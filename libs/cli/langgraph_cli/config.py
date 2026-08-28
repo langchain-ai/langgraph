@@ -1162,16 +1162,6 @@ def _build_runtime_env_vars(config: Config) -> list[str]:
     return env_vars
 
 
-def _can_flatten(config: Config, local_deps: LocalDeps, escape_variables: bool) -> bool:
-    return not (
-        config["dockerfile_lines"]
-        or local_deps.additional_contexts
-        or config.get("ui")
-        or config.get("node_version")
-        or escape_variables
-    )
-
-
 def _faux_package_pyproject_command(package_name: str) -> str:
     pyproject_path = shlex.quote(f"/deps/outer-{package_name}/pyproject.toml")
     return f"""cat > {pyproject_path} <<'PYPROJECT'
@@ -1196,9 +1186,28 @@ def _build_flat_dockerfile(
     pip_cleanup: str,
     image: str,
     env_vars: list[str],
+    additional_context_names: dict[pathlib.Path, str],
 ) -> str:
     context = pathlib.PurePosixPath("/__build_context")
+    additional_context_root = pathlib.PurePosixPath("/__additional_contexts")
+    js_working_dir = (
+        local_deps.working_dir
+        if config.get("ui") or config.get("node_version")
+        else None
+    )
     commands = ["set -eu"]
+
+    if js_working_dir:
+        commands.append("/storage/install-node.sh")
+
+    def source_path(
+        path: pathlib.Path,
+        relative_path: str = ".",
+        additional_relative_path: str = ".",
+    ) -> str:
+        if name := additional_context_names.get(path):
+            return str(additional_context_root / name / additional_relative_path)
+        return str(context / relative_path)
 
     if pip_config_file := config.get("pip_config_file"):
         source = shlex.quote(str(context / pip_config_file))
@@ -1207,44 +1216,69 @@ def _build_flat_dockerfile(
         commands.append(f"{local_reqs_pip_install} {' '.join(pypi_deps)}")
 
     for reqpath, destination in local_deps.pip_reqs:
-        source = context / reqpath.relative_to(config_path.parent)
+        source = source_path(
+            reqpath.parent,
+            str(reqpath.relative_to(config_path.parent)),
+            reqpath.name,
+        )
         destination_parent = pathlib.PurePosixPath(destination).parent
         commands.append(f"""mkdir -p {shlex.quote(str(destination_parent))}
-cp {shlex.quote(str(source))} {shlex.quote(destination)}""")
+cp {shlex.quote(source)} {shlex.quote(destination)}""")
     if local_deps.pip_reqs:
         requirements = " ".join(
             f"-r {destination}" for _, destination in local_deps.pip_reqs
         )
         commands.append(f"{local_reqs_pip_install} {requirements}")
 
-    for _, (relative_path, name) in local_deps.real_pkgs.items():
-        source = f"{context / relative_path}/."
+    for full_path, (relative_path, name) in local_deps.real_pkgs.items():
+        source = f"{source_path(full_path, relative_path)}/."
         destination = f"/deps/{name}"
         commands.append(f"""mkdir -p {shlex.quote(destination)}
 cp -a {shlex.quote(source)} {shlex.quote(destination)}/""")
 
     for full_path, (relative_path, destination) in local_deps.faux_pkgs.items():
-        source = f"{context / relative_path}/."
+        source = f"{source_path(full_path, relative_path)}/."
         pyproject = _faux_package_pyproject_command(full_path.name)
         commands.append(f"""mkdir -p {shlex.quote(destination)}
 cp -a {shlex.quote(source)} {shlex.quote(destination)}/
 {pyproject}""")
 
     commands.append(local_deps_install_command)
+    if js_working_dir:
+        working_dir = shlex.quote(js_working_dir)
+        commands.append(
+            f"cd {working_dir}\n"
+            f"{_get_node_pm_install_cmd(config_path.parent)} "
+            "&& tsx /api/langgraph_api/js/build.mts"
+        )
     commands.extend(
         line.removeprefix("RUN ")
         for line in pip_cleanup.splitlines()
         if line and not line.startswith("#")
     )
 
+    mounts = ["--mount=type=bind,target=/__build_context,readonly"]
+    mounts.extend(
+        f"--mount=type=bind,from={name},target={additional_context_root / name},readonly"
+        for name in additional_context_names.values()
+    )
+    run = f"RUN {' '.join(mounts)} <<'USER_LAYER'"
+    node_env = (
+        f"ENV NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}"
+        if js_working_dir
+        else ""
+    )
+
     return os.linesep.join(
         [
             "# syntax=docker/dockerfile:1.7",
             f"FROM {image}",
-            "RUN --mount=type=bind,target=/__build_context,readonly <<'USER_LAYER'",
+            *config["dockerfile_lines"],
+            node_env,
+            *env_vars,
+            run,
             *commands,
             "USER_LAYER",
-            *env_vars,
             f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
         ]
     )
@@ -1531,7 +1565,7 @@ ADD {relpath} /deps/{name}
         pip_installer=pip_installer,
     )
 
-    if flat and _can_flatten(config, local_deps, escape_variables):
+    if flat:
         return (
             _build_flat_dockerfile(
                 config_path=config_path,
@@ -1543,6 +1577,7 @@ ADD {relpath} /deps/{name}
                 pip_cleanup=pip_cleanup,
                 image=image_str,
                 env_vars=env_vars,
+                additional_context_names=additional_context_names,
             ),
             additional_contexts,
         )
@@ -1593,6 +1628,7 @@ def node_config_to_docker(
     install_command: str | None = None,
     build_command: str | None = None,
     build_context: str | None = None,
+    flat: bool = False,
 ) -> tuple[str, dict[str, str]]:
     # Calculate paths for monorepo support
     install_root = (
@@ -1619,22 +1655,42 @@ def node_config_to_docker(
         # Monorepo case: install from root, build from config directory
         container_root = f"/deps/{pathlib.Path(build_context).name}"
         install_workdir = container_root
-        install_step = f"RUN {install_cmd}"
-
-        if build_command:
-            build_step = f"RUN {build_command}"
-        else:
-            build_step = 'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts'
     else:
         # Original behavior: everything happens in the same directory
         install_workdir = faux_path
-        install_step = f"RUN {install_cmd}"
-        build_step = 'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts'
 
-    if build_context:
-        build_workdir = faux_path
-    else:
-        build_workdir = faux_path
+    build_workdir = faux_path
+    build_cmd = (
+        build_command
+        if build_context and build_command
+        else '(test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts'
+    )
+
+    if flat:
+        context = pathlib.PurePosixPath("/__build_context")
+        destination = container_root if build_context else faux_path
+        commands = [
+            "set -eu",
+            f"mkdir -p {shlex.quote(destination)}\n"
+            f"cp -a {shlex.quote(f'{context}/.')} {shlex.quote(destination)}/",
+            f"cd {shlex.quote(install_workdir)}\n{install_cmd}",
+            f"cd {shlex.quote(build_workdir)}\n{build_cmd}",
+        ]
+        return (
+            os.linesep.join(
+                [
+                    "# syntax=docker/dockerfile:1.7",
+                    f"FROM {image_str}",
+                    *config["dockerfile_lines"],
+                    *env_vars,
+                    "RUN --mount=type=bind,target=/__build_context,readonly <<'USER_LAYER'",
+                    *commands,
+                    "USER_LAYER",
+                    f"WORKDIR {build_workdir}",
+                ]
+            ),
+            {},
+        )
 
     docker_file_contents = [
         f"FROM {image_str}",
@@ -1645,13 +1701,13 @@ def node_config_to_docker(
         "",
         f"WORKDIR {install_workdir}",
         "",
-        install_step,
+        f"RUN {install_cmd}",
         "",
         os.linesep.join(env_vars),
         "",
         f"WORKDIR {build_workdir}",
         "",
-        build_step,
+        f"RUN {build_cmd}",
     ]
 
     return os.linesep.join(docker_file_contents), {}
@@ -1744,6 +1800,7 @@ def config_to_docker(
             install_command=install_command,
             build_command=build_command,
             build_context=build_context,
+            flat=flat,
         )
 
     return python_config_to_docker(

@@ -412,7 +412,7 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
     "--flat",
     is_flag=True,
     envvar="LANGGRAPH_CLI_FLAT_IMAGES",
-    help="Flatten generated Python build steps into one image layer when supported.",
+    help="Flatten generated build steps into one image layer when supported.",
 )
 @click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
 @cli.command(

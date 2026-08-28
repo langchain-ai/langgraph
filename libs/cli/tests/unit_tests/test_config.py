@@ -742,6 +742,48 @@ def test_config_to_docker_flat():
     assert dockerfile.endswith("WORKDIR /deps/outer-unit_tests/unit_tests")
 
 
+def test_config_to_docker_flat_with_custom_lines_and_escaped_variables():
+    dockerfile, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+                "dockerfile_lines": ["RUN echo custom"],
+            }
+        ),
+        base_image="langchain/langgraph-api",
+        escape_variables=True,
+        flat=True,
+    )
+
+    assert dockerfile.index("RUN echo custom") < dockerfile.index("USER_LAYER")
+    assert 'echo "Installing $$dep"' in dockerfile
+
+
+def test_config_to_docker_flat_with_additional_context():
+    dockerfile, additional_contexts = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {"dependencies": [".", ".."], "graphs": {"agent": "./agent.py:graph"}}
+        ),
+        base_image="langchain/langgraph-api",
+        flat=True,
+    )
+
+    assert additional_contexts == {
+        "outer-tests": str(pathlib.Path(__file__).parent.parent.absolute()),
+    }
+    assert (
+        "--mount=type=bind,from=outer-tests,"
+        "target=/__additional_contexts/outer-tests,readonly" in dockerfile
+    )
+    assert (
+        "cp -a /__additional_contexts/outer-tests/. /deps/outer-tests/tests/"
+        in dockerfile
+    )
+
+
 def test_config_to_docker_outside_path():
     graphs = {"agent": "./agent.py:graph"}
     actual_docker_stdin, additional_contexts = config_to_docker(
@@ -1017,6 +1059,28 @@ RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not foun
     assert additional_contexts == {}
 
 
+def test_config_to_docker_nodejs_flat():
+    dockerfile, additional_contexts = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "node_version": "20",
+                "graphs": {"agent": "./graphs/agent.js:graph"},
+                "dockerfile_lines": ["RUN echo custom"],
+            }
+        ),
+        base_image="langchain/langgraphjs-api",
+        flat=True,
+    )
+
+    assert additional_contexts == {}
+    assert dockerfile.index("RUN echo custom") < dockerfile.index("USER_LAYER")
+    assert "cp -a /__build_context/. /deps/unit_tests/" in dockerfile
+    assert "cd /deps/unit_tests\nnpm i" in dockerfile
+    assert "tsx /api/langgraph_api/js/build.mts" in dockerfile
+    assert dockerfile.endswith("WORKDIR /deps/unit_tests")
+
+
 def test_config_to_docker_python_encryption():
     # Test that encryption config is included in validation
     graphs = {"agent": "./agent.py:graph"}
@@ -1231,6 +1295,29 @@ WORKDIR /deps/outer-unit_tests/unit_tests"""
 
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
     assert additional_contexts == {}
+
+
+def test_config_to_docker_gen_ui_python_flat():
+    dockerfile, additional_contexts = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+                "ui": {"agent": "./graphs/agent.ui.jsx"},
+            }
+        ),
+        base_image="langchain/langgraph-api",
+        flat=True,
+    )
+
+    assert additional_contexts == {}
+    assert dockerfile.count("\nRUN ") == 1
+    assert dockerfile.index("ENV NODE_VERSION=20") < dockerfile.index("\nRUN ")
+    assert dockerfile.index("ENV LANGGRAPH_UI=") < dockerfile.index("\nRUN ")
+    assert "/storage/install-node.sh" in dockerfile
+    assert "cd /deps/outer-unit_tests/unit_tests\nnpm i" in dockerfile
+    assert "tsx /api/langgraph_api/js/build.mts" in dockerfile
 
 
 def test_config_to_docker_multiplatform():
