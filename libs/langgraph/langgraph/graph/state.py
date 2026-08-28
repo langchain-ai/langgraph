@@ -255,6 +255,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         self.schemas = {}
         self.channels = {}
         self.managed = {}
+        self.private_channels: set[str] = set()
         self.compiled = False
         self.waiting_edges = set()
 
@@ -343,7 +344,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     def _add_schema(self, schema: type[Any], /, allow_managed: bool = True) -> None:
         if schema not in self.schemas:
             _warn_invalid_state_schema(schema)
-            channels, managed, type_hints = _get_channels(schema)
+            channels, managed, private_keys, type_hints = _get_channels(schema)
             if managed and not allow_managed:
                 names = ", ".join(managed)
                 schema_name = getattr(schema, "__name__", "")
@@ -352,6 +353,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                     " Managed channels are not permitted in Input/Output schema."
                 )
             self.schemas[schema] = {**channels, **managed}
+            self.private_channels |= private_keys
             for key, channel in channels.items():
                 if key in self.channels:
                     if self.channels[key] != channel:
@@ -1281,7 +1283,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             "__root__"
             if len(self.channels) == 1 and "__root__" in self.channels
             else [
-                key for key, val in self.channels.items() if not is_managed_value(val)
+                key
+                for key, val in self.channels.items()
+                if not is_managed_value(val) and key not in self.private_channels
             ]
         )
         # Apply builder defaults to node specs. Per-node values always win.
@@ -1812,13 +1816,32 @@ def _get_root(input: Any) -> Sequence[tuple[str, Any]] | None:
         return [("__root__", input)]
 
 
+class Private:
+    """Marker for an `Annotated[...]` state field that should be
+    checkpointed and restored across turns, but excluded from
+    `StateSnapshot.values` / streamed state values.
+
+    Example:
+        class State(TypedDict):
+            internal_blob: Annotated[bytes, DeltaChannel(...), Private]
+    """
+
 def _get_channels(
     schema: type[dict],
-) -> tuple[dict[str, BaseChannel], dict[str, ManagedValueSpec], dict[str, Any]]:
+) -> tuple[dict[str, BaseChannel], dict[str, ManagedValueSpec], set[str], dict[str, Any]]:
+    """Parse a schema into channels, managed values, private keys, and type hints.
+
+    Returns a 4-tuple:
+        - channels: mapping of field name -> BaseChannel
+        - managed: mapping of field name -> ManagedValueSpec
+        - private_keys: set of field names marked with the `Private` marker
+        - type_hints: raw type hints from the schema
+    """
     if not hasattr(schema, "__annotations__"):
         return (
             {"__root__": _get_channel("__root__", schema, allow_managed=False)},
             {},
+            set(),
             {},
         )
 
@@ -1828,9 +1851,24 @@ def _get_channels(
         for name, typ in type_hints.items()
         if name != "__slots__"
     }
+    private_keys: set[str] = set()
+    for name, typ in type_hints.items():
+        if name == "__slots__":
+            continue
+        # Unwrap Required/NotRequired wrappers, mirroring _get_channel's logic
+        inner = typ
+        if hasattr(inner, "__origin__") and inner.__origin__ in (Required, NotRequired):
+            inner = inner.__args__[0]
+        if hasattr(inner, "__metadata__"):
+            for item in inner.__metadata__:
+                if item is Private or isinstance(item, Private):
+                    private_keys.add(name)
+                    break
+
     return (
         {k: v for k, v in all_keys.items() if isinstance(v, BaseChannel)},
         {k: v for k, v in all_keys.items() if is_managed_value(v)},
+        private_keys,
         type_hints,
     )
 
@@ -1856,6 +1894,22 @@ def _get_channel(
         NotRequired,
     ):
         annotation = annotation.__args__[0]
+    if hasattr(annotation, "__metadata__") and any(
+        item is Private or isinstance(item, Private)
+        for item in annotation.__metadata__
+    ):
+        inner_type = annotation.__args__[0]
+        remaining_meta = tuple(
+            item
+            for item in annotation.__metadata__
+            if item is not Private and not isinstance(item, Private)
+        )
+        if remaining_meta:
+            # Reconstruct Annotated[inner_type, meta1, meta2, ...] in a way
+            # that is compatible with Python 3.10+ (no star-unpack in subscript).
+            annotation = typing.Annotated.__class_getitem__((inner_type,) + remaining_meta)
+        else:
+            annotation = inner_type
     if manager := _is_field_managed_value(name, annotation):
         if allow_managed:
             return manager
