@@ -35,7 +35,9 @@ jobs:
             tag: langgraph-test-d
     name: "CLI integration test (${{ matrix.python-version }}, ${{ matrix.example.name }}, ${{ matrix.build_mode }})"
     env:
+      BUILD_ARGS: ${{ matrix.build_mode == 'flat' && '--flat' || '' }}
       HAS_LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY != '' }}
+      TAG_SUFFIX: ${{ matrix.build_mode == 'flat' && '-flat' || '' }}
     defaults:
       run:
         working-directory: libs/cli
@@ -61,7 +63,7 @@ jobs:
         if: (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch')
         working-directory: ${{ matrix.example.workdir }}
         run: |
-          langgraph build ${{ matrix.build_mode == 'flat' && '--flat' || '' }} -t ${{ matrix.example.tag }}${{ matrix.build_mode == 'flat' && '-flat' || '' }}
+          langgraph build $BUILD_ARGS -t ${{ matrix.example.tag }}$TAG_SUFFIX
       - name: Test service ${{ matrix.example.name }}
         if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&env.HAS_LANGSMITH_API_KEY == 'true' }}
         working-directory: ${{ matrix.example.workdir }}
@@ -74,98 +76,98 @@ jobs:
           if [ -f ../.env ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> ../.env; fi
           # Run the integration test using the built tag
           REPO_ROOT=$(git rev-parse --show-toplevel)
-          timeout 60 python "$REPO_ROOT/.github/scripts/run_langgraph_cli_test.py" -t ${{ matrix.example.tag }}${{ matrix.build_mode == 'flat' && '-flat' || '' }}
+          timeout 60 python "$REPO_ROOT/.github/scripts/run_langgraph_cli_test.py" -t ${{ matrix.example.tag }}$TAG_SUFFIX
 
       - name: Build JS service
-        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' && matrix.build_mode == 'layered' }}
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' }}
         working-directory: libs/cli/js-examples
         run: |
-          langgraph build -t langgraph-test-e
+          langgraph build $BUILD_ARGS -t langgraph-test-e$TAG_SUFFIX
 
       - name: Build JS monorepo service
-        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' && matrix.build_mode == 'layered' }}
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' }}
         working-directory: libs/cli/js-monorepo-example
         run: |
-          langgraph build -t langgraph-test-f -c apps/agent/langgraph.json --build-command "yarn run turbo build" --install-command "yarn install"
+          langgraph build $BUILD_ARGS -t langgraph-test-f$TAG_SUFFIX -c apps/agent/langgraph.json --build-command "yarn run turbo build" --install-command "yarn install"
 
       - name: Build Python monorepo service
-        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' && matrix.build_mode == 'layered' }}
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' }}
         working-directory: libs/cli/python-monorepo-example
         run: |
-          langgraph build -t langgraph-test-g -c apps/agent/langgraph.json
+          langgraph build $BUILD_ARGS -t langgraph-test-g$TAG_SUFFIX -c apps/agent/langgraph.json
       - name: Test Python monorepo service
-        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' && matrix.build_mode == 'layered' && env.HAS_LANGSMITH_API_KEY == 'true' }}
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' && env.HAS_LANGSMITH_API_KEY == 'true' }}
         working-directory: libs/cli/python-monorepo-example
         env:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
         run: |
           cp apps/agent/.env.example apps/agent/.env
           echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> apps/agent/.env
-          timeout 60 python ../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-g -c apps/agent/langgraph.json
+          timeout 60 python ../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-g$TAG_SUFFIX -c apps/agent/langgraph.json
 
       - name: Build prerelease reqs service
-        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' && matrix.build_mode == 'layered' }}
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' }}
         working-directory: libs/cli/examples/graph_prerelease_reqs
         run: |
-          langgraph build -t langgraph-test-h
+          langgraph build $BUILD_ARGS -t langgraph-test-h$TAG_SUFFIX
       - name: Test prerelease reqs service
-        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' && matrix.build_mode == 'layered' && env.HAS_LANGSMITH_API_KEY == 'true' }}
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' && env.HAS_LANGSMITH_API_KEY == 'true' }}
         working-directory: libs/cli/examples/graph_prerelease_reqs
         env:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
         run: |
           cp ../.env.example .env
           echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
-          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-h
+          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-h$TAG_SUFFIX
           echo "Finished starting up langgraph-test-h"
-          LANGGRAPH_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langgraph'); print(v);")
+          LANGGRAPH_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h$TAG_SUFFIX python -c "import sys; from importlib.metadata import version; v = version('langgraph'); print(v);")
           if [ "$LANGGRAPH_VERSION" != "1.1.5" ]; then
             echo "LANGGRAPH_VERSION != 1.1.5; $LANGGRAPH_VERSION"
             exit 1
           fi
-          LANGCHAIN_OPENAI_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langchain-openai'); print(v);")
+          LANGCHAIN_OPENAI_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h$TAG_SUFFIX python -c "import sys; from importlib.metadata import version; v = version('langchain-openai'); print(v);")
           if [ "$LANGCHAIN_OPENAI_VERSION" != "1.1.14" ]; then
             echo "LANGCHAIN_OPENAI_VERSION != 1.1.14; $LANGCHAIN_OPENAI_VERSION"
             exit 1
           fi
-          LANGCHAIN_ANTHROPIC_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langchain-anthropic'); print(v);")
+          LANGCHAIN_ANTHROPIC_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h$TAG_SUFFIX python -c "import sys; from importlib.metadata import version; v = version('langchain-anthropic'); print(v);")
           if [ "$LANGCHAIN_ANTHROPIC_VERSION" != "1.4.6" ]; then
             echo "LANGCHAIN_ANTHROPIC_VERSION != 1.4.6; $LANGCHAIN_ANTHROPIC_VERSION"
             exit 1
           fi
 
       - name: Build and test prerelease reqs fail service
-        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' && matrix.build_mode == 'layered' }}
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' }}
         working-directory: libs/cli/examples/graph_prerelease_reqs_fail
         run: |
-          langgraph build -t langgraph-test-i || [ $? -eq 1 ]
+          langgraph build $BUILD_ARGS -t langgraph-test-i$TAG_SUFFIX || [ $? -eq 1 ]
 
       - name: Build uv simple service
-        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' && matrix.build_mode == 'layered' }}
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' }}
         working-directory: libs/cli/uv-examples/simple
         run: |
-          langgraph build -t langgraph-test-uv-simple
+          langgraph build $BUILD_ARGS -t langgraph-test-uv-simple$TAG_SUFFIX
       - name: Test uv simple service
-        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' && matrix.build_mode == 'layered' && env.HAS_LANGSMITH_API_KEY == 'true' }}
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' && env.HAS_LANGSMITH_API_KEY == 'true' }}
         working-directory: libs/cli/uv-examples/simple
         env:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
         run: |
           cp .env.example .env
           echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
-          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-uv-simple
+          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-uv-simple$TAG_SUFFIX
 
       - name: Build uv monorepo service
-        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' && matrix.build_mode == 'layered' }}
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' }}
         working-directory: libs/cli/uv-examples/monorepo/apps/agent
         run: |
-          langgraph build -t langgraph-test-uv-monorepo
+          langgraph build $BUILD_ARGS -t langgraph-test-uv-monorepo$TAG_SUFFIX
       - name: Test uv monorepo service
-        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' && matrix.build_mode == 'layered' && env.HAS_LANGSMITH_API_KEY == 'true' }}
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' && env.HAS_LANGSMITH_API_KEY == 'true' }}
         working-directory: libs/cli/uv-examples/monorepo/apps/agent
         env:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
         run: |
           cp .env.example .env
           echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
-          timeout 60 python ../../../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-uv-monorepo
+          timeout 60 python ../../../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-uv-monorepo$TAG_SUFFIX
