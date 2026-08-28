@@ -409,10 +409,11 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
     help="Custom build command to run from the langgraph.json directory. If not provided, uses default build process.",
 )
 @click.option(
-    "--single-user-layer",
+    "--flat",
+    "single_user_layer",
     is_flag=True,
-    envvar="LANGGRAPH_CLI_SINGLE_USER_LAYER",
-    help="Combine generated Python build steps into one image layer when supported.",
+    envvar="LANGGRAPH_CLI_FLAT",
+    help="Flatten generated Python build steps into one image layer when supported.",
 )
 @click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
 @cli.command(

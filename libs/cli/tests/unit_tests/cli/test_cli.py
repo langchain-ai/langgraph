@@ -320,6 +320,14 @@ def test_top_level_help_truncates_command_descriptions_to_single_line() -> None:
     assert "[Beta] List LangSmith Deployments." in deploy_list_line
 
 
+def test_build_help_includes_flat_option() -> None:
+    result = CliRunner().invoke(cli, ["build", "--help"])
+
+    assert result.exit_code == 0
+    assert "--flat" in result.output
+    assert "--single-user-layer" not in result.output
+
+
 def test_dev_command_requires_ssl_certfile_and_keyfile_together(tmp_path) -> None:
     config_path = tmp_path / "langgraph.json"
     config_path.write_text(

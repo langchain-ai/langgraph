@@ -58,7 +58,12 @@ jobs:
         if: (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch')
         working-directory: ${{ matrix.example.workdir }}
         run: |
-          langgraph build --single-user-layer -t ${{ matrix.example.tag }}
+          langgraph build -t ${{ matrix.example.tag }}
+      - name: Build flattened service
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') && matrix.example.name == 'A' }}
+        working-directory: ${{ matrix.example.workdir }}
+        run: |
+          langgraph build --flat -t ${{ matrix.example.tag }}-flat
       - name: Test service ${{ matrix.example.name }}
         if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&env.HAS_LANGSMITH_API_KEY == 'true' }}
         working-directory: ${{ matrix.example.workdir }}
@@ -72,6 +77,9 @@ jobs:
           # Run the integration test using the built tag
           REPO_ROOT=$(git rev-parse --show-toplevel)
           timeout 60 python "$REPO_ROOT/.github/scripts/run_langgraph_cli_test.py" -t ${{ matrix.example.tag }}
+          if [ "${{ matrix.example.name }}" = "A" ]; then
+            timeout 60 python "$REPO_ROOT/.github/scripts/run_langgraph_cli_test.py" -t ${{ matrix.example.tag }}-flat
+          fi
 
       - name: Build JS service
         if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}
