@@ -34,6 +34,7 @@ from langgraph.checkpoint.serde.event_hooks import (
 )
 from langgraph.checkpoint.serde.jsonplus import (
     EXT_METHOD_SINGLE_ARG,
+    EXT_NUMPY_ARRAY,
     InvalidModuleError,
     JsonPlusSerializer,
     _msgpack_enc,
@@ -623,6 +624,174 @@ def test_serde_jsonplus_numpy_array_json_hook(arr: np.ndarray) -> None:
     result = serde.loads_typed(dumped)
     assert isinstance(result, list)
     assert result == arr.tolist()
+
+
+@pytest.mark.parametrize(
+    "arr",
+    [
+        # datetime64/timedelta64 arrays are C-contiguous but expose no buffer,
+        # so the memoryview fast path used to raise and the value never
+        # serialized at all.
+        np.array(["2020-01-01", "2020-02-01"], dtype="datetime64[D]"),
+        np.array([1, 2, 3], dtype="datetime64[ns]"),
+        np.array([1, 2, 3], dtype="timedelta64[s]"),
+        np.array([1, 2, 3, 4], dtype="datetime64[ns]").reshape(2, 2),
+        # Structured dtypes: dtype.str collapses these to "|V<n>", which used
+        # to silently decode as raw void bytes with the fields gone.
+        np.array([(1, 2.0), (3, 4.0)], dtype=[("a", "i4"), ("b", "f8")]),
+        np.array([((1.0, 2.0),)], dtype=[("p", [("x", "f4"), ("y", "f4")])]),
+        np.array([([1.0, 2.0, 3.0],)], dtype=[("v", "f8", (3,))]),
+        np.asfortranarray(
+            np.array([(1, 2.0), (3, 4.0)], dtype=[("a", "i4"), ("b", "f8")])
+        ),
+    ],
+)
+def test_serde_jsonplus_numpy_array_lossless_dtype(arr: np.ndarray) -> None:
+    serde = JsonPlusSerializer()
+
+    dumped = serde.dumps_typed(arr)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == arr.dtype
+    assert result.shape == arr.shape
+    assert np.array_equal(result, arr)
+
+
+def test_serde_jsonplus_numpy_structured_array_keeps_fields() -> None:
+    arr = np.array([(1, 2.0), (3, 4.0)], dtype=[("a", "i4"), ("b", "f8")])
+    serde = JsonPlusSerializer()
+
+    result = serde.loads_typed(serde.dumps_typed(arr))
+
+    assert result.dtype.names == ("a", "b")
+    assert result["a"].tolist() == [1, 3]
+    assert result["b"].tolist() == [2.0, 4.0]
+
+
+@pytest.mark.parametrize(
+    "arr",
+    [
+        np.array([{"a": 1}, {"b": 2}], dtype=object),
+        np.array([1, "two", None, [3, 4]], dtype=object),
+        np.array([[{"k": 1}], [{"k": 2}]], dtype=object),
+        np.array({"x": 1}, dtype=object),
+    ],
+)
+def test_serde_jsonplus_numpy_object_array(arr: np.ndarray) -> None:
+    serde = JsonPlusSerializer()
+
+    result = serde.loads_typed(serde.dumps_typed(arr))
+
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == arr.dtype
+    assert result.shape == arr.shape
+    assert result.tolist() == arr.tolist()
+
+
+def test_serde_jsonplus_numpy_object_array_does_not_leak_pointers() -> None:
+    """An object array's buffer is raw CPython pointers; never persist it."""
+    arr = np.array([{"a": 1}, {"b": 2}], dtype=object)
+    serde = JsonPlusSerializer()
+
+    _, dumped = serde.dumps_typed(arr)
+
+    pointers = b"".join(int(id(item)).to_bytes(8, "little") for item in arr)
+    assert pointers not in dumped
+
+
+def test_serde_jsonplus_numpy_array_is_writeable() -> None:
+    """`frombuffer` over `bytes` is read-only, which breaks in-place updates."""
+    arr = np.arange(6, dtype=np.float64).reshape(2, 3)
+    serde = JsonPlusSerializer()
+
+    result = serde.loads_typed(serde.dumps_typed(arr))
+
+    assert result.flags.writeable
+    result[0, 0] = 99.0
+    assert result[0, 0] == 99.0
+
+
+@pytest.mark.parametrize(
+    "scalar",
+    [
+        np.float64(1.5),
+        np.float32(2.5),
+        np.float16(1.0),
+        np.int64(7),
+        np.int32(3),
+        np.uint8(255),
+        np.bool_(True),
+        np.complex128(1 + 2j),
+        np.datetime64("2024-01-01"),
+        np.timedelta64(5, "s"),
+        # a structured (void) scalar, i.e. one row of a structured array
+        np.array([(1, 2.0)], dtype=[("a", "i4"), ("b", "f8")])[0],
+    ],
+)
+def test_serde_jsonplus_numpy_scalar(scalar: np.generic) -> None:
+    """numpy scalars are what indexing or reducing an array returns."""
+    serde = JsonPlusSerializer()
+
+    dumped = serde.dumps_typed(scalar)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert type(result) is type(scalar)
+    assert result.dtype == scalar.dtype
+    assert result == scalar
+
+
+def test_serde_jsonplus_numpy_scalar_nested_in_state() -> None:
+    state = {"score": np.float64(0.75), "count": np.int64(3), "ok": np.bool_(True)}
+    serde = JsonPlusSerializer()
+
+    result = serde.loads_typed(serde.dumps_typed(state))
+
+    assert result == state
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        np.array([(1, 2.0)], dtype=[("a", "i4"), ("b", "f8")]),
+        np.array([{"a": 1}], dtype=object),
+        np.array(["2020-01-01"], dtype="datetime64[D]"),
+        np.float64(1.5),
+        np.int64(7),
+    ],
+)
+def test_serde_jsonplus_numpy_json_hook(value: object) -> None:
+    serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+
+    result = serde.loads_typed(serde.dumps_typed(value))
+
+    assert result == value.tolist()
+
+
+@pytest.mark.parametrize(
+    "arr",
+    [
+        np.arange(6, dtype=np.float64).reshape(2, 3),
+        np.asfortranarray(np.arange(6, dtype=np.float64).reshape(2, 3)),
+        np.arange(4, dtype=np.int32),
+    ],
+)
+def test_serde_jsonplus_numpy_legacy_payload(arr: np.ndarray) -> None:
+    """Checkpoints written before the dtype fix must still load."""
+    order = "F" if arr.flags.f_contiguous and not arr.flags.c_contiguous else "C"
+    legacy = ormsgpack.packb(
+        ormsgpack.Ext(
+            EXT_NUMPY_ARRAY,
+            _msgpack_enc((arr.dtype.str, arr.shape, order, arr.tobytes(order="A"))),
+        )
+    )
+    serde = JsonPlusSerializer()
+
+    result = serde.loads_typed(("msgpack", legacy))
+
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == arr.dtype
+    assert np.array_equal(result, arr)
 
 
 @pytest.mark.parametrize(

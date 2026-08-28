@@ -300,6 +300,64 @@ EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
 EXT_DELTA_SNAPSHOT = 7
+EXT_NUMPY_SCALAR = 8
+
+
+def _numpy_dtype_repr(dtype: Any) -> Any:
+    """Return a msgpack-safe, lossless representation of a numpy dtype.
+
+    `dtype.str` is compact but describes a single scalar kind, so it discards
+    the field layout of a structured dtype: `[("a", "i4"), ("b", "f8")]`
+    collapses to `"|V12"`. Structured dtypes are represented by `dtype.descr`
+    instead, which reconstructs exactly through `numpy.dtype`.
+    """
+    return dtype.descr if dtype.names is not None else dtype.str
+
+
+def _numpy_descr_from_msgpack(descr: Any) -> Any:
+    """Rebuild a structured dtype descriptor decoded from msgpack.
+
+    msgpack has no tuple type, so `dtype.descr` decodes as nested lists while
+    `numpy.dtype` requires each field to be a 2- or 3-tuple whose optional
+    third element (the subarray shape) is itself a tuple.
+    """
+    fields = []
+    for field in descr:
+        name = tuple(field[0]) if isinstance(field[0], list) else field[0]
+        fmt = field[1]
+        if isinstance(fmt, list):
+            fmt = _numpy_descr_from_msgpack(fmt)
+        fields.append((name, fmt, tuple(field[2])) if len(field) > 2 else (name, fmt))
+    return fields
+
+
+def _numpy_dtype_from_repr(dtype_repr: Any) -> Any:
+    """Rebuild a numpy dtype written by `_numpy_dtype_repr`."""
+    import numpy as _np
+
+    if isinstance(dtype_repr, str):
+        return _np.dtype(dtype_repr)
+    return _np.dtype(_numpy_descr_from_msgpack(dtype_repr))
+
+
+def _numpy_array_from_meta(
+    dtype_repr: Any, shape: Any, order: Any, payload: Any
+) -> Any:
+    """Reconstruct an ndarray from the `EXT_NUMPY_ARRAY` payload."""
+    import numpy as _np
+
+    dtype = _numpy_dtype_from_repr(dtype_repr)
+    if dtype.hasobject:
+        # Elements were encoded individually; see `_msgpack_default`.
+        arr = _np.empty(len(payload), dtype=dtype)
+        for i, item in enumerate(payload):
+            arr[i] = item
+    else:
+        # `frombuffer` over immutable `bytes` yields a read-only array, so
+        # state restored from a checkpoint could not be updated in place.
+        # Wrapping in `bytearray` keeps the result writeable.
+        arr = _np.frombuffer(bytearray(payload), dtype=dtype)
+    return arr.reshape(shape, order=order)
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
@@ -513,20 +571,40 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             ),
         )
     elif (np_mod := sys.modules.get("numpy")) is not None and isinstance(
-        obj, np_mod.ndarray
+        obj, (np_mod.ndarray, np_mod.generic)
     ):
+        if isinstance(obj, np_mod.generic):
+            # numpy scalars (np.float64, np.int64, np.bool_, np.datetime64, ...)
+            # are what indexing or reducing an array returns. They are not
+            # ndarray instances and ormsgpack cannot encode them natively.
+            return ormsgpack.Ext(
+                EXT_NUMPY_SCALAR,
+                _msgpack_enc((_numpy_dtype_repr(obj.dtype), obj.tobytes())),
+            )
         order = "F" if obj.flags.f_contiguous and not obj.flags.c_contiguous else "C"
-        if obj.flags.c_contiguous:
+        dtype_repr = _numpy_dtype_repr(obj.dtype)
+        payload: Any
+        if obj.dtype.hasobject:
+            # An object array's buffer holds raw CPython pointers. Persisting it
+            # would write this process's memory addresses to the checkpoint and
+            # decode back to garbage, so encode the elements themselves and let
+            # them recurse through this hook.
+            payload = obj.ravel(order=order).tolist()
+        elif obj.flags.c_contiguous and obj.dtype.kind not in "Mm":
+            # Zero-copy fast path. datetime64 ("M") and timedelta64 ("m") are
+            # C-contiguous but have no buffer representation -- memoryview()
+            # raises -- so they fall through to the tobytes() path below.
             mv = memoryview(obj)
             try:
-                meta = (obj.dtype.str, obj.shape, order, mv)
+                meta = (dtype_repr, obj.shape, order, mv)
                 return ormsgpack.Ext(EXT_NUMPY_ARRAY, _msgpack_enc(meta))
             finally:
                 mv.release()
         else:
-            buf = obj.tobytes(order="A")
-            meta = (obj.dtype.str, obj.shape, order, buf)
-            return ormsgpack.Ext(EXT_NUMPY_ARRAY, _msgpack_enc(meta))
+            payload = obj.tobytes(order="A")
+        return ormsgpack.Ext(
+            EXT_NUMPY_ARRAY, _msgpack_enc((dtype_repr, obj.shape, order, payload))
+        )
 
     elif isinstance(obj, BaseException):
         return repr(obj)
@@ -730,13 +808,21 @@ def _create_msgpack_ext_hook(
                     return None
         elif code == EXT_NUMPY_ARRAY:
             try:
+                return _numpy_array_from_meta(
+                    *ormsgpack.unpackb(
+                        data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                    )
+                )
+            except Exception:
+                return None
+        elif code == EXT_NUMPY_SCALAR:
+            try:
                 import numpy as _np
 
-                dtype_str, shape, order, buf = ormsgpack.unpackb(
+                dtype_repr, buf = ormsgpack.unpackb(
                     data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
                 )
-                arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
-                return arr.reshape(shape, order=order)
+                return _np.frombuffer(buf, dtype=_numpy_dtype_from_repr(dtype_repr))[0]
             except Exception:
                 return None
         return None
@@ -826,15 +912,27 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             return
     elif code == EXT_NUMPY_ARRAY:
         try:
+            return _numpy_array_from_meta(
+                *ormsgpack.unpackb(
+                    data,
+                    ext_hook=_msgpack_ext_hook_to_json,
+                    option=ormsgpack.OPT_NON_STR_KEYS,
+                )
+            ).tolist()
+        except Exception:
+            return
+    elif code == EXT_NUMPY_SCALAR:
+        try:
             import numpy as _np
 
-            dtype_str, shape, order, buf = ormsgpack.unpackb(
+            dtype_repr, buf = ormsgpack.unpackb(
                 data,
                 ext_hook=_msgpack_ext_hook_to_json,
                 option=ormsgpack.OPT_NON_STR_KEYS,
             )
-            arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
-            return arr.reshape(shape, order=order).tolist()
+            return _np.frombuffer(buf, dtype=_numpy_dtype_from_repr(dtype_repr))[
+                0
+            ].item()
         except Exception:
             return
 
