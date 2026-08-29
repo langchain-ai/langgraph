@@ -41,6 +41,7 @@ from langgraph.checkpoint.serde.jsonplus import (
     _warned_blocked_types,
     _warned_unregistered_types,
 )
+from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from langgraph.store.base import Item
 
 
@@ -324,6 +325,27 @@ def test_serde_jsonplus_json_mode() -> None:
         expected_result["my_secret_str_v1"] = "meow"
 
     assert result == expected_result
+
+
+def test_serde_jsonplus_delta_snapshot_json_hook() -> None:
+    """EXT_DELTA_SNAPSHOT survives the JSON read path.
+
+    Regression test for _msgpack_ext_hook_to_json silently returning None
+    for ext code 7 (_DeltaSnapshot blobs written by DeltaChannel). With the
+    snapshot decoded as None, DeltaChannel.from_checkpoint() loses its
+    baseline and every message written before the last snapshot is missing from
+    the JSON state view -- the multi-turn, long-thread history-loss symptom.
+    """
+    snapshot = _DeltaSnapshot([HumanMessage(content="hi", id="snap-msg")])
+    serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+    value = serde.loads_typed(serde.dumps_typed(snapshot))
+
+    assert value is not None
+    assert isinstance(value, list)
+    assert len(value) == 1
+    assert value[0]["content"] == "hi"
+    assert value[0]["id"] == "snap-msg"
+    assert value[0]["type"] == "human"
 
 
 def test_serde_jsonplus_bytes() -> None:

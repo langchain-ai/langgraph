@@ -800,6 +800,17 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             return tup[2]
         except Exception:
             return
+    elif code == EXT_DELTA_SNAPSHOT:
+        # A DeltaChannel stores occasional full snapshots of its value as a
+        # single ext blob. Unwrap it (recursively through the same hook) so the
+        # JSON read path keeps the snapshot base instead of silently returning
+        # None; otherwise DeltaChannel.from_checkpoint() replays against a None
+        # baseline and all history written before the last snapshot is lost.
+        return ormsgpack.unpackb(
+            data,
+            ext_hook=_msgpack_ext_hook_to_json,
+            option=ormsgpack.OPT_NON_STR_KEYS,
+        )
     elif code == EXT_PYDANTIC_V1:
         try:
             tup = ormsgpack.unpackb(
