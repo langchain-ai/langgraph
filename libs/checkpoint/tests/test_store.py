@@ -330,6 +330,43 @@ def test_list_namespaces_basic() -> None:
     assert result == expected
 
 
+def test_list_namespaces_only_reports_populated_namespaces() -> None:
+    store = InMemoryStore()
+    store.put(("real",), "key", {"v": 1})
+
+    # A miss is a read: it must not bring the namespace into existence.
+    assert store.get(("ghost",), "key") is None
+    assert store.list_namespaces() == [("real",)]
+
+    # Neither may deleting a key that was never written.
+    store.delete(("ghost",), "key")
+    assert store.list_namespaces() == [("real",)]
+
+    # A namespace stops existing once its last item is removed.
+    store.delete(("real",), "key")
+    assert store.list_namespaces() == []
+
+
+async def test_alist_namespaces_only_reports_populated_namespaces() -> None:
+    store = InMemoryStore()
+    await store.aput(("real",), "key", {"v": 1})
+
+    assert await store.aget(("ghost",), "key") is None
+    await store.adelete(("ghost",), "key")
+    assert await store.alist_namespaces() == [("real",)]
+
+    await store.adelete(("real",), "key")
+    assert await store.alist_namespaces() == []
+
+
+def test_repeated_misses_do_not_grow_the_store() -> None:
+    store = InMemoryStore()
+    for i in range(100):
+        assert store.get(("users", str(i)), "prefs") is None
+
+    assert store.list_namespaces() == []
+
+
 def test_list_namespaces_with_wildcards() -> None:
     store = InMemoryStore()
 
