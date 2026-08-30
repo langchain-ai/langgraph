@@ -796,3 +796,17 @@ def test_delta_channel_from_checkpoint_seed_none_is_distinct_from_sentinel() -> 
     ch = spec.from_checkpoint(None)
     ch.replay_writes([("t0", "x", "after")])
     assert ch.get() == "after"
+
+
+def test_topic_checkpoint_immutability_on_subsequent_updates() -> None:
+    """Ensure Topic.checkpoint() returns a defensive copy so subsequent updates do not mutate historical checkpoints."""
+    channel = Topic(str, accumulate=True).from_checkpoint(MISSING)
+    channel.update(["a"])
+    checkpoint_step1 = channel.checkpoint()
+
+    channel.update(["b"])
+    checkpoint_step2 = channel.checkpoint()
+
+    assert checkpoint_step1 == ["a"], "Step 1 checkpoint must not be mutated by Step 2 update"
+    assert checkpoint_step2 == ["a", "b"]
+
