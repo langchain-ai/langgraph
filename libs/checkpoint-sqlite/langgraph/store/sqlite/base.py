@@ -1067,6 +1067,9 @@ class SqliteStore(BaseSqliteStore, BaseStore):
         with self.lock:
             if self.is_setup:
                 return
+            # Enable foreign key constraints (SQLite defaults to OFF for backwards compatibility)
+            self.conn.execute("PRAGMA foreign_keys = ON")
+
             # Create migrations table if it doesn't exist
             self.conn.executescript(
                 """

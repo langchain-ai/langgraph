@@ -1435,3 +1435,60 @@ def test_list_namespaces_metacharacter_labels(store: SqliteStore) -> None:
         assert set(store.list_namespaces(prefix=[label, "child"], limit=100)) == {
             (label, "child"),
         }
+
+
+def test_delete_cascades_to_store_vectors(
+    fake_embeddings: CharacterEmbeddings,
+) -> None:
+    """Deleting items from store should cascade-delete their embeddings from store_vectors.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/8757
+    """
+    namespace = ("test", "cascade")
+    # SqliteStore converts namespace tuples to dot-separated strings for storage
+    prefix = ".".join(namespace)
+
+    with create_vector_store(fake_embeddings, text_fields=["text"]) as store:
+        # Put items with embeddings
+        store.put(namespace, "key1", {"text": "hello world"})
+        store.put(namespace, "key2", {"text": "goodbye world"})
+        store.put(namespace, "key3", {"text": "test data"})
+
+        # Trigger embedding generation via search (which indexes on first access)
+        list(store.search(namespace, query="world"))
+
+        # Verify embeddings exist in store_vectors
+        with store._cursor(transaction=False) as cur:
+            count_before = cur.execute(
+                "SELECT COUNT(*) FROM store_vectors WHERE prefix = ?",
+                (prefix,)
+            ).fetchone()[0]
+            assert count_before > 0, "Embeddings should exist before deletion"
+
+        # Delete 2 items (delete takes a single key, not a list)
+        store.delete(namespace, "key1")
+        store.delete(namespace, "key2")
+
+        # Verify only 1 embedding remains (for key3)
+        with store._cursor(transaction=False) as cur:
+            remaining = cur.execute(
+                "SELECT key FROM store_vectors WHERE prefix = ?",
+                (prefix,)
+            ).fetchall()
+            remaining_keys = {row[0] for row in remaining}
+            assert remaining_keys == {"key3"}, (
+                f"Only key3's embedding should remain, found: {remaining_keys}"
+            )
+
+        # Delete the last item
+        store.delete(namespace, "key3")
+
+        # Verify store_vectors is empty for this namespace
+        with store._cursor(transaction=False) as cur:
+            count_after = cur.execute(
+                "SELECT COUNT(*) FROM store_vectors WHERE prefix = ?",
+                (prefix,)
+            ).fetchone()[0]
+            assert count_after == 0, (
+                "All embeddings should be cascade-deleted when items are deleted"
+            )
