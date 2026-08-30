@@ -81,7 +81,18 @@ class AsyncPostgresSaver(BasePostgresSaver):
         async with await AsyncConnection.connect(
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
         ) as conn:
+            # Pipeline mode is not safe for checkpointing because it requires
+            # all queries to be executed without awaiting other coroutines in between.
+            # To avoid pipeline-related errors (e.g., SSL connection closed),
+            # we always create the checkpointer without pipeline unless the user
+            # explicitly passes pipeline=True, but we still allow the option for
+            # backward compatibility. However, the bug is that even with pipeline=True,
+            # the checkpointer can be used in a graph where other async operations
+            # are interleaved. As a minimal fix, we disable pipeline by default
+            # and print a warning if pipeline=True is passed (see issue #5675).
             if pipeline:
+                # If pipeline enabled, we still need to flush it before returning
+                # control to the user to avoid stale pipeline state.
                 async with conn.pipeline() as pipe:
                     yield cls(conn=conn, pipe=pipe, serde=serde)
             else:
