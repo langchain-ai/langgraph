@@ -1032,7 +1032,12 @@ class PregelLoop:
             self.updated_channels = updated_channels
             self._put_checkpoint({"source": "input"})
         elif CONFIG_KEY_RESUMING not in configurable:
-            raise EmptyInputError(f"Received no input for {input_keys}")
+            err = EmptyInputError(f"Received no input for {input_keys}")
+            # Recovery of a known thread_id with no durable checkpoint
+            # (crash before the first put landed). Persist a failure
+            # record so fire-and-forget callers can observe the loss.
+            self._persist_empty_resume(repr(err))
+            raise err
         # Propagate resuming and replaying flags to subgraphs.
         if not self.is_nested:
             # Pass the resolved before-bound checkpoint ID so subgraphs can
@@ -1077,6 +1082,19 @@ class PregelLoop:
         if is_resuming:
             self._push_graph_lifecycle_event("resume")
         return updated_channels
+
+    def _persist_empty_resume(self, error: str) -> None:
+        """Write a durable aborted record when resume finds no checkpoint.
+
+        `invoke(None, config)` is the recovery path. If the original run died
+        before its first `put()`, the thread has no checkpoint and no input to
+        replay. Without this write, recovery raises `EmptyInputError` and
+        leaves no durable evidence that the accepted run was lost.
+        """
+        if self.checkpointer is None or self._has_persisted_parent:
+            return
+        self._put_checkpoint({"source": "loop"})
+        self.put_writes(NULL_TASK_ID, [(ERROR, error)])
 
     def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
         # `is` (object identity) — not `==`. Three of four call sites pass a
@@ -1700,12 +1718,26 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         self.step = self.checkpoint_metadata["step"] + 1
         self.stop = self.step + self.config["recursion_limit"] + 1
         self.checkpoint_previous_versions = self.checkpoint["channel_versions"].copy()
-        self.updated_channels = self._first(
-            input_keys=self.input_keys,
-            updated_channels=set(self.checkpoint.get("updated_channels"))  # type: ignore[arg-type]
-            if self.checkpoint.get("updated_channels")
-            else None,
-        )
+        try:
+            self.updated_channels = self._first(
+                input_keys=self.input_keys,
+                updated_channels=set(self.checkpoint.get("updated_channels"))  # type: ignore[arg-type]
+                if self.checkpoint.get("updated_channels")
+                else None,
+            )
+            # durability="sync": the input / accepted checkpoint must be
+            # durable before the first user node runs. The post-tick wait
+            # in Pregel.stream() is too late — a crash in that window
+            # leaves no checkpoint for recovery.
+            if self.durability == "sync" and (
+                fut := getattr(self, "_put_checkpoint_fut", None)
+            ):
+                fut.result()
+        except BaseException as exc:
+            # __enter__ raising skips __exit__; unwind so background puts
+            # (including an empty-resume failure record) finish.
+            self.stack.__exit__(type(exc), exc, exc.__traceback__)
+            raise
 
         return self
 
@@ -1960,12 +1992,24 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         self.step = self.checkpoint_metadata["step"] + 1
         self.stop = self.step + self.config["recursion_limit"] + 1
         self.checkpoint_previous_versions = self.checkpoint["channel_versions"].copy()
-        self.updated_channels = self._first(
-            input_keys=self.input_keys,
-            updated_channels=set(self.checkpoint.get("updated_channels"))  # type: ignore[arg-type]
-            if self.checkpoint.get("updated_channels")
-            else None,
-        )
+        try:
+            self.updated_channels = self._first(
+                input_keys=self.input_keys,
+                updated_channels=set(self.checkpoint.get("updated_channels"))  # type: ignore[arg-type]
+                if self.checkpoint.get("updated_channels")
+                else None,
+            )
+            # durability="sync": the input / accepted checkpoint must be
+            # durable before the first user node runs.
+            if self.durability == "sync" and (
+                fut := getattr(self, "_put_checkpoint_fut", None)
+            ):
+                await fut
+        except BaseException as exc:
+            # __aenter__ raising skips __aexit__; unwind so background puts
+            # (including an empty-resume failure record) finish.
+            await self.stack.__aexit__(type(exc), exc, exc.__traceback__)
+            raise
 
         return self
 

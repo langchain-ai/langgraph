@@ -62,7 +62,12 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.config import get_stream_writer
-from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
+from langgraph.errors import (
+    EmptyInputError,
+    GraphRecursionError,
+    InvalidUpdateError,
+    ParentCommand,
+)
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState, _messages_delta_reducer, add_messages
@@ -5430,6 +5435,65 @@ def test_checkpoint_recovery(
     graph.checkpointer.delete_thread(config["configurable"]["thread_id"])
     assert graph.checkpointer.get_tuple(config) is None
     assert [*graph.get_state_history(config)] == []
+
+
+def test_crash_before_first_checkpoint_records_failure_on_recovery() -> None:
+    """If the first durable checkpoint never lands, recovery must persist a
+    failure record instead of raising EmptyInputError with an empty thread.
+
+    Regression for https://github.com/langchain-ai/langgraph/issues/8764.
+    """
+
+    class CrashBeforeFirstPut(InMemorySaver):
+        def __init__(self) -> None:
+            super().__init__()
+            self.allow_put = False
+
+        def put(
+            self,
+            config: RunnableConfig,
+            checkpoint: Checkpoint,
+            metadata: CheckpointMetadata,
+            new_versions: dict[str, str | int | float] | None = None,
+        ) -> RunnableConfig:
+            if not self.allow_put:
+                raise RuntimeError("crash before first checkpoint")
+            return super().put(config, checkpoint, metadata, new_versions)
+
+    class State(TypedDict):
+        done: bool
+
+    effects: list[str] = []
+
+    def node(state: State) -> State:
+        effects.append("effect")
+        return {"done": True}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    saver = CrashBeforeFirstPut()
+    app = builder.compile(checkpointer=saver)
+    config: RunnableConfig = {"configurable": {"thread_id": "accepted-run"}}
+
+    with pytest.raises(RuntimeError, match="crash before first checkpoint"):
+        app.invoke({"done": False}, config, durability="sync")
+
+    assert effects == []
+    assert saver.get_tuple(config) is None
+
+    saver.allow_put = True
+    with pytest.raises(EmptyInputError, match="Received no input"):
+        app.invoke(None, config, durability="sync")
+
+    saved = saver.get_tuple(config)
+    assert saved is not None
+    assert saved.pending_writes
+    assert any(w[1] == ERROR for w in saved.pending_writes)
+
+    # A later invoke with input can still start a fresh run on this thread.
+    assert app.invoke({"done": False}, config, durability="sync") == {"done": True}
+    assert effects == ["effect"]
 
 
 def test_multiple_updates_root() -> None:

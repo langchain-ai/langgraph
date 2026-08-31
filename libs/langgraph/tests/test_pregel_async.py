@@ -61,6 +61,7 @@ from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.errors import (
+    EmptyInputError,
     GraphRecursionError,
     InvalidUpdateError,
     NodeError,
@@ -6678,6 +6679,66 @@ async def test_checkpoint_recovery_async(
     # Verify the error was recorded in checkpoint
     failed_checkpoint = next(c for c in history if c.tasks and c.tasks[0].error)
     assert "RuntimeError('Simulated failure')" in failed_checkpoint.tasks[0].error
+
+
+async def test_crash_before_first_checkpoint_records_failure_on_recovery() -> None:
+    """If the first durable checkpoint never lands, recovery must persist a
+    failure record instead of raising EmptyInputError with an empty thread.
+
+    Regression for https://github.com/langchain-ai/langgraph/issues/8764.
+    """
+
+    class CrashBeforeFirstPut(InMemorySaver):
+        def __init__(self) -> None:
+            super().__init__()
+            self.allow_put = False
+
+        def put(
+            self,
+            config: RunnableConfig,
+            checkpoint: Checkpoint,
+            metadata: CheckpointMetadata,
+            new_versions: ChannelVersions | None = None,
+        ) -> RunnableConfig:
+            if not self.allow_put:
+                raise RuntimeError("crash before first checkpoint")
+            return super().put(config, checkpoint, metadata, new_versions)
+
+    class State(TypedDict):
+        done: bool
+
+    effects: list[str] = []
+
+    async def node(state: State) -> State:
+        effects.append("effect")
+        return {"done": True}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    saver = CrashBeforeFirstPut()
+    app = builder.compile(checkpointer=saver)
+    config: RunnableConfig = {"configurable": {"thread_id": "accepted-run"}}
+
+    with pytest.raises(RuntimeError, match="crash before first checkpoint"):
+        await app.ainvoke({"done": False}, config, durability="sync")
+
+    assert effects == []
+    assert await saver.aget_tuple(config) is None
+
+    saver.allow_put = True
+    with pytest.raises(EmptyInputError, match="Received no input"):
+        await app.ainvoke(None, config, durability="sync")
+
+    saved = await saver.aget_tuple(config)
+    assert saved is not None
+    assert saved.pending_writes
+    assert any(w[1] == ERROR for w in saved.pending_writes)
+
+    assert await app.ainvoke({"done": False}, config, durability="sync") == {
+        "done": True
+    }
+    assert effects == ["effect"]
 
 
 async def test_multiple_updates_root() -> None:
