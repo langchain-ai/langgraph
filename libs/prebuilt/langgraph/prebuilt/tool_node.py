@@ -1439,6 +1439,13 @@ class ToolNode(RunnableCallable):
         if isinstance(response, Command):
             return self._validate_tool_command(response, tool_call, input_type)
         if isinstance(response, ToolMessage):
+            if response.tool_call_id != tool_call["id"]:
+                msg = (
+                    f"Tool {tool_call['name']} returned a ToolMessage with "
+                    f"tool_call_id {response.tool_call_id!r}; expected "
+                    f"{tool_call['id']!r}."
+                )
+                raise ValueError(msg)
             response.content = cast("str | list", msg_content_output(response.content))
             return response
         if isinstance(response, list):
@@ -1469,6 +1476,13 @@ class ToolNode(RunnableCallable):
         terminator_count = 0
         for item in response:
             if isinstance(item, ToolMessage):
+                if item.tool_call_id != expected_id:
+                    msg = (
+                        f"Tool {tool_call['name']} returned a ToolMessage with "
+                        f"tool_call_id {item.tool_call_id!r}; expected "
+                        f"{expected_id!r}."
+                    )
+                    raise ValueError(msg)
                 if item.tool_call_id == expected_id:
                     terminator_count += 1
             elif isinstance(item, Command) and isinstance(item.update, dict):
@@ -1553,6 +1567,13 @@ class ToolNode(RunnableCallable):
             if message.tool_call_id == call["id"]:
                 message.name = call["name"]
                 has_matching_tool_message = True
+            elif updated_command.graph is None:
+                msg = (
+                    f"Tool {call['name']} returned a ToolMessage with "
+                    f"tool_call_id {message.tool_call_id!r}; expected "
+                    f"{call['id']!r}."
+                )
+                raise ValueError(msg)
 
         # validate that we always have a ToolMessage matching the tool call in
         # Command.update if command is sent to the CURRENT graph

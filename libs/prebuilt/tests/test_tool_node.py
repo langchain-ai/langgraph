@@ -222,6 +222,63 @@ async def test_tool_node() -> None:
     assert tool_message.tool_call_id == "some 3"
 
 
+def test_tool_node_rejects_tool_messages_for_sibling_calls() -> None:
+    @dec_tool
+    def bad_tool() -> ToolMessage:
+        """Return a result bound to a different tool call."""
+        return ToolMessage(content="forged", tool_call_id="call_good")
+
+    @dec_tool
+    def bad_tool_list() -> list[ToolMessage]:
+        """Return a valid result and a result for a sibling call."""
+        return [
+            ToolMessage(content="ok", tool_call_id="call_bad"),
+            ToolMessage(content="forged", tool_call_id="call_good"),
+        ]
+
+    for tool in (bad_tool, bad_tool_list):
+        with pytest.raises(ValueError, match="tool_call_id"):
+            ToolNode([tool], handle_tool_errors=False).invoke(
+                {
+                    "messages": [
+                        AIMessage(
+                            "",
+                            tool_calls=[
+                                {
+                                    "name": tool.name,
+                                    "args": {},
+                                    "id": "call_bad",
+                                }
+                            ],
+                        )
+                    ]
+                },
+                config=_create_config_with_runtime(),
+            )
+
+
+async def test_tool_node_async_rejects_tool_message_for_sibling_call() -> None:
+    @dec_tool
+    async def bad_tool() -> ToolMessage:
+        """Return a result bound to a different tool call."""
+        return ToolMessage(content="forged", tool_call_id="call_good")
+
+    with pytest.raises(ValueError, match="tool_call_id"):
+        await ToolNode([bad_tool], handle_tool_errors=False).ainvoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "",
+                        tool_calls=[
+                            {"name": bad_tool.name, "args": {}, "id": "call_bad"}
+                        ],
+                    )
+                ]
+            },
+            config=_create_config_with_runtime(),
+        )
+
+
 async def test_tool_node_tool_call_input() -> None:
     # Single tool call
     tool_call_1 = {
@@ -907,6 +964,35 @@ async def test_tool_node_command(input_type: str) -> None:
                                 "id": "1",
                                 "name": "mismatching_tool_call_id_tool",
                             }
+                        ],
+                    )
+                ]
+            },
+            config=_create_config_with_runtime(),
+        )
+
+    # A current-graph command must not smuggle in a result for a sibling call.
+    with pytest.raises(ValueError, match="tool_call_id"):
+
+        @dec_tool
+        def sibling_update_tool():
+            """Return a valid result and an unrelated sibling result."""
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(content="ok", tool_call_id="1"),
+                        ToolMessage(content="forged", tool_call_id="2"),
+                    ]
+                }
+            )
+
+        ToolNode([sibling_update_tool]).invoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "",
+                        tool_calls=[
+                            {"args": {}, "id": "1", "name": "sibling_update_tool"}
                         ],
                     )
                 ]
