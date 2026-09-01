@@ -2266,6 +2266,34 @@ def _invoke_returning(
     )
 
 
+def test_tool_node_content_block_list_return() -> None:
+    """A tool returning LangChain content blocks becomes a ToolMessage."""
+    content = [{"type": "text", "text": "test content"}]
+    result = _invoke_returning(content)
+
+    assert isinstance(result, dict)
+    message = result["messages"][0]
+    assert isinstance(message, ToolMessage)
+    assert message.content == content
+    assert message.tool_call_id == "call-1"
+
+
+async def test_tool_node_content_block_list_return_async() -> None:
+    """The async path accepts the same content block format."""
+    content = [{"type": "text", "text": "test content"}]
+    node = ToolNode([_ReturningTool(return_value=content)])
+    result = await node.ainvoke(
+        {"messages": [AIMessage("", tool_calls=[_list_tool_call()])]},
+        config=_create_config_with_runtime(),
+    )
+
+    assert isinstance(result, dict)
+    message = result["messages"][0]
+    assert isinstance(message, ToolMessage)
+    assert message.content == content
+    assert message.tool_call_id == "call-1"
+
+
 def test_tool_node_list_return_command_and_tool_message() -> None:
     """Valid: tool returns [Command(update={...}), ToolMessage(...)]."""
     outer_id = "call-1"
