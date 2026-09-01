@@ -17,6 +17,7 @@ from langchain_core.runnables.config import RunnableConfig
 from langchain_core.tools import tool as dec_tool
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
+from pydantic import BaseModel, model_validator
 
 from langgraph.prebuilt import InjectedState, InjectedStore, ToolNode, ToolRuntime
 from langgraph.prebuilt.tool_node import ToolInvocationError
@@ -468,3 +469,73 @@ async def test_sync_tool_validation_error_filtering() -> None:
     assert tool_message.status == "error"
     assert "value" in tool_message.content
     assert "state" not in tool_message.content.lower()
+
+
+class RangeArgs(BaseModel):
+    low: int
+    high: int
+
+    @model_validator(mode="after")
+    def check_bounds(self) -> "RangeArgs":
+        if self.low > self.high:
+            raise ValueError("low must be less than or equal to high")
+        return self
+
+
+@dec_tool(args_schema=RangeArgs)
+def get_range(low: int, high: int) -> str:
+    """Return a range."""
+    return f"{low}-{high}"
+
+
+async def test_model_level_validation_errors_are_visible_to_the_model() -> None:
+    """Keep model-level Pydantic errors in ToolNode feedback."""
+    result = await ToolNode([get_range]).ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {
+                            "name": "get_range",
+                            "args": {"low": 5, "high": 1},
+                            "id": "call_1",
+                            "type": "tool_call",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+
+    tool_message = result["messages"][0]
+    assert tool_message.status == "error"
+    assert "low must be less than or equal to high" in tool_message.content
+    assert "with error:\n \n Please fix" not in tool_message.content
+
+
+def test_sync_model_level_validation_errors_are_visible_to_the_model() -> None:
+    """Keep model-level Pydantic errors in sync ToolNode feedback."""
+    result = ToolNode([get_range]).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {
+                            "name": "get_range",
+                            "args": {"low": 5, "high": 1},
+                            "id": "call_1",
+                            "type": "tool_call",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+
+    tool_message = result["messages"][0]
+    assert tool_message.status == "error"
+    assert "low must be less than or equal to high" in tool_message.content
