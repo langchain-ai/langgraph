@@ -73,6 +73,7 @@ from langchain_core.runnables.config import (
     get_config_list,
     get_executor_for_config,
 )
+from langchain_core.runnables.utils import gather_with_concurrency
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
 from langchain_core.tools.base import (
@@ -855,7 +856,7 @@ class ToolNode(RunnableCallable):
         coros = []
         for call, tool_runtime in zip(tool_calls, tool_runtimes, strict=False):
             coros.append(self._arun_one(call, input_type, tool_runtime))  # type: ignore[arg-type]
-        outputs = await asyncio.gather(*coros)
+        outputs = await gather_with_concurrency(config.get("max_concurrency"), *coros)
 
         return self._combine_tool_outputs(outputs, input_type)
 

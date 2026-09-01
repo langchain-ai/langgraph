@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import dataclasses
 import json
@@ -2383,6 +2384,32 @@ async def test_tool_node_list_return_async_smoke() -> None:
     assert isinstance(result, list)
     commands = [r for r in result if isinstance(r, Command)]
     assert len(commands) == 1 and commands[0].update == {"foo": "bar"}
+
+
+async def test_tool_node_async_respects_max_concurrency() -> None:
+    """Async tool calls honor RunnableConfig.max_concurrency."""
+    active = 0
+    max_active = 0
+
+    async def probe(value: int) -> str:
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return str(value)
+
+    tool_calls = [
+        {"name": "probe", "args": {"value": i}, "id": f"call-{i}"}
+        for i in range(3)
+    ]
+    result = await ToolNode([probe]).ainvoke(
+        {"messages": [AIMessage("", tool_calls=tool_calls)]},
+        config={**_create_config_with_runtime(), "max_concurrency": 1},
+    )
+
+    assert len(result["messages"]) == 3
+    assert max_active == 1
 
 
 def test_tool_node_list_return_mixed_with_regular_tool() -> None:
