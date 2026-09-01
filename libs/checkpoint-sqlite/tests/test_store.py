@@ -1069,6 +1069,27 @@ def test_sql_injection_vulnerability(store: SqliteStore) -> None:
         store.search(("docs",), filter={malicious_key: "dummy"})
 
 
+def test_nested_object_filter(store: SqliteStore) -> None:
+    """Test that literal nested objects are not parsed as operator maps."""
+    store.put(
+        ("docs",),
+        "matching",
+        {"config": {"alpha": 1, "beta": 2}, "score": 3},
+    )
+    store.put(
+        ("docs",),
+        "different",
+        {"config": {"alpha": 1, "beta": 9}, "score": 1},
+    )
+
+    results = store.search(("docs",), filter={"config": {"alpha": 1, "beta": 2}})
+
+    assert [item.key for item in results] == ["matching"]
+
+    operator_results = store.search(("docs",), filter={"score": {"$gt": 2}})
+    assert [item.key for item in operator_results] == ["matching"]
+
+
 def test_sql_injection_filter_values(store: SqliteStore) -> None:
     """Test that SQL injection via malicious filter values is properly escaped."""
     # Setup: Create documents with different access levels

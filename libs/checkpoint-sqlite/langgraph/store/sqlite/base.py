@@ -458,7 +458,9 @@ class BaseSqliteStore:
                 for key, value in op.filter.items():
                     _validate_filter_key(key)
 
-                    if isinstance(value, dict):
+                    if isinstance(value, dict) and any(
+                        key.startswith("$") for key in value
+                    ):
                         for op_name, val in value.items():
                             condition, filter_params_ = self._get_filter_condition(
                                 key, op_name, val

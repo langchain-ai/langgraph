@@ -718,6 +718,27 @@ async def test_search_items(
             await store.adelete(ns, key)
 
 
+async def test_nested_object_filter(store: AsyncSqliteStore) -> None:
+    """Test that literal nested objects are not parsed as operator maps."""
+    await store.aput(
+        ("docs",),
+        "matching",
+        {"config": {"alpha": 1, "beta": 2}, "score": 3},
+    )
+    await store.aput(
+        ("docs",),
+        "different",
+        {"config": {"alpha": 1, "beta": 9}, "score": 1},
+    )
+
+    results = await store.asearch(("docs",), filter={"config": {"alpha": 1, "beta": 2}})
+
+    assert [item.key for item in results] == ["matching"]
+
+    operator_results = await store.asearch(("docs",), filter={"score": {"$gt": 2}})
+    assert [item.key for item in operator_results] == ["matching"]
+
+
 async def test_async_namespace_segment_boundary(store: AsyncSqliteStore) -> None:
     """Segment-aware scoping on the async path.
 
