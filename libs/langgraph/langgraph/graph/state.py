@@ -42,6 +42,7 @@ from langgraph._internal._constants import (
 from langgraph._internal._fields import (
     get_cached_annotated_keys,
     get_field_default,
+    get_field_default_factory,
     get_update_as_tuples,
 )
 from langgraph._internal._pydantic import create_model
@@ -1824,7 +1825,7 @@ def _get_channels(
 
     type_hints = get_type_hints(schema, include_extras=True)
     all_keys = {
-        name: _get_channel(name, typ)
+        name: _get_channel(name, typ, schema=schema)
         for name, typ in type_hints.items()
         if name != "__slots__"
     }
@@ -1837,18 +1838,30 @@ def _get_channels(
 
 @overload
 def _get_channel(
-    name: str, annotation: Any, *, allow_managed: Literal[False]
+    name: str,
+    annotation: Any,
+    *,
+    allow_managed: Literal[False],
+    schema: type[Any] | None = None,
 ) -> BaseChannel: ...
 
 
 @overload
 def _get_channel(
-    name: str, annotation: Any, *, allow_managed: Literal[True] = True
+    name: str,
+    annotation: Any,
+    *,
+    allow_managed: Literal[True] = True,
+    schema: type[Any] | None = None,
 ) -> BaseChannel | ManagedValueSpec: ...
 
 
 def _get_channel(
-    name: str, annotation: Any, *, allow_managed: bool = True
+    name: str,
+    annotation: Any,
+    *,
+    allow_managed: bool = True,
+    schema: type[Any] | None = None,
 ) -> BaseChannel | ManagedValueSpec:
     # Strip out Required and NotRequired wrappers
     if hasattr(annotation, "__origin__") and annotation.__origin__ in (
@@ -1864,7 +1877,7 @@ def _get_channel(
     elif channel := _is_field_channel(annotation):
         channel.key = name
         return channel
-    elif channel := _is_field_binop(annotation):
+    elif channel := _is_field_binop(name, annotation, schema):
         channel.key = name
         return channel
 
@@ -1901,7 +1914,9 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
     return None
 
 
-def _is_field_binop(typ: type[Any]) -> BinaryOperatorAggregate | None:
+def _is_field_binop(
+    name: str, typ: type[Any], schema: type[Any] | None = None
+) -> BinaryOperatorAggregate | None:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
         if len(meta) >= 1 and callable(meta[-1]):
@@ -1914,7 +1929,14 @@ def _is_field_binop(typ: type[Any]) -> BinaryOperatorAggregate | None:
                 )
                 == 2
             ):
-                return BinaryOperatorAggregate(typ, meta[-1])
+                default_factory = (
+                    get_field_default_factory(name, schema)
+                    if schema is not None
+                    else None
+                )
+                return BinaryOperatorAggregate(
+                    typ, meta[-1], default_factory=default_factory
+                )
             else:
                 raise ValueError(
                     f"Invalid reducer signature. Expected (a, b) -> c. Got {sig}"

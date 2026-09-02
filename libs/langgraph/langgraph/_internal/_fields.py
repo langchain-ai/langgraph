@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import copy
 import dataclasses
 import types
 import weakref
-from collections.abc import Generator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from typing import Annotated, Any, Optional, Union, get_origin, get_type_hints
 
 from pydantic import BaseModel
+from pydantic_core import PydanticUndefined
 from typing_extensions import NotRequired, ReadOnly, Required
 
 from langgraph._internal._typing import MISSING
@@ -120,6 +122,41 @@ def get_field_default(name: str, type_: Any, schema: type[Any]) -> Any:
     if _is_optional_type(type_):
         return None
     return ...
+
+
+def get_field_default_factory(name: str, schema: type[Any]) -> Callable[[], Any] | None:
+    """Return a zero-arg factory for a field's configured default, if any.
+
+    Used to seed reducer channels (`BinaryOperatorAggregate`) with the state
+    schema's real default instead of the bare type's empty value. Returns a
+    factory (not a precomputed value) so that mutable defaults aren't shared
+    by reference across separate graph invocations. TypedDict has no native
+    per-field default concept, so it always returns None.
+    """
+    if isinstance(schema, type) and issubclass(schema, BaseModel):
+        field_info = schema.model_fields.get(name)
+        if field_info is not None:
+            if field_info.default_factory is not None:
+                return field_info.default_factory
+            if field_info.default is not PydanticUndefined:
+                default_value = field_info.default
+                return lambda: copy.deepcopy(default_value)
+        return None
+    if dataclasses.is_dataclass(schema):
+        field_info = next(
+            (f for f in dataclasses.fields(schema) if f.name == name), None
+        )
+        if field_info is not None:
+            if field_info.default_factory is not dataclasses.MISSING:
+                return field_info.default_factory
+            if (
+                field_info.default is not dataclasses.MISSING
+                and field_info.default is not ...
+            ):
+                default_value = field_info.default
+                return lambda: copy.deepcopy(default_value)
+        return None
+    return None
 
 
 def get_enhanced_type_hints(

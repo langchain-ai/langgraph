@@ -7,7 +7,7 @@ from typing import Annotated as Annotated2
 
 import pytest
 from langchain_core.runnables import RunnableConfig
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing_extensions import NotRequired, Required, TypedDict
 
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -246,6 +246,60 @@ def test_state_schema_default_values(kw_only_: bool):
     assert (
         set(json_schema["properties"].keys()) == expected_required | expected_optional
     )
+
+
+def _extend_list(original: list[str], new: list[str]) -> list[str]:
+    original.extend(new)
+    return original
+
+
+@pytest.mark.parametrize("schema_style", ["pydantic", "dataclass"])
+def test_reducer_field_with_nonempty_default(schema_style: str) -> None:
+    """A reducer field's configured default should seed the channel, not be
+    silently discarded in favor of the bare type's empty value. See #5225."""
+    if schema_style == "pydantic":
+
+        class OverallState(BaseModel):
+            variable: Annotated[list[str], _extend_list] = Field(
+                default_factory=lambda: ["default"]
+            )
+    else:
+
+        @dataclass
+        class OverallState:  # type: ignore[no-redef]
+            variable: Annotated[list[str], _extend_list] = field(
+                default_factory=lambda: ["default"]
+            )
+
+    def node(state: Any) -> dict[str, Any]:
+        return {"variable": ["appended"]}
+
+    builder = StateGraph(OverallState)
+    builder.add_node("n", node)
+    builder.add_edge("__start__", "n")
+    graph = builder.compile()
+
+    assert graph.invoke({})["variable"] == ["default", "appended"]
+    # A second invocation must not reuse/mutate the same default list object.
+    assert graph.invoke({})["variable"] == ["default", "appended"]
+
+
+def test_reducer_field_typed_dict_default_unchanged() -> None:
+    """TypedDict has no native default concept; a reducer field on one should
+    keep accumulating only what's explicitly written, unaffected by #5225's fix."""
+
+    class OverallState(TypedDict):
+        variable: Annotated[list[str], _extend_list]
+
+    def node(state: Any) -> dict[str, Any]:
+        return {"variable": ["appended"]}
+
+    builder = StateGraph(OverallState)
+    builder.add_node("n", node)
+    builder.add_edge("__start__", "n")
+    graph = builder.compile()
+
+    assert graph.invoke({"variable": ["seed"]})["variable"] == ["seed", "appended"]
 
 
 def test__get_node_name() -> None:
