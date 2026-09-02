@@ -10,6 +10,7 @@ from typing import (
     NamedTuple,
     TypedDict,
     TypeVar,
+    cast,
 )
 
 from langchain_core.runnables import RunnableConfig
@@ -781,7 +782,7 @@ def get_serializable_checkpoint_metadata(
     """Get checkpoint metadata in a backwards-compatible manner."""
     checkpoint_metadata = get_checkpoint_metadata(config, metadata)
     if "writes" in checkpoint_metadata:
-        checkpoint_metadata.pop("writes")
+        cast(dict[str, Any], checkpoint_metadata).pop("writes")
     return checkpoint_metadata
 
 
