@@ -6,7 +6,7 @@ import typing
 import warnings
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Hashable, Sequence
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass, is_dataclass, replace
 from datetime import timedelta
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
@@ -1287,16 +1287,21 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         # Apply builder defaults to node specs. Per-node values always win.
         # Error-handler routing and cache_policy are only assigned to regular
         # nodes. Retry and timeout defaults also apply to error-handler nodes.
+        #
+        # Defaults are applied to a local copy of the node specs rather than to
+        # `self.nodes`, so that `compile()` leaves the builder untouched and
+        # compiling the same builder twice is not an error.
         defaults = self._node_defaults
+        nodes: dict[str, StateNodeSpec[Any, ContextT]] = dict(self.nodes)
         default_handler_name: str | None = None
         if defaults.error_handler is not None:
-            if _DEFAULT_ERROR_HANDLER_NODE in self.nodes:
+            if _DEFAULT_ERROR_HANDLER_NODE in nodes:
                 raise ValueError(
                     f"Auto-generated default error handler node "
                     f"`{_DEFAULT_ERROR_HANDLER_NODE}` already exists."
                 )
             default_handler_name = _DEFAULT_ERROR_HANDLER_NODE
-            self.nodes[default_handler_name] = StateNodeSpec[Any, ContextT](
+            nodes[default_handler_name] = StateNodeSpec[Any, ContextT](
                 coerce_to_runnable(
                     defaults.error_handler,  # type: ignore[arg-type]
                     name=default_handler_name,
@@ -1310,7 +1315,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             )
 
         # Apply builder defaults to node specs. Per-node values always win.
-        for spec in self.nodes.values():
+        for node_name, spec in list(nodes.items()):
+            updated = spec
             # error_handler: regular nodes only — handlers must never
             # catch themselves or other handlers.
             if (
@@ -1318,11 +1324,11 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 and default_handler_name is not None
                 and spec.error_handler_node is None
             ):
-                spec.error_handler_node = default_handler_name
+                updated = replace(updated, error_handler_node=default_handler_name)
             # retry: all nodes — handlers should be retried on transient
             # failures just like regular nodes.
             if defaults.retry_policy is not None and spec.retry_policy is None:
-                spec.retry_policy = defaults.retry_policy
+                updated = replace(updated, retry_policy=defaults.retry_policy)
             # cache: regular nodes only — caching an error-handler result
             # is unsafe because the input (failed-node state) may differ
             # across failures even when the cache key matches.
@@ -1331,15 +1337,17 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 and defaults.cache_policy is not None
                 and spec.cache_policy is None
             ):
-                spec.cache_policy = defaults.cache_policy
+                updated = replace(updated, cache_policy=defaults.cache_policy)
             # timeout: all nodes — a stuck handler should be cancelled the
             # same way a stuck regular node would be.
             if defaults.timeout is not None and spec.timeout is None:
-                spec.timeout = defaults.timeout
+                updated = replace(updated, timeout=defaults.timeout)
+            if updated is not spec:
+                nodes[node_name] = updated
 
         node_error_handler_map = {
             node_name: spec.error_handler_node
-            for node_name, spec in self.nodes.items()
+            for node_name, spec in nodes.items()
             if not spec.is_error_handler and spec.error_handler_node is not None
         }
 
@@ -1371,7 +1379,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         compiled._serde_allowlist = serde_allowlist
 
         compiled.attach_node(START, None)
-        for key, node in self.nodes.items():
+        for key, node in nodes.items():
             compiled.attach_node(key, node)
 
         # Record output/state mappers for v2 stream coercion (pydantic/dataclass only)

@@ -2497,6 +2497,38 @@ def test_set_node_defaults_error_handler_collides_with_user_node():
         builder.compile()
 
 
+def test_set_node_defaults_error_handler_repeated_compile():
+    """Compiling the same builder twice must not fail or mutate the builder."""
+
+    class State(TypedDict):
+        foo: str
+
+    def boom(state: State) -> State:
+        raise ValueError("boom")
+
+    def default_handler(state: State, error: NodeError) -> State:
+        return {"foo": "handled"}
+
+    builder = (
+        StateGraph(State)
+        .add_node("boom", boom)
+        .add_edge(START, "boom")
+        .add_edge("boom", END)
+        .set_node_defaults(error_handler=default_handler)
+    )
+
+    first = builder.compile()
+    assert first.invoke({"foo": ""})["foo"] == "handled"
+
+    second = builder.compile()
+    assert second.invoke({"foo": ""})["foo"] == "handled"
+
+    # The auto-generated handler is an implementation detail of `compile()` and
+    # must not leak into the builder.
+    assert "__default_error_handler__" not in builder.nodes
+    assert builder.nodes["boom"].error_handler_node is None
+
+
 def test_set_node_defaults_retry_policy():
     class State(TypedDict):
         foo: str
