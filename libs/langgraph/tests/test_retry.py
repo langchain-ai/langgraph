@@ -21,6 +21,7 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResu
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableParallel
 from langgraph.checkpoint.memory import InMemorySaver, MemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from requests.models import Response
 from typing_extensions import TypedDict
 
 from langgraph._internal._constants import (
@@ -244,6 +245,71 @@ def test_should_retry_default_retry_on():
         pass
 
     assert _should_retry_on(policy, CustomException("custom error")) is True
+
+
+@pytest.mark.parametrize(
+    ("status_code", "should_retry"),
+    [
+        (400, False),
+        (401, False),
+        (404, False),
+        (422, False),
+        (429, False),
+        (500, True),
+        (502, True),
+        (503, True),
+    ],
+)
+def test_default_retry_on_requests_http_error_real_response(
+    status_code: int, should_retry: bool
+) -> None:
+    """`requests.HTTPError` must be classified by status code, not truthiness.
+
+    `Response.__bool__` is an alias for `Response.ok`, so every error response is
+    falsy. Guarding on `if exc.response` therefore skipped the status check for
+    all of them and retried 4xx responses. A `Mock()` response hides this,
+    because a bare `Mock` is truthy -- so these cases use a real `Response`.
+    """
+    response = Response()
+    response.status_code = status_code
+    assert bool(response) is False, "precondition: error responses are falsy"
+
+    exc = requests.HTTPError(f"status {status_code}")
+    exc.response = response
+
+    assert _should_retry_on(RetryPolicy(), exc) is should_retry
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        requests.ConnectionError("connection refused"),
+        requests.ConnectTimeout("connect timed out"),
+        requests.ReadTimeout("read timed out"),
+        requests.Timeout("timed out"),
+    ],
+    ids=["connection_error", "connect_timeout", "read_timeout", "timeout"],
+)
+def test_default_retry_on_requests_transient_errors(exc: Exception) -> None:
+    """Transient `requests` failures must retry.
+
+    `requests.RequestException` subclasses `OSError`, which is in the
+    non-retryable list, so these were classified as permanent failures even
+    though the builtin `ConnectionError` equivalent retries.
+    """
+    assert isinstance(exc, OSError), "precondition: requests errors are OSErrors"
+    assert _should_retry_on(RetryPolicy(), exc) is True
+
+
+def test_default_retry_on_requests_programming_errors_still_permanent() -> None:
+    """Non-transient `requests` errors must stay non-retryable."""
+    policy = RetryPolicy()
+    assert _should_retry_on(policy, requests.URLRequired("no url")) is False
+    assert (
+        _should_retry_on(policy, requests.exceptions.MissingSchema("no schema"))
+        is False
+    )
+    assert _should_retry_on(policy, requests.exceptions.InvalidURL("bad url")) is False
 
 
 def test_graph_with_single_retry_policy():
