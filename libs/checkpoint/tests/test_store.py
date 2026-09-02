@@ -1058,3 +1058,78 @@ def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
     assert result3[0].key == "3"
     assert result4[0].key == "4"
     assert result5[0].key == "5"
+
+
+NESTED_FIXTURE = {
+    "nested": {"user": {"access-level": "nested"}},
+    "plain": {"user": "nested"},
+}
+
+
+def _search_keys(store: InMemoryStore, filter_: dict[str, Any]) -> list[str]:
+    return sorted(item.key for item in store.search(("docs",), filter=filter_))
+
+
+def _fixture_store(values: dict[str, dict[str, Any]]) -> InMemoryStore:
+    store = InMemoryStore()
+    for key, value in values.items():
+        store.put(("docs",), key, value)
+    return store
+
+
+def test_search_dotted_filter_key() -> None:
+    """Dotted filter keys resolve nested values, as `SqliteStore` already does."""
+    store = _fixture_store(NESTED_FIXTURE)
+
+    assert _search_keys(store, {"user.access-level": "nested"}) == ["nested"]
+    # The nested-mapping form already worked and must keep working.
+    assert _search_keys(store, {"user": {"access-level": "nested"}}) == ["nested"]
+    assert _search_keys(store, {"user": "nested"}) == ["plain"]
+
+
+def test_search_dotted_filter_key_with_operator() -> None:
+    """Operators apply to the value resolved from a dotted key."""
+    store = _fixture_store({"a": {"user": {"age": 31}}, "b": {"user": {"age": 25}}})
+
+    assert _search_keys(store, {"user.age": {"$gt": 30}}) == ["a"]
+    assert _search_keys(store, {"user.age": {"$lte": 30}}) == ["b"]
+    assert _search_keys(store, {"user.age": {"$ne": 31}}) == ["b"]
+
+
+def test_search_dotted_filter_key_deep() -> None:
+    """Paths longer than two segments resolve too."""
+    store = _fixture_store(
+        {"deep": {"a": {"b": {"c": "hit"}}}, "shallow": {"a": {"b": "hit"}}}
+    )
+
+    assert _search_keys(store, {"a.b.c": "hit"}) == ["deep"]
+    assert _search_keys(store, {"a.b": "hit"}) == ["shallow"]
+
+
+def test_search_dotted_filter_key_unresolvable() -> None:
+    """A dotted path that resolves nowhere matches nothing."""
+    store = _fixture_store({"a": {"user": {"name": "x"}}})
+
+    assert _search_keys(store, {"user.missing": "x"}) == []
+    assert _search_keys(store, {"nope.name": "x"}) == []
+    # Traversing through a non-mapping leaf must not raise.
+    assert _search_keys(store, {"user.name.deeper": "x"}) == []
+
+
+def test_search_literal_dotted_key_still_matches() -> None:
+    """A top-level key that literally contains a dot stays matchable."""
+    store = _fixture_store(
+        {"literal": {"user.name": "x"}, "nested": {"user": {"name": "x"}}}
+    )
+
+    # Both forms match: the dotted path resolves for "nested", and the literal
+    # fallback covers "literal", whose key is not a path.
+    assert _search_keys(store, {"user.name": "x"}) == ["literal", "nested"]
+
+
+async def test_asearch_dotted_filter_key() -> None:
+    """`asearch` resolves dotted keys the same way `search` does."""
+    store = _fixture_store(NESTED_FIXTURE)
+
+    results = await store.asearch(("docs",), filter={"user.access-level": "nested"})
+    assert [item.key for item in results] == ["nested"]
