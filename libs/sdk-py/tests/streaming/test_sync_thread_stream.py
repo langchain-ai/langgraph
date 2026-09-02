@@ -590,10 +590,10 @@ def test_v3_streaming_sync_surface_smoke():
     assert results["values"] == fake.state["values"]
     messages_result = results["messages"]
     assert isinstance(messages_result, list)
-    assert [str(m.text) for m in messages_result] == ["hi"]  # ty: ignore[unresolved-attribute]
+    assert [str(m.text) for m in messages_result] == ["hi"]
     tools_result = results["tools"]
     assert isinstance(tools_result, list)
-    assert tools_result[0].name == "search"  # ty: ignore[unresolved-attribute]
+    assert tools_result[0].name == "search"
     assert results["progress"] == [{"name": "progress", "step": 1}]
     assert final == {"final": True}
 
