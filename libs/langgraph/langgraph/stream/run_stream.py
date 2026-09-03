@@ -33,12 +33,17 @@ async def _adrive_until_done(pump: Callable[[], Awaitable[bool]]) -> None:
         pass
 
 
-def _missing_projection(run: object, name: str) -> NoReturn:
-    """Raise for a projection name that was never registered.
+def _raise_missing_projection(run: object, name: str) -> NoReturn:
+    """Raise after normal attribute lookup fails for a projection.
 
-    Reads the mux out of `__dict__` because `__getattr__` also fires before
-    `__init__` assigns `_mux` and for dunder probes, where `run._mux` would
-    recurse until the stack is exhausted.
+    Registered native projections are installed directly on the run instance
+    during `__init__`, so `__getattr__` is never called for them. At this point
+    the requested name is necessarily missing; the mux is inspected only to
+    include the valid registered projection names in the error message.
+
+    Read `_mux` directly from `__dict__` because it may not exist yet on a
+    partially initialized instance. Accessing `run._mux` in that case would
+    invoke `__getattr__` again and recurse indefinitely.
     """
     mux = run.__dict__.get("_mux")
     registered = sorted(mux.native_keys) if mux is not None else []
@@ -94,7 +99,7 @@ class GraphRunStream:
         them all. The cost is that a misspelling type-checks too, and fails at
         runtime instead.
         """
-        _missing_projection(self, name)
+        _raise_missing_projection(self, name)
 
     def __init__(
         self,
@@ -394,7 +399,7 @@ class AsyncGraphRunStream:
 
     def __getattr__(self, name: str) -> StreamChannel[Any]:
         """Type projections declared elsewhere. See `GraphRunStream`."""
-        _missing_projection(self, name)
+        _raise_missing_projection(self, name)
 
     def __init__(
         self,
