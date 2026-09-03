@@ -126,7 +126,9 @@ UPSERT_CHECKPOINTS_SQL = """
     ON CONFLICT (thread_id, checkpoint_ns)
     DO UPDATE SET
         checkpoint = EXCLUDED.checkpoint,
-        metadata = EXCLUDED.metadata;
+        metadata = EXCLUDED.metadata
+    WHERE checkpoints.checkpoint->>'id' <= EXCLUDED.checkpoint->>'id'
+    RETURNING checkpoint->>'id' AS checkpoint_id;
 """
 
 UPSERT_CHECKPOINT_WRITES_SQL = """
@@ -409,6 +411,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
         checkpoint_ns = configurable.pop("checkpoint_ns")
 
         copy = checkpoint.copy()
+        channel_values = copy.pop("channel_values")
         next_config = {
             "configurable": {
                 "thread_id": thread_id,
@@ -417,7 +420,27 @@ class ShallowPostgresSaver(BasePostgresSaver):
             }
         }
 
-        with self._cursor(pipeline=True) as cur:
+        with self._transaction_cursor() as cur:
+            cur.execute(
+                self.UPSERT_CHECKPOINTS_SQL,
+                (
+                    thread_id,
+                    checkpoint_ns,
+                    Jsonb(copy),
+                    Jsonb(get_serializable_checkpoint_metadata(config, metadata)),
+                ),
+            )
+            if cur.fetchone() is None:
+                cur.execute(
+                    """SELECT checkpoint->>'id' AS checkpoint_id
+                    FROM checkpoints
+                    WHERE thread_id = %s AND checkpoint_ns = %s""",
+                    (thread_id, checkpoint_ns),
+                )
+                stored = cur.fetchone()
+                assert stored is not None
+                next_config["configurable"]["checkpoint_id"] = stored["checkpoint_id"]
+                return next_config
             cur.execute(
                 """DELETE FROM checkpoint_writes
                 WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id NOT IN (%s, %s)""",
@@ -434,17 +457,8 @@ class ShallowPostgresSaver(BasePostgresSaver):
                     self.serde,
                     thread_id,
                     checkpoint_ns,
-                    copy.pop("channel_values"),  # type: ignore[misc]
+                    channel_values,
                     new_versions,
-                ),
-            )
-            cur.execute(
-                self.UPSERT_CHECKPOINTS_SQL,
-                (
-                    thread_id,
-                    checkpoint_ns,
-                    Jsonb(copy),
-                    Jsonb(get_serializable_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config
@@ -524,6 +538,16 @@ class ShallowPostgresSaver(BasePostgresSaver):
             else:
                 with self.lock, conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
+
+    @contextmanager
+    def _transaction_cursor(self) -> Iterator[Cursor[DictRow]]:
+        with _internal.get_connection(self.conn) as conn:
+            with (
+                self.lock,
+                conn.transaction(),
+                conn.cursor(binary=True, row_factory=dict_row) as cur,
+            ):
+                yield cur
 
 
 class AsyncShallowPostgresSaver(BasePostgresSaver):
@@ -747,6 +771,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         checkpoint_ns = configurable.pop("checkpoint_ns")
 
         copy = checkpoint.copy()
+        channel_values = copy.pop("channel_values")
         next_config = {
             "configurable": {
                 "thread_id": thread_id,
@@ -755,7 +780,27 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
             }
         }
 
-        async with self._cursor(pipeline=True) as cur:
+        async with self._transaction_cursor() as cur:
+            await cur.execute(
+                self.UPSERT_CHECKPOINTS_SQL,
+                (
+                    thread_id,
+                    checkpoint_ns,
+                    Jsonb(copy),
+                    Jsonb(get_serializable_checkpoint_metadata(config, metadata)),
+                ),
+            )
+            if await cur.fetchone() is None:
+                await cur.execute(
+                    """SELECT checkpoint->>'id' AS checkpoint_id
+                    FROM checkpoints
+                    WHERE thread_id = %s AND checkpoint_ns = %s""",
+                    (thread_id, checkpoint_ns),
+                )
+                stored = await cur.fetchone()
+                assert stored is not None
+                next_config["configurable"]["checkpoint_id"] = stored["checkpoint_id"]
+                return next_config
             await cur.execute(
                 """DELETE FROM checkpoint_writes
                 WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id NOT IN (%s, %s)""",
@@ -772,17 +817,8 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                     self.serde,
                     thread_id,
                     checkpoint_ns,
-                    copy.pop("channel_values"),  # type: ignore[misc]
+                    channel_values,
                     new_versions,
-                ),
-            )
-            await cur.execute(
-                self.UPSERT_CHECKPOINTS_SQL,
-                (
-                    thread_id,
-                    checkpoint_ns,
-                    Jsonb(copy),
-                    Jsonb(get_serializable_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config
@@ -866,6 +902,16 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                     conn.cursor(binary=True, row_factory=dict_row) as cur,
                 ):
                     yield cur
+
+    @asynccontextmanager
+    async def _transaction_cursor(self) -> AsyncIterator[AsyncCursor[DictRow]]:
+        async with _ainternal.get_connection(self.conn) as conn:
+            async with (
+                self.lock,
+                conn.transaction(),
+                conn.cursor(binary=True, row_factory=dict_row) as cur,
+            ):
+                yield cur
 
     def list(
         self,

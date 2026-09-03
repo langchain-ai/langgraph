@@ -278,6 +278,34 @@ async def test_asearch(saver_name: str, test_data) -> None:
         } == {"", "inner"}
 
 
+async def test_shallow_saver_ignores_stale_checkpoint() -> None:
+    config: RunnableConfig = {
+        "configurable": {
+            "thread_id": "stale-checkpoint",
+            "checkpoint_ns": "",
+        }
+    }
+    stale = empty_checkpoint()
+    stale["id"] = "00000000-0000-0000-0000-000000000001"
+    stale["channel_values"] = {"value": "stale"}
+    stale["channel_versions"] = {"value": "1"}
+    newer = empty_checkpoint()
+    newer["id"] = "00000000-0000-0000-0000-000000000002"
+    newer["channel_values"] = {"value": "newer"}
+    newer["channel_versions"] = {"value": "2"}
+
+    async with _shallow_saver() as saver:
+        await saver.aput(config, newer, {}, {"value": "2"})
+        saved_config = await saver.aput(config, stale, {}, {"value": "1"})
+
+        saved = await saver.aget_tuple(config)
+
+    assert saved_config["configurable"]["checkpoint_id"] == newer["id"]
+    assert saved is not None
+    assert saved.checkpoint["id"] == newer["id"]
+    assert saved.checkpoint["channel_values"] == {"value": "newer"}
+
+
 @pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
 async def test_null_chars(saver_name: str, test_data) -> None:
     async with _saver(saver_name) as saver:
