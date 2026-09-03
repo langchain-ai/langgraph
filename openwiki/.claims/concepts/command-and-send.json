@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:04b34ec4849c655ae71aaff85dcecc415274c0b0c5b9765beff863ef31c1bd2f",
+  "claims": [
+    {
+      "id": "claim_2e77e6d55a644035b28bac6711d595d7",
+      "statement": "Send explicitly enqueues a task for a specific node with custom input state in the same superstep, enabling dynamic fan-out for map-reduce patterns and conditional task dispatch.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_algo.py#L442-L466",
+          "version": "repo-lines-v1:sha256:1cd6107bd02b3d2c133365e8ce4e5a7bb83156ea11b96858f216362f060a273d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4NDA1YzM3NWMwMzY1ODllMjY5YThjN2FjZjc0MjE2NDA1ZjY0ZTRjYmExOTUxZWY5ZThlM2JkNmU1YmY5ZGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdmZDIyZWJiYmU0ODMyN2QwZWE4NjgyYjIxZWFmNDIxMmNhYzQzZjFmM2E0NWQ5ZDliMjIzOTMzYWYyOTU5M2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdkODhmY2IwNzAwY2Y5YzM2MDcxMGViMjJiY2MzNzJhNGYwMjk2YjdiOGZhZmU1OGY1MzFlZDY4ZTgwYjM2ZDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVhMjdjNzQ5ZjViZDViN2UwYmRlNmY5OWY5M2Y4Njg4ZTdmOWRjMGMxZWY2MjhhOGQ0Y2U3NWFmNmNlODg2ZTIifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L704-L793",
+          "version": "repo-lines-v1:sha256:0aceeccf568130b6910845b2955fff44566a57f8edc7c1aea26ac28a80241873:eyJzZWxlY3RlZExpbmVDb3VudCI6OTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM0MzY3ZDBkMzUwMTBlYjNhNzMyY2VmZjBhZjFlYzUzZjdmMTFiMzA4N2I3YjgyYjBiNDEzNzZjYTVhNmY4YzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRmZDlkZTFlYTk3MDQ0NmVkNmRhOTNmNmViY2M0ZGFkNDNlNzRmM2FiM2JiNmE0MmQ1NGU3MTA2YTM1Y2IyM2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMwOGFjZjM5MWUxZjc5M2ZlNjJhNmQ1ZTMwNjQ4OTUwNTI4ODY0YjQ1NDM1Mzk1YWM3ODkzZDU1NDNiNDQwN2QifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1de8993927524354bc36b39bcb7d18ea",
+      "statement": "Send constructor takes node (str), arg (Any), and optional timeout (TimeoutPolicy | None) parameters; the arg is the complete state or message passed to the target node.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L757-L776",
+          "version": "repo-lines-v1:sha256:6f8f1b0402085a39476ea16bdc788a49542aa8b9738a353c7ef26b8080711c80:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlmZDdhMDdhODNkZDE5OTZmYjUxNjg0YjQyYWVjYWY0ZTkwZmI3OGJhNzIzMGU1NDJlZDdiZDAxZDQyMzAxYmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRjODUyZGVhYjUwMjEwNzk0MzYyYzllZmQyNzc5OThlYjI0MTgzNDg1OThjZjcwMjM3Yjc3YWJiZmJkNDZmMzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhhMGZjOGFmZDc0Njg1NDNhMDZiMTk3ZGFkMzU1MWY0ZGJiZDdiMmIwY2YxNjdkYTZiZjY3NDlkNjAyM2M3MTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVlMzg5MjYxYWJiOTk4MTExN2NmYjY1NjUyNGMxYTc4YzYyNmVmODFjYjU0ZmEwNjA3MzY5YzhlZWExZDljNTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f4b3f19ba12843859694feee63c7c9f3",
+      "statement": "Conditional edge functions can return Send objects directly or mixed with node name strings, enabling dynamic routing of multiple tasks to the same or different nodes in one superstep.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L700-L700",
+          "version": "repo-lines-v1:sha256:0fb1a907ea87f449ae21dcf0ab6a083ae0e9633c167ed5cee003959f25398348:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMGZiMWE5MDdlYTg3ZjQ0OWFlMjFkY2YwYWI2YTA4M2FlMGU5NjMzYzE2N2VkNWNlZTAwMzk1OWYyNTM5ODM0OCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMGZiMWE5MDdlYTg3ZjQ0OWFlMjFkY2YwYWI2YTA4M2FlMGU5NjMzYzE2N2VkNWNlZTAwMzk1OWYyNTM5ODM0OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzNkOGE2ZTk4N2Q0YTFhNTA2ZDFkMmI1MGM3YmZiNGVlMWQxZTlkMzMxZDFmYjE1MWFjYmFlMzdjM2Y0YmQzMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMmU5MTM3NTZkMmQ2NjdhOTI4ZTdkZWIyN2RjMzQzN2Q1YTM1N2U4NWIxOTc1MjI5ODIxODdkZTdjZDliYWNmMSJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/tests/test_pregel.py#L1737-L1741",
+          "version": "repo-lines-v1:sha256:d07a30ffdfdbd6b8cf13a91fa62eb249c4d7f2e8b14087d0756e9edb59aa52ab:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzFhZWMyYzNiOGI3YWU0ZmM2MTg0M2EyNmZmNGE5NGMxMmQwY2Q5NzkwOGRjZjI5MDU3ODRmZWU3YmIxZDQyZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYmFhZThhMGNhNzZmOThmN2I3ZGM3OTg0OTUxZDYzZTU3ZGIzYzY0NTU3OWNhNTFiYWQ2YTUzOWQ2MTRlZGJiZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTJiYzg2OGI4YWZjOGIwOTA3MjIzNmY2YTA0MGJjMWRlNTUyMmNmOGViYzQ1MTRjODYzMGNlZmViNjBjYzhiMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2ZlMDg2YWUyZTVkMmFiNzNjNWM4ZmMzZDk4NzNmOGNhOWUzNmQ5ZjZhNTE3MzczN2Y0MzJmYmM2NGYyZTQzZCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_d68be4985748421199770e3378c038a3",
+      "statement": "Command wraps multiple control directives—update (state changes), goto (node navigation), resume (interrupt resumption), and graph (scope)—in a single return value for atomic multi-directional control.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L798-L849",
+          "version": "repo-lines-v1:sha256:b99fb30e7ec8ea0d6ae731f756141fcbe2ec9d2c558b1065d2cbade88758269e:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4YThkOWFiYTRiNTQ2NzYwMTk5MWYwZmQ2Y2RkNmNiMzQ3ZmIxMjM5YTVkMzMzMTFkZDRjNjFmZjc4MGI1Y2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjIyZTg0ZTQyNWIyYTMxZjVlYmM5YWVkODZiZmM5OWNjMjQ1ODE1ODk1NWVmZTliNTJjYjZjMTQ4YjQ3YTg5ODYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg1NjkzZjBkZjIwNTQyN2JhOWQyNTQ0MTY5NGVhNTM4ODJlMDFjMjIyYjgxOWFiNDVhZjkzZmI0ZmZmNzYxNjUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_dd69db3fd03643d692d16efe4174c944",
+      "statement": "Command.goto can be a node name (string), a Send object, or a list of names/Send objects, enabling static routes, dynamic task dispatch, or mixed routing in one command.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_io.py#L60-L73",
+          "version": "repo-lines-v1:sha256:895115c7a24a93e8ce457ee2a92df9c7e0544271bae24676cd180d2a3e2b15dc:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRjMGIyN2ZlNTIzZWIxZjgzZDY1ODg5ZGIyOWFhYmZhMDhmYzAyZDdmOTM4ZmFkNTBmYWViMzY1MzMwNzkzNTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxMDM0ODFjNTdkMGYwZGMwZjc2Y2QyY2M4YjM2MDRjNGU4Mjk2ZGE0MTIyYWRkMTllODE3NDVkYzdlMzMxYTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJmMTk5MDUzNWE4MGM2YjIzNWMzMGFiNDUxNTQzODg2YjM3OTM5NjA5MzllYjE2ZjRlZjI3NWZiNGIzNWYwZDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI1ZDI1MTQxNGNlYjZiNjE1OGNiMTFiMzFiYWMzYTMzYWJkZTU4MjhiOThlMWE5NjRjYTcyZjU2NDRmMmUwZmYifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L813-L818",
+          "version": "repo-lines-v1:sha256:1abf56db5947c7e113a4fd2eba920097aad1183d26931c6afdffb17b87c29cf5:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDY4NjBkMTVjNTZkZGVjNDIwM2ZjZTM0N2YwYmQzNzMxZWUwNjlmMTQ1YWE2MzQ3M2JjMzQxMzU2MDg0MDljYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMGE0YzAxMTRhNTZhOThjN2YxZDM5MTE3OTY5MDc2M2Y0ZmIzY2Y3MmUyNTRhZmJhMjZiNzU2ZjJkM2NhNGY1MyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmFhYTQxZDVkNWIxZDFmOTJmODFkYWJlN2M5MjRjZTc5NzhkMDczNmM5ODBhNjBjMDYzZGE5Yjk2ODJhNWIyYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNGY1NTRmM2IyM2Y3MDNmNjE4M2MwYTQ0NzIyYWVjZjQxYzAxNmZlZTU3YTYzZjBjZDczZjg3YjQ1ZjM5Njc2NiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_b5bb54e6d6184ab3a260c4a6afdad0a8",
+      "statement": "Error handlers receive state and NodeError, and can return Command to update state, navigate to recovery nodes, or retry by jumping back to the original node with modified state.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_runner.py#L171-L174",
+          "version": "repo-lines-v1:sha256:f01648065191c49fce3078408efdf3e82941b254f0c2bf181d0e47cd567caff2:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDIzNzExNGY2MmY4MGJjYjE0NDBhZWMzZDNjOGNhZjliOTAyOWU4Y2I4N2VmNWVlNzQzYTFhNDA0ZjM3OGQ1ZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTU1OWY0Yjc1ZTdhOWFmZThjZjBjY2FiZDhiOWZjN2U2YmE1Njg1MmIyNGIxMDI1MmQ1ZmY2NTBmMDNlODBkYyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmRjMDAxZTkzZDFmNWVkMWNlNTFiMzZlYmE3NDJiMTAzOTlmOTRlY2M0ZWRlZjdlYTlmNThjZjk1ZmNlNGMyNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2NkNTJiOTllMmRhNGMzMmYzOWZmMjYwYWQzY2NmNjM0OTE4ZTAyYjJkNWY1ZjBjNjc4ZTIyYzFmZmMyNjJmYSJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/tests/test_retry.py#L2021-L2024",
+          "version": "repo-lines-v1:sha256:d4da62285937b4faf076f8a828c9071a1afaddb670d542289b57684e9378d70e:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2FmNGFhZDFjMzA2NjM5MGI2N2E2NjdlZjRhZjliNjIxYTQxNTdmOTEzNTRhODg1ZWQxMGQ3OTRhYjlkZjcyMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTU4MjkzMmJmYjI1YmZkMTUyNTViZjRhOGE0M2UyZmVhMTdlMWNmNzA3Y2RjZWI2YmYwNWJmMjExNjliYjE4NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGFhNDRlMDE0OGI3OWIzM2M5MzA3ODk5NDExNzA2NmVjN2RlNzFkMmE5Mzg1MWNkMWU4NDQ5NjkyZDFjZjliOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTY1NmYzNTA2ZTdlMjQ5YWM2MzgxODdhM2QyMDMwNjU0ZDE2OGJhNWZiZTE1NGNjOWI5ZDhhYjU3NDg5N2U0NyJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/tests/test_retry.py#L2069-L2070",
+          "version": "repo-lines-v1:sha256:18c1fce204657987d285f3b3503678d52b69c8d8fdef3c7a59b58c8f54b78005:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMGNkM2JjZGRmMzAyOTI5Y2I0OGQzODNjOGZmYWI2NjlkMTU2Y2JiNWYxZWU2NTA0M2YxMjM4OGJjZDI2MmQ5MSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDVlMzY2N2VjNTg5Yjg4NTA4ZWRlY2U5MmMzNWQxNDgwNjFmZDg1MWY1ZmRlNDIxZmM3YmJlNTNjZjlmYWQ1MyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGFhNDRlMDE0OGI3OWIzM2M5MzA3ODk5NDExNzA2NmVjN2RlNzFkMmE5Mzg1MWNkMWU4NDQ5NjkyZDFjZjliOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTRhZTc2NmYzYWJlODFlODZlOTlkMGFlMDNiZjA0OTUyOTk0MjczZDE1YTVjYTlmNGQ2YjM0MjQzNTg4OTJhZCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_1f38c52225914a1d84bb17c77cbf513a",
+      "statement": "The interrupt() function pauses graph execution from within a node, raising GraphInterrupt with a user-supplied value; clients resume by calling invoke() or astream_events() with Command(resume=...) and the original checkpoint.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L851-L900",
+          "version": "repo-lines-v1:sha256:e5b21efa741c7ecebb2ce4f3ba879c683ffbb4c25f626e21f5cf5db9e5c549f6:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM4MDBkNWNkZTA5MWRiZDU0MDI1MzIzODY1MDFlMzEzNDkyMmJmY2JjODgwYjMzMGRkYWFhMmI2NGUxYWJjZTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAzZDljYjQwMTM0YzlmZWJjMDAzODhmMjZhZGJiYjkwN2NiNzlkYmRjYzEyZjcxMGY1MTY1YjBlYjQwZWI5ZjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFjN2JkMjU4MDFmNjYzZGRjODY3NjA1MjE3NjVlNWRhYTk3MDY4YWI0MzBiZDRlNTg0NzgzZjFjYWQxYjJlYWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY3MjU0YmIxMjRkZjU0NzMwNzliZmI1NjVjODUxYThkMWExMWE3MzQ2YmNmMDdiYTIzOTcwNTQzYzEzZDA4MzIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_146b1e0737094832ab4d100e4a257b51",
+      "statement": "Command(graph=Command.PARENT, goto=...) enables a subgraph node to break out and navigate in the parent graph, routing the command when the subgraph exits.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L821-L821",
+          "version": "repo-lines-v1:sha256:3aeb5111922b5ae8059cba81bb926cc2dc471ce32f4eb5a3febb023e68dbe404:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2FlYjUxMTE5MjJiNWFlODA1OWNiYTgxYmI5MjZjYzJkYzQ3MWNlMzJmNGViNWEzZmViYjAyM2U2OGRiZTQwNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiM2FlYjUxMTE5MjJiNWFlODA1OWNiYTgxYmI5MjZjYzJkYzQ3MWNlMzJmNGViNWEzZmViYjAyM2U2OGRiZTQwNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmNiNWZkY2Q4MjBjMjExZmEyYzZmNTVlNGZlODFiNjFjMTViMmQ4ZjNlMTg0ZTI4MzcyODg4MGIwMjM0MDA0OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2I4ZmMyNGIwMGM4ZTY5OTQ4MzMyNGU4ZmIwNzNhYjc3MTk4YWQ5MWY1Mjk5NTI0Mjk2YTQyMDM5MzYwNDdjZSJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/tests/test_parent_command.py#L18-L21",
+          "version": "repo-lines-v1:sha256:fcc17044bd4c1b3c9cb788e69ca15fb7547fc5179f397f39f6c766f9b827c631:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTdmMTczZTc5Y2JiNzZlYWQ0OGM1Nzk0NjM2NDA4OTMwOWI0MWQ2ZDYzYjAzY2JkZWNmMmI5Yjk0N2E0MGY0MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzEwYTExMmJlYWRjYTEwMzQyNzMxNzIzOTI3Y2I0NWYwYmQ2ZGUyYWFkY2Q5YzE2OTU2NDI5MjM1YzE3MzExNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmVmNzhiMTBkMjg1NzIzMWM3NzczNTQ1YTI4NjIzNTZiZjY2NmNiODU4ODRjODAxNzQ0Y2Q4YmIyYTljMjVlNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGUyN2E1OGIwMGVlMjgxODc5MjUzNzcxZTQ4YjhkYThmZTc4NWQ1ZTAxMDU3NzE2MzIxZTc3MWI0NmZkODI0NSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_64eca411566646609c475ab370e560bd",
+      "statement": "Commands are transformed into writes via map_command() which converts goto to TASKS channel writes, resume to RESUME channel, and update to state channel writes, processed atomically in one superstep.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_io.py#L56-L78",
+          "version": "repo-lines-v1:sha256:2dd91fccf07fbec2b877528070db2489f618f6d9db4912cc89a0011c7a21a858:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2MjJiY2Q5OGVhYjVlNjBjNDY3OWU2NmFjYmRhMzRjODUxYmI0MjI3YTJjNDQ5OGY1MmI1ZDg1OGQ0OWE4YTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkxZjc4YjJlNjQ3NGQ1NGRmMGEwMzBkYWVhZDI5M2IxMDkzYTg4YTg1OWI4YTBmZWI0MWJkODcxMjg2OTM3NGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIzNzgwNmM0ODMxYTg1ZDJiYWUwNjk4NDRlYmYzN2FjZmE0MzIzNDFkOTM1OWU3MmJiOWE4YWNmNTg5NjlhZjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBlMjlmY2Y3NmM2NDdkZTkwZDUyMDE5ZTk4ZWRhMDllYTVjN2Q0YzYxMGIyZDE1ZThmZWIxOWQwZmMxMDU5YWUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_fe7b6fc49b4144b0ad6ee7dea4868b65",
+      "statement": "Both Send and Command preserve superstep atomicity: all Command writes apply together, Send tasks execute in parallel in the next superstep, and state updates never interleave with other nodes.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_algo.py#L442-L466",
+          "version": "repo-lines-v1:sha256:1cd6107bd02b3d2c133365e8ce4e5a7bb83156ea11b96858f216362f060a273d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4NDA1YzM3NWMwMzY1ODllMjY5YThjN2FjZjc0MjE2NDA1ZjY0ZTRjYmExOTUxZWY5ZThlM2JkNmU1YmY5ZGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdmZDIyZWJiYmU0ODMyN2QwZWE4NjgyYjIxZWFmNDIxMmNhYzQzZjFmM2E0NWQ5ZDliMjIzOTMzYWYyOTU5M2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdkODhmY2IwNzAwY2Y5YzM2MDcxMGViMjJiY2MzNzJhNGYwMjk2YjdiOGZhZmU1OGY1MzFlZDY4ZTgwYjM2ZDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVhMjdjNzQ5ZjViZDViN2UwYmRlNmY5OWY5M2Y4Njg4ZTdmOWRjMGMxZWY2MjhhOGQ0Y2U3NWFmNmNlODg2ZTIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3991e03cdcad4dd3b0a9915a9523dc17",
+      "statement": "Send objects create PUSH tasks that execute immediately in the same superstep, distinct from PULL tasks triggered by channel version changes.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_algo.py#L98-L112",
+          "version": "repo-lines-v1:sha256:92e93d414ee6ee9de28b188e0f89990440494b06c91e61c3c69d57338ee02c17:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNjOGRkODU5MTFkMTM3MWY1MTU4MmQwMTczZTliZjI1ZWFmMjRhOWJmYWVhMjQ3OGI0YTYzOTI0MTBlODk1MjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNlYjVhYzA2ZGU0MDkyZjQ5ODYwN2RmNTgzM2YxZTMyMTI4MmNkZjRhYjBhNDVkZWM1NjJlZjU0OGI4ZWY3ZjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdiZjIxNTI4ODgyZTgyMDM1OTcyNmE3OWY2Mzc5ZDI4ZGEwYzE2YzE4MzEyYTMwYzM4ODFhMTg0ODM0ZWExZTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2YWU5OGI5NDIzNDRhODg3ZWRhMjM0ODY5MDhmZWRjMDYxNDY0NzgxMjQ2OTUzOTQzZTBiYmQwOThjNjlhMjcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_18266703f7e84503ab969325fc393519",
+      "statement": "StateGraph.add_node() accepts error_handler parameter to attach a handler node; if the primary node raises, the handler receives the state and NodeError exception.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/errors.py#L153-L153",
+          "version": "repo-lines-v1:sha256:04cf26c2998e12544fffcf32eb797b820a3a9259a7199ae497628e406a410891:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDRjZjI2YzI5OThlMTI1NDRmZmZjZjMyZWI3OTdiODIwYTNhOTI1OWE3MTk5YWU0OTc2MjhlNDA2YTQxMDg5MSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDRjZjI2YzI5OThlMTI1NDRmZmZjZjMyZWI3OTdiODIwYTNhOTI1OWE3MTk5YWU0OTc2MjhlNDA2YTQxMDg5MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzNlM2Y4NDhjMGVhZmU1YzY0NmQzNzViNGVkMmU0NDdkN2EzZDQxNmZkZGZlOWNmMjY3MjYzNzYyZjY2ZmU3ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTgyNGMzZjI3OTc4ZDM3MDFkYjYyM2U3MzEyYjdiMDI5NjBmNmY3NjE4NTY5ZDA3OTk4OGExYTg3ODkzMDYzYiJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L385-L455",
+          "version": "repo-lines-v1:sha256:77109afbd37f3698fefcbb32d29f75c29918165848d6232287ae97930a0a9217:eyJzZWxlY3RlZExpbmVDb3VudCI6NzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE0OGFhYWY3NWJkMGY3MDI4MDAyZTk1MGFjNzU2Mzc2MmNmMGM4ZWUyZmM1ZDlmNTUxODczNTFmZGRhYzRmZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE0OGFhYWY3NWJkMGY3MDI4MDAyZTk1MGFjNzU2Mzc2MmNmMGM4ZWUyZmM1ZDlmNTUxODczNTFmZGRhYzRmZGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJkMzk5M2Y3N2MyYjAzYWE5MWRhNDY1ZGVlZDMwNjgzYmQ2OWQ3MDA1YWQyOWY4OTM1MTc2MDk5ZmQ0OTNkNjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFlYjNhNGVlNGU5ZWI0N2U0MWNiNjViYzg2OTYyMGY3MzhkODBlOGNiNTQ3YWI2OTI3YWM3YWRkMDFmZGEyMzMifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-03T15:19:56.419Z"
+  }
+}

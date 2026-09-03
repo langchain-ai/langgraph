@@ -1,0 +1,322 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:fec3eeec507b579e942292d61bff00f53d697ee804390ea9fcc66644d64f2b58",
+  "claims": [
+    {
+      "id": "claim_dbd22bfe15084d2b868ea78f0d4f7f79",
+      "statement": "The langgraph-sdk provides async-first client implementations (get_client() and get_sync_client()) that connect to a LangGraph API server running at a configurable URL (default http://localhost:8123) and auto-load API keys from environment variables (LANGGRAPH_API_KEY, LANGSMITH_API_KEY, or LANGCHAIN_API_KEY) in priority order.",
+      "evidence": [
+        {
+          "resource": "repo://libs/sdk-py/README.md#L27-L50",
+          "version": "repo-lines-v1:sha256:8d5005b285cdab8c4284a09055f913e927c1e2201dfbcd727be4e8c5015c807d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYyOWE0OTAwZTI5MmM0NTU0YTQwNTliOWRkMThmOTY1YzgxYzJmMWUxMmZjNDhlODY4MmFlMzI2MzAyOWNiYjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3YzA2YzU2MWQ1YzMyNzM0MzY4NTI2OGE0NmIzMzkxZjM5OThlZWU4OTBkMmJlNTFmMGQyMWNjNGE1M2FlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVmNzliOTA4NmZhZWFmY2YyMzFmNjMzZWJjYWUzODQ0MWU5YmIwNzlhN2UwYzAwZjY4ZDgzOTg1ZGYxNDU4MDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY2ZGFiZjUyM2VjZWZmZTViZjFiYjU5ZWVmNDMzMjRhYWNkYWViOTRiMTZkY2UyMmVkNzExY2FmMzE0MDE3OTEifQ"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/__init__.py",
+          "version": "repo-file-v1:sha256:bbd685435a5a90a9c1135512e154f7ca785dff8776aed5782a23c41344a8a611"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/client.py#L29-L99",
+          "version": "repo-lines-v1:sha256:f878f630d5e7994961298920a5ca7f12840e7e6f26e1a510a3d01bfd2bf2fa40:eyJzZWxlY3RlZExpbmVDb3VudCI6NzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY3M2Q3MTgwZTcyMGRlMzg0ZWQ0ODNiNGE2ODBlYzkzNmY2Mzk3ZjRlNjgzZDVmYzNlYjIyNTRhOWE5OTZlZWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM4YWVhOGQxNjQ3YThjYjBkY2NlY2JkNDVkNmY2NjcyYTUyZWE2ZTFjNjJlZjMzNzg1NDQ1ZTQ0YWRlMTdjMzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMDA5N2U0YWE1MDA2OGJhMTU3ZjlhMjczOWZhZDg2OTk1ZTFlMGNkY2NkYWRjNTg5N2MyMDM0Yzc0ZDNlZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxNTI5NzdlNmVjOTJlZjQ3NDk4MDVhNjFmMjYwZDkxOGUxOGI4MzVhMzZjMmQ2MjNlYjUzMTRhZTk2NTFjMzQifQ"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_sync/client.py#L20-L70",
+          "version": "repo-lines-v1:sha256:1f7830619b71d67fe496c74b73605bf669c27f74835cd0040b2410fdd71a4966:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIzMWIxZDA3OTMxNzdiMTU4ZDBlYmQxM2I5MWIwMTEyNjQ2ZmYwYmE2ZDdjZTFlNjA0ZDA4YTAzNWNhZTNjZGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2YTcxNTI1NzJlZTg0ZjEwOTA2Yzc0YjlmMmE5MjQzNGRkYWIwZTNjNDI4MTNiMDRlNTk3ZWZjZWM5NTFiMjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY4Y2I3YThlNzdlZDZjOTQ4ZTZiYmZlNThiOGRlYzBkYTVhNmM4ODNiNWZhYjQ4NGI4NDZlZGU0Y2FhYWQwZDYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM1NDViZDMxNDZlMDM4MjBjNWIzNWY0ZGY2NTNlYzYyM2I2YjA4NDA4OWJkZTA4ZjhjMTY0ZGU0MTgxZTQzMjYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_87acf1b1f19b49b392650effa26dc2da",
+      "statement": "The LangGraphClient exposes sub-clients for managing assistants (AssistantsClient), threads (ThreadsClient), runs (RunsClient), and cron jobs (CronClient), each with methods for CRUD operations and search queries on their respective resources.",
+      "evidence": [
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/assistants.py#L29-L41",
+          "version": "repo-lines-v1:sha256:72d938d95e3159797b904c747312f87ed48856146132dc7251195c54fa552caa:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRhNzZlNTRmNTU3MTg2NmVlMTExOTg3Y2U1ZTFjMDhmZmVkOGIxZDVlMTQxMjM3YzczN2M1ZmZkM2FkZjFkNTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2YTcxNTI1NzJlZTg0ZjEwOTA2Yzc0YjlmMmE5MjQzNGRkYWIwZTNjNDI4MTNiMDRlNTk3ZWZjZWM5NTFiMjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE5OGIwNjNkOWI0N2U2NTM3OTYyNTU3MmNjZTE5NzY2OWQ1NzY3ZTEyYzE4YmUwNzU2NTJiOGNkOTgxY2U4ZDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIzOTc0Y2Q0YzQzY2QwMDNjYzNhMGUwZDM2NmIyOWM5MDkzZThhOWEwODgzYjU3ZDcwOWMzZmU4M2ZkOTE3OGQifQ"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/client.py#L12-L17",
+          "version": "repo-lines-v1:sha256:5584f3ae4a0c9d9ffa2c7a54799e3b3d28f4d08e54e3f32a3131198caacbc9c6:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWZlNDAxYjk1MjA2YjkxN2I5ODkwYWMxM2ZkYzUyOTc3MDdhNjUxNGIxOGVkNjM2NmU3NTQwNTkyMjUwN2ZkZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDMwZDgyMDgzMjlmYzRjN2VmNjhlMWI4ZDJhOGFkODY1NjlmMzlkZWYyYzUzZDZhNDMwZDI5OTNlZTBiOTBiYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTE5YjVmNDM2NmJjN2Y0ODkzMTNkZDU1ODE2NDA0ZWI3NDc2ZGRmODUyODdlNmEzMDMyODA2YjY4MGQ0NjBkNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjE4NDA4ZDBiZWRkNjc3M2I2ZjhkZTQxNzE1ZGE1MGYxODEzMzY3OTM3ZjA4YWNkOTU2YmVkYjRkNGM4NDY4MCJ9"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/threads.py#L30-L43",
+          "version": "repo-lines-v1:sha256:98edfcf2d51512288104a57c490f9de9c42ec66636239a3ee6c0483e1a3477b6:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyOGRlZmI0NGJmYWE5OWE3NjBjMGY4ZTZiNjMwYTE0NDdjNzBjNWM2ZjA1ODk0MzA0NWExMmI4MjIzODk2NTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2YTcxNTI1NzJlZTg0ZjEwOTA2Yzc0YjlmMmE5MjQzNGRkYWIwZTNjNDI4MTNiMDRlNTk3ZWZjZWM5NTFiMjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE5OGIwNjNkOWI0N2U2NTM3OTYyNTU3MmNjZTE5NzY2OWQ1NzY3ZTEyYzE4YmUwNzU2NTJiOGNkOTgxY2U4ZDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIzOTc0Y2Q0YzQzY2QwMDNjYzNhMGUwZDM2NmIyOWM5MDkzZThhOWEwODgzYjU3ZDcwOWMzZmU4M2ZkOTE3OGQifQ"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/client.py#L12-L31",
+          "version": "repo-lines-v1:sha256:753378c80e7917c7d77e2f267a2bbc846210df34211df4a0f98551818b3c0a8c:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVmZTQwMWI5NTIwNmI5MTdiOTg5MGFjMTNmZGM1Mjk3NzA3YTY1MTRiMThlZDYzNjZlNzU0MDU5MjI1MDdmZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmNzJjMDA1OGY0NjgyMThjYjBlZWFjMjY4NjVhZDM5YjY4MDI1ZjU2YzcwNThlYWM0ZWZhNzE4YmM1ZmJhYzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU1YjZlODcwNmI0MzA0N2YyYTZkYjY3ZjEzMjYzODU5NTYwNGU2N2YzNjk2Njg3NmNlMDE1OGYwMDUzZTZiZDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI1MWYyYjg0ZTJhOTU3YjcyYWJkMjhlMDQ0MmExMDc2ZTIyN2MzOWUyYjczNmRiYmUyMDUwOTY1MmViZTZiODQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_04ba7749608647f2819e7e1ba4456b9a",
+      "statement": "Assistants are auto-created per registered graph defined in langgraph.json; each assistant has an assistant_id, version tracking, and queryable graph schema, and the API provides get_graph(), get_schema(), and get_subgraphs() endpoints for introspection.",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/langgraph_cli/cli.py#L44-L92",
+          "version": "repo-lines-v1:sha256:928d17efe425066b6174a477e58ef084d5ade98969cc1b68ccd062dfd4a247a9:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBiMGZmYTljZWY0NjNhZTBkNGVhYTJlNWQ5Y2FhMjAyZTJmYzZkOTdhM2M4NDJhOWYzMWIyZGQxNjNlNTM3NGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRjN2ZiYzYzNWU5ODRlNWVhNDY5YWU2OTdjMGQ1YjEyMTgzMTc2YTg2ODQxYjNhZWJkZGU0ZDFkNzA4NTM2ZmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ0ZWU3YmI3M2FmZmM4Nzk2ODJmOGNjNTY0YjE1ZjUxNGQ1NzFmNjI1YThmNjY3MDgwY2ZkYzhlZmNlOGMxZGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRiYTliNDE5ZTNiMjRkZTQxNjI2ZWE5N2IzZWVmZjZiZjkyNDRmZWQwMjcwMjUyOGU2YjNlZmQ0MTM4MDUyOWQifQ"
+        },
+        {
+          "resource": "repo://libs/sdk-py/README.md#L36-L39",
+          "version": "repo-lines-v1:sha256:9024cfb209a1ce0d5f8a854f75fd49fb83c501b097f84f473ce0f848cef230bf:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTRiYTU1MDI0ZGI2NTk2NmNjMzdlZjdlODFjZmFmODdhZTIwZTZjNGZkZDdmNGNlZGM4NzU4YmEzN2VjMWI4MyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWRkZTMxMDNjYzA4Yzg1NDU1ZDk2MWU0ZWIzZGI1Njc2OTI3Y2JhNjFhNzA4ZmI3NDY4MWY2NDZkYjliZDZmOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjU0Mjc1ODJlN2E4ZDc1MzFiMTk4YmM4NWFmNjkxOTBjN2NmMjgwNDJjZjBlZmVhNWU2NThiZGVhMzg4ODI4MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTAzMDZkNmI2YmViM2NmMWY0NDcwYjY0YWU4ZDAyNzRlZjhmOGE3MTc3Yzg0NDI4MDcxMTY2Y2M5NDRhNzkwOCJ9"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/assistants.py#L93-L150",
+          "version": "repo-lines-v1:sha256:06f7f3702c8861ff99cc5e52f7c780b3a75fc2bac32ad0ddc3b4c06dfa7b9322:eyJzZWxlY3RlZExpbmVDb3VudCI6NTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2MGZiYmQ4NTYxNDlkZjk2NDM2ZjgyY2QzOTFhOGQ4ODg4MzJiZTVjODQwN2U0YmZkNWE2N2U5NzliNmY2N2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA4ZjQ3ODVhNjExMTUyYWJmZGJiMDkwZjcyMmUyYTg0Zjg4MzM0YWZiYTc0ZWE1MTBiY2M5YTgxODcyMGIzNmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJhZWRiNzUxYWI1YTYwNmZkZjhiZTExZDZkOTJiNDMxMDg5ZmUwNDkwMTUwNzQyNjA4NzFkNTQxMzUwZDMxN2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM4ZDBiY2Q5OTEwZjA5MDE5MmUxZjYwNDM4MmU5YTlhYjNhNjdmYmI3MjYxOTgwODNlNDlkNTMwOGQ4MjYwOTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_18e58cdccaa34cd7b6bcbbaef03e8a74",
+      "statement": "Threads represent persistent conversation sessions with a thread_id, accumulate graph state across multiple runs, support metadata and custom extensions (thread.extensions), and can be queried and managed via the threads client (create, get, update_state, search, delete).",
+      "evidence": [
+        {
+          "resource": "repo://libs/sdk-py/README.md#L40-L50",
+          "version": "repo-lines-v1:sha256:31159f055bba7ffe0228337b77005b3aedcbe2db543284002dccb540b5b532f8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3YzA2YzU2MWQ1YzMyNzM0MzY4NTI2OGE0NmIzMzkxZjM5OThlZWU4OTBkMmJlNTFmMGQyMWNjNGE1M2FlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU2N2VmMGJmMWY2MDQyNGIwN2FhZjFkNjE4NWZhY2MxY2IzNDU5NDkxMDExMWFiOGQ2ZDJjYzBkMjgzYmFjOWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY2ZGFiZjUyM2VjZWZmZTViZjFiYjU5ZWVmNDMzMjRhYWNkYWViOTRiMTZkY2UyMmVkNzExY2FmMzE0MDE3OTEifQ"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/threads.py#L30-L43",
+          "version": "repo-lines-v1:sha256:98edfcf2d51512288104a57c490f9de9c42ec66636239a3ee6c0483e1a3477b6:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyOGRlZmI0NGJmYWE5OWE3NjBjMGY4ZTZiNjMwYTE0NDdjNzBjNWM2ZjA1ODk0MzA0NWExMmI4MjIzODk2NTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2YTcxNTI1NzJlZTg0ZjEwOTA2Yzc0YjlmMmE5MjQzNGRkYWIwZTNjNDI4MTNiMDRlNTk3ZWZjZWM5NTFiMjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE5OGIwNjNkOWI0N2U2NTM3OTYyNTU3MmNjZTE5NzY2OWQ1NzY3ZTEyYzE4YmUwNzU2NTJiOGNkOTgxY2U4ZDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIzOTc0Y2Q0YzQzY2QwMDNjYzNhMGUwZDM2NmIyOWM5MDkzZThhOWEwODgzYjU3ZDcwOWMzZmU4M2ZkOTE3OGQifQ"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/schema.py#L34-L42",
+          "version": "repo-lines-v1:sha256:b3819d62db6f30aca952d62e486b7a4033e85c97682adc790fae4357d9ff943a:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTA2YWZjMTE4YWE2NzRmNmNiZTlmYzE1NTg5ZjgxOTFjZGNiNzkwNWY0Y2E0NTNiODZlNGVhYTY4YmQ5ZjQ5NiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTllNGE3Zjg2ZjEwNWI3NWVmZTBjNjBlZWE1YTM4NDRkMTU0YTQ1Yzk1YTkxNWE4MGQwODBkODJkMTNiMjFiNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDZiZmE4ZGNiMDAyOGU4ZDRlNzIyNmMxNmQ3MDU0Y2I5MDhjOTVhMTczNWI3MmJkMTdhYjlhY2Y5MWQzZjIyZSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_d10bce18fb37477ca65ddafbcb0f5694",
+      "statement": "The v2 streaming protocol (client.runs.stream()) streams individual events via SSE with StreamPart objects (event type and data dict); the v3 protocol (client.threads.stream()) provides a shared SSE connection to one thread with typed projections (values, messages, tool_calls, custom extensions) and synchronized command dispatch (run.start, run.respond).",
+      "evidence": [
+        {
+          "resource": "repo://libs/sdk-py/MIGRATION.md#L1-L50",
+          "version": "repo-lines-v1:sha256:bd001244aa9982bdeec577532f30aa0fd33eac40c8475a57dc9b278f76294f53:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM5NjNiOGE0M2I3MGM4YWY0MDc5NmIxNjgxZGEyOWRlYTBhNjQ1MjBjNzRkNjk2OGNlMWY3MjExMDhkNTlhNmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNkY2NlYjRiMmIyMWFhNDY4YTJhNTNjMDEyNTNhZDY1MWI5MThiZTEyMmU2MzNlMGVhZmEzZGZmNzJjY2E5OWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE3OThjNjMwYjRhNGE0YmMxYjgyYTBkNjA0Y2FiMmEyY2M4NzU5N2E4ODA0M2Q1NzVlNTM4OGY4NzlkMGE2YmMifQ"
+        },
+        {
+          "resource": "repo://libs/sdk-py/README.md#L59-L88",
+          "version": "repo-lines-v1:sha256:522c35dbd926f0c54e25fc7e265d5abf6b2cac0d1ccf18cb419cfe55628135d0:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2ZTE1YjIzNWRhMDdmYWE0ZGU1M2UxMjUzMGFlZDBjMTE5Yzc4MDdlMDg4NzQwYmY1NDA5YWMwZDg0YTU2Y2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3YzA2YzU2MWQ1YzMyNzM0MzY4NTI2OGE0NmIzMzkxZjM5OThlZWU4OTBkMmJlNTFmMGQyMWNjNGE1M2FlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU4ZmJiMGMyOWNhZDViNDM3ZDhiODM3YzBhYWNkY2NmOWYxNDg2MjMwYjkxYjZmMzVjNWRkZmE5NTAzOTc2ZWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRlNGI5OWUyMTY5ZjM1NDcyZmI1ZDQ5OTg3MzFkZDA1ZjAyODBmYmMzNGRjMTlkOGM3ZDFjYjY5NzA0MmI4N2IifQ"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/runs.py#L56-L100",
+          "version": "repo-lines-v1:sha256:b6dfe345de191a4c29363fd15efdbc319cfc93ec56c05f37096049e9cd9e927a:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYxNzVjNTZiZjA3NzEwNzlmYTc5Y2QzMTJmMzM3Nzk4OTE4Njc3ZDE3YjljZjllMzc5Njc1MjJiOGQxYjQxZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmNWU4ZDFlYTI1ZGFlNTc1NWU5MzhiZTk2NTJkZTg4Y2MzM2Y1NjkwMzE2YjI2ZDYyODRlN2UwZTQzYjU2NjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ2ZDM0YmQ4ODc3YTMyZTYzZmI0MTBlMTQ0NzgwOWMyZDczMzMzYzRhNTYzMDBhMTdkYTEzNWM4ZTU3M2Y3NzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM0NDM1YTU5M2FjYmI4M2ZlMzE2NTM4OWEwZTkzYmY5N2U2MTFlYTc1MTE4YTAzZWU0ZGJlMzExMjI0NDFkMmIifQ"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/stream.py#L1-L50",
+          "version": "repo-lines-v1:sha256:4706603875d56c825ba98347f494dc5b8de2e287cd4abbcf05c61958d44b9017:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNlNDNjMWU1MjU1Zjg4NTliZWE5NjE1NTAwN2ZhZGQwNjBmYmI4MTEzYWM0OTAxNmM0MTUyNTU1OTNlMjUwYzAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE0NzhmYzhhZjRmMTQ0MzQxYWUxYjZhMTRiY2I5MzNlODJlOTIwNWIyYzg4ODIyOTUzNDdkYjg5Y2I5ODNiN2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY1NjA3MGMyN2VkYzYyODZkZTA4Mjk4YzE5M2I3ZWE4MjNjOWU2OWFjNDdiNzUyNWE5ZDk0MGVkMmFiYjAwZTQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6c2d18fae6904de380f41b83d6a50e46",
+      "statement": "AsyncThreadStream is an async context manager that owns a single SSE connection per thread session, routes events to multiple concurrent subscribers via a fan-out dispatcher (asyncio.Queue-based), manages a lifecycle watcher for terminal state (completed/failed), and exposes typed projections (values, messages, tool_calls, extensions) that are single-consumer streams.",
+      "evidence": [
+        {
+          "resource": "repo://libs/sdk-py/MIGRATION.md#L42-L84",
+          "version": "repo-lines-v1:sha256:e51f02ecc0014ef8b3e33f321479e49bbdf2e08476ce7e89fde18b0e45f72793:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3YzA2YzU2MWQ1YzMyNzM0MzY4NTI2OGE0NmIzMzkxZjM5OThlZWU4OTBkMmJlNTFmMGQyMWNjNGE1M2FlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFmMWQ5OTJlODg3ZmU4NTg1ZGQwZGNlZTBhOGM1ODY0MGRkN2I5ZGJlN2U5NTg4ZDU1OTcyNTgzZjhmOGU3YmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI4NWE4YzdmMGIwMDcxMTFkZDNiMzYyMDYzOGQwMTExZGUwNzBiYmM2YjhmNDliMWRiNDBhYmIwNTIxN2Q4YTYifQ"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/stream.py#L1-L150",
+          "version": "repo-lines-v1:sha256:ba7434888253c84f616958b9589f1404fa3d8c7ca283e2ad68f1ec62c4813674:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzZTQzYzFlNTI1NWY4ODU5YmVhOTYxNTUwMDdmYWRkMDYwZmJiODExM2FjNDkwMTZjNDE1MjU1NTkzZTI1MGMwIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJiZmM1ZGE5OTc5NTMwNWY3MTQ4MDcwOGEyZDU4MWYxNGY1NDFkZjA2MjNjMWY4N2Y5MGQzNmJjMjcyZmZhN2IwIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI2OTkwMjdjYjBiODg4ZDVjODkxZTVhNmU2Y2I1NTViODViOTcxMzEyNjExZDY2Mzc1NmI4ZDdiOGJkOTQ0NjYyIn0"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/stream.py#L64-L86",
+          "version": "repo-lines-v1:sha256:8a10ad72f35d7cdf93e8ffa882d233e274d7ce533a7869b9b0d12a6543e8eeb0:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkOGJiNDI4NGI1NGUwZWRkMjQ2ZThhMWQzNjk2ZDlhMzNkNzAyZjQ0ZjQzMzY2NzEyNThkNTNkNDM1Yzg1MjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5NDE2ZTA5Zjc4YmEzMTZjMDMyNTY4MjEzYjg1NWVlNzU2ZTQxNTY1ZDkxOGYwOTUxOWM4MWZkNjIwZjQwNjAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZjMWYwMmZkN2VjMWQ0NjJjMGNiODE4Yjk0OGZmZTRmNzE1YjJjMmM0MzI2MzBjMjMyZGZlMzRkNDI3NDNmYTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFjNjU2N2JjNmQ0ZDkxNTFjYjc0YmQ1MDZhMjU4N2MzMDQ4YjgzZWFmNTM1MmIyNWE4NmY4N2JkODVlMTZmNTIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7612160979934f60be3cfd1b53861d07",
+      "statement": "The RunModule (thread.run) dispatches commands to the server via _send_command: run.start() sends the initial input/config/metadata, waits for the lifecycle to signal run readiness, and returns the run_id; run.respond() resumes interrupted runs by sending the human response to a matching interrupt_id.",
+      "evidence": [
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/stream.py#L160-L270",
+          "version": "repo-lines-v1:sha256:a0f78137a5f80e27aeb0f1b2e0fde182fd9445ff04fd9415e3a63fd3c27b769e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTExLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIxZTM1NzQ3MzgwYmQ2ZTdjNGE0MjRkNjU3ODQyY2YwMTE3NjczYmJiNGUwZjIxOTkxNDM3OWVlNDRhOGMyMDQ3IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIwMWJhNDcxOWM4MGI2ZmU5MTFiMDkxYTdjMDUxMjRiNjRlZWVjZTk2NGUwOWMwNThlZjhmOTgwNWRhY2E1NDZiIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiM2RmMmFjZjA2ZThjM2YwM2M3MTM1YzZlOGFjNWE5Y2E1NDMyYWJlMDZhNzRhY2EwZmRkOWE1M2EwMDhmOTg3IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJmMmJkM2Y0MmVlZjVjY2Y2MGU1ZTQxM2JjNjU4NjVhYmViNTYzODIyM2YxOTU2OGY1NmY2ZjRmYWRhYWZjNTVhIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_b114c784ae39419995e693f055f98f8e",
+      "statement": "Human-in-the-loop workflows use thread.interrupted (boolean flag set when an interrupt arrives) and thread.interrupts (list of pending InterruptPayloads), allowing callers to await interruption, inspect the pause reason and namespace, and call thread.run.respond(response, interrupt_id) to resume.",
+      "evidence": [
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/stream.py#L214-L270",
+          "version": "repo-lines-v1:sha256:d5903d4e12379ff7049943da873f188e080e87d9cd54e8aeb7d908f29e646a75:eyJzZWxlY3RlZExpbmVDb3VudCI6NTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE5ODU2M2U0NTBkZmY1NjY5NWFjMzhiNTcxZjIzMWMxYTk3ODRhMzZjNDlmMWI5MjhmNDFkODVmZGIwNWQ5NjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3N2U4NDMxNWQ0OGY5ZDNiNDc0ZTQ3OWZjZmE0Y2RmNjg3M2Q5YzY1NGUzMzM3MjhhZTdiMGQ0MDAxNjU1ZDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYyYmQzZjQyZWVmNWNjZjYwZTVlNDEzYmM2NTg2NWFiZWI1NjM4MjIzZjE5NTY4ZjU2ZjZmNGZhZGFhZmM1NWEifQ"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/stream.py#L47-L53",
+          "version": "repo-lines-v1:sha256:04f606e9edcbe306de6a94f44a2865944346831ed3a4fc38911a533744dc35cc:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMmZlZGQwOGViYjdlMTBlNjMzMjg4NjQ0YmRjNDZmM2Y4OGEzMzEwMDVkMGQyYWUwZmQ4NWJlOWFjNDJjYzM2NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTk4YjA2M2Q5YjQ3ZTY1Mzc5NjI1NTcyY2NlMTk3NjY5ZDU3NjdlMTJjMThiZTA3NTY1MmI4Y2Q5ODFjZThkNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjQ5YjA5YWMxOGFiNjc1NWEwODhiNTljNzBhY2U3MTE4MmNlYjU4ZGM2MzFiOTkzMTg1N2M3OGY0OGE3ZTVhYSJ9"
+        },
+        {
+          "resource": "repo://libs/sdk-py/tests/integration/test_lifecycle.py#L12-L45",
+          "version": "repo-lines-v1:sha256:629481748dabb511bf60b3743c21f9536c028e053c01cadab29fb9bec7b6ffde:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNkZTcyNTVhNjhmYTg5MWNjZThjZjJkOTA2MGI4YWM5MjQ5NWIxNjViNDFhNTQ5Nzc2MTFkNTg4MmFhY2U2ZmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUzZTlmMGEyMjAwMDlhNTM3ODg1ZWJjYzdlMjVhNThjYWJkMjkxM2E5NWJjMmJiMDc4M2Q3MzFmMWMzMjZhN2UiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZiOTA2NzYzZTM2Njg2NDQ3NGZiYmUxYjA2ZjNiOWNlN2VmOGE3YWYzOTBiZjM5MjM1NWMyMGM2YTkyM2QwOTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_17aa635d3c954e30a2486fa078c3441b",
+      "statement": "The HTTP client (HttpClient in async, SyncHttpClient in sync) handles request/response encoding with orjson, implements error handling via _araise_for_status_typed() which wraps HTTP errors into typed exceptions (APIStatusError, APIConnectionError, APIResponseValidationError), and streams SSE via aiter_lines_raw/iter_lines_raw decoding.",
+      "evidence": [
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/http.py#L26-L100",
+          "version": "repo-lines-v1:sha256:1c33b39cc58d351cb71e639cd1b46b6b61a77dc72f52dab3d10a1d4f0ae4bb87:eyJzZWxlY3RlZExpbmVDb3VudCI6NzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1ODZlZWI0Mzg5YmVlYTE4OWNkNDhmMWJkZGVjZmFlNzE1ZTc2ZDMxMmVmYjU5OWM1NDlmMjBmN2U3NmE4NzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRjZDE2NTY0OGRjODA3YzFmNWIxZGU2YzZiZmQ5YmY2ZmU5MjU1ZDE3YzQwYTA2M2I0ZjE5NjRjZGNjYzgzYzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMDA5N2U0YWE1MDA2OGJhMTU3ZjlhMjczOWZhZDg2OTk1ZTFlMGNkY2NkYWRjNTg5N2MyMDM0Yzc0ZDNlZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImExMGQ2NDRkMGY0MGEzMGE3MjU0NGJjZjA4ZDFhMGFmOTM4ZWRmZjEyNDlkMTZjZWMxYjcxOWVmZTZlM2MzZmIifQ"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/errors.py#L1-L100",
+          "version": "repo-lines-v1:sha256:b9f9a0c0369473aa87939739d308758836e6ff72491b043f0827026095b042b6:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI1Mzg0YmZkYjJkZjM4MGI2NTU3Y2M3YTcxZDE2ODkxNDE1YmNjYWE4NzY5OTQwNmUyMzZmNzUyYzY0MTUzODlmIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzNjk4ODg5YWVkYmY4Y2ZhZTgzMzRkMjNiOTFlNzg4NGU1NzNiMWEzNDEzM2Y0MTI4MmVmNmQ5MTk1N2UxM2I2IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlMWNmNDMzZGIyYWNlN2U0MDQzMDU3YzRjMGQ4MDcxYjQ3YTEzNTI2NWJlMjAxMzIzNjBkYjQ5MzI3NWQ2NWY3In0"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/sse.py",
+          "version": "repo-file-v1:sha256:333d2a7fb4a66939c6f27c96506aae60eafa71b74fa3ffab081b5613b6ca97fe"
+        }
+      ]
+    },
+    {
+      "id": "claim_9332c2ab9c63478da703a4adb1761755",
+      "statement": "The HTTP transport layer initializes httpx.AsyncClient with automatic retry logic (retries=5 by default), configurable timeout (default connect=5, read=300, write=300, pool=5 seconds), and optional custom headers and API key authentication headers via _get_headers().",
+      "evidence": [
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/client.py#L29-L99",
+          "version": "repo-lines-v1:sha256:f878f630d5e7994961298920a5ca7f12840e7e6f26e1a510a3d01bfd2bf2fa40:eyJzZWxlY3RlZExpbmVDb3VudCI6NzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY3M2Q3MTgwZTcyMGRlMzg0ZWQ0ODNiNGE2ODBlYzkzNmY2Mzk3ZjRlNjgzZDVmYzNlYjIyNTRhOWE5OTZlZWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM4YWVhOGQxNjQ3YThjYjBkY2NlY2JkNDVkNmY2NjcyYTUyZWE2ZTFjNjJlZjMzNzg1NDQ1ZTQ0YWRlMTdjMzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMDA5N2U0YWE1MDA2OGJhMTU3ZjlhMjczOWZhZDg2OTk1ZTFlMGNkY2NkYWRjNTg5N2MyMDM0Yzc0ZDNlZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxNTI5NzdlNmVjOTJlZjQ3NDk4MDVhNjFmMjYwZDkxOGUxOGI4MzVhMzZjMmQ2MjNlYjUzMTRhZTk2NTFjMzQifQ"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_sync/client.py#L71-L86",
+          "version": "repo-lines-v1:sha256:2b806603343a32b44a89962ff490620132b5d70baf306b9a2434af4289ce8604:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ0MzhlZjJlYjc3ZDAyZjBhZWI4MTI4MTk3YTlmYmZiZmJhNDEzOGE3NjExMzlmNWMyMDFkMWZjNDE0Y2E0OGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFhMzZkMTk1ODU0NzU5MjUzYTE0NDViMTI1YmNlNTZhNTM2MWZlM2E1NWE2MzM2NWYwMDJhMzVmMjEyYTc0OTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkxOTA2NzAyOTAzNDNkNmU2ZjdmODJiMDk4MWY5Zjg3MzBhYjQ0MDNkNzIwYWU4NjU5NjVlMjU4ODZmZDdkZTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6d3bf61a149b449e83df92c965047cfd",
+      "statement": "ServerRuntime receives access_context indicating why the graph factory was called (threads.create_run, threads.update_state, threads.read, or assistants.read) and provides execution_runtime property to conditionally initialize expensive resources (MCP servers, DB connections) only during actual execution without changing graph topology.",
+      "evidence": [
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/runtime.py#L28-L99",
+          "version": "repo-lines-v1:sha256:6db8803b367f32ce0440b0d46acf83dce7525e9f21eb580750ddb4119b293d92:eyJzZWxlY3RlZExpbmVDb3VudCI6NzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMxNTkyZjg0NGI2NjFhODUxMmJlNjYzYTI4ZDdlZWRkNjliMWM5ZjhjM2ZmOWRlZGZlMmM2Y2Y5ZWQxMDFkZmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM0MWJjOWVhNWM1YWU5MjQ2YzAzNzU4ODcwY2E0YjAyODJhYzE0NjI4YTBjYjEzYTE0MGE4MTI2NjNhZmM2MDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQzZDE3MWRlNzU0MzFhMDIxYTBkOTRmYTc2ZmFiZjBkNzEzOWM4OThjMWEwYjQ0YjQzY2E2MDkwM2ZhMWI4NDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEyZmNkZWYwZjI5Y2IxZTUwOTAyMzZhMWZiYmFmZGQ0ZTM5MWM1NWFjNzMwODEwMWQxZmUzYjgyYzA5ZmQyZmQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c58e79ac6f1c4843b43bd8aaf2a99102",
+      "statement": "langgraph-cli provides commands (langgraph dev, langgraph up, langgraph build) to manage LangGraph servers; langgraph dev runs locally with hot reloading on http://127.0.0.1:2024; langgraph up builds and runs in Docker on port 8123; both read langgraph.json config defining graphs, dependencies, environment variables, databases, and services.",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/README.md#L31-L88",
+          "version": "repo-lines-v1:sha256:c474ff804d5bd5b9b8359b3d2249a87f961cba5bee7ad618587f498e669d2f7c:eyJzZWxlY3RlZExpbmVDb3VudCI6NTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI0YzVlZjcwZjA5N2UyZGZlZDk4Mzk3NjliMWUwMDllZGJmNjUxNjM1YmI3YTg3YTkxMmFjNGNiMWQ2YjZhMzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE4MmVmN2JjM2Q2ZjBhMDg5MzNjZjRhMmFjZmY0ZjcxMDNmY2Y2NTlmOTRiY2MxNzNkY2UxNjgwY2E5NzcwMzUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIzMzdhZjRmY2ZmNDJmYTdjZTY5ZGE3OWEyYjI2NThmNjJjMjI1OTkyZTAyYjlhYjI1OTBmY2Q3MDY4NmEyYTAifQ"
+        },
+        {
+          "resource": "repo://libs/cli/examples/langgraph.json",
+          "version": "repo-file-v1:sha256:fea6b801155b3ddfc788dbef91ac5af5467d9dfb17cda22af8daf3a95c8d8d05"
+        },
+        {
+          "resource": "repo://libs/cli/langgraph_cli/cli.py#L1-L100",
+          "version": "repo-lines-v1:sha256:f017f6113c1d3e5c8c49b33c05d6f4464ba68494abb70476b9865fe871f37a14:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI3YzY3NjJjOTc0M2FjZGE1YjY3Y2U0MWVjZDZjZGI3NTZlODYyN2QxN2QwOWI5MzgwMzE1MjRmMzdmY2M5OWU0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI3MDJjNDE0YjU0Y2Y4NmRmYjRmOTBkZmU3ZDdiZGJmYTY2NmI3ZGRkZDMyZjEyODZmMjMwYTViNTMyNDE4MThhIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI0M2NlYzMyMjY2ZWJjNzIyODMzZTJmODk5YjEzZDc2MDQyMGQ3M2ExOTFkMWQzZTE3M2Q1MzE5NmZlNDNhMTc4In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_314668e8ff10475f918cddd6db888062",
+      "statement": "langgraph.json config schema includes dependencies (packages, local paths), graphs (mapping graph_id to module:symbol), env (file path or inline dict), python_version, pip_config_file, databases (with dialect and url_env), services (Docker images), and dockerfile_lines for custom build instructions.",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/examples/langgraph.json",
+          "version": "repo-file-v1:sha256:fea6b801155b3ddfc788dbef91ac5af5467d9dfb17cda22af8daf3a95c8d8d05"
+        },
+        {
+          "resource": "repo://libs/cli/langgraph_cli/cli.py#L41-L92",
+          "version": "repo-lines-v1:sha256:2ea25d31a64078b37b324df151890025a18a9edadc75fcc635b7681760cf950f:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc4ZGM5N2NiZTAwM2I2ODJkODc3ZTlhMjY5OGI1MDE4M2MzNzQ3OTM3Njc0MzE1MWY0Yzk3YmUxMGM2ZWI3ODMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRjN2ZiYzYzNWU5ODRlNWVhNDY5YWU2OTdjMGQ1YjEyMTgzMTc2YTg2ODQxYjNhZWJkZGU0ZDFkNzA4NTM2ZmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgxNjM1NDdkNDE3YzBhZDBlYzEyYTZjNWEzOWNkOWZkYzc2YmI5OTEwZmYyYTc5YjhkOTRlMmFmMzg1NWQ2YjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRiYTliNDE5ZTNiMjRkZTQxNjI2ZWE5N2IzZWVmZjZiZjkyNDRmZWQwMjcwMjUyOGU2YjNlZmQ0MTM4MDUyOWQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_945aa0d8bf304c66a65f5747f995ef9a",
+      "statement": "Run status lifecycle includes pending, running, success, error, timeout, and interrupted states; runs support stream_mode parameter for values, messages, updates, events, tasks, checkpoints, debug, or custom event filtering; interrupts, resumption, and disconnection behavior are configurable via on_disconnect (cancel/continue) and multitask_strategy (reject/interrupt/rollback/enqueue).",
+      "evidence": [
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/runs.py#L56-L100",
+          "version": "repo-lines-v1:sha256:b6dfe345de191a4c29363fd15efdbc319cfc93ec56c05f37096049e9cd9e927a:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYxNzVjNTZiZjA3NzEwNzlmYTc5Y2QzMTJmMzM3Nzk4OTE4Njc3ZDE3YjljZjllMzc5Njc1MjJiOGQxYjQxZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmNWU4ZDFlYTI1ZGFlNTc1NWU5MzhiZTk2NTJkZTg4Y2MzM2Y1NjkwMzE2YjI2ZDYyODRlN2UwZTQzYjU2NjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ2ZDM0YmQ4ODc3YTMyZTYzZmI0MTBlMTQ0NzgwOWMyZDczMzMzYzRhNTYzMDBhMTdkYTEzNWM4ZTU3M2Y3NzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM0NDM1YTU5M2FjYmI4M2ZlMzE2NTM4OWEwZTkzYmY5N2U2MTFlYTc1MTE4YTAzZWU0ZGJlMzExMjI0NDFkMmIifQ"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/schema.py#L23-L90",
+          "version": "repo-lines-v1:sha256:c8f568608ce265a23af03c25c5b76d728173f733136b7c392410421c85509821:eyJzZWxlY3RlZExpbmVDb3VudCI6NjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM1MjAxNzE0YzBkYmRkNDk3OTljY2QxNTc1MTEzYzY1N2YwYzZhZDdhYmY5NDg2NjhkODg1NmU2MjhkZjBiOGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1MDFlOGQ2MmZkM2I5NmUyZmU0ZDIzYjhmOWM4YmNkNjFlN2I4MTRjOTBlYjNiNmE0OWExZmEzYzUxMzk5NTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUxYjhhOThhMTNiYWRhZTFmN2VlMjE5ZDI5ZGIyZjUyZTY3ZjFiM2Q5YTdiOGY2MTJjYWI5MDYxMjY2MzlmMmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVkYmE3ZjBiMzI1Y2RkN2UwY2IwNzUxNDQxMjU4N2EyN2QwYTY1YzYzNmQ4MDAyZTkzZDdiMWQ3MGQzOTVmYmIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d1931fa9174147c2a8f5adc614f5612f",
+      "statement": "AsyncThreadStream._OutputAwaitable implements thread.output as an idempotent awaitable that waits for the lifecycle terminal event (completed/failed), fetches the final thread state via REST GET, and surfaces errors from terminal lifecycle events; supports with_timeout() to bound the wait without affecting the subsequent state fetch.",
+      "evidence": [
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/stream.py#L282-L341",
+          "version": "repo-lines-v1:sha256:fdcb7e381bd6b47dbcc5d2e4af7aa3e82b316f14d5fcdb850d7d7cdd71bf3885:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2YmJiOTRlNTc5ZjcxNWYxMjcxOGRkOGMwZWVkZjkzN2I1NGY3NDViM2M5YjRjOTE4MGEyMGE0NWQ2ZDUyYzIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNjMDMwMDUyNzFlM2Q3MmI2ZjZlYmVlMGQyMDUzZDVlYmU5MzMxY2VjOTdhMDlmMjRkYmZlY2IyNDNkMTA0MTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ5NTNlZWM5NDk3YTI2MmQwNjFmYjA0ZjdlYjRlNjBhNjcxNWFlMWIzNmZlY2VhMDFmMzVjMmVhZmYyZjYyNDMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_13413c75a18944d7929fec56c6a0a2c5",
+      "statement": "Thread streaming projections (values, messages, tool_calls, extensions) are single-consumer streams; concurrent consumption requires either collecting all events before iteration or using asyncio.gather() to start all consumers before any completes, ensuring the shared SSE fan-out routes events to all queues in parallel.",
+      "evidence": [
+        {
+          "resource": "repo://libs/sdk-py/MIGRATION.md#L64-L84",
+          "version": "repo-lines-v1:sha256:424f7548d840e308c0a2159019ed01bfe5d9b2d5f417cc785e65576742fa2ee4:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA3ZTA3NzhmYzU3ZjI2ODUwNWJkZDRjMzFiYTVjMTU2NDRhZmEzNDlmOWQ1ZjA0N2IyZTg2ZmNlMTM1Mjk3NTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3YzA2YzU2MWQ1YzMyNzM0MzY4NTI2OGE0NmIzMzkxZjM5OThlZWU4OTBkMmJlNTFmMGQyMWNjNGE1M2FlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUxNWM4ZjUyMTM3NjcyNTE3NGJmZGU1ZWY2YzhjMTU4MmU2ZDkxYzhmMzA3ZTRiZWE3NTEwMDQwNTJlYjE3MGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI4NWE4YzdmMGIwMDcxMTFkZDNiMzYyMDYzOGQwMTExZGUwNzBiYmM2YjhmNDliMWRiNDBhYmIwNTIxN2Q4YTYifQ"
+        },
+        {
+          "resource": "repo://libs/sdk-py/README.md#L52-L88",
+          "version": "repo-lines-v1:sha256:aa52c8d7ef9f12c60fd5564d0b80ad0b0fd0561f3a06be1baca3e0a1d5f979b2:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE1Yjc5M2I0Y2M3MDE2ZjIyYmUzMmZiZDQ0ODhmNzEwMDQyYTk0ZjBkY2UzZjdjMTg0NGYxYzJlMDAyZTI3OWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3YzA2YzU2MWQ1YzMyNzM0MzY4NTI2OGE0NmIzMzkxZjM5OThlZWU4OTBkMmJlNTFmMGQyMWNjNGE1M2FlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgwNDZhNzE3ZDZjNGViZTlmOTJhZWM5NzNhZmYyN2Y3YTIwNTA0YzFjOGIxNjFhMzcyMTQ0MDc3Yjc5MDllZTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRlNGI5OWUyMTY5ZjM1NDcyZmI1ZDQ5OTg3MzFkZDA1ZjAyODBmYmMzNGRjMTlkOGM3ZDFjYjY5NzA0MmI4N2IifQ"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/stream.py#L343-L400",
+          "version": "repo-lines-v1:sha256:0b6c1500eb4309acd3df4cbec6381fee716f1a9110378baa33093758349edf87:eyJzZWxlY3RlZExpbmVDb3VudCI6NTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgxNDYwZTVmMmYwNWVmNjJlZDI5ZWIxZTc3MzE2ZmRjNTNlMWU1MDVhNmIyOTJiNWI0NzA5NjliMWE1OGQxODIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE2Nzk5NzM0M2FkMTg5YTYwNTIzM2E0ZDkxZDgxMjMyZmJlNjQxMjNkMjZmZWZiNWRhMThkZWQ2YjliNmUzY2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE1M2YxNTBiYjdlMjZkN2FhOWNiZjZjYjc0OTE0ZDQ4ZjRjY2U3MDEzMDU1YWM5N2I5YjJjN2JjZjIxNzFmMDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZkMTM3M2JkMDQxOTgyOTEyYWFmNmZhYzA1ZDJlYWVlYTkyNjNkMjc1MjRkMTFmYTQwN2ZjMjU0ZjIyNzVkZjcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_fa20229441c54fa8a9034758a142d440",
+      "statement": "WebSocket transport is available for v3 streaming with the transport='websocket' parameter and requires websockets>=14; it provides lower-latency bidirectional communication compared to SSE, but is async-only (sync client uses SSE exclusively).",
+      "evidence": [
+        {
+          "resource": "repo://libs/sdk-py/README.md#L52-L56",
+          "version": "repo-lines-v1:sha256:51b1dbff284c925603796374cee85e631893132ea7a8d142032986d9235de010:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTViNzkzYjRjYzcwMTZmMjJiZTMyZmJkNDQ4OGY3MTAwNDJhOTRmMGRjZTNmN2MxODQ0ZjFjMmUwMDJlMjc5ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjhiYjU5NjI2NDI5NjEzZmU3ZTQ0NzdiZTBkNGU0YTkyOTM3MWQ4NTQ1OTY4NGY0YzY4NmUwOGMwMmI3ZjU3ZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODA0NmE3MTdkNmM0ZWJlOWY5MmFlYzk3M2FmZjI3ZjdhMjA1MDRjMWM4YjE2MWEzNzIxNDQwNzdiNzkwOWVlMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDU2OWQxOGNiMmU4ZGVmZTMxNmRkYzE1ZmNjYTgwNDI2YjkzODI2ZDIyYjM1YTgxNjFjODViZDlkMzZjNzY4ZiJ9"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/stream/transport/__init__.py",
+          "version": "repo-file-v1:sha256:80b6d129e8bd4f96c2055a631aa9e771391cf332112ab1714d303e055a94a549"
+        }
+      ]
+    },
+    {
+      "id": "claim_a0339a53d27c42eabdd0709c51c5d755",
+      "statement": "Sync client (SyncLangGraphClient) wraps async operations; sync streaming (SyncThreadStream) drives the lifecycle watcher in a background thread, requiring the context manager to exit before that thread is cleaned up.",
+      "evidence": [
+        {
+          "resource": "repo://libs/sdk-py/README.md#L56-L56",
+          "version": "repo-lines-v1:sha256:f8bb59626429613fe7e4477be0d4e4a929371d85459684f4c686e08c02b7f57e:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjhiYjU5NjI2NDI5NjEzZmU3ZTQ0NzdiZTBkNGU0YTkyOTM3MWQ4NTQ1OTY4NGY0YzY4NmUwOGMwMmI3ZjU3ZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjhiYjU5NjI2NDI5NjEzZmU3ZTQ0NzdiZTBkNGU0YTkyOTM3MWQ4NTQ1OTY4NGY0YzY4NmUwOGMwMmI3ZjU3ZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDMxNGQ2OTcyZTA0YjNlOGI2ZWU2ZjIzNzg5ZDk1OTk4ODg1NWI5MjlhMjQ1NjZmMTBiZTJmNWQwNWJlNDkyNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDU2OWQxOGNiMmU4ZGVmZTMxNmRkYzE1ZmNjYTgwNDI2YjkzODI2ZDIyYjM1YTgxNjFjODViZDlkMzZjNzY4ZiJ9"
+        },
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_sync/client.py#L20-L86",
+          "version": "repo-lines-v1:sha256:693566a4c58e5a7dcde001bf83d862bbf55f51c72e377a435efda58b71cdf50a:eyJzZWxlY3RlZExpbmVDb3VudCI6NjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIzMWIxZDA3OTMxNzdiMTU4ZDBlYmQxM2I5MWIwMTEyNjQ2ZmYwYmE2ZDdjZTFlNjA0ZDA4YTAzNWNhZTNjZGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ0MzhlZjJlYjc3ZDAyZjBhZWI4MTI4MTk3YTlmYmZiZmJhNDEzOGE3NjExMzlmNWMyMDFkMWZjNDE0Y2E0OGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY4Y2I3YThlNzdlZDZjOTQ4ZTZiYmZlNThiOGRlYzBkYTVhNmM4ODNiNWZhYjQ4NGI4NDZlZGU0Y2FhYWQwZDYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkxOTA2NzAyOTAzNDNkNmU2ZjdmODJiMDk4MWY5Zjg3MzBhYjQ0MDNkNzIwYWU4NjU5NjVlMjU4ODZmZDdkZTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_fbb661d78f134638ac71aa6d596bb574",
+      "statement": "Reconnection logic in AsyncThreadStream limits both the shared SSE fan-out and the lifecycle watcher to 5 retry attempts by default; persistent network partitions surface as RuntimeError on in-flight projections when retries are exhausted.",
+      "evidence": [
+        {
+          "resource": "repo://libs/sdk-py/README.md#L52-L58",
+          "version": "repo-lines-v1:sha256:ec0d8e96b5825d0efe817575b1471c5bf6cc2bc92458d44d806e9fe4f2bd8836:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTViNzkzYjRjYzcwMTZmMjJiZTMyZmJkNDQ4OGY3MTAwNDJhOTRmMGRjZTNmN2MxODQ0ZjFjMmUwMDJlMjc5ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODA0NmE3MTdkNmM0ZWJlOWY5MmFlYzk3M2FmZjI3ZjdhMjA1MDRjMWM4YjE2MWEzNzIxNDQwNzdiNzkwOWVlMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjAyNjRlZTc0YTljNTFiNWMyNjQ4Zjk2YTg2ODdmMGFkYzY4NmI0NTAyZDdkYTgxMGQ1NzdjYmUwOGFjZTY5ZiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_fbceb8c4f2dd486eb9de95d7b6246bf6",
+      "statement": "Run configuration passes configurable overrides (e.g., LLM model, temperature, retriever type) via the config parameter; the graph's config_schema defines available overrides, fetched via client.assistants.get_schema(assistant_id).",
+      "evidence": [
+        {
+          "resource": "repo://libs/sdk-py/langgraph_sdk/_async/runs.py#L73-L100",
+          "version": "repo-lines-v1:sha256:bc107c1c2145c9ffbcee4d455dea4f32d295e7394dd41434baea273ded60b27d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmMDFhNzQzNzhlMjVhYzIyNTUwZWMwZDViYjlmNTkwOTNmYTk2OTIyNzdkYTNjMjk1YzlhMDVkMjIzYmVkZDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmNWU4ZDFlYTI1ZGFlNTc1NWU5MzhiZTk2NTJkZTg4Y2MzM2Y1NjkwMzE2YjI2ZDYyODRlN2UwZTQzYjU2NjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI0ODgwYzEyNjkwMTc3ODdlOTk0YWFmYTNiYjIzMTBiNzBmY2UxM2I0NDE3ZWFiM2FiNGQzZTQ2YmE2ZjllNDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM0NDM1YTU5M2FjYmI4M2ZlMzE2NTM4OWEwZTkzYmY5N2U2MTFlYTc1MTE4YTAzZWU0ZGJlMzExMjI0NDFkMmIifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-03T15:19:56.419Z"
+  }
+}
