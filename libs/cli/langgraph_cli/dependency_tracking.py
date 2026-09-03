@@ -23,7 +23,8 @@ _PACKAGES_ALT = "|".join(re.escape(p) for p in TRACKED_PACKAGES)
 _DEPS_RE = re.compile(
     rf"(?<![a-zA-Z0-9_-])({_PACKAGES_ALT})"
     r"(?:\[[^\]]*\])?"
-    r"\s*((?:(?:==|>=|<=|~=|!=|>|<)\s*[\w.*]+\s*,?\s*)+)"
+    r"\s*((?:==|>=|<=|~=|!=|>|<)\s*[\w.*]+(?:\s*,\s*(?:==|>=|<=|~=|!=|>|<)\s*[\w.*]+){0,9})",
+    re.IGNORECASE
 )
 
 _UV_LOCK_RE = re.compile(
