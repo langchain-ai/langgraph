@@ -1,0 +1,230 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:ef0c8bcfff2dcecd64eba594b9b6e9d129a12318844d44f1b62915b2dd0c3cae",
+  "claims": [
+    {
+      "id": "claim_a0d20e735caf49caa26ff19abbe7b180",
+      "statement": "invoke() and ainvoke() run a graph to completion synchronously or asynchronously, returning final output or collected stream parts depending on the stream_mode parameter.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/main.py#L3836-L3950",
+          "version": "repo-lines-v1:sha256:b84abda30bda7b5635fbf57b1a516f50fcd0731046b91ab2c63884178cd214c6:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE1LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI3ZTRhMTAxNjIzY2I2NmJhY2MwMDQ5NTdjYTMyNjNhNmM2OTQ1NDU5NjlmZTA2YmQyNjBiMzMwMmIzZGFkYTAzIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJlMjhkODA5YmM2ZjE0ZjQ1ZGIxZmFhNzUwODM1MGE4YjU4NjhlNjEwZmU2OTM4MjBiNDRhODNmN2FiOGY1OGRiIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI2MTM0MjMyNzAyNzRmOTdkOTk0ZTM5YWQyNjRjMmMwOTAyNDIwYTk2M2MzZTY3YjQ4N2EyMGUzNzc4YmQxNzNkIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIzZjRjOTUxYWU2NWRmMjFiNmY1YTllOTBlZTRjMmRiMDRhNjMzNGQ0YTY0MDQwZjQ2MTAxMjkwZTg0YWJiMWYxIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_d788d4fb5ebb4a42a2fe9eaa56f3c2bc",
+      "statement": "invoke() configuration includes thread_id (for checkpoint persistence), checkpoint_id (to resume from a mid-execution snapshot), recursion_limit (max supersteps), timeout, and callbacks for observability.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/config.py#L17-L30",
+          "version": "repo-lines-v1:sha256:bd7bbf07e451b84ec237a8589fb4be74eac1f64efde216ae07d8b214859be8cf:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0MDIwNWJmNGNiZTlmYjJlZmM2MGRjOTI1NGIwNzdlOWNmNDNiYWQyZjg4M2YwNGM3MzY1NDFmN2NjYjA4YzAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg1NDEyNzMwOWZkZTJiZWUxOWQzODY1MWRkOWU5ZmJiZmQzM2E5MGM2Yjc1ODk4NjY4MzM3N2U1YmNjNzUyOWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUyZjY3MjkwOGQ1Yjk3M2QzZDcxZDhmYzYzN2YzMzgzYzQzYTc2NzEzMGMxYzZiMzFhN2EzMWZmMGIzOWY3ODQifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/main.py#L3836-L3883",
+          "version": "repo-lines-v1:sha256:45f982916c5c4faaf7aa35a2a8fb58f3712354b7a980d439e263be8908b14dc4:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdlNGExMDE2MjNjYjY2YmFjYzAwNDk1N2NhMzI2M2E2YzY5NDU0NTk2OWZlMDZiZDI2MGIzMzAyYjNkYWRhMDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM1ZjM2MDIzNzFiMGFhZjg4N2NkMmVmODdmNzI0MjZkMDgwMjEyNzYzOTBkY2IxMzU5ZWQzYWE4N2YyOGM2YjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYxMzQyMzI3MDI3NGY5N2Q5OTRlMzlhZDI2NGMyYzA5MDI0MjBhOTYzYzNlNjdiNDg3YTIwZTM3NzhiZDE3M2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgyMzAxYzhiODlmOTZhMDU2N2FhYzdmNWEzOTEyMWZhNTJkMjg5NjRjZWZmYjQyOTA5NzFkNTA4OTczMWRlNGUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8ca68f7f9f6a40c381b5e58e246bd605",
+      "statement": "stream() and astream() are pull-based iterators where caller iteration drives the graph forward; no background thread pumps execution.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/main.py#L2655-L2750",
+          "version": "repo-lines-v1:sha256:9edccba9eb0bcc047f96c0a348c090714d4fc6a1e9bf49749df60deff9288d70:eyJzZWxlY3RlZExpbmVDb3VudCI6OTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZkMDJmY2NjNWE1YWFkOWQyZmRmNzU2ZmM3ZmU2OTM0MGYxZDM3ODAxNzQwMTY2MzgzMjQwYzNlYTZjMWY0NGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVhZWJiNWYzNGIyYmYyY2YxYWRlZDU1NmJmMGI1MTJjODhiZmJiMWYzYTQ3YmU3N2FiOTljNTY3MjI2Mjk2OTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE4NGI0YTE1NWMyMjY3MDVlNTViODZmMDJiNmY1YmE0NTIxMmM0MzBiYTQ4MDY0MjQ4ZjBlMWFjNjQ0OWIzYzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAxZmUxM2U3ODg3MDI4ZjU2NDYwOTAzZTM2NDY4N2MxZmMwOTRhNmJlMWI0YmU1NDdmZGE0MzdkNmEzNGI4MTYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3766b2cccc304395ad36779942a765f8",
+      "statement": "Stream modes control output: 'values' emits full state snapshots, 'updates' emits node-level deltas, 'messages' emits LLM tokens, 'custom' emits user-written events, 'tasks'/'debug'/'checkpoints' emit specialized events.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/main.py#L2680-L2724",
+          "version": "repo-lines-v1:sha256:db62f3ac269f310a52a626ea4e87fb35203f21385fddf6c129a8770043e00b1d:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyYmU2ODlkMTliYjEzZjk5ZGQwNzRkMDI2NTNjYTU0Y2Q3OTU2OGNhOWE1MDZiYjBjYjJjMDUwNjhkODNhM2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwZGUyNTg3MTk2MTQ5MjYwNzFjOGZiMTlmZDg2NjE1MDU1NWYxYjAxMzU0ZjhjZDE2MDNhMTA5YTdkZGFlNDAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIyYTJhNTNlODg1MWU3NTFlZTFiMTMzY2VlYjdhZTE1YTk1YjU4ODkzMmVjM2U5Y2IyNWY1Zjc2ODFkYmFkMzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk1MTk1NDY2NzA3YjNmOGZkM2IwZmVhMzFiY2M3NzI4Zjg2NmI0ZDNmMjhiN2JjNzM4OThmYjc3ODA3NTE3NjIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b26e788710074d8b8d4b679485176bf9",
+      "statement": "Passing stream_mode as a list streams multiple modes simultaneously; output is tuples (mode, data) in v1 or typed stream parts with namespace in v2.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/main.py#L2695-L2720",
+          "version": "repo-lines-v1:sha256:25e4fcffc76efd601853fc011bd86bc07dfb92b75b3fd9101e60cdfb29d6ffda:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQyMTA0Mjg0Nzk2MDBlYTg5NDdmNGJiZGE3NTVhMzU5OGMzODBiMWY3MzFhM2FlOTMxNjljNWM3NTUwOWNjNjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNkZWEyMjYwOWFhOGExMmJjMWJlNTgxZDBhMzlhMTY5Yjg3NzhlOTc1NDMzNTk4NzU1Zjk4NDJmZDgxNDMxZWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQwODdkNjY0YmVmODQ0MTY5NWQ4YWQ3ZDU5MzNlNjdiMTZiMjEwMWM5YzFmMWIwZTFlOTU1ODBlNWI2NTY2MmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkxODUwZjFmZjZhY2U4NDI2NWVjZTY3ZjRlMjA3OTVkYmExOWMzNTBmM2NiMTE3ZDFjZTcwOGZjZWQ0NTU5ZmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2271ee9f978d4d168360220c129888e5",
+      "statement": "v1 (default) returns plain dicts and tuples; v2 returns typed StreamPart dicts with 'type', 'ns', 'data', and optional 'interrupts' fields; v3 is experimental caller-driven with projections.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/main.py#L2670-L2670",
+          "version": "repo-lines-v1:sha256:f11d24d18c385e17198acc3392c2b158a100d912b72d28b2bff467a593d968c2:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjExZDI0ZDE4YzM4NWUxNzE5OGFjYzMzOTJjMmIxNThhMTAwZDkxMmI3MmQyOGIyYmZmNDY3YTU5M2Q5NjhjMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjExZDI0ZDE4YzM4NWUxNzE5OGFjYzMzOTJjMmIxNThhMTAwZDkxMmI3MmQyOGIyYmZmNDY3YTU5M2Q5NjhjMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjdlZTc0NTM3NzIwMDRlZWEwNzBiMDcxZGNkZWFiZWZhNmUyNzk1NDNlYTE3ZjNlZmE4MjAwOTJkYzNjNzg4NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzBkOWZiMzQzOWRmMTUyMWExODgwZDU4YmMyZDUzYjdlY2VkZmI2NmEyY2ZiN2JmMWI3MDE3YTJhMmU4MjlmZiJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L177-L192",
+          "version": "repo-lines-v1:sha256:2f3ae4547fbc3b4f2580fae9867aeba49fa7ccf61c0074f43020836cd93c8323:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ5NWEzZjQyMzg3ODNmNmVhOGI5NTBmMWIyNWQ2MTRhZDBjZDhhYWIyNDQzNzJiMmZhMTBhMjI3MmQ1YTdmM2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2MjliZjY3YWJjY2E2MGUwYWE1MWZkMThmMGUxOTA0MTJiYTMyOWExNGNlODg0NGNmOTg5Y2Q0ZDJhMGVhNWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNhMDZlZjVkNWJkNzMzMWE0ZDRiNjAwNTgwYzc3MTVjMzliMzc3ZmI5YmQ3Zjc2NTgzOTA3ZDBhYWNkNjY0MDYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBjMzAyYTdiMTAxZjgwZTliZmJkMGIxZDQ3MzJkOTc2ZGVlOWY3NzM0OGQ1NTNhOTQ2NmRlMjcyNmZhNGY4N2YifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_42db9b31c05c4cc5b430b9ed082149ef",
+      "statement": "stream_events(version='v3') returns a GraphRunStream with typed projections (values, messages, lifecycle, subgraphs) that the caller iterates to drive the graph; no background thread.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/main.py#L3638-L3717",
+          "version": "repo-lines-v1:sha256:67f5bc379f2669d3475bdf40c239430d60273a9be44dfe967a04f09e4ec4865a:eyJzZWxlY3RlZExpbmVDb3VudCI6ODAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdkYmI2ZDFmYzMxYjdhMTg3YTczYzQ4NmI5MTNlMjMzYjEyMWIzZmQ0ZTI3MGI5M2JiOGVjZWY4YTYzNzBjMjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJhMTM3NmY1NTk2OTk4OGFiNmY1NTY1MDY2YTY0NjdlZTg3NGE2MDcwZjBhOWRmYTFlZDk3ZjU1NDY2YTMzMmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhiZTUzMDgzM2JjM2FiNGM5ZWNhMGE2M2U1NDE3OTdjMjQ4YjM3MDM4ZTA2YjBkMTJlNTdmNDU0ZDQ2OGE0NDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU2MWI5OTdlNDViN2Y5Nzk3MjY3ZGNjNDY1ODdhOGI4OTFhZThiM2ZkZmY0NWU4OGEzY2YyZmFjOWJhNzZiYmYifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/stream/run_stream.py#L36-L98",
+          "version": "repo-lines-v1:sha256:0030add8f3763df958d3e5a0f91c3cd147b9de58058b028509fe95ca53347a57:eyJzZWxlY3RlZExpbmVDb3VudCI6NjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1Mjk2MTBjNmQzN2IwOThkYTQ3ZTI5N2QxZmE1MDI1OTAxNDk5Nzc3NjFkOTM3MzBlNTJhZjRhOWJlZDZiMjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZhMjhmMzA0MGRmYmViNjhjYzk0NjA4NDdiODVkYjU5ZDNlMGFkNzA5Nzk5NzFhNzM0YzQ5NWEyMTBiOWViN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU2MDA2YzllMTFkZjY5YjYwYTU4MDAyYWI2Y2E5NzZmM2Q3YjVlMjg0OTM5MjBlYTNjNzE3NDZhYzBkYThjZjUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_dd85372dfe3a4637bdc4cf413bb11e78",
+      "statement": "GraphRunStream projections are single-consumer; iterating one projection twice raises RuntimeError unless .tee(n) is used for fan-out.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/stream/run_stream.py#L37-L55",
+          "version": "repo-lines-v1:sha256:b8ff660c5b8c05db9a3608c6f4e1904fe9906fd1a48930077925cdaa60c818f3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMwZDVhMTNjODdkNTgxM2MzYzE5OWM1MTM1NGJmNDg1NzJkMGQ5NTFlNmY5YzA4ZTAxYzM5ZmI3MjBjNzRjZWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2YTcxNTI1NzJlZTg0ZjEwOTA2Yzc0YjlmMmE5MjQzNGRkYWIwZTNjNDI4MTNiMDRlNTk3ZWZjZWM5NTFiMjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhkNTE2YjYxYTZmMmY1MGViODNjZjQ4YzJlM2I2YzU2ZTUyYWEzZTkyYzBmNTczN2E3MzRjYmJhOWY3MzdhNzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdlNTdiYmE2ODNhMTEyM2M0NTI4NzY2Yjg1OGFiZTVkOTMyOTc4MGRkYWRmZTAwYzc3ZWQ4NjYzNjA5YzA4MmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_96889b4a22884b60bb54b000b77e4b82",
+      "statement": "interrupt(value) inside a node raises GraphInterrupt, pausing execution at the current superstep; state is persisted, and execution can resume via Command(resume=...).",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L575-L630",
+          "version": "repo-lines-v1:sha256:4d2900c27e6c5324adb495fd7bc3a49b840df35ffb65103b5fe6f2801d25b5e4:eyJzZWxlY3RlZExpbmVDb3VudCI6NTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImExNzkwMzA2ZTFjYzgwMDMxNmRiMmZhYjUyOWVmNTVmZmMxNzczZWExOGViNTBmNTNjMGE2YmMzZTEzNTQ3MzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE2ZmZkMjM0NDgxZDAxMTViYmYwNGFmMjEzNmE0ZWNhMjU3NGZmYzc2OGIzNmQzYWJhOGE4YWQ4NTBjMmZmZTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc1YWQ4Mjc2NWRhODFhNjViOTcyOWE5Mzg0Y2I2ODM5Y2U3NzMyM2UzNzNlZDEzZThmODZhOTg4ZDc2ODZjMWYifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L851-L900",
+          "version": "repo-lines-v1:sha256:e5b21efa741c7ecebb2ce4f3ba879c683ffbb4c25f626e21f5cf5db9e5c549f6:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM4MDBkNWNkZTA5MWRiZDU0MDI1MzIzODY1MDFlMzEzNDkyMmJmY2JjODgwYjMzMGRkYWFhMmI2NGUxYWJjZTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAzZDljYjQwMTM0YzlmZWJjMDAzODhmMjZhZGJiYjkwN2NiNzlkYmRjYzEyZjcxMGY1MTY1YjBlYjQwZWI5ZjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFjN2JkMjU4MDFmNjYzZGRjODY3NjA1MjE3NjVlNWRhYTk3MDY4YWI0MzBiZDRlNTg0NzgzZjFjYWQxYjJlYWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY3MjU0YmIxMjRkZjU0NzMwNzliZmI1NjVjODUxYThkMWExMWE3MzQ2YmNmMDdiYTIzOTcwNTQzYzEzZDA4MzIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d7790aa965c0425fa53cb59211abfc3f",
+      "statement": "Interrupts require a configured checkpointer; they rely on persisting graph state and snapshot restoration on resume.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L871-L871",
+          "version": "repo-lines-v1:sha256:0378f4bf573c73924cf99e235732fd4fabb830dd4e8325247f2fc22790ca76fa:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDM3OGY0YmY1NzNjNzM5MjRjZjk5ZTIzNTczMmZkNGZhYmI4MzBkZDRlODMyNTI0N2YyZmMyMjc5MGNhNzZmYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDM3OGY0YmY1NzNjNzM5MjRjZjk5ZTIzNTczMmZkNGZhYmI4MzBkZDRlODMyNTI0N2YyZmMyMjc5MGNhNzZmYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTZlODlkYjg1Y2I3NjcwYzQyYmNhZmJlMTAwOWM4MGEwZGIyMDY2OTIzNThiMzAxOThkYmYyODY0YWU5NTA0MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODgzMGM5OWRhYjZlM2E2ODQzNWM4MmEzMjUzYzBkODNjNWJmZTc2OWYwMTdhZTVhYWU1MjIwY2M0MWRiMDlhNSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_bc018b7474d54fb59f025eb3aee833e0",
+      "statement": "Multiple interrupt() calls in a single node are matched to resume values by order; a list of resume values is scoped to one task execution, not shared across parallel tasks.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L866-L870",
+          "version": "repo-lines-v1:sha256:f3e0330379b433cd12c3b8af0c0d130fb62f9dd55dd99c5b6e39b833a60ebaf3:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2IwZjQ2ZjllNmZiZDQyYmY4M2M2Y2FiMjQwODdjZjI1OGYyNjBhMWI1NjA3ZjA0NDBjZTExNWEwMThjZTAzYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjgzMWJjZDE0NTk2N2UxNWM3NzIxMWJmNTAyMGQzYjU0NTZiYmQ2MWVmNjUwZjdmZDRhN2M1NzEzY2EwM2MzMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjY2ZjhiOTgzY2Y4NTQ0YjU3ODRhMTc2OTgyYjUzYzUwZDlhYjVhMTQyMDc1YzQ2NDYxODc5MmY3ZjFlODlhZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTc4YzMxZGM3MGQzMWM3MDY0MzdkNDYxZjYwNmY0NWIyMzY4MTgxYjY2ODMzOTgzZmQ4NDY5MjIzYWM1ODFhZiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_3106c9fa42434c8a8cf316568b682b8b",
+      "statement": "get_state(config) returns a StateSnapshot with values, next, config, metadata, tasks, and interrupts; get_state_history(config) yields all checkpoints for a thread.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/main.py#L1392-L1434",
+          "version": "repo-lines-v1:sha256:9e6ab63783830adf83311a7a5686f27a02021b60afd25d64d45b3259e5bc0049:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZjOTA2ZTVhYzExM2M0YmYzYWEzN2VkYTM0ODFkODg2MTM1MDRmM2NiOTkyMTc3ZTA3OGVhMWI2NjUxMWZmYzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5MDlhNTNhNjE4ZDAyOGUxZDMwMDBjMGE3YWJjZWVjYmU1ZmIzN2Y0ZTUxMWVmZTQ2NjQzZmFkNmU2Njg3MmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYzOTM4MTE4NzNlODM1NGViNmJkZThmYzkwZDM3ZDYzNjFlMGRjMDZiNTIyMDgyY2EzMGVhMDU5YjUwZDNlODEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZhYzlkNGVkNDg3NWVmYzJjMzQwZWQyMmI0MjQ5MzdhODQzNTAxOGMxZDk5NWJhNTQ4YzAwMjFlZDQwZTM2ZDUifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/main.py#L1480-L1531",
+          "version": "repo-lines-v1:sha256:ea4d5fc6ac2532990394172dca3f87b958a8472cbc3ac3f4c52efe5e11b6983b:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3MWJjODdlYjY2NGRjZmE5NWVhZDE1MjQzM2I4OThjNDQxMmNiNmE1YjI2YmVkNmYzODIzNGQzMjQ4ZGQxZjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MDMyZTk2NGQwOTMyMzUxZTVkMTg1MjY5MjgxYjE3MWEzYTA5YjA4YjI4NmU2NjFlYTQ3MDMyM2M4MmViNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU4ZjJkMjNmYTAwOGRiY2I3MWY2Njg0N2JjOWZkZWQ4OTkyNTA3NTlmMmRiODkyYzI2ZGRmNGZkMmViMGZiYzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNkMWE1NTFmYzBmMjA5OGE3NTYwZGUzNzc1NWZmYmM2NGU2N2M5ZmM1NTJiODQ2NDVkMTcxMTZiNDBkOTgyNGEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_343d6b918e3346bbb13209761afebc5e",
+      "statement": "Passing checkpoint_id in config enables resuming from a mid-execution snapshot; prior supersteps are replayed deterministically using stable task IDs.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/main.py#L1428-L1434",
+          "version": "repo-lines-v1:sha256:9ed338f92691e90358a950acf4879cfa9d8a848ac10a257d2b44048c0934300a:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTA2YTI5NmJhYzg3ODZhNmQxNDFjMThjYTZmODE2OTEwYWRjYjI2MTY4NjA5NjBkYmQ5YTliN2RkMTliMDViYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTkwOWE1M2E2MThkMDI4ZTFkMzAwMGMwYTdhYmNlZWNiZTVmYjM3ZjRlNTExZWZlNDY2NDNmYWQ2ZTY2ODcyZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmRmZDcyYTE5MDU4NjE2YjE1NTZjMjRkZmViMWM5NTYwNjhmMWQzZjU3NWNhOGRlYjMzOGQ4MzMwZGQ1NjU3MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmFjOWQ0ZWQ0ODc1ZWZjMmMzNDBlZDIyYjQyNDkzN2E4NDM1MDE4YzFkOTk1YmE1NDhjMDAyMWVkNDBlMzZkNSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_41e53d6481eb470f9239f4315aed18cd",
+      "statement": "BaseCallbackHandler (generic chain lifecycle) and GraphCallbackHandler (graph-specific interrupt/resume events) are registered via config['callbacks'] for observability.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/callbacks.py#L87-L112",
+          "version": "repo-lines-v1:sha256:2e32ce2f93730cf9286bdedd82e4a88b1e3f1779a94bf8622277eafeb1105a45:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA5MzkyMGZiMzY3MTVkNTQ5YWEzOTE5ZTM5NzViOWRkMGRhZDhlYjVlYWViODI0N2ExNGE5ODdmMDc1NTA3Y2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM4YWU2MGEwOWE3ODRiNDdlYTA4NTMxNmJmZjkyYzY4MDExZGQ2NzBkODlmMjhkYWY1ZGE5YmI2YWU0MWJjNDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQwM2U0MTExN2UxMGU3MGQwYWY4NWNiODU3NGYzZjUxNjcyZmZmZTk1ZmUwM2ZlMGFlMzhjMTM3YWUxMjg2YzAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d566074ea27442b9b825d234b5d44f76",
+      "statement": "GraphInterruptEvent contains run_id, status, checkpoint_id, checkpoint_ns, and interrupts tuple; GraphResumeEvent contains run_id, status, checkpoint_id, and checkpoint_ns.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/callbacks.py#L42-L77",
+          "version": "repo-lines-v1:sha256:5ae313862e176fc9a33c86e030b8982969cff3df74f935a83db8164550149c19:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2OWExMzk3NWMyNTZlYzgzMjBlMjAxNjA4M2M5NmRmNjM3Y2EzZDM1YmViZGUyMzE0YmVlM2E0NzExYjU2Y2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJjMTIyZDkzMzAyNzZmNzc0NDEyMzdkMzBlNGFkOGI3ZWI0OTExMzU2MTJhNDI3YjVlZjAzMmI2NmRhYzYxYTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc3Y2ZkMGEzODY3YTU3ZWE0MmVjMTBiNzQ2NzY2MjFlYzkwN2MwOTQ5OWQ0NDVhNTJhMzJlODhmMWRmNzQ1NDMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_80b7d1a37e0148a7a4efa4671882481e",
+      "statement": "Durability modes control checkpoint persistence timing: 'async' (default) persists asynchronously, 'sync' persists before next superstep, 'exit' persists only on completion.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/main.py#L3866-L3872",
+          "version": "repo-lines-v1:sha256:4510a9528f39fc7fbdc76ccf62fafec185980553f49b8a7573414f62c908e3d4:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDkyYzlmNWRlMmFlMTk1MDQ5YTBmYTY1ZTkzNTZlNzhjYjVhYzg3MGQ4NzkyMWJiYTViNGZhOGJjMzJlZGI0YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYWMyNzE1ZDljZTAyMjMyMWZjNmYzMjc5ZmY0MWYzOGRmYTdjOTVmOTAxODA3ZjNmNGE1MTcyZWVjOGMyMmVhMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODFiYzA5ZjI2ZGZiYTE2N2UwNWU0OGM1MjZmMDRmZmFkZjFjZTU0NTMyZmY5NWIyNjE5MjExMzZlMzEzNzE4NiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjFiOWEwNTE0MGUzYzZjZDNhMjBlOTkyZjI5MmIyN2M0ZWU0Yzc4M2FlYTIwZTE1ZDRmN2ViZjE2MjBjYjczYyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_00045929255a44e8b0ccd0065ba293ea",
+      "statement": "RunnableConfig is a dict with 'configurable' (thread_id, checkpoint_id, recursion_limit, timeout), run_id, callbacks, tags, and metadata keys.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/config.py#L1-L30",
+          "version": "repo-lines-v1:sha256:0bc9931bd5de9bb239bdb28fcb1693e4ed0b62598efe4a272a257c2cfcf19deb:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAzNGM5Y2RkNDJmOGQ4OGMwNDQyNTM3M2E3MzM2MjA5ZjZiMmEyZGNlYmVjMzJiNGQ0MDU5M2Y5MGJlMmJiMjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUyZjY3MjkwOGQ1Yjk3M2QzZDcxZDhmYzYzN2YzMzgzYzQzYTc2NzEzMGMxYzZiMzFhN2EzMWZmMGIzOWY3ODQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d7dec069751647088c02630b2ab8e5b4",
+      "statement": "subgraphs=True in stream() enables receiving events from nested graph nodes; output includes namespace tuples identifying the subgraph path.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/main.py#L2713-L2720",
+          "version": "repo-lines-v1:sha256:be42ff69b3b30fe0f3e0b2384dfcb609dfe4113503c4a2437e201bfd1d7cc22f:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTYwMmUxOGE2N2M4NDlhZjAxMDEwYTMyMmY1YjIyZjVmOGI4MzE2Y2RjZjcyNWUxYTZlZmM3YTYwMWYxNmI2OCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiM2RlYTIyNjA5YWE4YTEyYmMxYmU1ODFkMGEzOWExNjliODc3OGU5NzU0MzM1OTg3NTVmOTg0MmZkODE0MzFlYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmQ0ZGY1MDZkZjNmNjM2YzM1NmU2Y2YxNjFmMjUyMTEwODRlYTU3Njg2Yjg0NGJkODBhODU0NWQxNmE3Njc2YSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTE4NTBmMWZmNmFjZTg0MjY1ZWNlNjdmNGUyMDc5NWRiYTE5YzM1MGYzY2IxMTdkMWNlNzA4ZmNlZDQ1NTlmYSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_06c75e462cb04705b2541c27566dfbc8",
+      "statement": "get_stream_writer() inside a node returns a callable to emit custom events; these appear in stream output when stream_mode='custom'.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/config.py#L126-L150",
+          "version": "repo-lines-v1:sha256:675e7e4a79a652965ee6065a49f92157bdd72530aabec7e76b4a9f98589a4453:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM0YjcxZmEwYjg0ODQ0YmEwOTJkYzE3N2I0MGI1NzgyMzNiZmVkYzQ4ZWJhNzFhZTNmOWYwOWY5ZDc3MTNmYzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBhZDMyYjkzYWQ3YmYwYmVlYjhjODY5Mjg4OWU1YjlkN2Y2MmQxMGJlMWJiN2VlNDFkOTliNWMyMTAzZDczZWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhiODlmNjA1OWNjN2VmOWI5Y2FiYTI4OTI1M2Y3NmE0YzY5YzMwNTBiNmY4ZTEwYWU5ZmUxNDIwMDY4MTcyMGQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIwNzNjMTcyMTUxODkxM2RjNzRhM2ZkNDZjNzc3Mzg2ZWFlZTlmMTdmYTRlZGNiMmI1OThlMTkxODI5ZmY1OTgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e3ef7090e0a040d28ff25d7be2efe438",
+      "statement": "After an interrupt, clients inspect state via get_state(config); state.interrupts contains Interrupt objects with value and id fields.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L575-L630",
+          "version": "repo-lines-v1:sha256:4d2900c27e6c5324adb495fd7bc3a49b840df35ffb65103b5fe6f2801d25b5e4:eyJzZWxlY3RlZExpbmVDb3VudCI6NTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImExNzkwMzA2ZTFjYzgwMDMxNmRiMmZhYjUyOWVmNTVmZmMxNzczZWExOGViNTBmNTNjMGE2YmMzZTEzNTQ3MzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE2ZmZkMjM0NDgxZDAxMTViYmYwNGFmMjEzNmE0ZWNhMjU3NGZmYzc2OGIzNmQzYWJhOGE4YWQ4NTBjMmZmZTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc1YWQ4Mjc2NWRhODFhNjViOTcyOWE5Mzg0Y2I2ODM5Y2U3NzMyM2UzNzNlZDEzZThmODZhOTg4ZDc2ODZjMWYifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-03T15:19:56.419Z"
+  }
+}
