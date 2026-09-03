@@ -968,7 +968,12 @@ def create_react_agent(
     )
 
     def route_tool_responses(state: StateSchema) -> str:
-        for m in reversed(_get_state_value(state, "messages")):
+        messages = _get_state_value(state, "messages")
+        if not messages:
+            return entrypoint
+
+        m: Any = None
+        for m in reversed(messages):
             if not isinstance(m, ToolMessage):
                 break
             if m.name in should_return_direct:
@@ -976,7 +981,7 @@ def create_react_agent(
 
         # handle a case of parallel tool calls where
         # the tool w/ `return_direct` was executed in a different `Send`
-        if isinstance(m, AIMessage) and m.tool_calls:
+        if m is not None and isinstance(m, AIMessage) and m.tool_calls:
             if any(call["name"] in should_return_direct for call in m.tool_calls):
                 return END
 
