@@ -1435,3 +1435,29 @@ def test_list_namespaces_metacharacter_labels(store: SqliteStore) -> None:
         assert set(store.list_namespaces(prefix=[label, "child"], limit=100)) == {
             (label, "child"),
         }
+
+
+def test_operator_filter_with_list_and_dict_values(store: SqliteStore) -> None:
+    """Operator-form filters ($eq/$ne) work correctly on list and dict values (#8759).
+
+    orjson.dumps() returns bytes, which SQLite binds as BLOB.  json_extract()
+    returns TEXT, so TEXT != BLOB is always true — $eq returns nothing and $ne
+    includes items it should exclude.  Both values must be decoded to str before
+    binding so SQLite sees TEXT on both sides of the comparison.
+    """
+    store.put(("docs",), "a", {"tags": ["x", "y"], "meta": {"k": "v"}})
+    store.put(("docs",), "b", {"tags": ["z"], "meta": {"k": "w"}})
+
+    def keys(flt: dict) -> list[str]:
+        return sorted(i.key for i in store.search(("docs",), filter=flt))
+
+    # $eq: operator form must match the same items as the shorthand form
+    assert keys({"tags": {"$eq": ["x", "y"]}}) == ["a"]
+    assert keys({"tags": ["x", "y"]}) == ["a"], "shorthand baseline should work"
+
+    # $ne: operator form must exclude the matching item
+    assert keys({"tags": {"$ne": ["x", "y"]}}) == ["b"]
+
+    # dict values
+    assert keys({"meta": {"$eq": {"k": "v"}}}) == ["a"]
+    assert keys({"meta": {"$ne": {"k": "v"}}}) == ["b"]

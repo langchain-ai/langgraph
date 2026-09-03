@@ -729,7 +729,8 @@ class BaseSqliteStore:
                 # SQLite REAL can handle these cases better than INTEGER
                 return f"json_extract(value, '$.{key}') = ?", [float(value)]
             else:
-                return f"json_extract(value, '$.{key}') = ?", [orjson.dumps(value)]
+                # orjson.dumps returns bytes; decode to str so SQLite sees TEXT not BLOB
+                return f"json_extract(value, '$.{key}') = ?", [orjson.dumps(value).decode()]
         elif op == "$gt":
             # For numeric values, SQLite needs to compare as numbers, not strings
             if isinstance(value, (int, float)):
@@ -740,7 +741,7 @@ class BaseSqliteStore:
             elif isinstance(value, str):
                 return f"json_extract(value, '$.{key}') > ?", [value]
             else:
-                return f"json_extract(value, '$.{key}') > ?", [orjson.dumps(value)]
+                return f"json_extract(value, '$.{key}') > ?", [orjson.dumps(value).decode()]
         elif op == "$gte":
             if isinstance(value, (int, float)):
                 return f"CAST(json_extract(value, '$.{key}') AS REAL) >= ?", [
@@ -749,7 +750,7 @@ class BaseSqliteStore:
             elif isinstance(value, str):
                 return f"json_extract(value, '$.{key}') >= ?", [value]
             else:
-                return f"json_extract(value, '$.{key}') >= ?", [orjson.dumps(value)]
+                return f"json_extract(value, '$.{key}') >= ?", [orjson.dumps(value).decode()]
         elif op == "$lt":
             if isinstance(value, (int, float)):
                 return f"CAST(json_extract(value, '$.{key}') AS REAL) < ?", [
@@ -758,7 +759,7 @@ class BaseSqliteStore:
             elif isinstance(value, str):
                 return f"json_extract(value, '$.{key}') < ?", [value]
             else:
-                return f"json_extract(value, '$.{key}') < ?", [orjson.dumps(value)]
+                return f"json_extract(value, '$.{key}') < ?", [orjson.dumps(value).decode()]
         elif op == "$lte":
             if isinstance(value, (int, float)):
                 return f"CAST(json_extract(value, '$.{key}') AS REAL) <= ?", [
@@ -767,7 +768,7 @@ class BaseSqliteStore:
             elif isinstance(value, str):
                 return f"json_extract(value, '$.{key}') <= ?", [value]
             else:
-                return f"json_extract(value, '$.{key}') <= ?", [orjson.dumps(value)]
+                return f"json_extract(value, '$.{key}') <= ?", [orjson.dumps(value).decode()]
         elif op == "$ne":
             if isinstance(value, str):
                 return f"json_extract(value, '$.{key}') != ?", [value]
@@ -779,7 +780,7 @@ class BaseSqliteStore:
                 # Convert to float for consistency
                 return f"json_extract(value, '$.{key}') != ?", [float(value)]
             else:
-                return f"json_extract(value, '$.{key}') != ?", [orjson.dumps(value)]
+                return f"json_extract(value, '$.{key}') != ?", [orjson.dumps(value).decode()]
         else:
             raise ValueError(f"Unsupported operator: {op}")
 
@@ -953,7 +954,8 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                 # SQLite REAL can handle these cases better than INTEGER
                 return f"json_extract(value, '$.{key}') = ?", [float(value)]
             else:
-                return f"json_extract(value, '$.{key}') = ?", [orjson.dumps(value)]
+                # orjson.dumps returns bytes; decode to str so SQLite sees TEXT not BLOB
+                return f"json_extract(value, '$.{key}') = ?", [orjson.dumps(value).decode()]
         elif op == "$gt":
             # For numeric values, SQLite needs to compare as numbers, not strings
             if isinstance(value, (int, float)):
@@ -964,7 +966,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
             elif isinstance(value, str):
                 return f"json_extract(value, '$.{key}') > ?", [value]
             else:
-                return f"json_extract(value, '$.{key}') > ?", [orjson.dumps(value)]
+                return f"json_extract(value, '$.{key}') > ?", [orjson.dumps(value).decode()]
         elif op == "$gte":
             if isinstance(value, (int, float)):
                 return f"CAST(json_extract(value, '$.{key}') AS REAL) >= ?", [
@@ -973,7 +975,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
             elif isinstance(value, str):
                 return f"json_extract(value, '$.{key}') >= ?", [value]
             else:
-                return f"json_extract(value, '$.{key}') >= ?", [orjson.dumps(value)]
+                return f"json_extract(value, '$.{key}') >= ?", [orjson.dumps(value).decode()]
         elif op == "$lt":
             if isinstance(value, (int, float)):
                 return f"CAST(json_extract(value, '$.{key}') AS REAL) < ?", [
@@ -982,7 +984,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
             elif isinstance(value, str):
                 return f"json_extract(value, '$.{key}') < ?", [value]
             else:
-                return f"json_extract(value, '$.{key}') < ?", [orjson.dumps(value)]
+                return f"json_extract(value, '$.{key}') < ?", [orjson.dumps(value).decode()]
         elif op == "$lte":
             if isinstance(value, (int, float)):
                 return f"CAST(json_extract(value, '$.{key}') AS REAL) <= ?", [
@@ -991,7 +993,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
             elif isinstance(value, str):
                 return f"json_extract(value, '$.{key}') <= ?", [value]
             else:
-                return f"json_extract(value, '$.{key}') <= ?", [orjson.dumps(value)]
+                return f"json_extract(value, '$.{key}') <= ?", [orjson.dumps(value).decode()]
         elif op == "$ne":
             if isinstance(value, str):
                 return f"json_extract(value, '$.{key}') != ?", [value]
@@ -1003,7 +1005,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                 # Convert to float for consistency
                 return f"json_extract(value, '$.{key}') != ?", [float(value)]
             else:
-                return f"json_extract(value, '$.{key}') != ?", [orjson.dumps(value)]
+                return f"json_extract(value, '$.{key}') != ?", [orjson.dumps(value).decode()]
         else:
             raise ValueError(f"Unsupported operator: {op}")
 
