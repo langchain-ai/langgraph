@@ -1490,7 +1490,11 @@ def _ensure_index_config(
     index_config = index_config.copy()
     tokenized: list[tuple[str, Literal["$"] | list[str]]] = []
     tot = 0
-    text_fields = index_config.get("text_fields") or ["$"]
+    fields = index_config.get("fields")
+    if fields is None:
+        # Keep accepting the pre-`fields` name for backwards compatibility.
+        fields = index_config.get("text_fields")
+    text_fields = fields or ["$"]
     if isinstance(text_fields, str):
         text_fields = [text_fields]
     if not isinstance(text_fields, list):

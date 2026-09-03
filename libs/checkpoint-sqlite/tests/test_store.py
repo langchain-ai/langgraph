@@ -477,6 +477,30 @@ def test_vector_store_initialization(fake_embeddings: CharacterEmbeddings) -> No
         assert len(tables) >= 1, "Vector tables were not created"
 
 
+def test_vector_store_respects_fields_config(
+    fake_embeddings: CharacterEmbeddings,
+) -> None:
+    """Test that the documented fields config selects the indexed field."""
+    index_config: SqliteIndexConfig = {
+        "dims": fake_embeddings.dims,
+        "embed": fake_embeddings,
+        "fields": ["text"],
+    }
+    with SqliteStore.from_conn_string(":memory:", index=index_config) as store:
+        store.setup()
+        store.put(
+            ("test",),
+            "doc",
+            {"text": "indexed", "metadata": "not indexed"},
+        )
+
+        vector_fields = [
+            row[0] for row in store.conn.execute("SELECT field_name FROM store_vectors")
+        ]
+
+    assert vector_fields == ["text"]
+
+
 @pytest.mark.parametrize("distance_type", VECTOR_TYPES)
 @pytest.mark.parametrize("conn_type", ["memory", "file"])
 def test_vector_insert_with_auto_embedding(
