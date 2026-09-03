@@ -94,7 +94,7 @@ class Checkpoint(TypedDict):
     """State snapshot at a given point in time."""
 
     v: int
-    """The version of the checkpoint format. Currently `1`."""
+    """The version of the checkpoint format. Set by `LATEST_VERSION`."""
     id: str
     """The ID of the checkpoint.
     
