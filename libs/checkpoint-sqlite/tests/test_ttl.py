@@ -7,7 +7,7 @@ import time
 from collections.abc import Generator
 
 import pytest
-from langgraph.store.base import TTLConfig
+from langgraph.store.base import GetOp, TTLConfig
 
 from langgraph.store.sqlite import SqliteStore
 from langgraph.store.sqlite.aio import AsyncSqliteStore
@@ -139,9 +139,11 @@ def test_ttl_custom_value(temp_db_file: str) -> None:
         time.sleep(2)  # Wait for short TTL
         store.sweep_ttl()
 
-        # Short TTL item should be gone, long TTL item should remain
-        item1 = store.get(("test",), "item1")
-        item2 = store.get(("test",), "item2")
+        # Probe reads must not extend the items' TTLs: refresh_on_read defaults to
+        # True, so a default read of item2 here would push its expiry out and make
+        # the final "should be gone" assertion timing-dependent.
+        item1 = store.get(("test",), "item1", refresh_ttl=False)
+        item2 = store.get(("test",), "item2", refresh_ttl=False)
         assert item1 is None
         assert item2 is not None
 
@@ -150,7 +152,7 @@ def test_ttl_custom_value(temp_db_file: str) -> None:
         store.sweep_ttl()
 
         # Now both should be gone
-        item2 = store.get(("test",), "item2")
+        item2 = store.get(("test",), "item2", refresh_ttl=False)
         assert item2 is None
 
 
@@ -176,10 +178,11 @@ def test_ttl_override_default(temp_db_file: str) -> None:
         time.sleep(2)
         store.sweep_ttl()
 
-        # Check results
-        item1 = store.get(("test",), "item1")
-        item2 = store.get(("test",), "item2")
-        item3 = store.get(("test",), "item3")
+        # Probe reads must not extend the items' TTLs: refresh_on_read defaults to
+        # True, so default reads would push item2's expiry out past the final sweep.
+        item1 = store.get(("test",), "item1", refresh_ttl=False)
+        item2 = store.get(("test",), "item2", refresh_ttl=False)
+        item3 = store.get(("test",), "item3", refresh_ttl=False)
 
         assert item1 is None  # Should be expired
         assert item2 is not None  # Default TTL, should still be there
@@ -190,8 +193,8 @@ def test_ttl_override_default(temp_db_file: str) -> None:
         store.sweep_ttl()
 
         # Check results again
-        item2 = store.get(("test",), "item2")
-        item3 = store.get(("test",), "item3")
+        item2 = store.get(("test",), "item2", refresh_ttl=False)
+        item3 = store.get(("test",), "item3", refresh_ttl=False)
 
         assert item2 is None  # Default TTL item should be gone
         assert item3 is not None  # No TTL item should still be there
@@ -427,3 +430,235 @@ async def test_async_asearch_refresh_ttl(temp_db_file: str) -> None:
         assert item1_final_check is None, (
             "Item1 should be gone after its refreshed TTL expired"
         )
+
+
+def _expires_map(store: SqliteStore) -> dict[str, str]:
+    """Return a {key: expires_at} map for direct TTL comparisons."""
+    return dict(store.conn.execute("SELECT key, expires_at FROM store"))
+
+
+async def _aexpires_map(store: AsyncSqliteStore) -> dict[str, str]:
+    """Return a {key: expires_at} map for direct TTL comparisons."""
+    async with store.conn.execute("SELECT key, expires_at FROM store") as cur:
+        return dict(await cur.fetchall())
+
+
+def test_batch_get_respects_per_op_refresh_ttl(temp_db_file: str) -> None:
+    """A GetOp with refresh_ttl=False must not refresh siblings in the same batch."""
+    with SqliteStore.from_conn_string(
+        temp_db_file, ttl={"default_ttl": 60, "refresh_on_read": True}
+    ) as store:
+        store.setup()
+        store.put(("docs",), "refresh", {"k": 1})
+        store.put(("docs",), "keep", {"k": 2})
+
+        # Far-future baseline so a refresh (now + ttl) is clearly distinguishable.
+        store.conn.execute(
+            "UPDATE store SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+1 day')"
+        )
+        before = _expires_map(store)
+
+        store.batch(
+            [
+                GetOp(("docs",), "refresh", refresh_ttl=True),
+                GetOp(("docs",), "keep", refresh_ttl=False),
+            ]
+        )
+
+        after = _expires_map(store)
+        assert after["refresh"] != before["refresh"], "refresh=True record must refresh"
+        assert after["keep"] == before["keep"], "refresh=False record must not refresh"
+
+
+def test_get_refreshes_by_default_without_refresh_on_read(
+    temp_db_file: str,
+) -> None:
+    """refresh_on_read defaults to True, so reads refresh by default."""
+    with SqliteStore.from_conn_string(temp_db_file, ttl={"default_ttl": 60}) as store:
+        store.setup()
+        store.put(("docs",), "key1", {"k": 1})
+        store.conn.execute(
+            "UPDATE store SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+1 day')"
+        )
+        before = _expires_map(store)
+
+        assert store.get(("docs",), "key1") is not None
+
+        after = _expires_map(store)
+        assert after["key1"] != before["key1"], "default read should refresh the TTL"
+
+
+def test_get_explicit_refresh_ttl_overrides_store_default(
+    temp_db_file: str,
+) -> None:
+    """An explicit refresh_ttl=True overrides a store-level refresh_on_read=False."""
+    with SqliteStore.from_conn_string(
+        temp_db_file, ttl={"default_ttl": 60, "refresh_on_read": False}
+    ) as store:
+        store.setup()
+        store.put(("docs",), "key1", {"k": 1})
+        store.conn.execute(
+            "UPDATE store SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+1 day')"
+        )
+        baseline = _expires_map(store)
+
+        # Store default is False: no flag means no refresh.
+        assert store.get(("docs",), "key1") is not None
+        assert _expires_map(store)["key1"] == baseline["key1"]
+
+        # Per-operation override opts back in.
+        assert store.get(("docs",), "key1", refresh_ttl=True) is not None
+        after = _expires_map(store)
+        assert after["key1"] != baseline["key1"]
+
+
+def test_search_refreshes_by_default_without_refresh_on_read(
+    temp_db_file: str,
+) -> None:
+    """Search refreshes returned items by default (refresh_on_read defaults to True)."""
+    with SqliteStore.from_conn_string(temp_db_file, ttl={"default_ttl": 60}) as store:
+        store.setup()
+        store.put(("docs",), "k1", {"group": "a"})
+        store.put(("docs",), "k2", {"group": "b"})
+        store.conn.execute(
+            "UPDATE store SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+1 day')"
+        )
+        baseline = _expires_map(store)
+
+        results = store.search(("docs",), filter={"group": "a"}, limit=10)
+        assert [item.key for item in results] == ["k1"]
+
+        after = _expires_map(store)
+        assert after["k1"] != baseline["k1"], "matched item should refresh"
+        assert after["k2"] == baseline["k2"], "unmatched item must not refresh"
+
+
+def test_search_refresh_ttl_overrides_store_default(temp_db_file: str) -> None:
+    """Search honors an explicit refresh_ttl=True over a False store default."""
+    with SqliteStore.from_conn_string(
+        temp_db_file, ttl={"default_ttl": 60, "refresh_on_read": False}
+    ) as store:
+        store.setup()
+        store.put(("docs",), "k1", {"group": "a"})
+        store.put(("docs",), "k2", {"group": "b"})
+        store.conn.execute(
+            "UPDATE store SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+1 day')"
+        )
+        baseline = _expires_map(store)
+
+        # Store default is False: no flag means no refresh.
+        assert [i.key for i in store.search(("docs",), filter={"group": "a"})] == ["k1"]
+        assert _expires_map(store)["k1"] == baseline["k1"]
+
+        # Per-operation override opts back in.
+        assert [
+            i.key
+            for i in store.search(("docs",), filter={"group": "a"}, refresh_ttl=True)
+        ] == ["k1"]
+        after = _expires_map(store)
+        assert after["k1"] != baseline["k1"]
+        assert after["k2"] == baseline["k2"]
+
+
+@pytest.mark.asyncio
+async def test_async_batch_get_respects_per_op_refresh_ttl(
+    temp_db_file: str,
+) -> None:
+    """Async batch GET must not refresh records whose op opted out."""
+    async with AsyncSqliteStore.from_conn_string(
+        temp_db_file, ttl={"default_ttl": 60, "refresh_on_read": True}
+    ) as store:
+        await store.setup()
+        await store.aput(("docs",), "refresh", {"k": 1})
+        await store.aput(("docs",), "keep", {"k": 2})
+        await store.conn.execute(
+            "UPDATE store SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+1 day')"
+        )
+        before = await _aexpires_map(store)
+
+        await store.abatch(
+            [
+                GetOp(("docs",), "refresh", refresh_ttl=True),
+                GetOp(("docs",), "keep", refresh_ttl=False),
+            ]
+        )
+
+        after = await _aexpires_map(store)
+        assert after["refresh"] != before["refresh"]
+        assert after["keep"] == before["keep"]
+
+
+@pytest.mark.asyncio
+async def test_async_aget_defaults_to_refresh_without_refresh_on_read(
+    temp_db_file: str,
+) -> None:
+    """Async reads refresh by default when refresh_on_read is unset."""
+    async with AsyncSqliteStore.from_conn_string(
+        temp_db_file, ttl={"default_ttl": 60}
+    ) as store:
+        await store.setup()
+        await store.aput(("docs",), "key1", {"k": 1})
+        await store.conn.execute(
+            "UPDATE store SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+1 day')"
+        )
+        before = await _aexpires_map(store)
+
+        assert await store.aget(("docs",), "key1") is not None
+
+        after = await _aexpires_map(store)
+        assert after["key1"] != before["key1"]
+
+
+@pytest.mark.asyncio
+async def test_async_aget_explicit_refresh_ttl_overrides_store_default(
+    temp_db_file: str,
+) -> None:
+    """Explicit refresh_ttl=True overrides a False store default in async reads."""
+    async with AsyncSqliteStore.from_conn_string(
+        temp_db_file, ttl={"default_ttl": 60, "refresh_on_read": False}
+    ) as store:
+        await store.setup()
+        await store.aput(("docs",), "key1", {"k": 1})
+        await store.conn.execute(
+            "UPDATE store SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+1 day')"
+        )
+        baseline = await _aexpires_map(store)
+
+        assert await store.aget(("docs",), "key1") is not None
+        assert (await _aexpires_map(store))["key1"] == baseline["key1"]
+
+        assert await store.aget(("docs",), "key1", refresh_ttl=True) is not None
+        after = await _aexpires_map(store)
+        assert after["key1"] != baseline["key1"]
+
+
+@pytest.mark.asyncio
+async def test_async_search_refresh_ttl_overrides_store_default(
+    temp_db_file: str,
+) -> None:
+    """Async search honors an explicit refresh_ttl=True over a False store default."""
+    async with AsyncSqliteStore.from_conn_string(
+        temp_db_file, ttl={"default_ttl": 60, "refresh_on_read": False}
+    ) as store:
+        await store.setup()
+        await store.aput(("docs",), "k1", {"group": "a"})
+        await store.aput(("docs",), "k2", {"group": "b"})
+        await store.conn.execute(
+            "UPDATE store SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+1 day')"
+        )
+        baseline = await _aexpires_map(store)
+
+        assert [
+            i.key for i in await store.asearch(("docs",), filter={"group": "a"})
+        ] == ["k1"]
+        assert (await _aexpires_map(store))["k1"] == baseline["k1"]
+
+        assert [
+            i.key
+            for i in await store.asearch(
+                ("docs",), filter={"group": "a"}, refresh_ttl=True
+            )
+        ] == ["k1"]
+        after = await _aexpires_map(store)
+        assert after["k1"] != baseline["k1"]
+        assert after["k2"] == baseline["k2"]

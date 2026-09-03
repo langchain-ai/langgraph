@@ -547,7 +547,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
             await cur.execute(query, params)
             rows = await cur.fetchall()
 
-            if needs_refresh and rows and self.ttl_config:
+            if needs_refresh and rows:
                 keys_to_refresh = []
                 for row_data in rows:
                     # Assuming row_data[0] is prefix (text), row_data[1] is key (text)

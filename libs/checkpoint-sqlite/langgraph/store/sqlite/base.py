@@ -299,7 +299,6 @@ class BaseSqliteStore:
         for namespace, items in namespace_groups.items():
             _, keys = zip(*items, strict=False)
             this_refresh_ttls = refresh_ttls[namespace]
-            refresh_ttl_any = any(this_refresh_ttls)
 
             # Always add the main query to get the data
             select_query = f"""
@@ -312,13 +311,20 @@ class BaseSqliteStore:
                 PreparedGetQuery(select_query, select_params, namespace, items, "get")
             )
 
-            # Add a TTL refresh query if needed
-            if (
-                refresh_ttl_any
-                and self.ttl_config
-                and self.ttl_config.get("refresh_on_read", False)
-            ):
-                placeholders = ",".join(["?"] * len(keys))
+            # Refresh only the records whose GetOps opted in. The per-op flag is
+            # already resolved by BaseStore (which folds refresh_on_read into it),
+            # so the store-level config must not be consulted again here: doing so
+            # would silently disable refresh when refresh_on_read keeps its
+            # default, and would prevent an explicit refresh_ttl=True from
+            # overriding a store-level refresh_on_read=False.
+            refresh_items = []
+            for (idx, key), do_refresh in zip(items, this_refresh_ttls, strict=False):
+                if do_refresh:
+                    refresh_items.append((idx, key))
+
+            if refresh_items:
+                refresh_keys = [key for _, key in refresh_items]
+                placeholders = ",".join(["?"] * len(refresh_keys))
                 update_query = f"""
                     UPDATE store
                     SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
@@ -326,10 +332,10 @@ class BaseSqliteStore:
                     AND key IN ({placeholders})
                     AND ttl_minutes IS NOT NULL
                 """
-                update_params = (_namespace_to_text(namespace), *keys)
+                update_params = (_namespace_to_text(namespace), *refresh_keys)
                 results.append(
                     PreparedGetQuery(
-                        update_query, update_params, namespace, items, "refresh"
+                        update_query, update_params, namespace, refresh_items, "refresh"
                     )
                 )
 
@@ -590,12 +596,10 @@ class BaseSqliteStore:
                 logger.debug(f"Search query: {base_query}")
                 logger.debug(f"Search params: {params}")
 
-            # Determine if TTL refresh is needed
-            needs_ttl_refresh = bool(
-                op.refresh_ttl
-                and self.ttl_config
-                and self.ttl_config.get("refresh_on_read", False)
-            )
+            # Determine if TTL refresh is needed. The per-op flag is already
+            # resolved by BaseStore (which folds refresh_on_read into it), so the
+            # store-level config must not be consulted again here.
+            needs_ttl_refresh = bool(op.refresh_ttl)
 
             # The base_query is now the final_sql, and we pass the refresh flag
             final_sql = base_query
@@ -899,7 +903,6 @@ class SqliteStore(BaseSqliteStore, BaseStore):
         for namespace, items in namespace_groups.items():
             _, keys = zip(*items, strict=False)
             this_refresh_ttls = refresh_ttls[namespace]
-            refresh_ttl_any = any(this_refresh_ttls)
 
             # Always add the main query to get the data
             select_query = f"""
@@ -912,13 +915,20 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                 PreparedGetQuery(select_query, select_params, namespace, items, "get")
             )
 
-            # Add a TTL refresh query if needed
-            if (
-                refresh_ttl_any
-                and self.ttl_config
-                and self.ttl_config.get("refresh_on_read", False)
-            ):
-                placeholders = ",".join(["?"] * len(keys))
+            # Refresh only the records whose GetOps opted in. The per-op flag is
+            # already resolved by BaseStore (which folds refresh_on_read into it),
+            # so the store-level config must not be consulted again here: doing so
+            # would silently disable refresh when refresh_on_read keeps its
+            # default, and would prevent an explicit refresh_ttl=True from
+            # overriding a store-level refresh_on_read=False.
+            refresh_items = []
+            for (idx, key), do_refresh in zip(items, this_refresh_ttls, strict=False):
+                if do_refresh:
+                    refresh_items.append((idx, key))
+
+            if refresh_items:
+                refresh_keys = [key for _, key in refresh_items]
+                placeholders = ",".join(["?"] * len(refresh_keys))
                 update_query = f"""
                     UPDATE store
                     SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
@@ -926,10 +936,10 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                     AND key IN ({placeholders})
                     AND ttl_minutes IS NOT NULL
                 """
-                update_params = (_namespace_to_text(namespace), *keys)
+                update_params = (_namespace_to_text(namespace), *refresh_keys)
                 results.append(
                     PreparedGetQuery(
-                        update_query, update_params, namespace, items, "refresh"
+                        update_query, update_params, namespace, refresh_items, "refresh"
                     )
                 )
 
@@ -1400,7 +1410,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
             cur.execute(query, params)
             rows = cur.fetchall()
 
-            if needs_refresh and rows and self.ttl_config:
+            if needs_refresh and rows:
                 keys_to_refresh = []
                 for row_data in rows:
                     keys_to_refresh.append((row_data[0], row_data[1]))
