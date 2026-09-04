@@ -1341,7 +1341,7 @@ def _scratchpad(
         resume=task_resume_write,
         get_null_resume=get_null_resume,
         # subgraph
-        subgraph_counter=LazyAtomicCounter(),
+        subgraph_counter=LazyAtomicCounters(),
     )
 
 
@@ -1437,6 +1437,29 @@ class LazyAtomicCounter:
                 if self._counter is None:
                     self._counter = itertools.count(0).__next__
         return self._counter()
+
+
+class LazyAtomicCounters:
+    """Lazily created per-key counters; each key counts from 0.
+
+    Used to number repeated subgraph invocations under the same base
+    namespace within one task."""
+
+    __slots__ = ("_counters",)
+
+    _counters: dict[str, Callable[[], int]] | None
+
+    def __init__(self) -> None:
+        self._counters = None
+
+    def __call__(self, key: str) -> int:
+        with LAZY_ATOMIC_COUNTER_LOCK:
+            if self._counters is None:
+                self._counters = {}
+            counter = self._counters.get(key)
+            if counter is None:
+                counter = self._counters[key] = itertools.count(0).__next__
+            return counter()
 
 
 def sanitize_untracked_values_in_send(

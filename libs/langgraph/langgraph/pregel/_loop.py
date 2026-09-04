@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import binascii
 import concurrent.futures
-import threading
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import (
@@ -40,7 +39,6 @@ from typing_extensions import ParamSpec, Self
 from langgraph._internal._config import (
     is_addressable_checkpoint_ns,
     patch_configurable,
-    recast_checkpoint_ns,
 )
 from langgraph._internal._constants import (
     CONF,
@@ -150,32 +148,6 @@ P = ParamSpec("P")
 
 
 WritesT = Sequence[tuple[str, Any]]
-
-# In-process registry of running loops on addressable namespaces
-# (thread_id, checkpoint_ns). Two concurrent loops on one addressable namespace
-# would each load the same "latest" checkpoint and write divergent children of
-# it, silently forking the subgraph's history. Detect it instead.
-_ACTIVE_ADDRESSABLE_NS_LOCK = threading.Lock()
-_ACTIVE_ADDRESSABLE_NS: set[tuple[str, str]] = set()
-
-
-def _register_addressable_ns(thread_id: str, ns: str) -> Callable[[], None]:
-    key = (thread_id, ns)
-    with _ACTIVE_ADDRESSABLE_NS_LOCK:
-        if key in _ACTIVE_ADDRESSABLE_NS:
-            raise RuntimeError(
-                f"Subgraph checkpoint namespace {ns!r} on thread {thread_id!r} is "
-                "already being executed by another concurrent invocation. Parallel "
-                "invocations of the same stateful subgraph must use distinct "
-                f"'{CONFIG_KEY_SUBGRAPH_KEY}' values in their config."
-            )
-        _ACTIVE_ADDRESSABLE_NS.add(key)
-
-    def release() -> None:
-        with _ACTIVE_ADDRESSABLE_NS_LOCK:
-            _ACTIVE_ADDRESSABLE_NS.discard(key)
-
-    return release
 
 
 def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
@@ -355,11 +327,20 @@ class PregelLoop:
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: PregelScratchpad | None = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
-        subgraph_key = config[CONF].get(CONFIG_KEY_SUBGRAPH_KEY)
-        if self.is_nested and subgraph_key is not None:
-            # Keyed instance: namespace is `<parent frames without task ids>|:key`.
-            # Stable across parent turns (same key continues the same history)
-            # and distinct across parallel invocations (different keys).
+        ns = config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        ns_patch: dict[str, Any] = {}
+        if (
+            self.is_nested
+            and (subgraph_key := config[CONF].get(CONFIG_KEY_SUBGRAPH_KEY)) is not None
+        ):
+            # Keyed instance: append `:key` to the namespace this graph would
+            # otherwise use. A per-invocation subgraph's base namespace still
+            # carries the invoking task id, so there the key only tells
+            # invocations within one task apart (deterministically, unlike the
+            # call-order counter below). A checkpointer=True subgraph's base is
+            # already stable across turns, so there the key names a distinct,
+            # addressable memory (`call|:key`) that a later invocation with the
+            # same key continues.
             if not isinstance(subgraph_key, str) or not subgraph_key:
                 raise ValueError(f"'{CONFIG_KEY_SUBGRAPH_KEY}' must be a non-empty str")
             if NS_SEP in subgraph_key:
@@ -367,37 +348,23 @@ class PregelLoop:
                     f"'{NS_SEP}' is a reserved character and is not allowed in "
                     f"'{CONFIG_KEY_SUBGRAPH_KEY}'"
                 )
-            self.config = patch_configurable(
-                self.config,
-                {
-                    CONFIG_KEY_CHECKPOINT_NS: NS_SEP.join(
-                        (
-                            recast_checkpoint_ns(
-                                config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
-                                keep_keys=True,
-                            ),
-                            f"{NS_END}{subgraph_key}",
-                        )
-                    ),
-                    # the key applies to this graph only, not to its subgraphs
-                    CONFIG_KEY_SUBGRAPH_KEY: None,
-                },
-            )
-        elif isinstance(scratchpad, PregelScratchpad):
-            # if count is > 0, append to checkpoint_ns
-            # if count is 0, leave as is
-            if cnt := scratchpad.subgraph_counter():
-                self.config = patch_configurable(
-                    self.config,
-                    {
-                        CONFIG_KEY_CHECKPOINT_NS: NS_SEP.join(
-                            (
-                                config[CONF][CONFIG_KEY_CHECKPOINT_NS],
-                                str(cnt),
-                            )
-                        )
-                    },
-                )
+            ns = NS_SEP.join((ns, f"{NS_END}{subgraph_key}"))
+            ns_patch[CONFIG_KEY_CHECKPOINT_NS] = ns
+            # the key applies to this graph only, not to its subgraphs
+            ns_patch[CONFIG_KEY_SUBGRAPH_KEY] = None
+        if isinstance(scratchpad, PregelScratchpad):
+            # Call-order counter: the n-th (n > 0) subgraph invoked from the
+            # same task gets a `|n` suffix. Unkeyed invocations share one
+            # counter per task (unchanged behaviour); keyed invocations count
+            # per key, so two subgraphs invoked under one injected key are
+            # told apart while an explicit key elsewhere in the task is not
+            # affected.
+            if cnt := scratchpad.subgraph_counter(
+                subgraph_key if CONFIG_KEY_SUBGRAPH_KEY in ns_patch else ""
+            ):
+                ns_patch[CONFIG_KEY_CHECKPOINT_NS] = NS_SEP.join((ns, str(cnt)))
+        if ns_patch:
+            self.config = patch_configurable(self.config, ns_patch)
         if not self.is_nested and config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
             self.config = patch_configurable(
                 self.config,
@@ -1780,17 +1747,6 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         self._exit_delta_writes = (
             [] if self.durability == "exit" and self.checkpointer is not None else None
         )
-        if (
-            self.is_nested
-            and self.checkpointer is not None
-            and is_addressable_checkpoint_ns(self.checkpoint_ns)
-        ):
-            self.stack.callback(
-                _register_addressable_ns(
-                    str(self.checkpoint_config[CONF].get(CONFIG_KEY_THREAD_ID)),
-                    NS_SEP.join(self.checkpoint_ns),
-                )
-            )
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
         self.channels, self.managed = channels_from_checkpoint(
             self.specs,
@@ -2049,17 +2005,6 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         self._exit_delta_writes = (
             [] if self.durability == "exit" and self.checkpointer is not None else None
         )
-        if (
-            self.is_nested
-            and self.checkpointer is not None
-            and is_addressable_checkpoint_ns(self.checkpoint_ns)
-        ):
-            self.stack.callback(
-                _register_addressable_ns(
-                    str(self.checkpoint_config[CONF].get(CONFIG_KEY_THREAD_ID)),
-                    NS_SEP.join(self.checkpoint_ns),
-                )
-            )
         self.submit = await self.stack.enter_async_context(
             AsyncBackgroundExecutor(self.config)
         )

@@ -1,9 +1,13 @@
 """Tests for keyed subgraph instances (`configurable["subgraph_key"]`).
 
-A key gives a subgraph invocation an addressable checkpoint namespace
-(`<parent frames>|:key`) instead of one derived from the invoking task id or
-the call-order counter. Parallel invocations with distinct keys never share
-state, and a later invocation with the same key continues the same history.
+A key is appended to the namespace a subgraph invocation would otherwise use:
+
+- per-invocation subgraph (`checkpointer=None`): `call:<task_id>|:key`; the key
+  tells invocations within one task apart deterministically, replacing the
+  racy call-order counter. Fresh each turn, as before.
+- stateful subgraph (`checkpointer=True`): `call|:key`; the key names a
+  distinct, addressable memory that a later invocation with the same key
+  continues.
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt import ToolNode, ToolRuntime
 from typing_extensions import TypedDict
 
+from langgraph._internal._config import recast_checkpoint_ns
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.pregel import Pregel
 from langgraph.types import Command, interrupt
@@ -77,14 +82,12 @@ def namespaces(saver: BaseCheckpointSaver, config: RunnableConfig) -> list[str]:
     )
 
 
-@pytest.mark.parametrize("stateful", [False, True])
-def test_parallel_keyed_calls_then_continue_one(
-    sync_checkpointer: BaseCheckpointSaver, stateful: bool
+def test_stateful_parallel_keyed_calls_then_continue_one(
+    sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Two parallel calls to the same subgraph with distinct keys get distinct
-    namespaces; a later call with one of the keys continues that history.
-    Identical behaviour for per-invocation and checkpointer=True subgraphs."""
-    fruit = make_agent("fruit", stateful=stateful)
+    """Two parallel calls to one checkpointer=True subgraph with distinct keys
+    get distinct memories; a later call with one of the keys continues it."""
+    fruit = make_agent("fruit", stateful=True)
     turn = 0
 
     def call(state: ParentState, config: RunnableConfig) -> dict:
@@ -116,17 +119,51 @@ def test_parallel_keyed_calls_then_continue_one(
         ["bananas", "fruit: bananas", "more bananas", "fruit: more bananas"]
     )
     assert namespaces(sync_checkpointer, config) == ["", "call|:tc_a", "call|:tc_b"]
-    # keyed instances are addressable through the parent by explicit namespace
+    # keyed memories are addressable through the parent by explicit namespace
     child = parent.get_state(
         {"configurable": {**config["configurable"], "checkpoint_ns": "call|:tc_b"}}
     )
     assert child.config["configurable"]["checkpoint_ns"] == "call|:tc_b"
-    assert texts(child.values) == [
-        "bananas",
-        "fruit: bananas",
-        "more bananas",
-        "fruit: more bananas",
+    assert texts(child.values)[-1] == "fruit: more bananas"
+
+
+def test_per_invocation_keyed_calls_stay_per_invocation(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """With checkpointer=None the key scopes to the invoking task: parallel
+    calls are told apart, but the same key on a later turn starts fresh."""
+    fruit = make_agent("fruit")
+
+    def call(state: ParentState, config: RunnableConfig) -> dict:
+        with get_executor_for_config(config) as ex:
+            futs = {
+                k: ex.submit(
+                    fruit.invoke, {"messages": [HumanMessage(content=q)]}, keyed(k)
+                )
+                for k, q in (("tc_a", state["topic"]), ("tc_b", "bananas"))
+            }
+            outs = {k: texts(f.result()) for k, f in futs.items()}
+        return {"result": repr(outs)}
+
+    parent = make_parent(call, sync_checkpointer)
+    config = {"configurable": {"thread_id": str(uuid4())}}
+    out = parent.invoke({"topic": "apples", "result": ""}, config)
+    assert out["result"] == repr(
+        {"tc_a": ["apples", "fruit: apples"], "tc_b": ["bananas", "fruit: bananas"]}
+    )
+    out = parent.invoke({"topic": "cherries", "result": ""}, config)
+    assert out["result"] == repr(
+        {"tc_a": ["cherries", "fruit: cherries"], "tc_b": ["bananas", "fruit: bananas"]}
+    )
+    ns = namespaces(sync_checkpointer, config)
+    assert sorted(recast_checkpoint_ns(n, keep_keys=True) for n in ns) == [
+        "",
+        "call|:tc_a",
+        "call|:tc_a",
+        "call|:tc_b",
+        "call|:tc_b",
     ]
+    assert all(":" in n.split("|")[0] for n in ns[1:])  # task id kept
 
 
 def test_keys_make_parallel_resume_deterministic(
@@ -210,10 +247,10 @@ def test_stateful_subgraph_turn_not_replayed_on_resume(
     )
 
 
-def test_interrupt_inside_keyed_child_then_continue(
+def test_interrupt_inside_keyed_memory_then_continue(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    fruit = make_agent("fruit", interrupt_on="durian")
+    fruit = make_agent("fruit", stateful=True, interrupt_on="durian")
 
     def call(state: ParentState) -> dict:
         r = fruit.invoke(
@@ -235,44 +272,10 @@ def test_interrupt_inside_keyed_child_then_continue(
     )
 
 
-def test_same_key_in_parallel_is_rejected(
+def test_keyed_memory_persists_under_exit_durability(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    fruit = make_agent("fruit")
-
-    def slow_reply(state: MessagesState) -> dict:
-        time.sleep(0.3)
-        return {"messages": [AIMessage(content="ok")]}
-
-    fruit = (
-        StateGraph(MessagesState)
-        .add_node("reply", slow_reply)
-        .add_edge(START, "reply")
-        .compile()
-    )
-
-    def call(state: ParentState, config: RunnableConfig) -> dict:
-        with get_executor_for_config(config) as ex:
-            futs = [
-                ex.submit(
-                    fruit.invoke,
-                    {"messages": [HumanMessage(content=q)]},
-                    keyed("shared"),
-                )
-                for q in ("a", "b")
-            ]
-            return {"result": repr([texts(f.result()) for f in futs])}
-
-    parent = make_parent(call, sync_checkpointer)
-    config = {"configurable": {"thread_id": str(uuid4())}}
-    with pytest.raises(RuntimeError, match="already being executed"):
-        parent.invoke({"topic": "", "result": ""}, config)
-
-
-def test_keyed_child_persists_under_exit_durability(
-    sync_checkpointer: BaseCheckpointSaver,
-) -> None:
-    fruit = make_agent("fruit")
+    fruit = make_agent("fruit", stateful=True)
 
     def call(state: ParentState) -> dict:
         r = fruit.invoke(
@@ -310,7 +313,7 @@ def test_parent_command_from_keyed_child(
 
 
 def test_three_level_keyed_nesting(sync_checkpointer: BaseCheckpointSaver) -> None:
-    leaf = make_agent("leaf")
+    leaf = make_agent("leaf", stateful=True)
 
     def mid_node(state: MessagesState) -> dict:
         r = leaf.invoke({"messages": [HumanMessage(content="deep")]}, keyed("L"))
@@ -320,7 +323,7 @@ def test_three_level_keyed_nesting(sync_checkpointer: BaseCheckpointSaver) -> No
         StateGraph(MessagesState)
         .add_node("mid_node", mid_node)
         .add_edge(START, "mid_node")
-        .compile()
+        .compile(checkpointer=True)
     )
 
     def top_node(state: ParentState) -> dict:
@@ -354,10 +357,7 @@ def test_three_level_keyed_nesting(sync_checkpointer: BaseCheckpointSaver) -> No
         top.get_state(
             {"configurable": {**thread, "checkpoint_ns": "top_node|:M"}}
         ).values
-    ) == [
-        "hi",
-        "mid saw leaf: deep",
-    ]
+    ) == ["hi", "mid saw leaf: deep"]
     assert texts(
         top.get_state(
             {"configurable": {**thread, "checkpoint_ns": "top_node|:M|mid_node|:L"}}
@@ -365,12 +365,11 @@ def test_three_level_keyed_nesting(sync_checkpointer: BaseCheckpointSaver) -> No
     ) == ["deep", "leaf: deep"]
 
 
-def test_tool_node_keyed_by_tool_call_id(
-    sync_checkpointer: BaseCheckpointSaver,
-) -> None:
-    """The harness pattern: a tool keys the subagent by its tool_call_id, and a
-    second tool continues a conversation by passing that id back."""
-    expert = make_agent("expert", interrupt_on="risky")
+def test_tool_passes_key_explicitly(sync_checkpointer: BaseCheckpointSaver) -> None:
+    """The harness pattern without ToolNode help: a tool keys a stateful
+    subagent by its tool_call_id, and a second tool continues that
+    conversation by passing the id back."""
+    expert = make_agent("expert", stateful=True, interrupt_on="risky")
 
     @tool
     def ask_expert(question: str, runtime: ToolRuntime) -> str:
@@ -440,10 +439,209 @@ def test_tool_node_keyed_by_tool_call_id(
     )
 
 
+def test_tool_node_subgraph_key_tool_call_id(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """ToolNode(subgraph_key="tool_call_id") keys every graph a tool invokes,
+    with no code in the tool. Two per-invocation subagents run in parallel,
+    one interrupts, arrival order flips on resume: each still resumes its own
+    checkpoint."""
+    a = make_agent("A")
+    b = make_agent("B", interrupt_on="hello-B")
+    calls = {"a": 0, "b": 0}
+
+    @tool
+    def ask_a(text: str) -> str:
+        """Ask A."""
+        calls["a"] += 1
+        time.sleep(
+            0.0 if calls["a"] == 1 else 0.2
+        )  # first on attempt 1, last on resume
+        return a.invoke({"messages": [HumanMessage(content=text)]})["messages"][-1].text
+
+    @tool
+    def ask_b(text: str) -> str:
+        """Ask B."""
+        calls["b"] += 1
+        time.sleep(
+            0.2 if calls["b"] == 1 else 0.0
+        )  # last on attempt 1, first on resume
+        return b.invoke({"messages": [HumanMessage(content=text)]})["messages"][-1].text
+
+    graph = (
+        StateGraph(MessagesState)
+        .add_node("tools", ToolNode([ask_a, ask_b], subgraph_key="tool_call_id"))
+        .add_edge(START, "tools")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = {"configurable": {"thread_id": str(uuid4())}}
+    ai = AIMessage(
+        content="",
+        tool_calls=[
+            {"name": "ask_a", "args": {"text": "hello-A"}, "id": "call_a"},
+            {"name": "ask_b", "args": {"text": "hello-B"}, "id": "call_b"},
+        ],
+    )
+    out = graph.invoke({"messages": [ai]}, config)
+    assert [i.value for i in out["__interrupt__"]] == ["B needs approval for hello-B"]
+    out = graph.invoke(Command(resume="yes"), config)
+    assert [
+        (m.tool_call_id, m.content)
+        for m in out["messages"]
+        if isinstance(m, ToolMessage)
+    ] == [
+        ("call_a", "A: hello-A"),
+        ("call_b", "B(yes): hello-B"),
+    ]
+    ns = namespaces(sync_checkpointer, config)
+    assert [recast_checkpoint_ns(n, keep_keys=True) for n in ns] == [
+        "",
+        "tools|:call_a",
+        "tools|:call_b",
+    ]
+
+
+def test_tool_node_subgraph_key_tool_name(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """ToolNode(subgraph_key="tool_name") gives a checkpointer=True subagent
+    one memory per tool per thread, independent of the calling node's name."""
+    fruit = make_agent("fruit", stateful=True)
+    veggie = make_agent("veggie", stateful=True)
+
+    @tool
+    def ask_fruit(q: str) -> str:
+        """Ask fruit."""
+        return " / ".join(texts(fruit.invoke({"messages": [HumanMessage(content=q)]})))
+
+    @tool
+    def ask_veggie(q: str) -> str:
+        """Ask veggie."""
+        return " / ".join(texts(veggie.invoke({"messages": [HumanMessage(content=q)]})))
+
+    graph = (
+        StateGraph(MessagesState)
+        .add_node("tools", ToolNode([ask_fruit, ask_veggie], subgraph_key="tool_name"))
+        .add_edge(START, "tools")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = {"configurable": {"thread_id": str(uuid4())}}
+
+    def turn(*calls: tuple[str, str, str]) -> list[str]:
+        ai = AIMessage(
+            content="",
+            tool_calls=[{"name": n, "args": {"q": q}, "id": i} for n, q, i in calls],
+        )
+        out = graph.invoke({"messages": [ai]}, config)
+        tool_msgs = [m.content for m in out["messages"] if isinstance(m, ToolMessage)]
+        return tool_msgs[-len(calls) :]
+
+    assert turn(("ask_fruit", "cherries", "c1"), ("ask_veggie", "broccoli", "c2")) == [
+        "cherries / fruit: cherries",
+        "broccoli / veggie: broccoli",
+    ]
+    # order flipped on the next turn: memories follow the tool, not call order
+    assert turn(("ask_veggie", "carrots", "c3"), ("ask_fruit", "oranges", "c4")) == [
+        "broccoli / veggie: broccoli / carrots / veggie: carrots",
+        "cherries / fruit: cherries / oranges / fruit: oranges",
+    ]
+    assert namespaces(sync_checkpointer, config) == [
+        "",
+        "tools|:ask_fruit",
+        "tools|:ask_veggie",
+    ]
+
+
+def test_tool_node_injected_key_with_two_subgraphs_in_one_tool(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """An injected key is shared by everything one tool invokes: a second
+    subgraph under the same key gets the per-namespace counter (`|1`), and an
+    explicit key inside the tool is left alone."""
+    helper1 = make_agent("h1")
+    helper2 = make_agent("h2")
+    expert = make_agent("expert", stateful=True)
+
+    @tool
+    def plan(q: str) -> str:
+        """Plan."""
+        r1 = helper1.invoke({"messages": [HumanMessage(content=q)]})
+        r2 = helper2.invoke({"messages": [HumanMessage(content=q)]})
+        r3 = expert.invoke({"messages": [HumanMessage(content=q)]}, keyed("agent7"))
+        return " / ".join(t[-1] for t in (texts(r1), texts(r2), texts(r3)))
+
+    graph = (
+        StateGraph(MessagesState)
+        .add_node("tools", ToolNode([plan], subgraph_key="tool_call_id"))
+        .add_edge(START, "tools")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = {"configurable": {"thread_id": str(uuid4())}}
+    ai = AIMessage(
+        content="", tool_calls=[{"name": "plan", "args": {"q": "x"}, "id": "call_1"}]
+    )
+    out = graph.invoke({"messages": [ai]}, config)
+    assert out["messages"][-1].content == "h1: x / h2: x / expert: x"
+    ns = namespaces(sync_checkpointer, config)
+    assert sorted(recast_checkpoint_ns(n, keep_keys=True) for n in ns) == [
+        "",
+        "tools|:agent7",
+        "tools|:call_1",
+        "tools|:call_1",
+    ]
+    assert "tools|:agent7" in ns  # explicit key: stable memory, no counter
+    assert sum(n.endswith("|:call_1") for n in ns) == 1
+    assert sum(n.endswith("|:call_1|1") for n in ns) == 1
+
+
+def test_tool_node_subgraph_key_callable(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """A callable can derive the key from the tool call, e.g. an agent id the
+    model passes in the arguments, falling back to the call id."""
+    expert = make_agent("expert", stateful=True)
+
+    @tool
+    def talk(question: str, agent_id: str | None = None) -> str:
+        """Talk to the expert; pass agent_id to continue."""
+        return " / ".join(
+            texts(expert.invoke({"messages": [HumanMessage(content=question)]}))
+        )
+
+    node = ToolNode(
+        [talk], subgraph_key=lambda call: call["args"].get("agent_id") or call["id"]
+    )
+    graph = (
+        StateGraph(MessagesState)
+        .add_node("tools", node)
+        .add_edge(START, "tools")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = {"configurable": {"thread_id": str(uuid4())}}
+    ai = AIMessage(
+        content="",
+        tool_calls=[{"name": "talk", "args": {"question": "hi"}, "id": "c1"}],
+    )
+    graph.invoke({"messages": [ai]}, config)
+    ai = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "talk",
+                "args": {"question": "again", "agent_id": "c1"},
+                "id": "c2",
+            }
+        ],
+    )
+    out = graph.invoke({"messages": [ai]}, config)
+    assert out["messages"][-1].content == "hi / expert: hi / again / expert: again"
+    assert namespaces(sync_checkpointer, config) == ["", "tools|:c1"]
+
+
 async def test_async_parallel_keyed_and_time_travel(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    fruit = make_agent("fruit")
+    fruit = make_agent("fruit", stateful=True)
     turn = 0
 
     async def call(state: ParentState) -> dict:
@@ -475,13 +673,13 @@ async def test_async_parallel_keyed_and_time_travel(
         ["apples", "fruit: apples", "more apples", "fruit: more apples"]
     )
 
-    # update_state on a keyed child by explicit namespace
+    # update_state on a keyed memory by explicit namespace
     child_cfg = {"configurable": {**config["configurable"], "checkpoint_ns": "call|:a"}}
     await parent.aupdate_state(child_cfg, {"messages": [AIMessage(content="(note)")]})
     assert texts((await parent.aget_state(child_cfg)).values)[-1] == "(note)"
 
     # time travel: replaying the parent from the first input checkpoint must
-    # fork the keyed child from its pre-turn-1 state, not continue its latest
+    # fork the keyed memory from its pre-turn-1 state, not continue its latest
     history = [s async for s in parent.aget_state_history(config)]
     first_input = next(
         s for s in reversed(history) if s.metadata.get("source") == "input"
