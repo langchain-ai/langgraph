@@ -1162,6 +1162,208 @@ def _build_runtime_env_vars(config: Config) -> list[str]:
     return env_vars
 
 
+def _faux_package_pyproject_command(package_name: str) -> str:
+    pyproject_path = shlex.quote(f"/deps/outer-{package_name}/pyproject.toml")
+    return f"""cat > {pyproject_path} <<'PYPROJECT'
+[project]
+name = {json.dumps(package_name)}
+version = "0.1"
+[tool.setuptools.package-data]
+"*" = ["**/*"]
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+PYPROJECT"""
+
+
+_FLAT_BUILD_CONTEXT = pathlib.PurePosixPath("/__build_context")
+_FLAT_ADDITIONAL_CONTEXTS = pathlib.PurePosixPath("/__additional_contexts")
+_DEFAULT_NODE_BUILD_COMMAND = (
+    '(test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, '
+    'skipping") || tsx /api/langgraph_api/js/build.mts'
+)
+
+
+def _render_flat_dockerfile(
+    *,
+    image: str,
+    dockerfile_lines: list[str],
+    env_vars: list[str],
+    commands: list[str],
+    workdir: str | None,
+    additional_context_names: dict[pathlib.Path, str] | None = None,
+) -> str:
+    mounts = [f"--mount=type=bind,target={_FLAT_BUILD_CONTEXT},readonly"]
+    mounts.extend(
+        f"--mount=type=bind,from={name},"
+        f"target={_FLAT_ADDITIONAL_CONTEXTS / name},readonly"
+        for name in (additional_context_names or {}).values()
+    )
+
+    return os.linesep.join(
+        [
+            "# syntax=docker/dockerfile:1.7",
+            f"FROM {image}",
+            *dockerfile_lines,
+            *env_vars,
+            f"RUN {' '.join(mounts)} <<'USER_LAYER'",
+            *commands,
+            "USER_LAYER",
+            f"WORKDIR {workdir}" if workdir else "",
+        ]
+    )
+
+
+def _flat_context_source(
+    path: pathlib.Path,
+    relative_path: str,
+    additional_context_names: dict[pathlib.Path, str],
+    *,
+    additional_relative_path: str = ".",
+) -> str:
+    if name := additional_context_names.get(path):
+        return str(_FLAT_ADDITIONAL_CONTEXTS / name / additional_relative_path)
+    return str(_FLAT_BUILD_CONTEXT / relative_path)
+
+
+def _copy_directory_command(source: str, destination: str) -> str:
+    return f"""mkdir -p {shlex.quote(destination)}
+cp -a {shlex.quote(f"{source}/.")} {shlex.quote(destination)}/"""
+
+
+def _flat_local_dependency_commands(
+    *,
+    config_path: pathlib.Path,
+    local_deps: LocalDeps,
+    local_reqs_pip_install: str,
+    additional_context_names: dict[pathlib.Path, str],
+) -> list[str]:
+    commands = []
+
+    for reqpath, destination in local_deps.pip_reqs:
+        source = _flat_context_source(
+            reqpath.parent,
+            str(reqpath.relative_to(config_path.parent)),
+            additional_context_names,
+            additional_relative_path=reqpath.name,
+        )
+        destination_parent = pathlib.PurePosixPath(destination).parent
+        commands.append(f"""mkdir -p {shlex.quote(str(destination_parent))}
+cp {shlex.quote(source)} {shlex.quote(destination)}""")
+    if local_deps.pip_reqs:
+        requirements = " ".join(
+            f"-r {destination}" for _, destination in local_deps.pip_reqs
+        )
+        commands.append(f"{local_reqs_pip_install} {requirements}")
+
+    for full_path, (relative_path, name) in local_deps.real_pkgs.items():
+        source = _flat_context_source(
+            full_path, relative_path, additional_context_names
+        )
+        commands.append(_copy_directory_command(source, f"/deps/{name}"))
+
+    for full_path, (relative_path, destination) in local_deps.faux_pkgs.items():
+        source = _flat_context_source(
+            full_path, relative_path, additional_context_names
+        )
+        pyproject = _faux_package_pyproject_command(full_path.name)
+        commands.append(f"{_copy_directory_command(source, destination)}\n{pyproject}")
+
+    return commands
+
+
+def _build_flat_python_commands(
+    *,
+    config_path: pathlib.Path,
+    config: Config,
+    local_deps: LocalDeps,
+    pypi_deps: list[str],
+    local_reqs_pip_install: str,
+    local_deps_install_command: str,
+    pip_cleanup: str,
+    additional_context_names: dict[pathlib.Path, str],
+    js_working_dir: str | None,
+) -> list[str]:
+    commands = ["set -eu"]
+
+    if js_working_dir:
+        commands.append("/storage/install-node.sh")
+
+    if pip_config_file := config.get("pip_config_file"):
+        source = shlex.quote(str(_FLAT_BUILD_CONTEXT / pip_config_file))
+        commands.append(f"cp {source} /pipconfig.txt")
+    if pypi_deps:
+        commands.append(f"{local_reqs_pip_install} {' '.join(pypi_deps)}")
+
+    commands.extend(
+        _flat_local_dependency_commands(
+            config_path=config_path,
+            local_deps=local_deps,
+            local_reqs_pip_install=local_reqs_pip_install,
+            additional_context_names=additional_context_names,
+        )
+    )
+
+    commands.append(local_deps_install_command)
+    if js_working_dir:
+        working_dir = shlex.quote(js_working_dir)
+        commands.append(
+            f"cd {working_dir}\n"
+            f"{_get_node_pm_install_cmd(config_path.parent)} "
+            "&& tsx /api/langgraph_api/js/build.mts"
+        )
+    commands.extend(
+        line.removeprefix("RUN ")
+        for line in pip_cleanup.splitlines()
+        if line and not line.startswith("#")
+    )
+    return commands
+
+
+def _build_flat_python_dockerfile(
+    config_path: pathlib.Path,
+    config: Config,
+    local_deps: LocalDeps,
+    pypi_deps: list[str],
+    local_reqs_pip_install: str,
+    local_deps_install_command: str,
+    pip_cleanup: str,
+    image: str,
+    env_vars: list[str],
+    additional_context_names: dict[pathlib.Path, str],
+) -> str:
+    js_working_dir = (
+        local_deps.working_dir
+        if config.get("ui") or config.get("node_version")
+        else None
+    )
+    commands = _build_flat_python_commands(
+        config_path=config_path,
+        config=config,
+        local_deps=local_deps,
+        pypi_deps=pypi_deps,
+        local_reqs_pip_install=local_reqs_pip_install,
+        local_deps_install_command=local_deps_install_command,
+        pip_cleanup=pip_cleanup,
+        additional_context_names=additional_context_names,
+        js_working_dir=js_working_dir,
+    )
+    if js_working_dir:
+        env_vars = [
+            f"ENV NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}",
+            *env_vars,
+        ]
+
+    return _render_flat_dockerfile(
+        image=image,
+        dockerfile_lines=config["dockerfile_lines"],
+        env_vars=env_vars,
+        commands=commands,
+        workdir=local_deps.working_dir,
+        additional_context_names=additional_context_names,
+    )
+
+
 def _get_node_pm_install_cmd(project_dir: pathlib.Path) -> str:
     def test_file(file_name):
         full_path = project_dir / file_name
@@ -1267,6 +1469,7 @@ def python_config_to_docker(
     api_version: str | None = None,
     *,
     escape_variables: bool = False,
+    flat: bool = False,
 ) -> tuple[str, dict[str, str]]:
     """Generate a Dockerfile from the configuration."""
     source_kind = _get_source_kind(config)
@@ -1428,6 +1631,36 @@ ADD {relpath} /deps/{name}
             ]
         )
     image_str = docker_tag(config, base_image, api_version)
+    dep_vname = "$$dep" if escape_variables else "$dep"
+    local_deps_install_command = f"""for dep in /deps/*; do \
+            echo "Installing {dep_vname}"; \
+            if [ -d "{dep_vname}" ]; then \
+                echo "Installing {dep_vname}"; \
+                (cd "{dep_vname}" && {global_reqs_pip_install} -e .); \
+            fi; \
+        done"""
+    pip_cleanup = _get_pip_cleanup_lines(
+        install_cmd=install_cmd,
+        to_uninstall=build_tools_to_uninstall,
+        pip_installer=pip_installer,
+    )
+
+    if flat:
+        return (
+            _build_flat_python_dockerfile(
+                config_path=config_path,
+                config=config,
+                local_deps=local_deps,
+                pypi_deps=pypi_deps,
+                local_reqs_pip_install=local_reqs_pip_install,
+                local_deps_install_command=local_deps_install_command,
+                pip_cleanup=pip_cleanup,
+                image=image_str,
+                env_vars=env_vars,
+                additional_context_names=additional_context_names,
+            ),
+            additional_contexts,
+        )
 
     # Prepare docker file contents
     docker_file_contents = []
@@ -1442,14 +1675,6 @@ ADD {relpath} /deps/{name}
         )
 
     # Add main dockerfile content
-    dep_vname = "$$dep" if escape_variables else "$dep"
-    local_deps_install_str = f"""RUN for dep in /deps/*; do \
-            echo "Installing {dep_vname}"; \
-            if [ -d "{dep_vname}" ]; then \
-                echo "Installing {dep_vname}"; \
-                (cd "{dep_vname}" && {global_reqs_pip_install} -e .); \
-            fi; \
-        done"""
     docker_file_contents.extend(
         [
             f"FROM {image_str}",
@@ -1459,24 +1684,45 @@ ADD {relpath} /deps/{name}
             installs,
             "",
             "# -- Installing all local dependencies --",
-            local_deps_install_str,
+            f"RUN {local_deps_install_command}",
             "# -- End of local dependencies install --",
             os.linesep.join(env_vars),
             "",
             js_inst_str,
             "",
             # Add pip cleanup after all installations are complete
-            _get_pip_cleanup_lines(
-                install_cmd=install_cmd,
-                to_uninstall=build_tools_to_uninstall,
-                pip_installer=pip_installer,
-            ),
+            pip_cleanup,
             "",
             f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
         ]
     )
 
     return os.linesep.join(docker_file_contents), additional_contexts
+
+
+def _build_flat_node_dockerfile(
+    *,
+    config: Config,
+    image: str,
+    env_vars: list[str],
+    install_workdir: str,
+    build_workdir: str,
+    install_command: str,
+    build_command: str,
+) -> str:
+    commands = [
+        "set -eu",
+        _copy_directory_command(str(_FLAT_BUILD_CONTEXT), install_workdir),
+        f"cd {shlex.quote(install_workdir)}\n{install_command}",
+        f"cd {shlex.quote(build_workdir)}\n{build_command}",
+    ]
+    return _render_flat_dockerfile(
+        image=image,
+        dockerfile_lines=config["dockerfile_lines"],
+        env_vars=env_vars,
+        commands=commands,
+        workdir=build_workdir,
+    )
 
 
 def node_config_to_docker(
@@ -1487,6 +1733,7 @@ def node_config_to_docker(
     install_command: str | None = None,
     build_command: str | None = None,
     build_context: str | None = None,
+    flat: bool = False,
 ) -> tuple[str, dict[str, str]]:
     # Calculate paths for monorepo support
     install_root = (
@@ -1496,56 +1743,56 @@ def node_config_to_docker(
     if build_context:
         relative_workdir = _calculate_relative_workdir(config_path, build_context)
         container_name = pathlib.Path(build_context).name
-        if relative_workdir:
-            faux_path = f"/deps/{container_name}/{relative_workdir}"
-        else:
-            faux_path = f"/deps/{container_name}"
+        install_workdir = f"/deps/{container_name}"
+        build_workdir = (
+            f"{install_workdir}/{relative_workdir}"
+            if relative_workdir
+            else install_workdir
+        )
     else:
         # Backward compatibility: use the original behavior
-        faux_path = f"/deps/{config_path.parent.name}"
+        install_workdir = build_workdir = f"/deps/{config_path.parent.name}"
 
     image_str = docker_tag(config, base_image, api_version)
 
     env_vars = _build_runtime_env_vars(config)
 
-    # For monorepo support, we need to handle install and build commands differently
-    if build_context:
-        # Monorepo case: install from root, build from config directory
-        container_root = f"/deps/{pathlib.Path(build_context).name}"
-        install_workdir = container_root
-        install_step = f"RUN {install_cmd}"
+    build_cmd = (
+        build_command
+        if build_context and build_command
+        else _DEFAULT_NODE_BUILD_COMMAND
+    )
 
-        if build_command:
-            build_step = f"RUN {build_command}"
-        else:
-            build_step = 'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts'
-    else:
-        # Original behavior: everything happens in the same directory
-        install_workdir = faux_path
-        install_step = f"RUN {install_cmd}"
-        build_step = 'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts'
-
-    if build_context:
-        build_workdir = faux_path
-    else:
-        build_workdir = faux_path
+    if flat:
+        return (
+            _build_flat_node_dockerfile(
+                config=config,
+                image=image_str,
+                env_vars=env_vars,
+                install_workdir=install_workdir,
+                build_workdir=build_workdir,
+                install_command=install_cmd,
+                build_command=build_cmd,
+            ),
+            {},
+        )
 
     docker_file_contents = [
         f"FROM {image_str}",
         "",
         os.linesep.join(config["dockerfile_lines"]),
         "",
-        f"ADD . {faux_path if not build_context else container_root}",
+        f"ADD . {install_workdir}",
         "",
         f"WORKDIR {install_workdir}",
         "",
-        install_step,
+        f"RUN {install_cmd}",
         "",
         os.linesep.join(env_vars),
         "",
         f"WORKDIR {build_workdir}",
         "",
-        build_step,
+        f"RUN {build_cmd}",
     ]
 
     return os.linesep.join(docker_file_contents), {}
@@ -1625,6 +1872,7 @@ def config_to_docker(
     build_command: str | None = None,
     build_context: str | None = None,
     escape_variables: bool = False,
+    flat: bool = False,
 ) -> tuple[str, dict[str, str]]:
     base_image = base_image or default_base_image(config)
 
@@ -1637,6 +1885,7 @@ def config_to_docker(
             install_command=install_command,
             build_command=build_command,
             build_context=build_context,
+            flat=flat,
         )
 
     return python_config_to_docker(
@@ -1645,6 +1894,7 @@ def config_to_docker(
         base_image=base_image,
         api_version=api_version,
         escape_variables=escape_variables,
+        flat=flat,
     )
 
 
