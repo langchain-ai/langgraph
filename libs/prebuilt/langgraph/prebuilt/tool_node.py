@@ -82,14 +82,8 @@ from langchain_core.tools.base import (
     _is_injected_arg_type,
     get_all_basemodel_annotations,
 )
-from langgraph._internal._config import patch_configurable
 from langgraph._internal._constants import CONF, CONFIG_KEY_READ
 from langgraph._internal._runnable import RunnableCallable
-
-try:
-    from langgraph._internal._constants import CONFIG_KEY_SUBGRAPH_KEY
-except ImportError:  # older langgraph core without keyed subgraph instances
-    CONFIG_KEY_SUBGRAPH_KEY = "subgraph_key"
 from langgraph.errors import GraphBubbleUp
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.pregel._tools import _tool_call_writer
@@ -760,9 +754,6 @@ class ToolNode(RunnableCallable):
         messages_key: str = "messages",
         wrap_tool_call: ToolCallWrapper | None = None,
         awrap_tool_call: AsyncToolCallWrapper | None = None,
-        subgraph_key: Literal["tool_call_id", "tool_name"]
-        | Callable[[ToolCall], str | None]
-        | None = None,
     ) -> None:
         """Initialize `ToolNode` with tools and configuration.
 
@@ -777,16 +768,6 @@ class ToolNode(RunnableCallable):
                 Enables retries, caching, request modification, and control flow.
             awrap_tool_call: Async wrapper function to intercept tool execution.
                 If not provided, falls back to wrap_tool_call for async execution.
-            subgraph_key: How to key subgraphs (e.g. subagents) invoked inside a tool.
-                The key is set as `configurable["subgraph_key"]` on the config each
-                tool runs with, so any graph the tool invokes gets a checkpoint
-                namespace derived from it instead of from the call-order counter.
-                `"tool_call_id"` keys by the tool call id: parallel calls never share
-                state and retries/resumes are deterministic. `"tool_name"` keys by
-                the tool name: a `checkpointer=True` subagent then keeps one memory
-                per tool per thread. A callable receives the tool call and returns
-                the key, or `None` for no key. A tool can still pass its own
-                `subgraph_key` explicitly to override this.
         """
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self._tools_by_name: dict[str, BaseTool] = {}
@@ -795,7 +776,6 @@ class ToolNode(RunnableCallable):
         self._messages_key = messages_key
         self._wrap_tool_call = wrap_tool_call
         self._awrap_tool_call = awrap_tool_call
-        self._subgraph_key = subgraph_key
         for tool in tools:
             if not isinstance(tool, BaseTool):
                 tool_ = create_tool(cast("type[BaseTool]", tool))
@@ -804,49 +784,6 @@ class ToolNode(RunnableCallable):
             self._tools_by_name[tool_.name] = tool_
             # Build injected args mapping once during initialization in a single pass
             self._injected_args[tool_.name] = _get_all_injected_args(tool_)
-
-    def _subgraph_key_for_call(self, call: ToolCall) -> str | None:
-        if self._subgraph_key is None:
-            return None
-        if self._subgraph_key == "tool_call_id":
-            return call["id"]
-        if self._subgraph_key == "tool_name":
-            return call["name"]
-        return self._subgraph_key(call)
-
-    def _configs_for_calls(
-        self, tool_calls: Sequence[ToolCall], configs: Sequence[RunnableConfig]
-    ) -> list[RunnableConfig]:
-        """Apply the configured `subgraph_key` to each tool call's config.
-
-        Two tool calls in one batch that resolve to the same key would run their
-        subgraphs on the same checkpoint namespace concurrently, silently
-        forking its history. The batch always runs in one process, so this is
-        the one place that conflict can be detected reliably: refuse the whole
-        batch before any tool runs.
-        """
-        if self._subgraph_key is None:
-            return list(configs)
-        keys = [self._subgraph_key_for_call(call) for call in tool_calls]
-        seen: dict[str, str] = {}
-        for call, key in zip(tool_calls, keys, strict=False):
-            if key is None:
-                continue
-            if key in seen:
-                msg = (
-                    f"Tool calls {seen[key]!r} and {call['id']!r} both resolve to "
-                    f"subgraph_key {key!r}. Parallel tool calls must not share a "
-                    "subgraph key: they would run the same subgraph memory "
-                    "concurrently. Call them one at a time, or key by tool call id."
-                )
-                raise ValueError(msg)
-            seen[key] = call["id"]
-        return [
-            patch_configurable(cfg, {CONFIG_KEY_SUBGRAPH_KEY: key})
-            if key is not None
-            else cfg
-            for cfg, key in zip(configs, keys, strict=False)
-        ]
 
     @property
     def tools_by_name(self) -> dict[str, BaseTool]:
@@ -860,9 +797,7 @@ class ToolNode(RunnableCallable):
         runtime: Runtime,
     ) -> Any:
         tool_calls, input_type = self._parse_input(input)
-        config_list = self._configs_for_calls(
-            tool_calls, get_config_list(config, len(tool_calls))
-        )
+        config_list = get_config_list(config, len(tool_calls))
 
         # Construct ToolRuntime instances at the top level for each tool call
         tool_runtimes = []
@@ -897,9 +832,7 @@ class ToolNode(RunnableCallable):
         runtime: Runtime,
     ) -> Any:
         tool_calls, input_type = self._parse_input(input)
-        config_list = self._configs_for_calls(
-            tool_calls, get_config_list(config, len(tool_calls))
-        )
+        config_list = get_config_list(config, len(tool_calls))
 
         # Construct ToolRuntime instances at the top level for each tool call
         tool_runtimes = []

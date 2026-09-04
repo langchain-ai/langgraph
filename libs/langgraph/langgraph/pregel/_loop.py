@@ -39,6 +39,7 @@ from typing_extensions import ParamSpec, Self
 from langgraph._internal._config import (
     is_addressable_checkpoint_ns,
     patch_configurable,
+    recast_checkpoint_ns,
 )
 from langgraph._internal._constants import (
     CONF,
@@ -333,14 +334,13 @@ class PregelLoop:
             self.is_nested
             and (subgraph_key := config[CONF].get(CONFIG_KEY_SUBGRAPH_KEY)) is not None
         ):
-            # Keyed instance: append `:key` to the namespace this graph would
-            # otherwise use. A per-invocation subgraph's base namespace still
-            # carries the invoking task id, so there the key only tells
-            # invocations within one task apart (deterministically, unlike the
-            # call-order counter below). A checkpointer=True subgraph's base is
-            # already stable across turns, so there the key names a distinct,
-            # addressable memory (`call|:key`) that a later invocation with the
-            # same key continues.
+            # Keyed instance: the key names an addressable checkpoint namespace,
+            # `<parent frames without task ids>|:key`, in either persistence
+            # mode. Distinct keys never share state; a later invocation with the
+            # same key continues the same history. `checkpointer=` keeps its
+            # jobs: False disables persistence, and without a key it decides
+            # whether the namespace is per task (None) or per calling node
+            # (True).
             if not isinstance(subgraph_key, str) or not subgraph_key:
                 raise ValueError(f"'{CONFIG_KEY_SUBGRAPH_KEY}' must be a non-empty str")
             if NS_SEP in subgraph_key:
@@ -348,7 +348,9 @@ class PregelLoop:
                     f"'{NS_SEP}' is a reserved character and is not allowed in "
                     f"'{CONFIG_KEY_SUBGRAPH_KEY}'"
                 )
-            ns = NS_SEP.join((ns, f"{NS_END}{subgraph_key}"))
+            ns = NS_SEP.join(
+                (recast_checkpoint_ns(ns, keep_keys=True), f"{NS_END}{subgraph_key}")
+            )
             ns_patch[CONFIG_KEY_CHECKPOINT_NS] = ns
             # the key applies to this graph only, not to its subgraphs
             ns_patch[CONFIG_KEY_SUBGRAPH_KEY] = None
