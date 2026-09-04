@@ -36,7 +36,11 @@ from langgraph.checkpoint.base import (
 from langgraph.store.base import BaseStore
 from typing_extensions import ParamSpec, Self
 
-from langgraph._internal._config import patch_configurable
+from langgraph._internal._config import (
+    is_addressable_checkpoint_ns,
+    patch_configurable,
+    recast_checkpoint_ns,
+)
 from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_ID,
@@ -48,6 +52,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_STREAM,
+    CONFIG_KEY_SUBGRAPH_KEY,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
     ERROR,
@@ -323,21 +328,45 @@ class PregelLoop:
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: PregelScratchpad | None = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
-        if isinstance(scratchpad, PregelScratchpad):
-            # if count is > 0, append to checkpoint_ns
-            # if count is 0, leave as is
-            if cnt := scratchpad.subgraph_counter():
-                self.config = patch_configurable(
-                    self.config,
-                    {
-                        CONFIG_KEY_CHECKPOINT_NS: NS_SEP.join(
-                            (
-                                config[CONF][CONFIG_KEY_CHECKPOINT_NS],
-                                str(cnt),
-                            )
-                        )
-                    },
+        ns = config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        ns_patch: dict[str, Any] = {}
+        if (
+            self.is_nested
+            and (subgraph_key := config[CONF].get(CONFIG_KEY_SUBGRAPH_KEY)) is not None
+        ):
+            # Keyed instance: the key names an addressable checkpoint namespace,
+            # `<parent frames without task ids>|:key`, in either persistence
+            # mode. Distinct keys never share state; a later invocation with the
+            # same key continues the same history. `checkpointer=` keeps its
+            # jobs: False disables persistence, and without a key it decides
+            # whether the namespace is per task (None) or per calling node
+            # (True).
+            if not isinstance(subgraph_key, str) or not subgraph_key:
+                raise ValueError(f"'{CONFIG_KEY_SUBGRAPH_KEY}' must be a non-empty str")
+            if NS_SEP in subgraph_key:
+                raise ValueError(
+                    f"'{NS_SEP}' is a reserved character and is not allowed in "
+                    f"'{CONFIG_KEY_SUBGRAPH_KEY}'"
                 )
+            ns = NS_SEP.join(
+                (recast_checkpoint_ns(ns, keep_keys=True), f"{NS_END}{subgraph_key}")
+            )
+            ns_patch[CONFIG_KEY_CHECKPOINT_NS] = ns
+            # the key applies to this graph only, not to its subgraphs
+            ns_patch[CONFIG_KEY_SUBGRAPH_KEY] = None
+        if isinstance(scratchpad, PregelScratchpad):
+            # Call-order counter: the n-th (n > 0) subgraph invoked from the
+            # same task gets a `|n` suffix. Unkeyed invocations share one
+            # counter per task (unchanged behaviour); keyed invocations count
+            # per key, so two subgraphs invoked under one injected key are
+            # told apart while an explicit key elsewhere in the task is not
+            # affected.
+            if cnt := scratchpad.subgraph_counter(
+                subgraph_key if CONFIG_KEY_SUBGRAPH_KEY in ns_patch else ""
+            ):
+                ns_patch[CONFIG_KEY_CHECKPOINT_NS] = NS_SEP.join((ns, str(cnt)))
+        if ns_patch:
+            self.config = patch_configurable(self.config, ns_patch)
         if not self.is_nested and config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
             self.config = patch_configurable(
                 self.config,
@@ -871,6 +900,37 @@ class PregelLoop:
             )
         )
 
+        if is_resuming and self.is_nested:
+            # The parent says "resume", but for an addressable subgraph
+            # (checkpointer=True or keyed) the latest checkpoint may belong to
+            # an earlier, completed invocation. Only resume if that checkpoint
+            # was written under the parent checkpoint that is invoking us now
+            # (same parent superstep => same invocation, retried or resumed),
+            # or if it has unfinished work (an interrupted turn) to continue.
+            own_ns = configurable.get(CONFIG_KEY_CHECKPOINT_NS, "")
+            stored_parents = {
+                k: v
+                for k, v in (self.checkpoint_metadata.get("parents") or {}).items()
+                if k != own_ns
+            }
+            current_parents = {
+                k: v
+                for k, v in configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}).items()
+                if k != own_ns
+            }
+            if stored_parents != current_parents and not prepare_next_tasks(
+                self.checkpoint,
+                self.checkpoint_pending_writes,
+                self.nodes,
+                self.channels,
+                self.managed,
+                self.config,
+                self.step,
+                self.stop,
+                for_execution=False,
+            ):
+                is_resuming = False
+
         # When replaying from a specific checkpoint, drop cached RESUME
         # writes so that interrupt() calls re-fire instead of returning
         # stale values. But if we're actively resuming, keep them —
@@ -1326,8 +1386,9 @@ class PregelLoop:
             not self.is_nested
             # or a nested graph with error or interrupt
             or exc_value is not None
-            # or a nested graph with checkpointer=True
-            or all(NS_END not in part for part in self.checkpoint_ns)
+            # or a nested graph on an addressable namespace (checkpointer=True
+            # or a keyed instance)
+            or is_addressable_checkpoint_ns(self.checkpoint_ns)
         ):
             self._put_exit_delta_writes()
             self._put_checkpoint(self.checkpoint_metadata)
