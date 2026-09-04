@@ -1354,3 +1354,49 @@ def test_prepare_args_and_stdin_distributed_mode() -> None:
     assert "langgraph-executor:" in actual_stdin
     assert "FROM langchain/langgraph-executor:" in actual_stdin
     assert "executor_entrypoint.sh" in actual_stdin
+
+
+def test_deploy_image_uri_rejects_incompatible_source(monkeypatch, tmp_path) -> None:
+    """--image-uri raises UsageError when applied to a non-external_docker deployment."""
+    # --no-input sets the module-level _no_input global; ensure it's restored.
+    monkeypatch.setattr(deploy_module, "_no_input", False)
+
+    config = tmp_path / "langgraph.json"
+    config.write_text('{"graphs": {"agent": "agent.py:graph"}, "dependencies": ["."]}')
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            self.base_url = host_url
+
+        def get_deployment(self, deployment_id: str):
+            return {
+                "id": deployment_id,
+                "name": "test-deploy",
+                "source": "internal_docker",
+                "tenant_id": "tenant-1",
+            }
+
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+            "--deployment-id",
+            "dep-123",
+            "--image-uri",
+            "registry.example.com/app:latest",
+            "--config",
+            str(config),
+            "--no-input",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "different build mode" in result.output
+    assert "cannot be updated with --image-uri" in result.output
