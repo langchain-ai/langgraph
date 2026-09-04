@@ -723,3 +723,69 @@ def test_unkeyed_behaviour_unchanged(sync_checkpointer: BaseCheckpointSaver) -> 
     ns = namespaces(sync_checkpointer, config)
     assert ns[0] == "" and ns[1] == "call"
     assert ns[2].startswith("call:") and ns[2].endswith("|1")
+
+
+def test_tool_node_rejects_duplicate_subgraph_keys(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Two tool calls in one batch resolving to the same key would run one
+    subgraph memory concurrently. ToolNode refuses the batch before any tool
+    runs; the batch is always in-process, so the check is reliable."""
+    fruit = make_agent("fruit", stateful=True)
+    ran: list[str] = []
+
+    @tool
+    def ask_fruit(q: str) -> str:
+        """Ask fruit."""
+        ran.append(q)
+        return fruit.invoke({"messages": [HumanMessage(content=q)]})["messages"][
+            -1
+        ].text
+
+    graph = (
+        StateGraph(MessagesState)
+        .add_node("tools", ToolNode([ask_fruit], subgraph_key="tool_name"))
+        .add_edge(START, "tools")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = {"configurable": {"thread_id": str(uuid4())}}
+    ai = AIMessage(
+        content="",
+        tool_calls=[
+            {"name": "ask_fruit", "args": {"q": "apples"}, "id": "c1"},
+            {"name": "ask_fruit", "args": {"q": "bananas"}, "id": "c2"},
+        ],
+    )
+    with pytest.raises(ValueError, match="both resolve to subgraph_key 'ask_fruit'"):
+        graph.invoke({"messages": [ai]}, config)
+    assert ran == []
+    # one at a time is fine
+    for q, i in (("apples", "c3"), ("bananas", "c4")):
+        ai = AIMessage(
+            content="", tool_calls=[{"name": "ask_fruit", "args": {"q": q}, "id": i}]
+        )
+        out = graph.invoke({"messages": [ai]}, config)
+    assert out["messages"][-1].content == "fruit: bananas"
+    assert namespaces(sync_checkpointer, config) == ["", "tools|:ask_fruit"]
+
+
+def test_stateful_keyed_child_without_parent_checkpointer() -> None:
+    """checkpointer=True is allowed on a subgraph whose parent runs without a
+    checkpointer: it simply runs unpersisted, as per-invocation does."""
+    fruit = make_agent("fruit", stateful=True)
+
+    def call(state: ParentState) -> dict:
+        r = fruit.invoke(
+            {"messages": [HumanMessage(content=state["topic"])]}, keyed("k")
+        )
+        return {"result": repr(texts(r))}
+
+    parent = (
+        StateGraph(ParentState).add_node("call", call).add_edge(START, "call").compile()
+    )
+    assert parent.invoke({"topic": "kiwi", "result": ""})["result"] == repr(
+        ["kiwi", "fruit: kiwi"]
+    )
+    assert parent.invoke({"topic": "lime", "result": ""})["result"] == repr(
+        ["lime", "fruit: lime"]
+    )

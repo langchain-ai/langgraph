@@ -805,21 +805,48 @@ class ToolNode(RunnableCallable):
             # Build injected args mapping once during initialization in a single pass
             self._injected_args[tool_.name] = _get_all_injected_args(tool_)
 
-    def _config_for_call(
-        self, call: ToolCall, config: RunnableConfig
-    ) -> RunnableConfig:
-        """Apply the configured `subgraph_key` for one tool call."""
+    def _subgraph_key_for_call(self, call: ToolCall) -> str | None:
         if self._subgraph_key is None:
-            return config
+            return None
         if self._subgraph_key == "tool_call_id":
-            key = call["id"]
-        elif self._subgraph_key == "tool_name":
-            key = call["name"]
-        else:
-            key = self._subgraph_key(call)
-        if key is None:
-            return config
-        return patch_configurable(config, {CONFIG_KEY_SUBGRAPH_KEY: key})
+            return call["id"]
+        if self._subgraph_key == "tool_name":
+            return call["name"]
+        return self._subgraph_key(call)
+
+    def _configs_for_calls(
+        self, tool_calls: Sequence[ToolCall], configs: Sequence[RunnableConfig]
+    ) -> list[RunnableConfig]:
+        """Apply the configured `subgraph_key` to each tool call's config.
+
+        Two tool calls in one batch that resolve to the same key would run their
+        subgraphs on the same checkpoint namespace concurrently, silently
+        forking its history. The batch always runs in one process, so this is
+        the one place that conflict can be detected reliably: refuse the whole
+        batch before any tool runs.
+        """
+        if self._subgraph_key is None:
+            return list(configs)
+        keys = [self._subgraph_key_for_call(call) for call in tool_calls]
+        seen: dict[str, str] = {}
+        for call, key in zip(tool_calls, keys, strict=False):
+            if key is None:
+                continue
+            if key in seen:
+                msg = (
+                    f"Tool calls {seen[key]!r} and {call['id']!r} both resolve to "
+                    f"subgraph_key {key!r}. Parallel tool calls must not share a "
+                    "subgraph key: they would run the same subgraph memory "
+                    "concurrently. Call them one at a time, or key by tool call id."
+                )
+                raise ValueError(msg)
+            seen[key] = call["id"]
+        return [
+            patch_configurable(cfg, {CONFIG_KEY_SUBGRAPH_KEY: key})
+            if key is not None
+            else cfg
+            for cfg, key in zip(configs, keys, strict=False)
+        ]
 
     @property
     def tools_by_name(self) -> dict[str, BaseTool]:
@@ -833,12 +860,13 @@ class ToolNode(RunnableCallable):
         runtime: Runtime,
     ) -> Any:
         tool_calls, input_type = self._parse_input(input)
-        config_list = get_config_list(config, len(tool_calls))
+        config_list = self._configs_for_calls(
+            tool_calls, get_config_list(config, len(tool_calls))
+        )
 
         # Construct ToolRuntime instances at the top level for each tool call
         tool_runtimes = []
         for call, cfg in zip(tool_calls, config_list, strict=False):
-            cfg = self._config_for_call(call, cfg)
             state = self._extract_state(input, cfg)
             tool_runtime = ToolRuntime(
                 state=state,
@@ -869,12 +897,13 @@ class ToolNode(RunnableCallable):
         runtime: Runtime,
     ) -> Any:
         tool_calls, input_type = self._parse_input(input)
-        config_list = get_config_list(config, len(tool_calls))
+        config_list = self._configs_for_calls(
+            tool_calls, get_config_list(config, len(tool_calls))
+        )
 
         # Construct ToolRuntime instances at the top level for each tool call
         tool_runtimes = []
         for call, cfg in zip(tool_calls, config_list, strict=False):
-            cfg = self._config_for_call(call, cfg)
             state = self._extract_state(input, cfg)
             tool_runtime = ToolRuntime(
                 state=state,
