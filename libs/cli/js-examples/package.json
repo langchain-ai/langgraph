@@ -25,7 +25,8 @@
     "@langchain/langgraph": "^1.4.13"
   },
   "resolutions": {
-    "@langchain/langgraph-checkpoint": "1.0.4"
+    "@langchain/langgraph-checkpoint": "1.0.4",
+    "jest/**/js-yaml": "3.15.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.6",
