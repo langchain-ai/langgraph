@@ -43,7 +43,7 @@ from langgraph._internal._typing import MISSING
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.pregel._algo import Call
-from langgraph.pregel._executor import Submit
+from langgraph.pregel._executor import SKIP_RERAISE_SET, Submit
 from langgraph.pregel._retry import arun_with_retry, run_with_retry
 from langgraph.types import (
     CachePolicy,
@@ -65,10 +65,6 @@ EXCLUDED_FRAME_FNAMES = (
     "langchain_core/runnables/config.py",
     "concurrent/futures/thread.py",
     "concurrent/futures/_base.py",
-)
-
-SKIP_RERAISE_SET: weakref.WeakSet[concurrent.futures.Future | asyncio.Future] = (
-    weakref.WeakSet()
 )
 
 
