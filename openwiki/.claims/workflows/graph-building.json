@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:ff8bf9c358c3793e4ff6a7fcf822069fdd7167a4afec439a63dedd34cbc75341",
+  "claims": [
+    {
+      "id": "claim_983ee2c107174a7a9207a05a52d9bec2",
+      "statement": "StateGraph constructor accepts state_schema (required), context_schema (optional), input_schema (optional, defaults to state), and output_schema (optional, defaults to state).",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L216-L270",
+          "version": "repo-lines-v1:sha256:c4105e73027208e4197fadeb9a0beb4fc161dbad057c8c53070bbc2bf043a94d:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlmZDdhMDdhODNkZDE5OTZmYjUxNjg0YjQyYWVjYWY0ZTkwZmI3OGJhNzIzMGU1NDJlZDdiZDAxZDQyMzAxYmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM5ZDYwNmQ2ODFkMjdlNGIxZDNjYTIyNWUyMDU3MjNjZmU5NjE1NjM4MGQ2ZDQwMGE5ZDE1YzA4MDc2YjJlZWQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3Mjc1YTM4OGJiMDFmZmMwYzk0MmZjNGRhMjBkM2E1ODM4NzU2OTllYTE4NjQ3OThmMjBmZGRjMmE4ZmI0ZmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE4MWE5MTgzOGMwMDY1N2Y5NjAyMjExMDdiZmM1M2U1MGQ3ZjFlMGE1OGZlMWQ0Y2RhZTNkNDBjOGUxYWQzMDgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2bcde5da07624d849de8dcdd6ed30ae4",
+      "statement": "add_node() registers a node with optional input_schema (inferred from state if not provided), retry_policy, cache_policy, error_handler, timeout, defer, and trace_policy parameters.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L667-L760",
+          "version": "repo-lines-v1:sha256:10d9970eff9d8c12545e9960984b69aa77e75bcf6ad3f3f29592ab60a1ce818e:eyJzZWxlY3RlZExpbmVDb3VudCI6OTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4ODNjM2JkOTdiNGU0YmFmM2ZjMjVhMzMyMjVkOTVlM2MwYTczZDQ1ZDM1OGE3NTgwY2IxMzRkMTlkYzIyMTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwZGUyNTg3MTk2MTQ5MjYwNzFjOGZiMTlmZDg2NjE1MDU1NWYxYjAxMzU0ZjhjZDE2MDNhMTA5YTdkZGFlNDAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFlMmI0NzA4ZjE0NWE3MDE5YmU1MjdhZDgzNTMyNGRkZTM0MzAwY2VjOThhOTg3ZGRkZmZhYjAxNTgyNTNhNWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZlMDUxN2VlZjYwYzAyNzJlZDUwYTgxNmM5MjhhNDUxM2I3YTliYmI3Y2M4NzkyMzllMmYzNzlmMmNlMDc2NzQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e9ee736e4dda49b495d77d26b329f651",
+      "statement": "add_edge(start_key, end_key) creates unconditional control flow; start_key can be a single node name or list of nodes for waiting edges.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L928-L980",
+          "version": "repo-lines-v1:sha256:72c5543e96c97478ff64625a951033c988a178bdc66e37f0bae6f7e74175fbf2:eyJzZWxlY3RlZExpbmVDb3VudCI6NTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzYWI5ZjM0MWY4OGE4NWU0YjIzNDhhNmI0N2QyNzYyZjE0YWVlNTQ5NTEwYTMwMmIwNmJkNWNkOTk0NzJmODQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEyYWIwOTBiY2QxNjIwZmE2MmVhZWUxNTdhNzRmY2E2MzVhYTI5ZTEyY2JmZmQ2MThiNTc5MmQ4N2JjMDNhM2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBlMTFhZDM0N2NlNTAxYzk4YmM2MzM3MGZmZTMwZjQ4NjUxNDY5YWNhM2I3YThjZTM5YTNiZTBmNzBkMjhiZmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ1NTc5OTdjNzdmNzdlM2VhMjBhMDQ1MWIzMjM4NDFjMjIwZTBjYzA2Mjg0YTU1ZjYzYTAyMGZlZjMyOGEyOTIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_404d564abd014b77adeea76bbb968963",
+      "statement": "add_conditional_edges(source, path, path_map) routes based on state inspection; path function returns node name(s) or list[Send] for dynamic fan-out, with optional path_map for label mapping.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L982-L1030",
+          "version": "repo-lines-v1:sha256:4cc06ce68d18ec6c2b1524585ffb7f965c83d3aa7ba4a649b9c522187f3142cf:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ0MjM5NmQxOWVlNzVlZWMzM2MyMDAxY2NkZjhhZThjYThlZWFiOTZiOTZjM2QwYjljYzc2M2RmYjM1YjhlMDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEyYWIwOTBiY2QxNjIwZmE2MmVhZWUxNTdhNzRmY2E2MzVhYTI5ZTEyY2JmZmQ2MThiNTc5MmQ4N2JjMDNhM2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIxMWRjZWJjOGU4YjY1OTg0M2JlOGRjMmYyODUzMTAwZGY0ZjliZTViN2M4OTQ5MDllY2E4YmJkY2FmYzA4ZWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUwZTE3YjczZmNmNDZlNDk3MTdmYmUxZDUxZDNiNWIwYmIyYTljMjQ2OGRmNTI5ODA0MTNlYzc4Mzk0NDMzNjgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6b2ce90530474ded98f8f440edba5ab1",
+      "statement": "Send objects route custom state to target nodes in dynamic fan-out patterns; each Send creates a new task with the provided arg, executing in parallel before proceeding.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L704-L793",
+          "version": "repo-lines-v1:sha256:0aceeccf568130b6910845b2955fff44566a57f8edc7c1aea26ac28a80241873:eyJzZWxlY3RlZExpbmVDb3VudCI6OTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM0MzY3ZDBkMzUwMTBlYjNhNzMyY2VmZjBhZjFlYzUzZjdmMTFiMzA4N2I3YjgyYjBiNDEzNzZjYTVhNmY4YzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRmZDlkZTFlYTk3MDQ0NmVkNmRhOTNmNmViY2M0ZGFkNDNlNzRmM2FiM2JiNmE0MmQ1NGU3MTA2YTM1Y2IyM2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMwOGFjZjM5MWUxZjc5M2ZlNjJhNmQ1ZTMwNjQ4OTUwNTI4ODY0YjQ1NDM1Mzk1YWM3ODkzZDU1NDNiNDQwN2QifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_07c0c1a5b94b4631834bcd48ecadc307",
+      "statement": "add_messages reducer deduplicates messages by ID while maintaining append-only semantics, enabling natural multi-turn conversation state without duplicate handling logic.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/message.py#L60-L100",
+          "version": "repo-lines-v1:sha256:3d1efa3f60d230135dc8ef211874bdee283ae228cba0d797c473b547b359321c:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVmMWQxODFhMjUyZTZjNWE4NWVmMGViMzQwODQ3M2M0NGE1ZGNlYjFkODdhOTAxZThkYWEyYWEzMjIwOWRiMTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMxZjY4Yjk1YWZkNmVmZDc5OTBmOTZhMzU4ZDMyZjEyMjdmNmFkNGFlMTc0MmFlOGY4YTMxM2VjOTljNDU5YjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE1ZjRlY2YwMGMzZGU0NDA2N2UwYzZkNTQwYjg0MTkxMmI5NjRhNjg3ZjdjYzI5OTZiZDMwYmE3MjZlZTRmOTYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_03cea6e5cddf404d9b22f9a0ae9b791b",
+      "statement": "Per-node error handlers registered via add_node(..., error_handler=handler) receive state and exception info, returning state updates; handlers are invoked on node failure after retries exhaust.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L699-L700",
+          "version": "repo-lines-v1:sha256:e19d365d8e829ec9ace85c6e880cc4a0a3843c47672ba158a608d504869a851d:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmE4ZjRjZjdhZTMzZDEyYzI0Zjc2MGQwNzdjMWFmN2UwNDk1YzA5NTQzN2ZmZmY0NjRjZDY1NGY3OTQ3NjJkNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMGZiMWE5MDdlYTg3ZjQ0OWFlMjFkY2YwYWI2YTA4M2FlMGU5NjMzYzE2N2VkNWNlZTAwMzk1OWYyNTM5ODM0OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiY2M1MjgzNWE3NDJjMjFiMDgwY2IzZmI5ZGZlNzViN2QwNTA3OWExM2FlNTQwMTc2YTc5Mjk0ZTdlOGMwZGNjNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMmU5MTM3NTZkMmQ2NjdhOTI4ZTdkZWIyN2RjMzQzN2Q1YTM1N2U4NWIxOTc1MjI5ODIxODdkZTdjZDliYWNmMSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_93b1cd3422f14c67bc524a6c30b71a1c",
+      "statement": "set_node_defaults() applies retry_policy, cache_policy, error_handler, and timeout to all nodes; per-node values override defaults, applied at compile time.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L272-L335",
+          "version": "repo-lines-v1:sha256:75c9c2f41ea2225f7e2fb8d700c72584eb679a05a55432e735f4f9cb3f9619fe:eyJzZWxlY3RlZExpbmVDb3VudCI6NjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5NGJjZjYzMjhkMzQ5MzBhYjdmZGQ0MzY1ZWE5YjFkN2E4M2E4M2M4ZDg1MjZhNGMxNTNlZmQ4NzE3MGRmYTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEyYWIwOTBiY2QxNjIwZmE2MmVhZWUxNTdhNzRmY2E2MzVhYTI5ZTEyY2JmZmQ2MThiNTc5MmQ4N2JjMDNhM2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNjMzYxYTBkODc2ZmQwZjYwOTJmY2MzYzVjNWVhMGZmZTVkYTAzMDg5MTJlYjJlMGUxNGVmODY4NmVhYTlkNTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE3YzAwMDUwZmQyOWI0ZTQyODY5MGU1MTgyZGVjMDA2MDUxOWFjNzAyNTMyODVlMjViOWY3NmVhMmFiOTg3OTAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f75a8917eed6463ea308098b02102e0f",
+      "statement": "compile() converts StateGraph builder into CompiledStateGraph (Pregel runtime) supporting invoke(), stream(), batch(), and async variants; accepts optional checkpointer, cache, store, interrupt_before, interrupt_after, debug, and name parameters.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L1177-L1230",
+          "version": "repo-lines-v1:sha256:6143adb5182157ef42be633cf28324b044d893303f1e2e23db01430acfae1015:eyJzZWxlY3RlZExpbmVDb3VudCI6NTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4NDJjYjljNTdhZjA3ODI0OTAzNzA2Yzg2YjVlNWI3NDhiYmE3YzdjOGU2YjAzZjc4YzExNzdhODM5NmRhMmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwZGUyNTg3MTk2MTQ5MjYwNzFjOGZiMTlmZDg2NjE1MDU1NWYxYjAxMzU0ZjhjZDE2MDNhMTA5YTdkZGFlNDAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdjMDZkNjM5NTA1NTAzYTYzYTlhY2JiNDNjNDliNDUzMzYzMzUxM2M3YTE1MTk3Y2ZiN2NlZDE2ZjQwZDcwMmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYyOTM4YmUxYTU3NDk4OTM3MGU4OTQ5NGQ4MTRkMWE5MjBiZGQxZTQ4ZmY4ODk0NTg4ODM3NmI4Y2JjNjVlNTMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7b2c80d7166e4e2b9fe5999e9503255a",
+      "statement": "Compiled StateGraph instances can be registered as nodes via add_node(); parent graph handles input/output schema adaptation automatically; subgraphs inherit parent's checkpointer by default or use independent checkpointing with compile(checkpointer=...).",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/test_pregel.py#L3216-L3251",
+          "version": "repo-lines-v1:sha256:68f24275c40455ef4e553b4b956a013c9e612a3e4b47d0d698d80e3ad34d4049:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcxYzVkMDQ2ZDdmN2Q5OGVlNmQ3YWZmY2U5MGQzNGRlYjVhMjBlNjkwNTMxODkyZjMwNjNlOGY4Yjk5ZmQ0ZDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFiYTcyNGUxNzlhYjc1MjVjMGM0NDVlOTYzZWQ0ZTUzYWI0ZGVmZjM2YjA5ODIzNGIyNzQ0NTZiOGU0MGFjYmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjlhODJlYmU5ZWQ0MDdjM2E2YmE0YjAwMzQyOTJiYWE1MmMxMWNlNWFlMjg2MTA3NDAyZGU0NzkyZWVlY2FjZmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg5ZmQ0Yzc0YzgxNGE5ZTk3OTY3YzU3NWM4YTBhZDk4NDc4MTdjMDM5ODgwZDBjMjY1YzE4YzNkZjFmYWQ5MDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e26b615ec7ad4032b37e0a15610fc3ec",
+      "statement": "StateGraph builder methods (add_node, add_edge, add_conditional_edges, set_entry_point, set_finish_point, compile) return Self, enabling fluent method chaining for readable graph construction.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L1127-L1127",
+          "version": "repo-lines-v1:sha256:d7ac9cddc53ccb9fb75630c9f64e82de8c3621e281257fffbfe7df0c406537a8:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDdhYzljZGRjNTNjY2I5ZmI3NTYzMGM5ZjY0ZTgyZGU4YzM2MjFlMjgxMjU3ZmZmYmZlN2RmMGM0MDY1MzdhOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDdhYzljZGRjNTNjY2I5ZmI3NTYzMGM5ZjY0ZTgyZGU4YzM2MjFlMjgxMjU3ZmZmYmZlN2RmMGM0MDY1MzdhOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjdmMDRjNjQ3ZTk1YmQzYjY5ZTE0ZDZmMDljZTQ2OGI3NDkyZWVkNGNlZTAwYjRjYTE5Yzg4NWJlOTFjZGNiMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjYxZjdhNjFlNWMyZjZkODliNjVjMDRlMTJiYmJlYTE4MjgwZDQ1NzcyYTA2MmJlNDMxOWU2Y2U5OWUyMWZlZSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_f11ba3ae675848299188211842946214",
+      "statement": "Per-node input_schema parameter restricts node input to specified fields; schema is inferred from function type hints if not provided, enabling multi-schema composition.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L813-L865",
+          "version": "repo-lines-v1:sha256:24c0058ec505c7fc5e9b138d813685e2aa79bbb0b2c395e7b9397b11fbcbb1cc:eyJzZWxlY3RlZExpbmVDb3VudCI6NTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA4NTNkMmJmMDJmZjEyZWYzZDM3MGQ2ZDk1NGZkZTIzNDY1MjA2Y2Q0MzViM2Y4NWUzZGVjNTExYzI0NmM1ZWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5MDlhNTNhNjE4ZDAyOGUxZDMwMDBjMGE3YWJjZWVjYmU1ZmIzN2Y0ZTUxMWVmZTQ2NjQzZmFkNmU2Njg3MmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3MWRiYWMzN2U5MzY3YjRhYTgyZTU2MjQ2YTk1N2YzZjRkZjRjMGIzYzY1Zjg2MDIzOTU1Y2JiNjk5NmE5OWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQyNGY4NGI3ZTU2MWM1NTZlOTkyZWQxOWNkYmI2MWYzODBjNDhmNDZjMDY5NGIzYmI3OWQ5ZmQyYTg4NDIyMGIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_0babbaffb01143a0b3b06a9c0c7170f0",
+      "statement": "Nodes execute in parallel if they don't write to the same unannotated state key; multiple start nodes via list form waiting edge that executes only when all sources complete.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L969-L980",
+          "version": "repo-lines-v1:sha256:71a5c04c591ebeb83aca3d9a7d8f077405674e349141b6a1f37a5038fd0b04d4:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwZTZiZmQ5OTkzMjc2YzZhMWU2NTgyNGYwZTdjY2NmZThjOGNkNGYwNDlmNDgzMmJiZWMzZGVkZmJhMTE0Y2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEyYWIwOTBiY2QxNjIwZmE2MmVhZWUxNTdhNzRmY2E2MzVhYTI5ZTEyY2JmZmQ2MThiNTc5MmQ4N2JjMDNhM2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM2NzM1MDEyZmQxMzYxYWU3OWZmNzRiMTA4MTk4YTc3N2NmN2VkZDM3Y2I3YzYzYzQ2Yzk4OWY4MGIzMjc3NWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ1NTc5OTdjNzdmNzdlM2VhMjBhMDQ1MWIzMjM4NDFjMjIwZTBjYzA2Mjg0YTU1ZjYzYTAyMGZlZjMyOGEyOTIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9764367310f245ec94545e1cbfc30846",
+      "statement": "Graph validation occurs at compile() time, checking for missing nodes in edge definitions, missing entry point (START), and unreachable nodes; errors raised as ValueError.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L1129-L1176",
+          "version": "repo-lines-v1:sha256:c42149677218f946bfead0054088365c2eca8a68632a6831c3c83694644c46b5:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRkYzEzOWI4ZWI1ZWJjMDc2MWI5NjY1OGE2Y2FhOTQxNTNlNWQwYWIzMWEwZDIzYzhmOGZkZmFmNzYwZTk3ZmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjUwMGFkYmI5MjBiNDg0MTE0ZGVlY2U0YmYyOWYzOWU0ZjQ5MDAzNjBmNWY3ZDUzOWEyNTZkODRiZGYzMjM3YjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZhODE5YjY1NTY1NDBjNDVlOWJjODk0NjczZDMzZGVkNjRhMTRhY2YyN2E1MGQ4MzVkYjBlMjk5ZjQ2NzE2N2IifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-03T15:19:56.419Z"
+  }
+}

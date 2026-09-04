@@ -1,0 +1,182 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:c772475bbfd5ac3f78874f53049637ad2fdf0b47ae02c1bfc6b4359240323201",
+  "claims": [
+    {
+      "id": "claim_d21593be066342fab0ee72a08a5de1e2",
+      "statement": "The Pregel algorithm executes graphs in supersteps: atomic synchronization barriers where nodes read state, execute in parallel, write results, and advance to the next superstep only if channels were updated or nodes request further execution.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_algo.py#L232-L346",
+          "version": "repo-lines-v1:sha256:d508df54726af40b6c57f4221219f97b2a6a86ff88210a32d2d4bb126696645d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE1LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIxM2QzNzEzMDdiMDQ4NDQ5ODUzZjZmOWEyOTJmYmJmZjIyNDJkMzFhZmI5MDM4OGJhNTQ0MmU1Njc3YjZhZjYyIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIwMWJhNDcxOWM4MGI2ZmU5MTFiMDkxYTdjMDUxMjRiNjRlZWVjZTk2NGUwOWMwNThlZjhmOTgwNWRhY2E1NDZiIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI5ZDRlMmY2ODQ3YjU2OTBkMDQzZTZjNzYyNmFmOTY0YjM3ODcxZjNkNWM1OTU2OGI0YjRiNzA1MDVjYTc4ZjYzIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJmMWJmNzQxZDNlMTNiYjMxMDdjZWNhYzYyM2M4ZTM5OGQzYzk0M2IxODczODY1YTE1ZmIwMThmYWNjNzgxZTRlIn0"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_loop.py#L599-L725",
+          "version": "repo-lines-v1:sha256:eaeedb5ee1b8d0e36bb2677c3d53a83728496aadefec68b1829065bc7bb01b0c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI3LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI5MDUzZTM4ZjE3ZjgxNGRmZjczYWI4ZmU2ZjNhNzRkNzMzOTA5M2Q0ZTAxNzg0NTM0NTY3OTE5NDE5YzJjNWMxIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI5MWYzZmFjNTA2ZjFkOGI3YjM2ZmNiZDIxN2Y4YjRkMzQ2YjZmY2RmZTRmM2UxYWE2MDc2MTRkYzNhYmI0NDE1IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJhN2EwODI3ZTNkODE0MjI0MTRhZTkxYTY1ZTNhOTQxYTY2ZGMzZjE1NGE1ODM5MjViMzc2ZDA2NDdkM2QzZDliIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJhODkwNjg1ODk3Mjk3M2Q4YzYzMzVhYzgyZjM0MzJhMDYyNjdiNTgwZjA4ZWY5NzNiMWE3OWE0NDc3ZGNkZWE4In0"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/main.py#L454-L477",
+          "version": "repo-lines-v1:sha256:9f2c0234c023f393adffd0c44da5dacd1ed36b49c3dbcadd065acaa4d20df46a:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFjNjVmYTg2MWZjNThmNTAyN2Y1ZGUyOTEyZGQ2NTE5MzMzYmFhNmJkNDM2M2ZlNmI3ZTZhYWQ0YWQ3MWQwYzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk1NGEzYTBhYTJkNGE0ZmNiOTUxZjRmOWM2NzRlMzY0ZDljNzc3N2M2YzQzYmM2MmI4ZDc1OWFlNGJiODgzMzciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM4MmQ4Y2QyMDZlMzZjMTg2ODNkZmZlNTI4NTIzMGY4NmY1ODU0NjY3Y2Y1ZTdmYTBjYzgzOGU3NjAyMjY1ZjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgwMTY1NzQ2YTBkYzYxNmRjNzhmYTBlNzI2MmMyMzA0MzY2YWM1OTdkNjc5NTkwYmU0YjNjNmM4ZjNhNjdjNzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_726cb2fa6ff94b47ab3f52a1c357066a",
+      "statement": "Task scheduling uses trigger mechanisms to determine which nodes execute: PUSH tasks from the TASKS channel (Send objects from conditional edges) and PULL tasks when at least one trigger channel has been updated since the node last processed it (detected via version comparison in versions_seen).",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_algo.py#L392-L513",
+          "version": "repo-lines-v1:sha256:4c6acc7b9dea513b276a524ce20f34243cad5e5877883036cc67dff1340d58b8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIyLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJiNmJjMjRhNTE1OGFiYTRhZjViMjRmZGE3NGMwNjhlZTRjYzNkMzFiNzc0YzBiNjAwMDBmN2U4ODJjMzg1ZGU4IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJkMjI0ZGI3NTI1YTkxYTI3NTc3ZTg1OTczZThmY2NhNzkwNzFiYmI5YTEzNWMwZGVjYjNkZmU2MjA2N2VlNmYyIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJkYmNjMTcxNGNkZjg0ZTEyOTE1OGU2NDhjMzY2YzhkZGU5OTliYTBiYTMzZmM0NzdkMjQyOTc1ZmQwNzliMTJkIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI3OWYzM2EwNGQ3YzIyOTY0YTdmNWFkYjg0MWJlN2Q4MDI1ZmY3OWEyNjNlOWFkMTVmOTEyMTU2NTlkNjQ4ZWNhIn0"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_algo.py#L597-L623",
+          "version": "repo-lines-v1:sha256:96c9af62d3fb17d09deec8d713e90bbbba394b4d88d4d6d3211329da8034bf53:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJmZTU5NGNjNzMxOGEwZTc1MGVjNWVmZjU4Yzk3NmY2NTkxMDY0YzUxYTRjMjRlMTI3NzI3NGEzNTQwMGU4ZGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MDMyZTk2NGQwOTMyMzUxZTVkMTg1MjY5MjgxYjE3MWEzYTA5YjA4YjI4NmU2NjFlYTQ3MDMyM2M4MmViNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyZWU5ZTIzNjEyYWQ0NjRjOGNmNTY2NDE5YTc1OTRkYmZmMGIyNDJlNzlkOTAzMzMyMTEyMzgzOGRkNmZiZjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMyMzY2MzAyZDNiOTNjMmJjMTcwNzViZDBhNWM3ZjdkMjIzZWZlMGNhZjRhNTgxOGQ0NGY1YTg3ZmE1NzUwMGEifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L666-L681",
+          "version": "repo-lines-v1:sha256:d16a0939747b9e329c0d015e485c58e536581f912791e259929adca4af030185:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1ODM3OTllZTI3NTcxOGZhM2I5YWM1MTE2MzBmNWRhZGE3NzQ1YTA0OTFiNDMxZjZhNWRiOTcwZTVjYTc4YjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1OWY5ODVmNjJmMWYzNTg5MzMwOTJjNTFjNTc0MWJlNTBkNGU5MzBhYjJlMzgxZWE2MDBjYjExMGUxMmRmYWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI1ZTZlNmQ5YWU1MjQwMjhjMzAyYjA4YzYxYjZjMDU3YzlhMzIyYWU1YTQ3Y2NmNjlhN2NlZTM5ZDY1YmY3OWEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_0ec65512b8c845798b0807b4a40126c5",
+      "statement": "ChannelRead and ChannelWrite abstractions enable nodes to read and write state: ChannelRead is injected into task config and reads channels on-demand via local_read(); ChannelWrite wraps node output and appends writes to a task.writes deque, which are batched and applied atomically after all tasks complete.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_algo.py#L188-L224",
+          "version": "repo-lines-v1:sha256:1a1b88ec70bb49e27ff6ddeedf611afcec4085e3599a6809d52e089777cb706d:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyZjZlODA1MGMwN2YxNzYyZWViMDQ2NjYyMWZkMGYyMWVlN2YzOTQwODc2MDJlMzFmNDU5MTYwYzY1NjA1YzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUzOTRkMzkzY2ExYThmZjk1NWM2ODhiMDYxMzM4OGRmOGJlODBjMmQ1NWQ4MzkyZWM0MjlkMThlM2M5MjUwYTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhjYzRhN2QxY2M3OTZhYmEzZTQ2NzIzMzI3ZjUxN2U5ZjgxMTk4MmQyNTBmMDcwMjk4NmU0YjU3NjRhZDk1ODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZlN2JlMGQ0ODM3YjZiODgwMWUwZDlkODJmMDEzMTNjMjY4MDM2ZDc5MzE4YzU3OWFmNDQ3ZmJkYmM5MzM3ZTMifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_read.py#L25-L92",
+          "version": "repo-lines-v1:sha256:c3d2954709faf0da4de5f6e16829e76a46ebac229da33d4f206ba0ed4547801b:eyJzZWxlY3RlZExpbmVDb3VudCI6NjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFjM2E5NzUwNmFiNTgxMGI0ZTE4OWZiNTM2MzljZGEwNmM2Y2M2ZGEyOWU5NDI1N2EyZGJmYWE1YWEwYWZkZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkzNzY4YWM4ZTUyZjZkODc5NzkzYjVjODVkZGFlNDE3MzJmZTU0OTRjMGFlOGRlYzE0MWQ5ZWU5MWY5ZTBjOTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU1MjExN2FiMjFhODVhY2Y3NGRlYzgyNDc0NzE4YTg1NjBhMTk2N2UwMDcxZDRmYjRkOTNiMDE5NmU2NTgzZmYifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_write.py#L46-L112",
+          "version": "repo-lines-v1:sha256:ecfe3a19c958545b7c8eb298a2f1aafcfb169e76d685a19735d6dde954be5580:eyJzZWxlY3RlZExpbmVDb3VudCI6NjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQyMDFiYzAzMjkwYjRiNTE2MzczMDE4YjM0MzU3YjQyZDk2MTc2ZTM5MmNjN2YyM2E1YWE4MzUzMmU1OGY4NWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMyNzgyMmRmOGIwNjljYWYxN2JmNjYxNWZjOGY1NTI3ODM4YTRjMTlkOTY0ZTkzYTQwMDgxMjczMTMxZTNiYjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMzYmNiNzJjOGVlNzg3NjY1YWM0NzdhMDQ3ZjkxMTg4ZTEyOTIxODg1ZTI2MmM1M2JmZDhhYjZiN2JiMmYxZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMzMmIxZGQ0ZGZkMmNlMmU2NDUwZjg3YWJlOTRhYjdmYjYzNDIwOWRmNDBhMjBmYzU5NjY1NDg1NjFiNmY3ZmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_46313bbbc96340089a0322e6a9b9455e",
+      "statement": "PregelNode wraps a user function and declares triggers, channels, tags, and policies; PregelExecutableTask is the runtime representation containing the node name, input snapshot, runnable, writes deque, and RunnableConfig with injected read/send callbacks.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_algo.py#L524-L750",
+          "version": "repo-lines-v1:sha256:5a027c56df98b6f41d07ee27d113ed8b2fa72d56599c56205c89b8dc658f9487:eyJzZWxlY3RlZExpbmVDb3VudCI6MjI3LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJhYThmZGJkODEwODFhYzBkZGRmYjY2Njk1NzdkY2E5YjIxYzUzNTJkYzE4NjI5ZDlmN2E5OGYzYmIwM2FhYTkzIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJkMmE1MTU3YzA3NjgzNDIwYmQ0Y2EyYTgxZDFlODg3NGRhZDI2NDQyYmY4ZTBlNTk1NzZhMjVhN2RlNDc5M2I2IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI2YTI4ZjMwNDBkZmJlYjY4Y2M5NDYwODQ3Yjg1ZGI1OWQzZTBhZDcwOTc5OTcxYTczNGM0OTVhMjEwYjllYjdkIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJhZmNmMjlmMDI5ZGJlMGQ5ZDU4NmUwOThmYTA4MWVhYjFlMmNhNWU5NzlhNTU3YjE4YjQzMjAwNGUxNTE0NGVhIn0"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_read.py#L97-L130",
+          "version": "repo-lines-v1:sha256:8243c05c07261dee6ed14e0c90e9722ab29058ed87a554c146a72d50a2b52766:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxMTA4NTFiOWU0NmRkMWMzYzk4ZmU0NDg0ZjE5NTAzMGU3NzNlMzllZDY1MzgxZTY4OTM4YzFiMDBiNGJiODciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM2MTRiOTU4ZTc4MGI2MjQyZjIyMjFlYjViZTAyY2I3MjI2YjNiMjY0NTBmY2MwOTliM2M4N2VkNWE0OTk4NWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI1YTgwNjY4ODNiZWQ5NGVhZjQ1YTQ2NzQzZGI3OTBkMzhmMzU1ODUzNjY1ZDZlZTY2Nzk4YjIxOTE5MDE2ZWQifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L666-L681",
+          "version": "repo-lines-v1:sha256:d16a0939747b9e329c0d015e485c58e536581f912791e259929adca4af030185:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1ODM3OTllZTI3NTcxOGZhM2I5YWM1MTE2MzBmNWRhZGE3NzQ1YTA0OTFiNDMxZjZhNWRiOTcwZTVjYTc4YjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM1OWY5ODVmNjJmMWYzNTg5MzMwOTJjNTFjNTc0MWJlNTBkNGU5MzBhYjJlMzgxZWE2MDBjYjExMGUxMmRmYWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI1ZTZlNmQ5YWU1MjQwMjhjMzAyYjA4YzYxYjZjMDU3YzlhMzIyYWU1YTQ3Y2NmNjlhN2NlZTM5ZDY1YmY3OWEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8f123fc501b34a2991e0a06ff09d21b5",
+      "statement": "State advancement happens in apply_writes: channel versions are incremented for updated channels, versions_seen records are updated to reflect what each node has processed, and the checkpoint is saved before the next superstep begins (or writes are buffered depending on durability mode).",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_algo.py#L232-L346",
+          "version": "repo-lines-v1:sha256:d508df54726af40b6c57f4221219f97b2a6a86ff88210a32d2d4bb126696645d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE1LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIxM2QzNzEzMDdiMDQ4NDQ5ODUzZjZmOWEyOTJmYmJmZjIyNDJkMzFhZmI5MDM4OGJhNTQ0MmU1Njc3YjZhZjYyIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIwMWJhNDcxOWM4MGI2ZmU5MTFiMDkxYTdjMDUxMjRiNjRlZWVjZTk2NGUwOWMwNThlZjhmOTgwNWRhY2E1NDZiIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI5ZDRlMmY2ODQ3YjU2OTBkMDQzZTZjNzYyNmFmOTY0YjM3ODcxZjNkNWM1OTU2OGI0YjRiNzA1MDVjYTc4ZjYzIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJmMWJmNzQxZDNlMTNiYjMxMDdjZWNhYzYyM2M4ZTM5OGQzYzk0M2IxODczODY1YTE1ZmIwMThmYWNjNzgxZTRlIn0"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_loop.py#L683-L727",
+          "version": "repo-lines-v1:sha256:dea6a69ae78cbc7224abb55a090c25245516c2a534d15ccf5a657252cc1fe9d6:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2Mjk0ZGUwZDEzYzZlZTJhZWE1MzU3ZmM3NWJhZGFiNzQ5MmFiMzZjNzNjMmQ2M2E4OWQ2ZDA3ZWI5NWY3MjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg5ZmMwMzcxN2M3MmFkZTI3NWIwNGMyNzAyOWU5MGIwNjg2ZWNmYjg1MTBiMjZjYTA3YzQxYTViZmEyZDMyOGQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRlNzFiNjQxOThkODk0ZGViN2Q0ZWY1ZmYxYjI4Nzc4NDE1ZTkyMjU3YmE3YjY4YjdlMjFhZDA2NGFhZTAzNzQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_083c3de12841433988eb2d7b098cc63e",
+      "statement": "PregelRunner (sync and async variants) executes tasks in parallel using ThreadPoolExecutor (sync) or asyncio task groups (async), applying retry policies, cache policies, timeout, and routing failures to error handlers; tasks execute with the node's bound runnable and the injected config containing read/send callbacks.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_executor.py#L40-L100",
+          "version": "repo-lines-v1:sha256:1c2c4510dd3b142b4ee49c208daf9f5e1a666c9fb4db6d3d334b2237bc19f60e:eyJzZWxlY3RlZExpbmVDb3VudCI6NjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc5M2Y3ZGMwOGMzNThkMjYzMjIxYTc2ODJjY2UwZDE1NDIyMjQ3NDRlODM0YzQwNmM0M2FlNjJkMmU0NzA0NDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQwOGQzMTU2N2JhMTAyZjQ5MWRmMzljNjBmOGQwNWVhMzU5ZGI2M2JlNTg3ZDZjMTQ5ZjEyODI5OGRlZWU1ZTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjllMDgwMTcxNWIxNjkzNzRmZmNhOWMyZmNhYjlmZDM2NzNhMDllODBhYzU2M2ZjMDIwNDY4N2JlNjVkNjJhYWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMwMDY1ZjAzY2MxZjNiOTAzMzc4ZTRmMDIxYTkxOGJkNDliNGM0NGEwOWQzNjNlNTNjZTEzZDM3YzhkYTNkYTEifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_runner.py#L75-L200",
+          "version": "repo-lines-v1:sha256:7558a9a908f9fd89d771c4ec4b9bd261539a8d2bad22ec944ee3659c2715b461:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJmODQ1NmU3NTdhNWVkMGNiZWYzYWI2ZTg3ZTM2NjUzN2Y5YTM3NDE0MjUyZmE1YmMwNTVjZTkzZDU2Mzk4MTQ0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJjZWZhYTk2NzY5ZTc1NDkwZjc2MjAwYzU0Y2I2ZjU1Y2QwODYzNGM5MmNiODgwMDIxNzcxZTk4NzZiM2NhMjI4IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJhOThiMDYzZDliNDdlNjUzNzk2MjU1NzJjY2UxOTc2NjlkNTc2N2UxMmMxOGJlMDc1NjUyYjhjZDk4MWNlOGQ1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIwNzU3Mzg5MTU1ZjBmYTI2YjhjYWUwYTkyMmQ3ODQ2MWY4MThlYzZmZTQ2YzZkOGM3OTkxY2IxNzJjZDA2NzU0In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_1be11c1e223d456394742f21b9caf128",
+      "statement": "The recursion limit prevents infinite execution: each superstep increments self.step, and if step exceeds the limit (stop parameter), the graph raises GraphRecursionError and terminates with the current checkpoint saved.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/errors.py#L67-L88",
+          "version": "repo-lines-v1:sha256:bd37da18f541d77372abaca581efbbd099b167648dbf5f0c30570d1ecfb2e59b:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxNTI0OTM3MTRkZGYxZDQzNmM3ZGI0ZDNhNWE1ZGU1M2EwMjI2NWZhZTg0ZDg1NTZlNjFjZTE3MDllMjE1MzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgxZjU2ODliZWZjMWZiYjcwM2NjY2E1NjRmNmE1NjkyMDYxMjBmMDU1YjFhZDVhYTA0ZGY5YjBhNjUwNmQxYjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFkMWM2YTcxZjEzZmIzZDNmNDljMWJkOTNkYWE3ODA1ZWYyZGJmNzY5NzUzNmE2MzY5NDc4YzY4MGYwZjBlZjYifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_loop.py#L606-L609",
+          "version": "repo-lines-v1:sha256:0b0443d55e736a436dff059fc1379f0982e7a7d5c6b3d050b1774a86a2cce24c:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2E4YjMxYmFlZjVkNzZkMzFlNTdkNDgxYzdlN2RhZDUyOTBmYmNmMzg4MDQ5Yzk1NGY5YzM1ZDdhYWE0YjA0YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWYxMWVhMTFlZjAxZTJlOTY5ZTVmNGM2MjcyZjNkYjY2ZGU1ZjhlNTRkMWNhYWE0YWZlZjJkMjBiYmEyZWYyNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzVmMzBiODhjY2Y5NDgzYWIzMjEzMGU5MmZlMDRlNGZjNmFkODhjZGU4Njc2ODQ5NjczMjFhMmU0NjU3OTZlMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGRhMTkwNTlhOGNhOTFmZTFlMWMzMmE5NWE4YWJiMjU1NGE0OTYwMzBiMTg3ZDQ0NDIyYTlkYTQ0Yzc1YTRkOCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_72661c4871514b099c1750767607d421",
+      "statement": "Durability modes control checkpoint persistence: 'sync' persists before the next superstep, 'async' persists during superstep execution, and 'exit' accumulates writes and persists only at graph termination.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_loop.py#L415-L549",
+          "version": "repo-lines-v1:sha256:5b37527ddde7691966e93294739de02db95e750c0c7748bea943ad5df814f946:eyJzZWxlY3RlZExpbmVDb3VudCI6MTM1LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI0NjQ2ZTcxNDM5NmE0OWJjY2Q1YTkyZWJkN2I0YjIwNDBhNzdjMDlhMzNhODhiN2NhZjNmNDVmYzViZWRjYzY5IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIwMWJhNDcxOWM4MGI2ZmU5MTFiMDkxYTdjMDUxMjRiNjRlZWVjZTk2NGUwOWMwNThlZjhmOTgwNWRhY2E1NDZiIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI2MDBiNzVjMjg1MTUwZDFmNGVmNGY2ZjQ1ZDQ0NDQwYzU2NTQ4ZWNiMTUwMGY4NWNkZjc0ODc5NDdhMDNmNWEzIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI0OTUwYTUyM2EzOTNlNmM5OTRkOWY5OTQ0MTJlYzQ1NDAzYWM1MzA4YjhlOWYzNjczMGViZWNlMzVlMTE2MDBjIn0"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L89-L96",
+          "version": "repo-lines-v1:sha256:4aceb4202e4c2a7067d4b1cf010766e0f63dfaa6a4a66fd1e02b2469c2d5d65f:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTk2NWQwM2NkMjJkZDhlNDA2ZjdlZDYyYWM4NWYxMmY5MzUxNmYyNDYyOTg1YTA5NjNhMzczNzU3ZjliNTM0NSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTg3ZjhlNzdjZTEzNzY5ZDQ2OGI5ZmU1ZTg1MjY5MzFiMGI4ZDYxM2FlOWY3MDliNGMzMDY3MTZkYjI1OGMyOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDY4NmU1ZDM5MGE3MGVjOGU3NGM2NmU0ZDk2NTA2NjQ2ODY2YTZmNTNlNWZiYmJmMWE5NjNlM2RiZWZlMWUxMyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_489a014b4fd1408ab092faf9b4f187ef",
+      "statement": "Channel reducers aggregate concurrent writes in one superstep: when multiple tasks write to the same channel, the reducer is invoked with the current value and a sequence of updates, and must be associative so replaying batches of writes produces the same result regardless of batching granularity.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_algo.py#L294-L334",
+          "version": "repo-lines-v1:sha256:427308451162a9fbfad8d648e48e7bddbeb28a82fe1e33e9de15bb037147bbfa:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZmMzljODM3MWIxNTAzZWEzZTNkNDI4ZDM5YTA0ZmQwZTZhMWJhMWY4ODA1MTAzYjk3ZGRmMmIwMTE3MGJhZmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVkMjk5Yzg4YzBlNGMxODM4MjJmODljY2NiNWE4ZDYzYjY5NTgxZTAyYTg0MmIyYWUxZTBmYWY3MWMxMWU4OTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVlNDIwMmVhZTZhNmFmZjUzOWU4ZTUyZjlmYzRkMmQzNzg1MTllY2UzNmQyNTllYTU1MWUwZTQ5NzljNjVmMzIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_59dafcf38b244c6e9e1a9a7f85d06f66",
+      "statement": "Graph termination occurs when no tasks are scheduled in a superstep (no PUSH or PULL tasks) or when the recursion limit is exceeded; the graph reaches END when execution naturally completes all paths.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_loop.py#L652-L659",
+          "version": "repo-lines-v1:sha256:ed41d59bc8944aad40d595300371fe3cdf037ccd0ec026d4e4d3e2e4371c20ba:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDU4YTI5NzQ4MDY2MzA5MjA5YjRkMDVmMDA3YWEwMjZhOGVhNTgwNzA3NWZhY2MxYmRhZTZiM2EyODgyOTk2OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWYxMWVhMTFlZjAxZTJlOTY5ZTVmNGM2MjcyZjNkYjY2ZGU1ZjhlNTRkMWNhYWE0YWZlZjJkMjBiYmEyZWYyNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjJkNjhmZDBkOWE3NWFiM2I5NDczNDk0YTczNDgwZDMxOTNjZDI3NjEwZGIxNzE2ZDAxNjEzYzk5ZDJmZTM0ZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTQxZWM3ZDU2NmJkNmUxNjdlYjY2ZTk1ZTA5OWIzOWE1OGZkYTgwYjQ5MmYxNzU1NjVmYjg5MjhhMzM3YjFiYiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_5f525587ca674a3cac5673b37b10025f",
+      "statement": "GraphInterrupt is raised at interrupt_before (before task execution if channels were updated) or interrupt_after (after writes applied); the checkpoint is saved and the graph pauses, allowing inspection and resumption with resume values.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_algo.py#L155-L186",
+          "version": "repo-lines-v1:sha256:dd32a65ac27c57ee5c961689da6f3a22ebd40e3fe1984accbaa2190692e0f014:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI0OTFjNzk5NTY2NTFjZmE0ZmEwYmFmMWFjYjI1NTFhMzAzOGU0YjFjYjEyNDdhY2U0ZDVlNDJmNGU3NGU3NzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY4N2IxZTc2MGYxZWIyNDMyMWNjOGVlYzU5MjcxNDdmMmZiZjQwYTNmNGU5MGFiY2U4MGM1ZWFkNGJiNWNjY2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU1ODFkNzEwMjU2NzEzNDY0NGM4MGZkNGFkODExZDZlNGE0YjEyYTUyMDMyMGY5N2ExMWQzZDYzMTI4OWRkYmUifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_loop.py#L666-L724",
+          "version": "repo-lines-v1:sha256:fb0e13f518cce9cd6368d5a57bfa4907795c6eb4900b3429f581f2bc4122c31d:eyJzZWxlY3RlZExpbmVDb3VudCI6NTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFlYTk1NDg0MjFjN2NmMDlhMTU4ZGU3OWNhNWFlZWJhZWZlY2ZiNjM4NzFmODE3YTBjNDEzMzAzNDc1MDU0MTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM5MDJlNzhkYzM0YjBiOTRiZmUxODBmNjc5ZjE3Y2YwYTEyOGRiYjhiY2Q1N2Q0ZTg2Y2E1Y2Y2MTgwODNmZTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk0ODgxZTZjMzVmOTBkODZlNDMwZDM1MTRjZWU3MTNlNTUwNWFkNTMxZDU2NWYxYjFlZmQxNWRhOWIzNjM0NzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNjNDMxNzhmMGE1YWRiNmUzYTY4MWU1MDRhODVmN2Y3YTE5MTA2MmM5NTNhZmEzOTUyM2VhNzliMGE3OTQwNWEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_683150c6507c495a9630e809c8abfa2d",
+      "statement": "Error handlers are scheduled on task failure: if a node has an error_handler_node, NodeError is caught, ERROR and ERROR_SOURCE_NODE markers are written to checkpoint_pending_writes, and a fresh error handler task is prepared and added to self.tasks for execution in the same superstep.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_loop.py#L751-L816",
+          "version": "repo-lines-v1:sha256:033871652df8a91cab782d51b514c0c50196501935f1ba368fa50333b213757a:eyJzZWxlY3RlZExpbmVDb3VudCI6NjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2NjdmNGM2ZmY2NjNjMmI4NjBkMTcyYmFhMzE3MDI4ZDI2YzE2YWYyMzI5OGJhYzFmZDI3NzdlNTNlNzFlMzIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQwMDkxNzU0Zjc2ZTJkZTQ4YWZlNjQ2OTc2YmE2NTJjZWE0MDJjZGU5YTBhYmExYjQ0NDY3ZjNiNmRhYTBmNmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjljMGY2NzJhODU5ZTE3MzJmNGQ1OTNhNTA3ZGExNGRkMWEyNzA4NWY5NTVlYmI2ZjI3MGUwOTljYmQ4MmY0MjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdmYzYxMGFjZDA4MmFjOTgyMGZiMWU0MzA4MTdhODczNjg2MmVhYTZmYjE0ZWZlZWExZmY4YmQzZDE3OGQ0OWUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-03T15:19:56.419Z"
+  }
+}

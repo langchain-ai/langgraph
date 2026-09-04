@@ -1,0 +1,188 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:54ea01ece3f3d4616d827ef54d13777913b73fb60a8d323a8b9d0ccda22bcc7b",
+  "claims": [
+    {
+      "id": "claim_b972bfa0c4a0475db58e0422e3c38706",
+      "statement": "The @entrypoint decorator converts a function into a Pregel graph that serves as a workflow entry point, accepting optional parameters for checkpointer, store, cache, retry_policy, cache_policy, timeout, and context_schema, with support for both sync and async functions.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/func/__init__.py#L262-L435",
+          "version": "repo-lines-v1:sha256:b43b3101f892455adc558e1fdc96de41a1e4edb1d620692b078949a51d10f99b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTc0LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI4ZGIzZTVjNzMwZjBjMjRlMDZmNWVkMTA1NDQzOWY4NDI0ZmRlMzM4ZDRlMmM5YTAwNmEwYzJiNjEwNWYwZGU0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJhNmE3MTUyNTcyZWU4NGYxMDkwNmM3NGI5ZjJhOTI0MzRkZGFiMGUzYzQyODEzYjA0ZTU5N2VmY2VjOTUxYjI2IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIxZTNjOGU0YjUzNzU0NGFkMjA3YmJjZDdiNWQyYmQ2NDhiYjllNTEwYmE5ZjFlYWE5YWY0YWIwMTFmNWU1YzQ2IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJkMzMxMDk1ZDVmZDk0OTdmNDNkZDY5MDFhOTNmNzQzYmI2NTU1MDZhMDUwZTE1YzI4MTViZjFjOWQ0ZjEzMjk4In0"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/func/__init__.py#L516-L620",
+          "version": "repo-lines-v1:sha256:62e5e645299bf445aa97aae23e36d4da779f06aeb290e090d9ba68276c4d75a5:eyJzZWxlY3RlZExpbmVDb3VudCI6MTA1LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI5NDc1MDMzYzJiNzM1Mjk5OTE1NDk5MzY2MzMyNDAyOTViMTc4ZmY1OGQ3MDAzOTM3M2ZhOGQzZTA4YTM4MDM0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI2ODQ0ZDU0NzdjODA3OWU5OGQ4YjYwY2Y0NzYzYjUzZTYwMjNlZTlhMzRkNmU1ZDA4Mzg2YTFlNDcyNTFlYzkxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI5NTQ4MTkzYzcwZWUzZWRjYWRhYjk5MDVmMTJlMzI2ZDQ0ZDU1ZGI5ZTJmOWNmYmVmYmM0YzkxMTA1MmVlOTNhIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_3f8d00faf53940e1ab6a54790e976b66",
+      "statement": "The @task decorator wraps a function as a composable task that can be called from entrypoints or other tasks, returning a SyncAsyncFuture that enables both sync .result() retrieval and async await, with configurable retry_policy, cache_policy, and timeout parameters.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/func/__init__.py#L59-L251",
+          "version": "repo-lines-v1:sha256:b717aee7c05b6ad05a41bb9c646833401c9304c26e508ba61f732e620d850ab7:eyJzZWxlY3RlZExpbmVDb3VudCI6MTkzLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIxN2QyZjE5OGQ4MjQ4NTliYmIyNTRkMzlhOTdiMzhmZDRjOGU4ZDlmZjNhZDRhZTYxMTBlY2QxMTcyMGY5MTFmIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI3NTAxYmM4OGZjZDI4MzU1ODYwYmViNzg2MzNiN2YwYzc0MmUxNTQ1ODA2YzJiMzNmODE4NjBmYmViZWI2NGI5IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIzYTk1NzgzZThmOGM0ZDBiNmMzYzAwNDRkMGM4ZjdiOGFlYjlkMmVjNDFiYzM5YzYzNDRkNmIwZGQ3OTg5OTBiIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJkZTMxZGM4M2U3MmNiYWYwNjllZGVlOTIwMzcwNmJkNmI0NzczMGJiZmNkMjgzMmRjNWUzN2E0YzU1ODVhMzU1In0"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_call.py#L253-L298",
+          "version": "repo-lines-v1:sha256:28fefe8da9234e3796a22ae211be9e2504f308703a09a17689e81ee0728c94ea:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZjNjU0OTM5MmUwMGIwNTk3NTVhOWFhNDZiMTBkNzAwZDk0MTRiN2M2ZGExODU5OTYwNTFmZjQyNzJhNjI4MTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZlYjcxM2VmOWVmZjI3MzNiYzIyNzA0ODgxZDk2Zjc5MWU3Zjk2YzY4ZWQ3ODgwNjAyYTc5Y2EwYThkNmE3NWQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNhYzM5ODI5NGI0NzYzNmRhYzlmNTM1M2FiYTBmNzIyMGI5NzYxMDJiMmVkNzZlN2U5ZjRmZTBlMmJiMzFjZGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_90dc4b2c30564233937e6445966beccd",
+      "statement": "RetryPolicy defines exponential backoff retry behavior with initial_interval, backoff_factor, max_interval, max_attempts, jitter, and retry_on (exception filter), enabling fault-tolerant task and entrypoint execution.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L418-L438",
+          "version": "repo-lines-v1:sha256:de3bbf309ba93c756d0e872f725c015a98b55a975dd4eb985e33d5eecedeecdd:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZkMGJmMjMxYWUxODY0ZDFiZGNkOTdhNjFhMzgxNWNjY2VkZmM5NDgxZTBmYjc0Y2JjYzdhMGQyYzFkZmNjYmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU1NzllODFmYzYxNjg3NGZlMTllNzZjZDNmNDJmNTQ3NDdjZTJmOWM4OTQyOTJiMjIxNzViZGExNzBhMGZjNWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU2Mjk3MzJmNzVkZjg1YWVjYzBlNTkwYjg3NWVlZjU5NmQ5NDIzOWE2MjIzNWI0MTZlNDk2OWQzZDRlZDUyODUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c622572cf8b049589696c9edafbbe3e4",
+      "statement": "CachePolicy enables task result memoization via a key_func (default: pickle-hash input) and optional ttl (time-to-live), with per-task cache isolation using module and function identity namespacing.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/func/__init__.py#L96-L106",
+          "version": "repo-lines-v1:sha256:2b541f4dd983603af5d4cc4c51b9d37b062315a2babcefce726f7b6f4dec13dd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRlYTQyMGM3OTJjYzQyNzIyNTUyN2VmNDAxNDk5ZTcxY2ZkMjZiMmRjOTZmZmZkZGRkZmNiZjkxYWE0ZjJjMDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MDMyZTk2NGQwOTMyMzUxZTVkMTg1MjY5MjgxYjE3MWEzYTA5YjA4YjI4NmU2NjFlYTQ3MDMyM2M4MmViNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMxODA5MGJhNGMzM2I4M2EwZDIzZDcyZmFhOTYzNTk3ZjY4MTY3NjQ1YTM3ZjAwYjA4MjUzZjM4Zjc3MmYxMzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc5MTMwOWQ3MjI5ZmEyZTMzMDc2N2FhOTk4ZWUxNTBjZTkyMmM5NDNhMDRmZmJjYWYxNGFjYWYxZGE4ZWJkMjcifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L521-L530",
+          "version": "repo-lines-v1:sha256:566cf23d8aaafe16f7635fbd7c03524503a6ad37f16743462d6743500e637cc2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzYjM2NjRlNzFlNWI0MGEzYjM3OGYwNWM1NDY4MDBkOWUyNzNkYzRlYjdjZjMxMzA4OWI4NGE3MDY3ZDYzZTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEwYTczNmY0ZTJmYjc3MTYzMzFjMzViNWM3ZGY5MWIyN2M0MGJjOGQxNjE5YzIxNTIzMzNlNzc2ZDI0OWE4NmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI3MzNhZjcwZmJjOTY0NzhmM2UxN2I2ZDI3NjhjM2YxYzIwNTI4NDFmODMwMDIyNTI1YmY5OGQ2ZjQwYmEzZDQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_fcb572be7d6647bebb0dc83ca8f03151",
+      "statement": "TimeoutPolicy enforces maximum execution duration with separate run_timeout (hard wall-clock cap) and idle_timeout (progress-based), applicable only to async tasks and entrypoints; sync functions cannot be safely cancelled in-process.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/func/__init__.py#L237-L239",
+          "version": "repo-lines-v1:sha256:b62f4f429dbd09e890b968bc6fadca56e2aaf2a327e3a5ab39159f7e80ff368b:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTAzNDZkNjY0MjdjMWViODU4MGQ0NjQxNzhjZTdjZTI5NTdiNDU4ZjRjNTY2OGUxZWFjOGEzYzFmNDc4N2Q1OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWNiNDVhYTYxMmY3NzA2ZTk2ZGUzZjdhMWI2NmNiZDQyZDI5MTYyM2I0ZmNlNjVjMzViZGRiMTM0ZWEyOWZhNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzgyYzI0MjIzZDhjNTBiNzBhZDkxODQ1NzJiMzQ5MWYyODM2YzBiNjU2YzZmMjdkNWRiMTIxZTQzMzg5ZmNjOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTBiY2YzNTJkZDQ1MGEzY2M4NjA3MTc2MmE5ODAyMDRiYzZlZmE3YmJiZDRmOTUyOTRiZGI1MzYyZTUxZDEwNiJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L451-L515",
+          "version": "repo-lines-v1:sha256:1152bf0bf360308dafcc7952de68002fadc823cae5929b00f9a37aacf0da3fd0:eyJzZWxlY3RlZExpbmVDb3VudCI6NjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4YThkOWFiYTRiNTQ2NzYwMTk5MWYwZmQ2Y2RkNmNiMzQ3ZmIxMjM5YTVkMzMzMTFkZDRjNjFmZjc4MGI1Y2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImViYWFkZWY4NzkyNWNjZmM5YjE2NWNmNDRhNDk1YWU1Zjc2ZjliNDQ2YjQ5NjI1MTdkMTFhYzgxOWQ5ZWExNjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRiMDUzYjhkZTdlOWFjYTBkNTNjNjFlOTI0ZGFhZjJlMTZjYzU4YTgyODM1MWUyMGVjNzNhOGUwNjQxMTA0OGIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_89be2fe6818d42b7a9afdca648918cfb",
+      "statement": "entrypoint.final[ReturnType, SaveType] allows decoupling the return value (sent to caller) from the save value (persisted to checkpoint for next invocation's previous parameter), enabling state transformation across runs.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/func/__init__.py#L475-L515",
+          "version": "repo-lines-v1:sha256:2a64a0789058fded4353f5406a73aa88190063894fa0bf65e359b298b6c16626:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEyNWExNmQ4Mzg3NzQxN2E5MTgxOThhNDZiY2ExODRkYjA4MjhmYjFmNWM0NDJkNmYyMmUxYjZmMWQxZjhjZDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYwOTdkOGE3MTgxYWY0NTMwMDgwOGFjZjg3ZjlmZmRlYTEwYjAzMjRjMjIyOTgwM2IxZDBmYzMzMTE0OTc2NzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE2ODhmZmEwNTMwZWNlMjI2ZWVmNGE0NzAzYjZkNTJjMGFiMWMzNTE0ZWQyYTgwYzk0YTg0ODlhZmE5MzhjMGIifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/func/__init__.py#L546-L552",
+          "version": "repo-lines-v1:sha256:4decb66b8159f46278e829b917692b5b6fefc4997e2493031b1a750cbdcf9a7b:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWUzNzUxZjQzYzhkY2IyN2ZjODY1NWFlYjA2NTYyMTFhODA3NmFkYzBiZjZhZDc4NmY1YjQ0Y2JmNzAzZDczMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYWUyNGJjMjAyZjRiNjFkMDBlOWNlYjU4NTg3YmIxMDMwZDYzNzY0MTUxOTcyOGY5OWZiMmU3NTBiNmFlNzU3NSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiM2NlZmQ4ZjVjZTNiYjllMjhhNmRkYTU5MmVjMjcwOGNlZWVkNjc0NDUzNGY2YjU2ZDEyNjBmYTUxZTNjMDg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzJlYmY5ZWRlMTdlZDE5MGQyZWZhZGRiZDk5YWY1ZWIwZDM1NjgwYjVjNzlkN2I4YWUwMTA5MTlmZTE0ZTdjMyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_2b221cff7d3047149492fad19a463b36",
+      "statement": "Tasks are called like normal functions but return SyncAsyncFuture objects that act as both standard concurrent.futures.Future (supporting .result()) and awaitables (supporting await), enabling transparent sync/async composition.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/func/__init__.py#L86-L94",
+          "version": "repo-lines-v1:sha256:0e40b2d9c8d4f1c92e921cc136a3cea58848bb0dbab7ccd733d74fb2372578fb:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDJlZWFjYTAwMGUwMzJhNjQyZjQyNGE4YTM0ZDU3ODEyZjYwMzExNGVmMmNkZmVhMDQxMGRlZGJkMmI1YjliMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTkwOWE1M2E2MThkMDI4ZTFkMzAwMGMwYTdhYmNlZWNiZTVmYjM3ZjRlNTExZWZlNDY2NDNmYWQ2ZTY2ODcyZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGJlYjBkYjY2OGU0YWZiMTAzNDA1YmE5Zjk2NDAxNTM0ZTI3OGRmZjYwN2NjZjgxNTk5NjE3ZGZlZmI0M2ZkNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTI1MDM4ZWRlNDBmMTNkZjM3M2QwMDI2ZDE3Nzc0ZTE2YmIwOGM1MGJlM2Y0ZWQxNDI2NmQ0MzM4NDQyZTRmMyJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_call.py#L253-L256",
+          "version": "repo-lines-v1:sha256:fb16ca5a4027e59d6525498fb842babc67632c2417c9c50c5b60aeb637251ed2:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmM2NTQ5MzkyZTAwYjA1OTc1NWE5YWE0NmIxMGQ3MDBkOTQxNGI3YzZkYTE4NTk5NjA1MWZmNDI3MmE2MjgxOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiM2FjMzk4Mjk0YjQ3NjM2ZGFjOWY1MzUzYWJhMGY3MjIwYjk3NjEwMmIyZWQ3NmU3ZTlmNGZlMGUyYmIzMWNkZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDkwNDNiNjU2NTFkMGMwMGNiZDVkZTRhZWFjNmU5ODhmMWM4ODlhNThmNzE3ZTY0M2JkOWEwMTAyMzAyYmM5OCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_acaca655c1b6482191c8d0ecc63d25be",
+      "statement": "Entrypoint functions can request optional injected parameters (config, previous, runtime) that are populated at runtime via function signature inspection, enabling access to RunnableConfig, checkpoint values, and Runtime context.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/func/__init__.py#L272-L290",
+          "version": "repo-lines-v1:sha256:aab52aceff866748b4a3620010ba43eabd0805f3076103360cf5cd5eebb6b1d9:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5ODQ4MzI0MjliYzAyYzY1Nzc5ZDY4NTMwN2IwYzA0NGE3ODc3NTU0OTM0Mjg1MzJmNDk1NzM0YWVlZjZkNzYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRjZDZhMzM1NmYyOWQzMDBhODg5YmRjZWFkMWEzZmI4NDZhZDM0ZDIyNTkzYjYyM2I0MDUwMDI1MjE4MzNmNjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkzY2JkM2Q1NzFiNWVjZmNiNmU2ODJhMDdjMzY5MzUwOTM3NDkzN2NkMzRiMGZmYmYyOTdjZmRjMWUyNmE2YmMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_20ca372349bf450f88840d2321c02e46",
+      "statement": "Task instances provide clear_cache(cache) and aclear_cache(cache) methods to manually evict cached results, enabling cache invalidation when stale data must be recomputed.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/func/__init__.py#L96-L106",
+          "version": "repo-lines-v1:sha256:2b541f4dd983603af5d4cc4c51b9d37b062315a2babcefce726f7b6f4dec13dd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRlYTQyMGM3OTJjYzQyNzIyNTUyN2VmNDAxNDk5ZTcxY2ZkMjZiMmRjOTZmZmZkZGRkZmNiZjkxYWE0ZjJjMDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MDMyZTk2NGQwOTMyMzUxZTVkMTg1MjY5MjgxYjE3MWEzYTA5YjA4YjI4NmU2NjFlYTQ3MDMyM2M4MmViNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMxODA5MGJhNGMzM2I4M2EwZDIzZDcyZmFhOTYzNTk3ZjY4MTY3NjQ1YTM3ZjAwYjA4MjUzZjM4Zjc3MmYxMzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc5MTMwOWQ3MjI5ZmEyZTMzMDc2N2FhOTk4ZWUxNTBjZTkyMmM5NDNhMDRmZmJjYWYxNGFjYWYxZGE4ZWJkMjcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8835f635a8e84d63a12ce523c003bf30",
+      "statement": "Both @task and @entrypoint support async functions with full parallelism; task invocation returns awaitables that can be passed to asyncio.gather() for concurrent execution, and timeouts work only with async.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/func/__init__.py#L145-L214",
+          "version": "repo-lines-v1:sha256:3c2f3c059a5741b3b9b3bada24b6c64028ebf9670d4abe9a97025a60e4428fe8:eyJzZWxlY3RlZExpbmVDb3VudCI6NzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2ZWY2ZDQ3NjI3Yzk4YzFjYWFkYTM4MDMzZDQzZTEyYzE5YTA3OTNiN2E5OTNjNWUwYTdmZDdlNjRiMmNmNTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMzNTFmNDIyMmExMWQ4NWJmZmI3NzA0MjE5NjUxNjEzNWIxNTgxNzU2NmE3MmFjYjAwNGZlZTk4NDE4NTQ1MTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIwOGJkZDk3M2U0NjBjN2I4YmI2Yzg4ODEyZGQxM2VhOWUwYWY3ZDYzNzlhOGIwOWI4MmIzODcwNTEyOWMwMDIifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/func/__init__.py#L195-L214",
+          "version": "repo-lines-v1:sha256:f34f358e43961aa75cf8436d4b9fdab568fad726888f241e015143bd74b09f95:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA1NGU0MGY1YzQ2Mjk3NzFiZGE2NDUxZjk3ZTg1NDQyM2M2NzgwZjhhNzU1OTgzOTg5MDUyZTMzZGZmODQ4ZTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2ZWY2ZDQ3NjI3Yzk4YzFjYWFkYTM4MDMzZDQzZTEyYzE5YTA3OTNiN2E5OTNjNWUwYTdmZDdlNjRiMmNmNTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYyMjg3YmM2OTI3MDRkMjkyOWNhZWI2OGMxNjhiMTIxN2FjZWNlZDM3NjhlOWNlYTQ1MTQ3NTA0MjVhZjc1MmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIwOGJkZDk3M2U0NjBjN2I4YmI2Yzg4ODEyZGQxM2VhOWUwYWY3ZDYzNzlhOGIwOWI4MmIzODcwNTEyOWMwMDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_276949b12ce54a97bff2cce82afbad17",
+      "statement": "Tasks operate implicitly on graph state without explicit passing; they receive only their regular parameters and closure variables, with state updates managed through interrupt() and Command primitives rather than direct state returns.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/func/__init__.py#L151-L156",
+          "version": "repo-lines-v1:sha256:bd3d6381b8e0f96bd88d836ed21176f0dcc99eb6955aa257e020470574a645bb:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTUwOGI4MDUwYmU0MWI5MThkMTc4ZTM5Zjk1OTg0MGUwNjkwYmU2ZDVkMmZlZjJlYWNkOGNlZTE3OTM5NzAyMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2MwM2MyMWI1MjVmZDA2NmY2N2MxMDBjNmViNmNlODk4YzMzYTMxMGYwOWU1MjczN2Q0MjNhYWE1MzFkNDE0NiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjIzYjI3Yjk4YzExNzE3NzI3NTEzZDFjNmEyNTJiOWIxMTE3YjM4ODJlNTAwZjdiMTEwZDZlYjlhNTNiMzlmOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTJlMzE3ZDBkZjMwZTgzNzgwMzJhMjI1ZjlhYzQyNGY4NjM0ZjJmMmJmMWQxZjExODQ1MDExMGFiMGNiOWFhMCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_5d1034cb0de940db9ecba82547147809",
+      "statement": "Entrypoints can call tasks, and tasks can call other tasks, enabling hierarchical composition with sequential or parallel execution patterns; nested task invocations return futures that can be chained or awaited.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/func/__init__.py#L86-L94",
+          "version": "repo-lines-v1:sha256:0e40b2d9c8d4f1c92e921cc136a3cea58848bb0dbab7ccd733d74fb2372578fb:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDJlZWFjYTAwMGUwMzJhNjQyZjQyNGE4YTM0ZDU3ODEyZjYwMzExNGVmMmNkZmVhMDQxMGRlZGJkMmI1YjliMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTkwOWE1M2E2MThkMDI4ZTFkMzAwMGMwYTdhYmNlZWNiZTVmYjM3ZjRlNTExZWZlNDY2NDNmYWQ2ZTY2ODcyZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGJlYjBkYjY2OGU0YWZiMTAzNDA1YmE5Zjk2NDAxNTM0ZTI3OGRmZjYwN2NjZjgxNTk5NjE3ZGZlZmI0M2ZkNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTI1MDM4ZWRlNDBmMTNkZjM3M2QwMDI2ZDE3Nzc0ZTE2YmIwOGM1MGJlM2Y0ZWQxNDI2NmQ0MzM4NDQyZTRmMyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_2c543f8c8a4d484694da3d65f1390c49",
+      "statement": "Entrypoint functions must accept exactly one input parameter (the workflow input); multiple logical inputs are passed via a single dict or dataclass parameter.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/func/__init__.py#L266-L269",
+          "version": "repo-lines-v1:sha256:4735edce7c853c25dfd199e8adb30d3a294eb5689fac8f2db4a8cb15f0ae2963:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYWExNDBiYTM3NjFjYWM5NGU1NDJlMjZmYzdlNGM0ZTZiMGIxNDIzYWEwNTg2NmFhYzcxYjU4Yzc2NDhiZDczOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWQzNjI3ZjQ4MDRhZDQyMzc5Njc3OWIzMjQwMzZjNWFlMzA5YzQ4ZjI2NDQ2YzllNTZhMjM3ZjA1ZGFjMzllZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYmJiZGNiZTgxYzc5MDkxODE0M2FhYzVmNmNiMDZiNWUxOWFmZmVhY2M4NDJlZGQ3MTkwODliNzRjODI5YmZmZSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_86c9e7a986d247f59a2df79e0ea6545f",
+      "statement": "Task and entrypoint return type annotations drive schema inference for serialization, validation, and introspection, enabling proper type checking and serialization of outputs.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/func/__init__.py#L539-L574",
+          "version": "repo-lines-v1:sha256:ca07b133bf72bbf7fa945a62e61a7330aeb020645ea82614f32c067c5fbd0e34:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZjMjNiOTlmZDQxMzk2YzFmMTI4Yjc2ZjgwNzg5NDE0YWU4MTkzMmQ5Mzg0OGIzMTIyZDExYTM4OTFmOWY4NjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQwZjY3YjhkZDc0MTFjOGU2YzQyMjJhMDRiNWM1Njc4Y2M0MWY5ZTBiNjQ2NzYxZmNhNDVmMTUzOWFkZTQxZTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU2N2JlZTVkMDFjMGFlNmVlNTRkMTNjNjYwOTRkNTQyMmQ2YzFlMmE3MmQ1ZTRjOTg5M2Q0MTdkNzM1ZDI4ODMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYyZGViMzAyNmY2ZGNlMDhhZGYyMDlkMDJkOGI2NWU0ZGY0MTk0ZDFhZDhjZTk4YzVjNzQ4N2EzMTdlOWI3OGYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_691437d8aef54a3f918f08e76ba172a4",
+      "statement": "An @entrypoint-decorated function is compiled into a Pregel instance with a single internal node, preserving full Pregel semantics: invoke(), stream(), astream(), aget_state(), aput_state() with checkpointer/store/cache integration.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/func/__init__.py#L576-L620",
+          "version": "repo-lines-v1:sha256:975cb9876b08cb10323885cfb110e7dc15195a8665555b318bfe00bb738ea059:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQzZWI0YTg2YzYxOTY1ZmI2Y2I1MTNhY2ZiNDA3NGMwMTllOWY1NGJmZjJmOWQ3M2M1NGIxOTg3NjMwMmVjN2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY4NDRkNTQ3N2M4MDc5ZTk4ZDhiNjBjZjQ3NjNiNTNlNjAyM2VlOWEzNGQ2ZTVkMDgzODZhMWU0NzI1MWVjOTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM2MzVhZWE1MzkxODFmNDY5NDEyY2MyOWE4NjJjNTVlYWJlZWE2OTQ1YzhlZDI5ZWIwOTM4YjYzYTZhNzM3YzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-03T15:19:56.419Z"
+  }
+}

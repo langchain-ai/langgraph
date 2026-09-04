@@ -1,0 +1,236 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:9297919c483a5e184389ab0478127851af6d9c9123848c51adef40b0ef1ad3d3",
+  "claims": [
+    {
+      "id": "claim_075755c929ef44598a8428f5d829f7af",
+      "statement": "Checkpoint persistence setup follows a consistent four-step pattern: create checkpointer instance, call .setup() to initialize schema (for SQL backends), compile the graph passing the checkpointer, and invoke with thread_id in configurable config.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint-postgres/langgraph/checkpoint/postgres/__init__.py#L40-L111",
+          "version": "repo-lines-v1:sha256:1d9212585e4ee5f03e8399b3a9d4ffc957d5cfa6bb4d45b2ad2ddcd4c418efbb:eyJzZWxlY3RlZExpbmVDb3VudCI6NzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyNDM2ZDRmNzYzOTIyNzAyMWE1ZjViZDQ1MmY0NzhjOWFkYWM0YzE1YzRhMWU2YzViY2ZiODNlMDRkNDUyZTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhYTYyYzkzMmE0MjRiY2I3YjJiYjU1ZDkxNmQyMjc1YmM4MjBiM2JmNDY5Y2YzZjJmNDg1OTk5OWI5NzE1OWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZlYTI1MDllZWQxYTdiY2ZkMTNhYTcxMzBhODc4ZTYyMmM1NmQ0OWI1NDhjZTdjMmY4ZDU4ZGMxMWVhODUyMjkifQ"
+        },
+        {
+          "resource": "repo://libs/checkpoint-sqlite/langgraph/checkpoint/sqlite/__init__.py#L45-L128",
+          "version": "repo-lines-v1:sha256:8920224eef3bd84fbc1a9b436b5053e59bd87f0426ff5300ce47a1c7644d66e3:eyJzZWxlY3RlZExpbmVDb3VudCI6ODQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEwMmEyYmFiYWNjZTkxZmYyZjhiMjNmNDFlYzc0MzQ1MjUyZmMyYThmMDc0NTFjMDVlNzNkM2IxYmQ2YTQxMTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE5OGIwNjNkOWI0N2U2NTM3OTYyNTU3MmNjZTE5NzY2OWQ1NzY3ZTEyYzE4YmUwNzU2NTJiOGNkOTgxY2U4ZDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA0Y2YzZmJiNWVhZmI2N2RmNWM3YWQ4NmU1YjA5NzM4MWVkMDdmZjA4YWUxZDBjM2MxNzZhOTY1ZGM3MDYxMzcifQ"
+        },
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L177-L218",
+          "version": "repo-lines-v1:sha256:e35c95fe210b8756c6dbda2e55009825c40704e9a8b0b5854e40bc58cf8cf38a:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUzZjMxNGRjZWFlYjg3ZDI5Mzk4YmY4OGI1ZWQ1NWZkNTVjM2Q4OGI3YmFkY2U4MGU3OGE2Mzc0Njk4NjkwNWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg0ODBmOWVmYzViMTI3ZmY4YzlmZmU5OGEyYzUzYjJmMDRhMTg3OGEzMmZkZDNjYjNmMmU1YzVjZTEwOTEwMDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIxZTA3ODBmYzNmNjgxODc5MGVhYzlmYzQ0ZjNlZDkwNGEwMTNlZTZlNDA0MDY0ZDJjMWQwMDg0ZDI2ZGQzODEifQ"
+        },
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/memory/__init__.py#L33-L100",
+          "version": "repo-lines-v1:sha256:b79166e456106cfe578f9a3f0d1e6b4f7a956bfbf994d1c65dd401a065773573:eyJzZWxlY3RlZExpbmVDb3VudCI6NjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg2ZjBlOWY1ODk0M2U4YmU3MGE1MDk0Yjg5ZjJiMDY1NTQyNzlhMmVjZjQyYmRlMDMyN2I4NmEyNWZmZWUwM2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMDA5N2U0YWE1MDA2OGJhMTU3ZjlhMjczOWZhZDg2OTk1ZTFlMGNkY2NkYWRjNTg5N2MyMDM0Yzc0ZDNlZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE0NzIzMDA0M2U2YWQyNTRlYjZiODRmYzc3ZDM1NmViODk3Njg4Y2YwODg2YWJkZDRlZTQ5YTg5NThmNWJhMjkifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L1177-L1231",
+          "version": "repo-lines-v1:sha256:cf1d8f1a0617a2b598c589985afc9a74952d545009d903f15f7db42fdd12e5e9:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4NDJjYjljNTdhZjA3ODI0OTAzNzA2Yzg2YjVlNWI3NDhiYmE3YzdjOGU2YjAzZjc4YzExNzdhODM5NmRhMmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQzOGZmMjZhMWE3YzJiMmVmNzVkNjlhNDFmN2FhNDE3ZTQ1YTRjYzE2OGU1MjhkZjkyODNjMDU3YjFhMjlhOWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdjMDZkNjM5NTA1NTAzYTYzYTlhY2JiNDNjNDliNDUzMzYzMzUxM2M3YTE1MTk3Y2ZiN2NlZDE2ZjQwZDcwMmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJiODFhYjYxZmVkNGRlZDY5MWFjMTc3NDA0NGIzNzg0YzJkNDU3NTg4MDZkMGRjMmE5NTAzODU3Yzk3YjVkNzMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_652deda1f6964d0892083cc072d6aa38",
+      "statement": "InMemorySaver stores checkpoints in process memory using nested dicts and requires no setup, making it suitable for development and testing only; it is lost on process restart and unsuitable for production use.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint/README.md",
+          "version": "repo-file-v1:sha256:efedc0a489d4ab9147d69c8575a9cfd2344d01040322ec6330302887c65aa80e"
+        },
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/memory/__init__.py#L33-L100",
+          "version": "repo-lines-v1:sha256:b79166e456106cfe578f9a3f0d1e6b4f7a956bfbf994d1c65dd401a065773573:eyJzZWxlY3RlZExpbmVDb3VudCI6NjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg2ZjBlOWY1ODk0M2U4YmU3MGE1MDk0Yjg5ZjJiMDY1NTQyNzlhMmVjZjQyYmRlMDMyN2I4NmEyNWZmZWUwM2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMDA5N2U0YWE1MDA2OGJhMTU3ZjlhMjczOWZhZDg2OTk1ZTFlMGNkY2NkYWRjNTg5N2MyMDM0Yzc0ZDNlZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE0NzIzMDA0M2U2YWQyNTRlYjZiODRmYzc3ZDM1NmViODk3Njg4Y2YwODg2YWJkZDRlZTQ5YTg5NThmNWJhMjkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_124926f43cd542ab90faa1d01f92d940",
+      "statement": "SqliteSaver provides file-based persistence via SQLite with simpler setup than PostgreSQL, supports both sync and async execution via AsyncSqliteSaver, and is suitable for small to medium deployments or local development.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint-sqlite/README.md",
+          "version": "repo-file-v1:sha256:c5041ffb8e9b8a73fd2e22170aaa6732a52bbe97381a96f6dda9a40200c80fbc"
+        },
+        {
+          "resource": "repo://libs/checkpoint-sqlite/langgraph/checkpoint/sqlite/__init__.py#L45-L128",
+          "version": "repo-lines-v1:sha256:8920224eef3bd84fbc1a9b436b5053e59bd87f0426ff5300ce47a1c7644d66e3:eyJzZWxlY3RlZExpbmVDb3VudCI6ODQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEwMmEyYmFiYWNjZTkxZmYyZjhiMjNmNDFlYzc0MzQ1MjUyZmMyYThmMDc0NTFjMDVlNzNkM2IxYmQ2YTQxMTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE5OGIwNjNkOWI0N2U2NTM3OTYyNTU3MmNjZTE5NzY2OWQ1NzY3ZTEyYzE4YmUwNzU2NTJiOGNkOTgxY2U4ZDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA0Y2YzZmJiNWVhZmI2N2RmNWM3YWQ4NmU1YjA5NzM4MWVkMDdmZjA4YWUxZDBjM2MxNzZhOTY1ZGM3MDYxMzcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_083356f18d8c47b8b7a1b9f3c381cb65",
+      "statement": "PostgresSaver requires explicit connection setup with autocommit=True and row_factory=dict_row to function correctly; without these parameters, .setup() may not persist table creation and read operations fail with TypeError when accessing columns by name.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint-postgres/README.md",
+          "version": "repo-file-v1:sha256:5d078003f953bad67bf1fe24883b205ae048cb0cbdaf51afcdfe82258726f887"
+        },
+        {
+          "resource": "repo://libs/checkpoint-postgres/langgraph/checkpoint/postgres/__init__.py#L62-L84",
+          "version": "repo-lines-v1:sha256:715d5be3a635d16216c5a6013e54e5596af628e6a7c5bac7a3ab43a83799ac81:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgyMGI0NTNmNWUwYzkyZDVmNmMyNTFhNWVhMTk2MGQ3MmYzYmQwNzk1NmFlODU3ZGEyMGUzMWE4OGM1NTk2OWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVjZjhkYWUwMTFkZjdhMzA3OWJmNWE5OWNiM2Q4MGI4NGEwY2NiMTQxZDU0NGU3ZmEyYmMwYmFhOTI1NjI1ZDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJhODRlZDg1NzhjNjY0OGNiZTgwMjQzNWFiMjYzYzRjMGYyMWVlNzM0ZDIyOWMwMGUyZjlmOTYxZGMwOTJiN2EifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_5a452a2f9ab94733b0a1265417fa871d",
+      "statement": "CheckpointTuple packages a checkpoint with its operational context: config (thread_id, checkpoint_ns, checkpoint_id), checkpoint snapshot (channel_values, channel_versions, versions_seen), metadata (source, step, parents), parent_config for ancestry walks, and pending_writes for fault recovery.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L140-L148",
+          "version": "repo-lines-v1:sha256:4cd55dcd1c40a70265f6ff49bad2c524de24c2a560c58be0bcfeb46a3bcec792:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzhkMzdiNjM4YTZhZWJhNjlmYzU0MDQ3OWNkYmE4MzE5ZmJlZjhmMDgzNWYxZGQ4MGE3OGNjZjk0MDBhMjVhYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGNjNGE3ZDFjYzc5NmFiYTNlNDY3MjMzMjdmNTE3ZTlmODExOTgyZDI1MGYwNzAyOTg2ZTRiNTc2NGFkOTU4OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjg4ZjVkNWNjOTE3OTIzZDMxNzU3ZWRhNzc3ZTM0N2NhMDFhNTY5NTg0NjdkNTJlY2VmZDU2MWQwZWY3ZmJhZCJ9"
+        },
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L39-L87",
+          "version": "repo-lines-v1:sha256:b93ccaac83fcb6d764b41097bed7f48f731254113b5834e07f6aa82f780f3b53:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQwODA4OTRkMGFkNDNiNjExNWQ3YjYyYzhmOGIzZDcyNWIzMmMxMDQwZGRhOGY5M2IxNTgzZjQ3Yjc3YTY2N2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2YTcxNTI1NzJlZTg0ZjEwOTA2Yzc0YjlmMmE5MjQzNGRkYWIwZTNjNDI4MTNiMDRlNTk3ZWZjZWM5NTFiMjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYyOGYxYmQ2NjY1MjE5ODAxNWNmODljN2MxZGNkZjFiODE5ZjU2OTA4ZTQ2YjVkZmIzOGNjMjdkZjEwOGU5NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhNTNjMmFlY2ViY2EyODIwYTc4YzY4MTY3NGQ3MWRhNDQyY2FlNmVlZWUxODM4YmY1Yzk0ZGIzMzcwYTVhY2EifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e8f138e1ef42425f86b5e842bc9da14b",
+      "statement": "Pending writes are PendingWrite tuples (task_id, channel_name, value) stored when a node task succeeds but checkpoint save fails; on resumption, these writes are replayed before scheduling next tasks, ensuring side effects are not lost to downstream failures.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L301-L320",
+          "version": "repo-lines-v1:sha256:ec1734eaa019e6cdfcc8ad2c8a9225b190db3e3236c55c0128c9539712224411:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVmYzNlMjYxODgxZmM1YTU5MzBhODRiNzg2YmVmNWMzMmQ2Mjg1ZGJhYzc0MTRhOWI5ZjM2NDg2ZmVkMmQ0YWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk4NjNhNzc0MWQwODE4ZmJlYzE4YjM4MmU3ZjI3NmNlNDE0ZWU4ZjU0ZjJjNmM1ZTQ4YTNhN2Q0MjM0MDE3ODEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBkZGZkZWRmY2I1ZWJlN2UzZjQzNjI4ZGZhMmQxNGI3ODcxOTg0YjJlYTUzMGNmNTIxYmYzYjYxOTM1MGI3ZjMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_80d6d473b96e44a582a16ac71824aec8",
+      "statement": "Thread ID is the primary key isolating execution contexts; reusing the same thread_id accumulates state across invocations while unique IDs yield independent runs. Checkpoint ID (UUID6) uniquely identifies a snapshot and enables time-travel resumption from historical points.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint/README.md",
+          "version": "repo-file-v1:sha256:efedc0a489d4ab9147d69c8575a9cfd2344d01040322ec6330302887c65aa80e"
+        },
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L177-L226",
+          "version": "repo-lines-v1:sha256:fce5720fa641f56a372ec4982500f26fb248e827ecce0445a175ee040d7ddcc4:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUzZjMxNGRjZWFlYjg3ZDI5Mzk4YmY4OGI1ZWQ1NWZkNTVjM2Q4OGI3YmFkY2U4MGU3OGE2Mzc0Njk4NjkwNWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiMWJmOTJmNWMwNDFkN2FkNzcxNGUwMDM5ZGI5NzBjMmU4ZDViY2ZmZjFmN2RiMTIwY2YzNDkzODJmNWNlY2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg0ODBmOWVmYzViMTI3ZmY4YzlmZmU5OGEyYzUzYjJmMDRhMTg3OGEzMmZkZDNjYjNmMmU1YzVjZTEwOTEwMDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk0NWMxZGJhNjk3NDlhZTUxZWY0NWI4MTM5MWJjNzMxYjhjYjA2YzEyYjk0NTUxY2I0ZDcxYzkyMWU4ZThmZTcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_06d700b907aa4e3791d2bff3700697a2",
+      "statement": "JsonPlusSerializer encodes checkpoints to msgpack by default; deserialization of untrusted data can execute arbitrary code. LANGGRAPH_STRICT_MSGPACK=true environment variable or explicit allowed_msgpack_modules parameter restricts deserialization to safe types, preventing code execution if checkpoint storage is compromised.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint-postgres/README.md",
+          "version": "repo-file-v1:sha256:5d078003f953bad67bf1fe24883b205ae048cb0cbdaf51afcdfe82258726f887"
+        },
+        {
+          "resource": "repo://libs/checkpoint/README.md",
+          "version": "repo-file-v1:sha256:efedc0a489d4ab9147d69c8575a9cfd2344d01040322ec6330302887c65aa80e"
+        },
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/serde/jsonplus.py#L82-L95",
+          "version": "repo-lines-v1:sha256:7bd5efed7f9ada985b7af9782ef322978bd27c884c7fd1e1278a31e7385734ee:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgwNzJkNjRjOGQ0MDgzYTA1MWIxYTQ1OWY3YWU0NjdlMTBkNTk1YTE2ZDIyMTIwMmI2NjBkNGI0NDYwMDJlODQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2YTcxNTI1NzJlZTg0ZjEwOTA2Yzc0YjlmMmE5MjQzNGRkYWIwZTNjNDI4MTNiMDRlNTk3ZWZjZWM5NTFiMjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRkMWYwNDczZWQxMGU5YWY0ZDI0OTRlNDAwNjQ5YmMxNTg4N2U0NmIxYmJlNTU3Njg0ZjQxZGY0YzBhYmEwYzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQzMzEwOTVkNWZkOTQ5N2Y0M2RkNjkwMWE5M2Y3NDNiYjY1NTUwNmEwNTBlMTVjMjgxNWJmMWM5ZDRmMTMyOTgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e71d5d963c904009884894a4de95255f",
+      "statement": "PostgresSaver.setup() is idempotent and handles automatic schema migrations; it creates a checkpoint_migrations table to track applied versions and applies pending migrations sequentially, enabling safe version upgrades.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint-postgres/langgraph/checkpoint/postgres/__init__.py#L85-L111",
+          "version": "repo-lines-v1:sha256:c67475fb08dccd11c869c98434de226c08b054b912540017d7c062e2a13b03bd:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUyMGFhZTg0ZTE4YzIwYmI1ODc1Yjc0M2FiZDYzY2IzNzhkZjQxZTZjZDgxYWRkYjJmMGU1YzQ1NDc5NDhmYTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBlODFmNTA5ZGJmOTZkMzQyMTg0NjVkN2EyZjgyMmE3OGIyZTZlNWY4MDU3OTA0Zjg0ZGEyMDExMjdkM2QzZjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZlYTI1MDllZWQxYTdiY2ZkMTNhYTcxMzBhODc4ZTYyMmM1NmQ0OWI1NDhjZTdjMmY4ZDU4ZGMxMWVhODUyMjkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3acb5738ed6043ee89ff8748060edaf5",
+      "statement": "BaseCheckpointSaver defines core methods for all implementations: put() to store checkpoints, get_tuple() to retrieve checkpoint tuples, list() to enumerate checkpoints matching criteria, delete_thread() to cleanup, and put_writes() to persist intermediate writes from failed nodes.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint/README.md",
+          "version": "repo-file-v1:sha256:efedc0a489d4ab9147d69c8575a9cfd2344d01040322ec6330302887c65aa80e"
+        },
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L228-L320",
+          "version": "repo-lines-v1:sha256:b1b8e859a0c8c9f59ca429615db2a211eda68cbda3db858d85d04b5e012176e2:eyJzZWxlY3RlZExpbmVDb3VudCI6OTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJkYWM4OWU2OWZlNWQzODE0OGI3MGNjMmVhZjZiMjAwNWY4YWJkNzAxZGY0ZmNlM2FjODA4MDYyZTljMzIzMDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI3OWIyNWU2MGQzYWUyOTYzZTUxZDU5MzFjMDhmMjlkMjQ0ZDdlYjFmZjlkOGE2MTNiN2MxNDYxNDFhZGZkMGIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBkZGZkZWRmY2I1ZWJlN2UzZjQzNjI4ZGZhMmQxNGI3ODcxOTg0YjJlYTUzMGNmNTIxYmYzYjYxOTM1MGI3ZjMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f768d7b6b0f14a4ea1f391865b2ec2a3",
+      "statement": "Delta channels store only incremental deltas between snapshots; naive pruning of intermediate checkpoints breaks reconstruction because delta channels require ancestor checkpoints containing _DeltaSnapshot blobs. Safe pruning requires preserving all ancestors back to the nearest snapshot or forcing fresh snapshots before deletion.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L375-L416",
+          "version": "repo-lines-v1:sha256:860c4e4f8fab511a373e76ed022112f60e21975e92af9c0892f2f13c10857e1a:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUzOGI1NzgyZjVlYTI1MTlhZDk5ZjU4Zjg3MzA5NmYyNzg1M2NiMzllZGRmOWIyODg5NzgxYjU1MDJjYmE4YjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3YjQ4Nzk3YmM1N2JkZGEzOGQ4MTE5NjhkMTE0YjgzNTZkN2I0YmUzMzFhMTQyZmY4ZDgzNWUwMzc3NjVlYzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk4NjNhNzc0MWQwODE4ZmJlYzE4YjM4MmU3ZjI3NmNlNDE0ZWU4ZjU0ZjJjNmM1ZTQ4YTNhN2Q0MjM0MDE3ODEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYzNzVlM2FmOTk3OGEyYTljMzRkY2NmODNmY2EwNjRkZDhiY2EzYTdlODJkM2FkMTY2ZDFkNjJjYzJiYWRjNDQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9c70f0e158cb4cd795c1d43d9b26c57c",
+      "statement": "StateGraph.compile(checkpointer=...) accepts a BaseCheckpointSaver instance, True (enables InMemorySaver), False (disables checkpointing), or None (inherits from parent); when enabled, invocations must pass thread_id in config['configurable'].",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L1177-L1231",
+          "version": "repo-lines-v1:sha256:cf1d8f1a0617a2b598c589985afc9a74952d545009d903f15f7db42fdd12e5e9:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4NDJjYjljNTdhZjA3ODI0OTAzNzA2Yzg2YjVlNWI3NDhiYmE3YzdjOGU2YjAzZjc4YzExNzdhODM5NmRhMmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQzOGZmMjZhMWE3YzJiMmVmNzVkNjlhNDFmN2FhNDE3ZTQ1YTRjYzE2OGU1MjhkZjkyODNjMDU3YjFhMjlhOWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdjMDZkNjM5NTA1NTAzYTYzYTlhY2JiNDNjNDliNDUzMzYzMzUxM2M3YTE1MTk3Y2ZiN2NlZDE2ZjQwZDcwMmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJiODFhYjYxZmVkNGRlZDY5MWFjMTc3NDA0NGIzNzg0YzJkNDU3NTg4MDZkMGRjMmE5NTAzODU3Yzk3YjVkNzMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b596861fedbe425492c30eb7803f6326",
+      "statement": "Checkpoint namespace (checkpoint_ns) isolates state for subgraphs using pipe-separated hierarchy (e.g., 'outer|inner'); root graph uses empty string. A single thread can maintain independent checkpoint chains per namespace, enabling subgraph composition without state collision.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L753-L776",
+          "version": "repo-lines-v1:sha256:56686aa46c9db72a8399be0e16d5af2fde380fd5d706b4e09118ce6613a72e80:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRjNDY0NzM2OTdjNGI4NmMzZWViNTRlMzNiYmViZjE1MGJlOWU3N2MwNDUwYzRjODA4NGY3YzA3ZjgyZmFlZDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg2MWRiMjFkN2Y3OWI5ZjhiNmFlNzQ3MDQ1Nzg0ZWI3M2YxMjRmZDU3ZTZjOTkxMTQyNjkyNTAxYmE3YzExNGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg1NDEyNzMwOWZkZTJiZWUxOWQzODY1MWRkOWU5ZmJiZmQzM2E5MGM2Yjc1ODk4NjY4MzM3N2U1YmNjNzUyOWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVjNGEzY2ZjMzlmZjlmZDQ3MmU0YzIxNWI0MGYxNmQ3NDc4NTAwYjEyOWYyNTc1MmM4N2Y4NmIyYzRjNTgzNTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a21b77328cba444caa39b5b0fb85b24f",
+      "statement": "Checkpointer.list(config, filter=None, before=None, limit=None) enumerates checkpoints matching criteria, returning iterator of CheckpointTuple; get_tuple(config) retrieves latest checkpoint on thread or specific checkpoint by checkpoint_id for time-travel debugging.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L240-L252",
+          "version": "repo-lines-v1:sha256:a8ccb26073399f94d0dc2821e4d94bd454f7aa6672c1461c96b0f0ffc25426f9:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU3NmU1Zjg0MmRiZjM1MDdkZjg5NWI1YmVkMzQ0YmM0N2M5NzkwMjE1ZDRkYWM5ZDE2NDM1OTZhZWFlZDM4MzAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3YjQ4Nzk3YmM1N2JkZGEzOGQ4MTE5NjhkMTE0YjgzNTZkN2I0YmUzMzFhMTQyZmY4ZDgzNWUwMzc3NjVlYzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdhNzMyYWMwYjhkYmI5NzdhOGMwYTYwM2UwMjliN2MzMmVlODI3MGViNDU0ZDFhMzBjZDgwYWZlYTA5N2ZkNTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ0ZjMwMWVhMDZiOTVjNmY0MzI4ZjE4YmZjMDU5MTc4OTM5ODhlMTRkMmY5NzVmOGIxM2NjOTdhNzhkOTM0YjkifQ"
+        },
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L254-L277",
+          "version": "repo-lines-v1:sha256:ea8b0bd46886e69506cc1c4413eed36f925f4438558d66a8c2a7354d8c0d9360:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5YWE0NmI4YjM3MTBlMWEzZjFhYzUwZjViZGUxNGM4M2E3OThlZTRhMzA1NGUwOWIzYTczNDA1Yzg3MjhkOTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk4NjNhNzc0MWQwODE4ZmJlYzE4YjM4MmU3ZjI3NmNlNDE0ZWU4ZjU0ZjJjNmM1ZTQ4YTNhN2Q0MjM0MDE3ODEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIwNDRiZGM2OGJjNDQ3Zjc3YTg4MzI1N2EyZmJlNDJkNjQ1MGM0ODYzNzE1MTQ1Y2Y3MzM3Zjk5OTVjOGI1MDUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6bb25d7f546647c28164aed3851298ee",
+      "statement": "SqliteSaver.aio.AsyncSqliteSaver provides async variants of core methods (aput, aget_tuple, alist, adelete_thread) for non-blocking I/O in async execution contexts; sync SqliteSaver requires import of AsyncSqliteSaver for async graphs.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint-sqlite/README.md",
+          "version": "repo-file-v1:sha256:c5041ffb8e9b8a73fd2e22170aaa6732a52bbe97381a96f6dda9a40200c80fbc"
+        },
+        {
+          "resource": "repo://libs/checkpoint-sqlite/langgraph/checkpoint/sqlite/__init__.py#L34-L42",
+          "version": "repo-lines-v1:sha256:b97bd14b437440eade621b4e4b6f6533eb339c14462ba28c10a749dd09d573b9:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDQxNDA5YmIzZmUyMjcyYTUxNTNkODljNDhjNTViMmE0MjBhOWFiNWY0MTY0ZGY2YmI1NDA4YzA1MTk4ZDAyZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmFmYmEwNTI3YzM5NTNjNGI2ZTBlNWI1NzM5YmE4MzYxMmY4MDUzYmNkYzk0NjY3MzAxOTNjZDFkNTkwYjQwOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzIwMzAyYzNmNDY3ZWRiYzdhNzdkMTg2MThmYjYyOWI5NWY1MzAzYTg0M2VjZTY5ZTFlNDJlNmM4M2YyMjZjMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDM0YjlhYmNhNGJhMDNhNzAyMzUxODRhYzc4MDQ1NDg5OWI5YTQ2NmI0MmY0YzU1MDVhODQ1MTg2ODgyYzQyZCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_e3816c06822a4fda91d0bc2da4cdfbde",
+      "statement": "AsyncPostgresSaver from langgraph.checkpoint.postgres.aio provides async variants for concurrent graph execution; AsyncPostgresSaver.from_conn_string(DB_URI) creates context manager yielding async-capable checkpointer with aput, aget_tuple, alist, adelete_thread methods.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint-postgres/README.md",
+          "version": "repo-file-v1:sha256:5d078003f953bad67bf1fe24883b205ae048cb0cbdaf51afcdfe82258726f887"
+        }
+      ]
+    },
+    {
+      "id": "claim_b759a9f8426445ee9d9efb91ed5a5c43",
+      "statement": "Checkpointer.delete_thread(thread_id) erases all checkpoints and associated pending writes for a thread; async variant adelete_thread provides non-blocking cleanup. Called when removing user data or cleaning up abandoned sessions.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L321-L330",
+          "version": "repo-lines-v1:sha256:009d453b312203656301aab0433d93f730f5ba3e2786176de844a03ab69eefd6:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI4NDliMjA0MmNhM2EyNjBjOTljNDU1Y2NiZjJhYWIwZTVmYjk2Y2NjNjExNWZmOWI1YjRjYWFlODJhZTU0MDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3YjQ4Nzk3YmM1N2JkZGEzOGQ4MTE5NjhkMTE0YjgzNTZkN2I0YmUzMzFhMTQyZmY4ZDgzNWUwMzc3NjVlYzAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk4NjNhNzc0MWQwODE4ZmJlYzE4YjM4MmU3ZjI3NmNlNDE0ZWU4ZjU0ZjJjNmM1ZTQ4YTNhN2Q0MjM0MDE3ODEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM0ZDc5NDY2OGU2MzU5OGNjNDM0ZjljNTVjZjI4NWYzYmFmNDAxYWVmNmFlMjJkNWY5NzE2YTFkYTQ0YjJiZGUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-03T15:19:56.419Z"
+  }
+}
