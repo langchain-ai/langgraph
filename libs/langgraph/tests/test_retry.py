@@ -211,24 +211,42 @@ def test_should_retry_default_retry_on():
     )
     assert _should_retry_on(policy, http_error_4xx) is False
 
-    # Should retry on requests.HTTPError with 5xx status code
-    response_req_5xx = Mock()
+    # Should retry on requests.HTTPError with 5xx status code.
+    # Use a real requests.models.Response: a bare Mock is truthy, but a real
+    # error Response is falsy (`__bool__` aliases `Response.ok`), so a Mock
+    # would exercise a code path production never reaches.
+    response_req_5xx = requests.models.Response()
     response_req_5xx.status_code = 502
-    req_error_5xx = requests.HTTPError("bad gateway")
-    req_error_5xx.response = response_req_5xx
+    req_error_5xx = requests.HTTPError("bad gateway", response=response_req_5xx)
     assert _should_retry_on(policy, req_error_5xx) is True
 
+    response_req_500 = requests.models.Response()
+    response_req_500.status_code = 500
+    req_error_500 = requests.HTTPError("server error", response=response_req_500)
+    assert _should_retry_on(policy, req_error_500) is True
+
     # Should not retry on requests.HTTPError with 4xx status code
-    response_req_4xx = Mock()
-    response_req_4xx.status_code = 400
-    req_error_4xx = requests.HTTPError("bad request")
-    req_error_4xx.response = response_req_4xx
-    assert _should_retry_on(policy, req_error_4xx) is False
+    for status_code in (400, 401, 404, 422):
+        response_req_4xx = requests.models.Response()
+        response_req_4xx.status_code = status_code
+        req_error_4xx = requests.HTTPError("client error", response=response_req_4xx)
+        assert _should_retry_on(policy, req_error_4xx) is False
 
     # Should retry on requests.HTTPError with no response
     req_error_no_resp = requests.HTTPError("connection error")
     req_error_no_resp.response = None
     assert _should_retry_on(policy, req_error_no_resp) is True
+
+    # Should retry on requests connection errors and timeouts. These subclass
+    # OSError, so they must be handled before the non-retryable OSError branch.
+    assert (
+        _should_retry_on(policy, requests.ConnectionError("connection refused")) is True
+    )
+    assert (
+        _should_retry_on(policy, requests.ConnectTimeout("connect timed out")) is True
+    )
+    assert _should_retry_on(policy, requests.ReadTimeout("read timed out")) is True
+    assert _should_retry_on(policy, requests.Timeout("timed out")) is True
 
     # NodeTimeoutError should be retryable by default
     assert (
