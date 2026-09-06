@@ -107,3 +107,6 @@ node_modules/
 .editorconfig
 .scratch
 .worktrees/
+
+# opencode
+.opencode/

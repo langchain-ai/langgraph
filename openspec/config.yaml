@@ -1,0 +1,32 @@
+schema: spec-driven
+
+# 项目上下文（可选）
+# 创建产出物时会展示给 AI 使用。
+# 可添加你的技术栈、编码规范、风格指南、领域知识等。
+# 示例：
+#   context: |
+#     技术栈：TypeScript、React、Node.js
+#     我们使用 conventional commits
+#     领域：电子商务平台
+
+# 按产出物的规则（可选）
+# 为特定产出物添加自定义规则。
+# 示例：
+#   rules:
+#     proposal:
+#       - 提案保持在 500 字以内
+#       - 始终包含"非目标"章节
+#     tasks:
+#       - 将任务拆分为每次不超过 2 小时的工作块
+
+# 按操作的指南（可选）
+# 为 apply 和 archive 操作添加咨询性指南。
+# 此段落独立于上述的产出物规则。
+# 示例：
+#   operations:
+#     apply:
+#       guidance:
+#         - 测试摘要保持简洁
+#     archive:
+#       guidance:
+#         - 完成前总结归档结果
