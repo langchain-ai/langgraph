@@ -1058,3 +1058,55 @@ def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
     assert result3[0].key == "3"
     assert result4[0].key == "4"
     assert result5[0].key == "5"
+
+
+def test_batch_duplicate_texts_indexed(fake_embeddings: CharacterEmbeddings) -> None:
+    """Test that batch() properly handles multiple PutOps containing identical indexed text."""
+    store = InMemoryStore(
+        index={
+            "dims": fake_embeddings.dims,
+            "embed": fake_embeddings,
+            "fields": ["text"],
+        }
+    )
+    operations = [
+        PutOp(("docs",), "doc-a", {"text": "identical text"}),
+        PutOp(("docs",), "doc-b", {"text": "identical text"}),
+        PutOp(("docs",), "doc-c", {"text": "different text"}),
+    ]
+    store.batch(operations)
+
+    results = store.search(("docs",), query="identical text")
+    assert len(results) == 3
+    keys = {r.key for r in results[:2]}
+    assert keys == {"doc-a", "doc-b"}
+    assert results[0].score is not None
+    assert results[1].score is not None
+    assert results[0].score == pytest.approx(results[1].score)
+
+
+async def test_async_batch_duplicate_texts_indexed(
+    fake_embeddings: CharacterEmbeddings,
+) -> None:
+    """Test that abatch() properly handles multiple PutOps containing identical indexed text."""
+    store = InMemoryStore(
+        index={
+            "dims": fake_embeddings.dims,
+            "embed": fake_embeddings,
+            "fields": ["text"],
+        }
+    )
+    operations = [
+        PutOp(("docs",), "doc-a", {"text": "identical text"}),
+        PutOp(("docs",), "doc-b", {"text": "identical text"}),
+        PutOp(("docs",), "doc-c", {"text": "different text"}),
+    ]
+    await store.abatch(operations)
+
+    results = await store.asearch(("docs",), query="identical text")
+    assert len(results) == 3
+    keys = {r.key for r in results[:2]}
+    assert keys == {"doc-a", "doc-b"}
+    assert results[0].score is not None
+    assert results[1].score is not None
+    assert results[0].score == pytest.approx(results[1].score)
