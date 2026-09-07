@@ -118,6 +118,18 @@ from langgraph.pregel._io import (
     read_channels,
 )
 from langgraph.pregel._messages import ensure_message_ids
+from langgraph.pregel._queue import (
+    CHECKPOINT_META_QUEUE_CONSUMED,
+    QueueApplyError,
+    QueueItem,
+    aack,
+    aack_after,
+    ack,
+    ack_after,
+    alist_pending,
+    list_pending,
+    queue_item_writes,
+)
 from langgraph.pregel._read import PregelNode
 from langgraph.pregel._utils import get_new_channel_versions, is_xxh3_128_hexdigest
 from langgraph.pregel.debug import (
@@ -134,6 +146,7 @@ from langgraph.types import (
     Durability,
     Interrupt,
     PregelExecutableTask,
+    PregelTask,
     RetryPolicy,
     Send,
     StreamMode,
@@ -264,6 +277,11 @@ class PregelLoop:
     ]
     control: RunControl | None
     tasks: dict[str, PregelExecutableTask]
+    # queued state updates, see `Pregel.queue_state`
+    _queue_read_fut: Any  # in-flight read of the pending items, if any
+    _queue_consumed: list[QueueItem]  # applied, awaiting the next checkpoint save
+    _queue_stale_ids: set[str]  # listed as consumed by the checkpoint resumed from
+    _queue_applied_ids: set[str]  # applied in this run; a read may still list them
     output: None | dict[str, Any] | Any = None
     updated_channels: set[str] | None = None
     _graph_lifecycle_events: deque[GraphLifecycleEvent]
@@ -372,6 +390,10 @@ class PregelLoop:
         self.prev_checkpoint_config = None
         runtime = self.config[CONF].get(CONFIG_KEY_RUNTIME)
         self.control = runtime.control if isinstance(runtime, Runtime) else None
+        self._queue_read_fut = None
+        self._queue_consumed = []
+        self._queue_stale_ids = set()
+        self._queue_applied_ids = set()
 
     def _push_graph_lifecycle_event(
         self,
@@ -716,6 +738,8 @@ class PregelLoop:
         self.is_replaying = False
         # save checkpoint
         self._put_checkpoint({"source": "loop"})
+        # read the queue in parallel with the write, per durability mode
+        self._schedule_queue_read()
         # after execution, check if we should interrupt
         if self.interrupt_after and should_interrupt(
             self.checkpoint, self.interrupt_after, self.tasks.values()
@@ -724,6 +748,162 @@ class PregelLoop:
             raise GraphInterrupt()
         # unset resuming flag
         self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
+
+    # queued state updates
+
+    def _queue_next_tasks(self) -> dict[str, PregelTask]:
+        """The tasks the next tick would prepare, without preparing them."""
+        return prepare_next_tasks(
+            self.checkpoint,
+            self.checkpoint_pending_writes,
+            self.nodes,
+            self.channels,
+            self.managed,
+            self.config,
+            self.step,
+            self.stop,
+            for_execution=False,
+            trigger_to_nodes=self.trigger_to_nodes,
+            updated_channels=self.updated_channels,
+        )
+
+    def _queue_would_interrupt(self, tasks: Mapping[str, PregelTask]) -> bool:
+        """`should_interrupt` for tasks prepared without execution."""
+        if not self.interrupt_before or not tasks:
+            return False
+        version_type = type(
+            next(iter(self.checkpoint["channel_versions"].values()), None)
+        )
+        null_version = version_type()  # type: ignore[misc]
+        seen = self.checkpoint["versions_seen"].get(INTERRUPT, {})
+        if not any(
+            version > seen.get(chan, null_version)  # type: ignore[operator]
+            for chan, version in self.checkpoint["channel_versions"].items()
+        ):
+            return False
+        return self.interrupt_before == "*" or any(
+            task.name in self.interrupt_before for task in tasks.values()
+        )
+
+    def _queue_boundary(self) -> dict[str, PregelTask] | None:
+        """The would-be next tasks at this boundary, or None if the loop will
+        not proceed from it: an update applied in memory at a boundary the loop
+        then leaves would be in no checkpoint."""
+        if self.checkpointer is None or self.status != "pending":
+            return None
+        if self.control is not None and self.control.drain_requested:
+            return None
+        if self.step > self.stop:
+            return None
+        tasks = self._queue_next_tasks()
+        if tasks and self._queue_would_interrupt(tasks):
+            return None
+        return tasks
+
+    def _queue_consume(
+        self, items: Sequence[QueueItem], tasks: Mapping[str, PregelTask]
+    ) -> list[QueueItem]:
+        """Apply the items this boundary takes: those steering one of the
+        would-be next tasks, or, at the boundary where the run would finish,
+        all of them. Returns items already recorded as consumed by the
+        checkpoint the loop resumed from; they are acked, not applied."""
+        # a read submitted while an ack was still in flight may list an item
+        # this run already applied: skip it, its ack is on its way
+        items = [item for item in items if item.id not in self._queue_applied_ids]
+        stale = [item for item in items if item.id in self._queue_stale_ids]
+        if stale:
+            stale_ids = {item.id for item in stale}
+            self._queue_stale_ids.difference_update(stale_ids)
+            items = [item for item in items if item.id not in stale_ids]
+        would_finish = not tasks
+        if would_finish:
+            matched = list(items)
+        else:
+            names = {task.name for task in tasks.values()}
+            matched = [item for item in items if item.steer in names]
+        if matched:
+            self._apply_queue_items(matched, restart=would_finish)
+        return stale
+
+    def _apply_queue_items(self, items: Sequence[QueueItem], restart: bool) -> None:
+        """Apply items as null-task writes, the path `Command(update=)` takes
+        at run start: through the reducers, without triggers, so the step in
+        flight is untouched. With `restart`, then start the graph again from
+        START, as `invoke({})` does on a finished thread."""
+        updated: set[str] = set()
+        for item in items:
+            try:
+                updated.update(
+                    apply_writes(
+                        self.checkpoint,
+                        self.channels,
+                        [
+                            PregelTaskWrites(
+                                (), INPUT, queue_item_writes(item.values), []
+                            )
+                        ],
+                        self.checkpointer_get_next_version,
+                        self.trigger_to_nodes,
+                    )
+                )
+            except Exception as exc:
+                raise QueueApplyError(item, exc) from exc
+            self._queue_consumed.append(item)
+            self._queue_applied_ids.add(item.id)
+        if self.updated_channels is not None:
+            self.updated_channels.update(updated)
+        if restart and (input_writes := deque(map_input(self.input_keys, {}))):
+            self.updated_channels = apply_writes(
+                self.checkpoint,
+                self.channels,
+                [PregelTaskWrites((), INPUT, input_writes, [])],
+                self.checkpointer_get_next_version,
+                self.trigger_to_nodes,
+            ) | (self.updated_channels or set())
+            self._put_checkpoint({"source": "input"})
+        self._emit("values", map_output_values, self.output_keys, True, self.channels)
+
+    def _schedule_queue_read(self) -> None:
+        """Submit the read of pending items for the next boundary, in parallel
+        with the checkpoint write just submitted. Never waits."""
+        if self.checkpointer is None:
+            return
+        if self.durability == "sync":
+            self._submit_queue_read()
+        elif self.durability == "async":
+            # one read in flight at a time; a completed one is consumed at the
+            # next boundary, which then submits the next read
+            if self._queue_read_fut is None:
+                self._submit_queue_read()
+        # "exit": no reads mid-run
+
+    def _queue_writes_at_exit(self) -> bool:
+        """Whether this loop writes a checkpoint at exit under `durability="exit"`."""
+        return not self.is_nested or all(
+            NS_END not in part for part in self.checkpoint_ns
+        )
+
+    def _put_exit_checkpoint(self) -> None:
+        """Write the exit checkpoint now, as `_suppress_interrupt` would at
+        exit, so the end-of-run queue read runs in parallel with it. If the
+        run then continues, this checkpoint is the persisted parent of what
+        follows, and the exit path writes another one at the true end."""
+        self._put_exit_delta_writes()
+        if self._exit_delta_writes is not None:
+            # staged above; a second flush at exit must not stage them again
+            self._exit_delta_writes = []
+        self._put_checkpoint(self.checkpoint_metadata)
+        self._put_pending_writes()
+        # make the exit path a no-op unless the run continues past this point
+        self.checkpoint_id_saved = self.checkpoint["id"]
+        self._has_persisted_parent = True
+        self._initial_checkpoint_config = self.checkpoint_config
+
+    def _submit_queue_read(self) -> Any:
+        raise NotImplementedError
+
+    def _submit_queue_ack(self, prev: Any, items: Sequence[QueueItem]) -> None:
+        raise NotImplementedError
 
     def match_cached_writes(self) -> Sequence[PregelExecutableTask]:
         raise NotImplementedError
@@ -1133,6 +1313,12 @@ class PregelLoop:
         do_checkpoint = self._checkpointer_put_after_previous is not None and (
             exiting or self.durability != "exit"
         )
+        # record the queued updates applied since the previous checkpoint, so a
+        # loop resumed from this checkpoint acks them instead of re-applying
+        if do_checkpoint and self._queue_consumed:
+            self.checkpoint_metadata[CHECKPOINT_META_QUEUE_CONSUMED] = [  # type: ignore[typeddict-unknown-key]
+                item.id for item in self._queue_consumed
+            ]
         # create new checkpoint
         channels_to_snapshot = (
             delta_channels_to_snapshot(self.channels, new_counters)
@@ -1207,6 +1393,10 @@ class PregelLoop:
                 self.checkpoint_metadata,
                 new_versions,
             )
+            # ack the queued updates this checkpoint records, once it is durable
+            if self._queue_consumed:
+                self._submit_queue_ack(self._put_checkpoint_fut, self._queue_consumed)
+                self._queue_consumed = []
             self.checkpoint_config = {
                 **self.checkpoint_config,
                 CONF: {
@@ -1624,6 +1814,66 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             },
         )
 
+    # queued state updates
+
+    def consume_queue(self) -> None:
+        """Apply the queued updates this boundary takes. Called by the driver
+        between supersteps, after the checkpoint write of the step that just
+        finished has been submitted."""
+        tasks = self._queue_boundary()
+        if tasks is None:
+            return
+        fut = self._queue_read_fut
+        if not tasks:
+            # the run would finish: a fresh read, in parallel with the
+            # checkpoint write the loop waits for anyway
+            if self.durability == "exit":
+                if not self._queue_writes_at_exit():
+                    return
+                self._put_exit_checkpoint()
+                fut = self._submit_queue_read()
+            if fut is None:
+                return
+            items = fut.result()
+        else:
+            if fut is None or (self.durability != "sync" and not fut.done()):
+                return
+            items = fut.result()
+        self._queue_read_fut = None
+        if tasks and self.durability == "async":
+            self._submit_queue_read()
+        if not items:
+            return
+        try:
+            stale = self._queue_consume(items, tasks)
+        except QueueApplyError as e:
+            ack(
+                cast(BaseCheckpointSaver, self.checkpointer),
+                e.item,
+                error=repr(e.error),
+            )
+            raise e.error from None
+        if stale:
+            self._submit_queue_ack(None, stale)
+        if not tasks and self.durability == "sync":
+            self._put_checkpoint_fut.result()
+
+    def _submit_queue_read(self) -> concurrent.futures.Future:
+        self._queue_read_fut = self.submit(
+            list_pending,
+            cast(BaseCheckpointSaver, self.checkpointer),
+            self.checkpoint_config,
+            __reraise_on_exit__=False,
+        )
+        return self._queue_read_fut
+
+    def _submit_queue_ack(
+        self, prev: concurrent.futures.Future | None, items: Sequence[QueueItem]
+    ) -> None:
+        self.submit(
+            ack_after, prev, cast(BaseCheckpointSaver, self.checkpointer), list(items)
+        )
+
     # context manager
 
     def __enter__(self) -> Self:
@@ -1689,6 +1939,11 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             [] if self.durability == "exit" and self.checkpointer is not None else None
         )
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
+        self._queue_stale_ids = set(
+            self.checkpoint_metadata.get(CHECKPOINT_META_QUEUE_CONSUMED) or ()
+        )
+        if self.checkpointer is not None:
+            self._submit_queue_read()
         self.channels, self.managed = channels_from_checkpoint(
             self.specs,
             self.checkpoint,
@@ -1882,6 +2137,62 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             },
         )
 
+    # queued state updates
+
+    async def aconsume_queue(self) -> None:
+        """Async twin of `SyncPregelLoop.consume_queue`."""
+        tasks = self._queue_boundary()
+        if tasks is None:
+            return
+        fut = self._queue_read_fut
+        if not tasks:
+            if self.durability == "exit":
+                if not self._queue_writes_at_exit():
+                    return
+                self._put_exit_checkpoint()
+                fut = self._submit_queue_read()
+            if fut is None:
+                return
+            items = await fut
+        else:
+            if fut is None or (self.durability != "sync" and not fut.done()):
+                return
+            items = await fut
+        self._queue_read_fut = None
+        if tasks and self.durability == "async":
+            self._submit_queue_read()
+        if not items:
+            return
+        try:
+            stale = self._queue_consume(items, tasks)
+        except QueueApplyError as e:
+            await aack(
+                cast(BaseCheckpointSaver, self.checkpointer),
+                e.item,
+                error=repr(e.error),
+            )
+            raise e.error from None
+        if stale:
+            self._submit_queue_ack(None, stale)
+        if not tasks and self.durability == "sync":
+            await cast(asyncio.Future, self._put_checkpoint_fut)
+
+    def _submit_queue_read(self) -> asyncio.Task:
+        self._queue_read_fut = self.submit(
+            alist_pending,
+            cast(BaseCheckpointSaver, self.checkpointer),
+            self.checkpoint_config,
+            __reraise_on_exit__=False,
+        )
+        return self._queue_read_fut
+
+    def _submit_queue_ack(
+        self, prev: asyncio.Task | None, items: Sequence[QueueItem]
+    ) -> None:
+        self.submit(
+            aack_after, prev, cast(BaseCheckpointSaver, self.checkpointer), list(items)
+        )
+
     # context manager
 
     async def __aenter__(self) -> Self:
@@ -1949,6 +2260,11 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         self.submit = await self.stack.enter_async_context(
             AsyncBackgroundExecutor(self.config)
         )
+        self._queue_stale_ids = set(
+            self.checkpoint_metadata.get(CHECKPOINT_META_QUEUE_CONSUMED) or ()
+        )
+        if self.checkpointer is not None:
+            self._submit_queue_read()
         self.channels, self.managed = await achannels_from_checkpoint(
             self.specs,
             self.checkpoint,
