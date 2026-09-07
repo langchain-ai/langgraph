@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import operator
+import sqlite3
 import sys
 import threading
 import time
@@ -21,6 +22,7 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResu
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableParallel
 from langgraph.checkpoint.memory import InMemorySaver, MemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.checkpoint.sqlite import SqliteSaver
 from typing_extensions import TypedDict
 
 from langgraph._internal._constants import (
@@ -2299,6 +2301,134 @@ def test_node_without_error_handler_still_fails_run():
 
     with pytest.raises(ValueError, match="no handler"):
         graph.invoke({"foo": ""})
+
+
+# ---------------------------------------------------------------------------
+# resume after a conditional-router exception
+# ---------------------------------------------------------------------------
+
+
+def _conditional_router_resume_snapshot(saver, failure_location, calls):
+    class State(TypedDict):
+        value: int
+
+    def node(state):
+        calls["node"] += 1
+        if failure_location == "node" and calls["node"] == 1:
+            raise ValueError("temporary node failure")
+        return {"value": 1}
+
+    def route(state):
+        calls["route"] += 1
+        if failure_location == "route" and calls["route"] == 1:
+            raise ValueError("temporary route failure")
+        return "sink"
+
+    def sink(state):
+        calls["sink"] += 1
+        return {"value": 2}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node", node)
+        .add_node("sink", sink)
+        .add_edge(START, "node")
+        .add_conditional_edges("node", route, {"sink": "sink"})
+        .add_edge("sink", END)
+        .compile(checkpointer=saver)
+    )
+
+    config = {"configurable": {"thread_id": failure_location}}
+    with pytest.raises(ValueError, match="temporary"):
+        graph.invoke({"value": 0}, config)
+    result = graph.invoke(None, config)
+    after = graph.get_state(config)
+    return result, dict(calls), list(after.next)
+
+
+def test_resume_reruns_failed_conditional_router():
+    """A conditional router that raises after the node wrote state must be
+    re-run on resume, not silently dropped.
+
+    Regression test for #8834: the node's state write was persisted alongside
+    the router's ``__error__``, and resume treated the write as a completed
+    transition — leaving no pending tasks and skipping the downstream node.
+    """
+    for failure_location in ["route", "node"]:
+        calls = {"node": 0, "route": 0, "sink": 0}
+        result, counts, pending = _conditional_router_resume_snapshot(
+            InMemorySaver(), failure_location, calls
+        )
+        assert result == {"value": 2}
+        assert counts["sink"] == 1
+        assert pending == []
+        if failure_location == "route":
+            # the router failed on first pass and was re-evaluated on resume
+            assert counts["route"] == 2
+        else:
+            # node-failure control: the node itself was re-run
+            assert counts["route"] == 1
+            assert counts["node"] == 2
+
+
+def test_resume_reruns_failed_conditional_router_sqlite():
+    for failure_location in ["route", "node"]:
+        calls = {"node": 0, "route": 0, "sink": 0}
+        with sqlite3.connect(":memory:", check_same_thread=False) as conn:
+            result, counts, pending = _conditional_router_resume_snapshot(
+                SqliteSaver(conn), failure_location, calls
+            )
+        assert result == {"value": 2}
+        assert counts["sink"] == 1
+        assert pending == []
+        assert counts["route"] == (2 if failure_location == "route" else 1)
+
+
+@pytest.mark.anyio
+async def test_async_resume_reruns_failed_conditional_router():
+    class State(TypedDict):
+        value: int
+
+    async def scenario(saver, failure_location):
+        calls = {"node": 0, "route": 0, "sink": 0}
+
+        async def node(state):
+            calls["node"] += 1
+            if failure_location == "node" and calls["node"] == 1:
+                raise ValueError("temporary node failure")
+            return {"value": 1}
+
+        async def route(state):
+            calls["route"] += 1
+            if failure_location == "route" and calls["route"] == 1:
+                raise ValueError("temporary route failure")
+            return "sink"
+
+        async def sink(state):
+            calls["sink"] += 1
+            return {"value": 2}
+
+        graph = (
+            StateGraph(State)
+            .add_node("node", node)
+            .add_node("sink", sink)
+            .add_edge(START, "node")
+            .add_conditional_edges("node", route, {"sink": "sink"})
+            .add_edge("sink", END)
+            .compile(checkpointer=saver)
+        )
+
+        config = {"configurable": {"thread_id": failure_location}}
+        with pytest.raises(ValueError, match="temporary"):
+            await graph.ainvoke({"value": 0}, config)
+        result = await graph.ainvoke(None, config)
+        return result, dict(calls)
+
+    for failure_location in ["route", "node"]:
+        result, counts = await scenario(InMemorySaver(), failure_location)
+        assert result == {"value": 2}
+        assert counts["sink"] == 1
+        assert counts["route"] == (2 if failure_location == "route" else 1)
 
 
 # ---------------------------------------------------------------------------

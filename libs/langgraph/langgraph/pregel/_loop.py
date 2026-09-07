@@ -741,9 +741,33 @@ class PregelLoop:
         Skips control signals (ERROR, ERROR_SOURCE_NODE, INTERRUPT, RESUME)
         so that failed/interrupted tasks remain with empty writes and will be
         re-executed (or routed to error handlers) by the runner.
+
+        A task whose superstep failed partway through must not have its
+        ordinary channel writes restored either. When a node produces a state
+        write and its (attached later) conditional router then raises, the
+        failed task's writes carry both the ordinary write and an `ERROR`.
+        Restoring the ordinary write would make the task non-empty, the runner
+        would skip it, and the never-executed router would silently be dropped
+        on resume. Such a task is treated as failed and re-run instead.
+
+        Tasks whose failure was routed to an error handler carry an
+        `ERROR_SOURCE_NODE` marker; they are deliberately left for
+        `_resume_error_handlers_if_applicable` to consume, so their ordinary
+        writes are still restored here.
         """
+        retry_task_ids = {
+            tid
+            for tid, k, _ in self.checkpoint_pending_writes
+            if k == ERROR
+            and not any(
+                t == tid and c == ERROR_SOURCE_NODE
+                for t, c, _ in self.checkpoint_pending_writes
+            )
+        }
         for tid, k, v in self.checkpoint_pending_writes:
             if k in (ERROR, ERROR_SOURCE_NODE, INTERRUPT, RESUME):
+                continue
+            if tid in retry_task_ids:
                 continue
             if task := tasks.get(tid):
                 task.writes.append((k, v))
