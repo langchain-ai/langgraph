@@ -1142,6 +1142,18 @@ class Pregel(
                 checkpoint["channel_versions"].values()
             )
 
+    def _public_values(self, values: dict[str, Any]) -> dict[str, Any]:
+        """Drop channels that are checkpointed but hidden from public state reads.
+
+        See #8644: large internal payloads (e.g. a REPL heap snapshot) must survive
+        across turns via the checkpointer, but should not appear in `get_state`,
+        `get_state_history`, or the Studio / API thread-state endpoints.
+        """
+        private = getattr(self, "private_channels", frozenset())
+        if not private:
+            return values
+        return {k: v for k, v in values.items() if k not in private}
+
     def _prepare_state_snapshot(
         self,
         config: RunnableConfig,
@@ -1255,7 +1267,7 @@ class Pregel(
         )
         # assemble the state snapshot
         return StateSnapshot(
-            read_channels(channels, self.stream_channels_asis),
+            self._public_values(read_channels(channels, self.stream_channels_asis)),
             tuple(t.name for t in next_tasks.values() if not t.writes),
             patch_checkpoint_map(saved.config, saved.metadata),
             saved.metadata,
@@ -1379,7 +1391,7 @@ class Pregel(
         )
         # assemble the state snapshot
         return StateSnapshot(
-            read_channels(channels, self.stream_channels_asis),
+            self._public_values(read_channels(channels, self.stream_channels_asis)),
             tuple(t.name for t in next_tasks.values() if not t.writes),
             patch_checkpoint_map(saved.config, saved.metadata),
             saved.metadata,
@@ -2523,6 +2535,9 @@ class Pregel(
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
+        if getattr(self, "input_validators", None):
+            for _validator in self.input_validators:
+                values = _validator(values)
         return self.bulk_update_state(config, [[StateUpdate(values, as_node, task_id)]])
 
     async def aupdate_state(
@@ -2536,6 +2551,9 @@ class Pregel(
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
+        if getattr(self, "input_validators", None):
+            for _validator in self.input_validators:
+                values = _validator(values)
         return await self.abulk_update_state(
             config, [[StateUpdate(values, as_node, task_id)]]
         )
@@ -2870,7 +2888,12 @@ class Pregel(
             server_info = _build_server_info(config, parent_runtime)
 
             runtime = Runtime(
-                context=_coerce_context(self.context_schema, context),
+                context=_coerce_context(
+                    self.context_schema,
+                    context
+                    if context is not None
+                    else getattr(self, "bound_context", None),
+                ),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
@@ -3313,7 +3336,12 @@ class Pregel(
             server_info = _build_server_info(config, parent_runtime)
 
             runtime = Runtime(
-                context=_coerce_context(self.context_schema, context),
+                context=_coerce_context(
+                    self.context_schema,
+                    context
+                    if context is not None
+                    else getattr(self, "bound_context", None),
+                ),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
