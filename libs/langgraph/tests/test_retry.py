@@ -211,19 +211,34 @@ def test_should_retry_default_retry_on():
     )
     assert _should_retry_on(policy, http_error_4xx) is False
 
-    # Should retry on requests.HTTPError with 5xx status code
-    response_req_5xx = Mock()
+    # Should retry on requests.HTTPError with 5xx status code.
+    # Use a real requests.Response: its __bool__ is `status_code < 400`, so a
+    # real error response is always falsy (a Mock would be truthy and would
+    # mask the truthiness trap in the None check).
+    response_req_5xx = requests.Response()
     response_req_5xx.status_code = 502
     req_error_5xx = requests.HTTPError("bad gateway")
     req_error_5xx.response = response_req_5xx
     assert _should_retry_on(policy, req_error_5xx) is True
 
     # Should not retry on requests.HTTPError with 4xx status code
-    response_req_4xx = Mock()
+    response_req_4xx = requests.Response()
     response_req_4xx.status_code = 400
     req_error_4xx = requests.HTTPError("bad request")
     req_error_4xx.response = response_req_4xx
     assert _should_retry_on(policy, req_error_4xx) is False
+
+    # Should not retry on requests.HTTPError with 4xx status code,
+    # as raised by raise_for_status() on a real response
+    real_response_404 = requests.Response()
+    real_response_404.status_code = 404
+    real_response_404.url = "http://example.com/missing"
+    try:
+        real_response_404.raise_for_status()
+    except requests.HTTPError as real_error_404:
+        assert _should_retry_on(policy, real_error_404) is False
+    else:
+        raise AssertionError("raise_for_status() did not raise for a 404")
 
     # Should retry on requests.HTTPError with no response
     req_error_no_resp = requests.HTTPError("connection error")
