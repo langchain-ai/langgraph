@@ -41,8 +41,15 @@ class ParentState(TypedDict):
     result: str
 
 
-def keyed(key: str) -> RunnableConfig:
-    return {"configurable": {"subgraph_key": key}}
+def keyed(key: str, config: RunnableConfig | None = None) -> RunnableConfig:
+    """Config selecting a keyed subgraph instance. Pass the node's own `config`
+    when calling from an async node: below Python 3.11 the ambient config is
+    not visible inside async nodes, so a subgraph call needs it explicitly."""
+    base = dict(config or {})
+    return {
+        **base,
+        "configurable": {**base.get("configurable", {}), "subgraph_key": key},
+    }
 
 
 def texts(result: dict) -> list[str]:
@@ -595,21 +602,24 @@ async def test_async_parallel_keyed_and_time_travel(
     fruit = make_agent("fruit")
     turn = 0
 
-    async def call(state: ParentState) -> dict:
+    async def call(state: ParentState, config: RunnableConfig) -> dict:
         nonlocal turn
         turn += 1
         if turn == 1:
             outs = await asyncio.gather(
                 fruit.ainvoke(
-                    {"messages": [HumanMessage(content="apples")]}, keyed("a")
+                    {"messages": [HumanMessage(content="apples")]},
+                    keyed("a", config),
                 ),
                 fruit.ainvoke(
-                    {"messages": [HumanMessage(content="bananas")]}, keyed("b")
+                    {"messages": [HumanMessage(content="bananas")]},
+                    keyed("b", config),
                 ),
             )
             return {"result": repr([texts(o) for o in outs])}
         r = await fruit.ainvoke(
-            {"messages": [HumanMessage(content=state["topic"])]}, keyed("a")
+            {"messages": [HumanMessage(content=state["topic"])]},
+            keyed("a", config),
         )
         return {"result": repr(texts(r))}
 
