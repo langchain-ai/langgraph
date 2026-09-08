@@ -1185,6 +1185,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         debug: bool = False,
         name: str | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+        context: Any | None = None,
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
@@ -1397,6 +1398,11 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         for start, branches in self.branches.items():
             for name, branch in branches.items():
                 compiled.attach_branch(start, name, branch)
+
+        if context is not None:
+            # graph-level context binding: server layers can supply run-scoped
+            # context here instead of seeding the private runtime slot (#7990)
+            compiled.bound_context = context
 
         return compiled.validate()
 
