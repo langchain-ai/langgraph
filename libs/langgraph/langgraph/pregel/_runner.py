@@ -100,6 +100,9 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
         self.should_stop = should_stop
         self.counter = 0
         self.done: set[F] = set()
+        # Set once a stop condition has been detected, so later completions don't
+        # re-run the check.
+        self._stop = False
 
     def __setitem__(
         self,
@@ -128,7 +131,15 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
                 self.counter -= 1
                 # Wake waiter when all tracked futures are done, or when runner-level
                 # stop condition is met (for example, a non-handled fatal exception).
-                if self.counter == 0 or self.should_stop(self.done):
+                #
+                # Only the newly finished future needs checking: futures already in
+                # `done` were checked when they were added and cannot change state
+                # afterwards, so rescanning the whole set on every completion is
+                # O(n^2) in the number of tasks.
+                if self.counter == 0 or self._stop:
+                    self.event.set()
+                elif self.should_stop({fut}):
+                    self._stop = True
                     self.event.set()
 
 
