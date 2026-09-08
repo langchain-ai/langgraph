@@ -1603,6 +1603,12 @@ def _deploy_cmd(
 
     # -- 1. Preflight --
     validate_deploy_commands(install_command, build_command)
+    if not config.exists():
+        raise click.ClickException(
+            "We couldn't find a langgraph.json file. Run `langgraph deploy` from "
+            "the root of a LangSmith Deployment project. To get started, visit "
+            "https://docs.langchain.com/langsmith/application-structure."
+        )
     config_json = langgraph_cli.config.validate_config_file(config)
     warn_non_wolfi_distro(config_json, emit=em.note)
 
