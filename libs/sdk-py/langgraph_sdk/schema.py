@@ -295,6 +295,8 @@ class Interrupt(TypedDict):
     """The value associated with the interrupt."""
     id: str
     """The ID of the interrupt. Can be used to resume the interrupt."""
+    response_schema: NotRequired[dict[str, Any]]
+    """JSON schema describing the expected response format, if specified."""
 
 
 class Thread(TypedDict):
