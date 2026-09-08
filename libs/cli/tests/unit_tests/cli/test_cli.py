@@ -329,7 +329,7 @@ def test_deploy_missing_config_shows_actionable_error(tmp_path, monkeypatch) -> 
     assert result.exit_code == 1
     assert "We couldn't find a langgraph.json file." in result.output
     assert "Run `langgraph deploy` from the root" in result.output
-    assert "https://docs.langchain.com/langsmith/application-structure" in result.output
+    assert "https://docs.langchain.com/langsmith/deployment-quickstart" in result.output
     assert "Traceback" not in result.output
 
 

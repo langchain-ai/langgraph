@@ -1607,7 +1607,7 @@ def _deploy_cmd(
         message = (
             "We couldn't find a langgraph.json file. Run `langgraph deploy` from "
             "the root of a LangSmith Deployment project. To get started, visit "
-            "https://docs.langchain.com/langsmith/application-structure."
+            "https://docs.langchain.com/langsmith/deployment-quickstart."
         )
         if json_output:
             em.error(message)
