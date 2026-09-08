@@ -1245,6 +1245,7 @@ def prepare_node_error_handler_task(
         translated_task_path,
         writers=proc.flat_writers,
         subgraphs=proc.subgraphs,
+        timeout=proc.timeout,
     )
 
 

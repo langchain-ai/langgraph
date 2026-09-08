@@ -64,6 +64,7 @@ from langgraph.errors import (
     GraphRecursionError,
     InvalidUpdateError,
     NodeError,
+    NodeTimeoutError,
     ParentCommand,
 )
 from langgraph.func import entrypoint, task
@@ -9716,3 +9717,58 @@ async def test_node_error_handler_handles_subgraph_internal_failure_async() -> N
     assert result["foo"] == "handled_async_subgraph"
     assert captured["from_node_name"] == "subgraph_node"
     assert isinstance(captured["from_node_error"], BaseException)
+
+
+async def test_error_handler_respects_node_default_timeout_async() -> None:
+    """Error-handler tasks must honor the timeout from `set_node_defaults`.
+
+    Regression: `prepare_node_error_handler_task` built the handler's task
+    without the node's `timeout`, so a handler that overran the default
+    timeout was never cancelled - the documented "timeout defaults apply to
+    error-handler nodes" behavior silently did nothing.
+    """
+
+    class State(TypedDict):
+        foo: str
+
+    async def failing_node(state: State) -> State:
+        raise ValueError("boom")
+
+    async def slow_handler(state: State, error: NodeError) -> State:
+        await asyncio.sleep(5)
+        return {"foo": "handled"}
+
+    graph = (
+        StateGraph(State)
+        .set_node_defaults(timeout=0.1)
+        .add_node("failing", failing_node, error_handler=slow_handler)
+        .add_edge(START, "failing")
+        .compile()
+    )
+
+    with pytest.raises(NodeTimeoutError):
+        await graph.ainvoke({"foo": ""})
+
+
+async def test_error_handler_within_node_default_timeout_async() -> None:
+    """A handler that finishes within the default timeout still runs."""
+
+    class State(TypedDict):
+        foo: str
+
+    async def failing_node(state: State) -> State:
+        raise ValueError("boom")
+
+    async def fast_handler(state: State, error: NodeError) -> State:
+        return {"foo": "handled"}
+
+    graph = (
+        StateGraph(State)
+        .set_node_defaults(timeout=5)
+        .add_node("failing", failing_node, error_handler=fast_handler)
+        .add_edge(START, "failing")
+        .compile()
+    )
+
+    result = await graph.ainvoke({"foo": ""})
+    assert result["foo"] == "handled"
