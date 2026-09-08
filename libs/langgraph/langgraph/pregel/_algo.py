@@ -73,6 +73,7 @@ from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel._call import get_runnable_for_task, identifier
 from langgraph.pregel._io import read_channels
 from langgraph.pregel._log import logger
+from langgraph.pregel._messages import StreamMessagesHandler
 from langgraph.pregel._read import INPUT_CACHE_KEY_TYPE, PregelNode
 from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
 from langgraph.types import (
@@ -890,6 +891,23 @@ def prepare_push_task_functional(
                 run_id=str(rid) if (rid := config.get("run_id")) else None,
             ),
         )
+        # Use original callback selection to preserve step-tag behaviour.
+        # When call.callbacks is truthy the 'or' would skip manager.get_child(),
+        # losing StreamMessagesHandler.  Inject it explicitly as a handler list so
+        # it is added to the copy of call.callbacks without changing its tags
+        # (merge_configs treats a list value as add_handler calls, not a tag merge).
+        callbacks: Callbacks = call.callbacks or (
+            manager.get_child(f"graph:step:{step}") if manager else None
+        )
+        if manager and call.callbacks:
+            streaming_handlers: list[StreamMessagesHandler] = [
+                h for h in manager.handlers if isinstance(h, StreamMessagesHandler)
+            ]
+            if streaming_handlers:
+                callbacks = merge_configs(
+                    cast(RunnableConfig, {"callbacks": callbacks}),
+                    cast(RunnableConfig, {"callbacks": streaming_handlers}),
+                ).get("callbacks")
         return PregelExecutableTask(
             name,
             call.input,
@@ -898,8 +916,7 @@ def prepare_push_task_functional(
             patch_config(
                 merge_configs(config, {"metadata": metadata}),
                 run_name=name,
-                callbacks=call.callbacks
-                or (manager.get_child(f"graph:step:{step}") if manager else None),
+                callbacks=callbacks,
                 configurable={
                     CONFIG_KEY_TASK_ID: task_id,
                     # deque.extend is thread-safe
