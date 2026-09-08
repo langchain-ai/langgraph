@@ -1,4 +1,5 @@
 import inspect
+import re
 import warnings
 from collections.abc import Awaitable, Callable, Sequence
 from typing import (
@@ -240,6 +241,85 @@ def _get_model(model: LanguageModelLike) -> BaseChatModel:
     return model
 
 
+def _build_text_mode_prompt(tools: Sequence[BaseTool]) -> str:
+    """Build a prompt that instructs the model to use text-based tool calling format."""
+    tool_descriptions = "\n".join(
+        f"- {tool.name}: {tool.description}" for tool in tools
+    )
+    tool_names = ", ".join(tool.name for tool in tools)
+
+    return f"""You have access to tools. To use a tool, respond in EXACTLY this format:
+
+Thought: <your reasoning>
+Action: <tool_name>
+Action Input: <the input value>
+
+Available tools:
+{tool_descriptions}
+
+Tool names: {tool_names}
+
+After seeing the Observation with the tool result, provide your final answer.
+If you don't need to use a tool, respond directly without using the Action format."""
+
+
+def _parse_text_tool_call(
+    content: str, tools_by_name: dict[str, BaseTool]
+) -> tuple[str, str, str | None] | None:
+    """Parse Action/Action Input from text response.
+
+    Returns (tool_name, tool_input, first_arg_name) or None if no tool call found.
+    """
+    action_match = re.search(r"Action:\s*([^\n]+)", content, re.IGNORECASE)
+    input_match = re.search(r"Action Input:\s*([^\n]+)", content, re.IGNORECASE)
+
+    if action_match:
+        tool_name = action_match.group(1).strip()
+        # Clean up tool name - remove punctuation
+        tool_name_clean = re.sub(r"[^\w_]", "", tool_name).lower()
+        tool_input = input_match.group(1).strip() if input_match else ""
+
+        # Find matching tool (case-insensitive)
+        for name, tool in tools_by_name.items():
+            if name.lower() == tool_name_clean:
+                # Get first argument name from schema
+                first_arg = None
+                if tool.args_schema:
+                    schema = tool.args_schema.model_json_schema()
+                    props = schema.get("properties", {})
+                    if props:
+                        first_arg = list(props.keys())[0]
+                return name, tool_input, first_arg
+
+    return None
+
+
+def _convert_text_to_tool_calls(
+    response: AIMessage, tools_by_name: dict[str, BaseTool]
+) -> AIMessage:
+    """Convert text-based Action/Action Input to tool_calls format."""
+    parsed = _parse_text_tool_call(response.content, tools_by_name)
+
+    if parsed:
+        tool_name, tool_input, first_arg = parsed
+        args = {first_arg: tool_input} if first_arg and tool_input else {}
+
+        from langchain_core.messages import ToolCall
+
+        tool_call = ToolCall(
+            name=tool_name,
+            args=args,
+            id=f"call_{tool_name}_{id(response)}",
+        )
+        return AIMessage(
+            content=response.content,
+            tool_calls=[tool_call],
+            id=response.id,
+        )
+
+    return response
+
+
 def _validate_chat_history(
     messages: Sequence[BaseMessage],
 ) -> None:
@@ -304,6 +384,7 @@ def create_react_agent(
     debug: bool = False,
     version: Literal["v1", "v2"] = "v2",
     name: str | None = None,
+    text_mode: bool = False,
     **deprecated_kwargs: Any,
 ) -> CompiledStateGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
@@ -464,6 +545,16 @@ def create_react_agent(
                 node using the [Send](https://langchain-ai.github.io/langgraph/concepts/low_level/#send)
                 API.
         name: An optional name for the `CompiledStateGraph`.
+        text_mode: If True, uses text-based tool calling instead of native tool binding.
+            This is useful for models that don't support native tool/function calling.
+            When enabled, the agent will:
+
+            - Add tool descriptions to the prompt instead of binding tools
+            - Parse "Action:" and "Action Input:" from the model's text response
+            - Convert parsed actions to tool_calls format for execution
+
+            This allows models like Perplexity Sonar, older OpenAI models, or other
+            LLMs without tool calling support to work with the ReAct agent pattern.
             This name will be automatically used when adding ReAct agent graph to another graph as a subgraph node -
             particularly useful for building multi-agent systems.
 
@@ -579,15 +670,30 @@ def create_react_agent(
 
             model = cast(BaseChatModel, init_chat_model(model))
 
-        if (
+        if text_mode:
+            # In text_mode, don't bind tools - use prompt-based tool calling
+            text_mode_tool_prompt = _build_text_mode_prompt(tool_classes)
+            # Combine user prompt with text mode instructions
+            if prompt is None:
+                combined_prompt = text_mode_tool_prompt
+            elif isinstance(prompt, str):
+                combined_prompt = prompt + "\n\n" + text_mode_tool_prompt
+            elif isinstance(prompt, SystemMessage):
+                combined_prompt = prompt.content + "\n\n" + text_mode_tool_prompt
+            else:
+                combined_prompt = text_mode_tool_prompt
+
+            static_model = _get_prompt_runnable(combined_prompt) | model  # type: ignore[operator]
+        elif (
             _should_bind_tools(model, tool_classes, num_builtin=len(llm_builtin_tools))  # type: ignore[arg-type]
             and len(tool_classes + llm_builtin_tools) > 0
         ):
             model = cast(BaseChatModel, model).bind_tools(
                 tool_classes + llm_builtin_tools  # type: ignore[operator]
             )
-
-        static_model: Runnable | None = _get_prompt_runnable(prompt) | model  # type: ignore[operator]
+            static_model = _get_prompt_runnable(prompt) | model  # type: ignore[operator]
+        else:
+            static_model = _get_prompt_runnable(prompt) | model  # type: ignore[operator]
     else:
         # For dynamic models, we'll create the runnable at runtime
         static_model = None
@@ -678,6 +784,10 @@ def create_react_agent(
         else:
             response = cast(AIMessage, static_model.invoke(model_input, config))  # type: ignore[union-attr]
 
+        # In text_mode, parse text response and convert to tool_calls
+        if text_mode and tool_calling_enabled:
+            response = _convert_text_to_tool_calls(response, tool_node.tools_by_name)
+
         # add agent name to the AIMessage
         response.name = name
 
@@ -705,6 +815,10 @@ def create_react_agent(
             response = cast(AIMessage, await dynamic_model.ainvoke(model_input, config))  # type: ignore[arg-type]
         else:
             response = cast(AIMessage, await static_model.ainvoke(model_input, config))  # type: ignore[union-attr]
+
+        # In text_mode, parse text response and convert to tool_calls
+        if text_mode and tool_calling_enabled:
+            response = _convert_text_to_tool_calls(response, tool_node.tools_by_name)
 
         # add agent name to the AIMessage
         response.name = name
