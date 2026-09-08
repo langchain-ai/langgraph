@@ -899,6 +899,21 @@ class PregelLoop:
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
             ]
 
+        has_null_resume = (
+            input_is_command
+            and (resume := cast(Command, self.input).resume) is not None
+            and not (
+                isinstance(resume, dict)
+                and all(is_xxh3_128_hexdigest(k) for k in resume)
+            )
+        )
+        if not has_null_resume:
+            self.checkpoint_pending_writes = [
+                w
+                for w in self.checkpoint_pending_writes
+                if not (w[0] == NULL_TASK_ID and w[1] == RESUME)
+            ]
+
         # map command to writes
         if input_is_command:
             if (resume := cast(Command, self.input).resume) is not None:
