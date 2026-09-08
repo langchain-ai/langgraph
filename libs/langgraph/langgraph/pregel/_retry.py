@@ -613,6 +613,9 @@ def run_with_retry(
         try:
             # clear any writes from previous attempts
             task.writes.clear()
+            # record the call against this node (per-node call limit)
+            if isinstance(runtime, Runtime):
+                runtime.record_node_call(task.name)
             # run the task
             return task.proc.invoke(task.input, config)
         except ParentCommand as exc:
