@@ -165,10 +165,16 @@ jobs:
 
   sdk-py-integration-test:
     needs: changes
-    if: needs.changes.outputs.sdk_py == 'true'
+    # This suite builds and runs PR-controlled integration files with
+    # LANGSMITH_API_KEY available to the container. Keep it off pull_request
+    # runs so repository secrets are only exposed on trusted refs.
+    if: github.event_name != 'pull_request' && needs.changes.outputs.sdk_py == 'true'
     name: "sdk-py integration test"
     uses: ./.github/workflows/_sdk_integration_test.yml
-    secrets: inherit
+    secrets:
+      LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_RO_TOKEN: ${{ secrets.DOCKERHUB_RO_TOKEN }}
 
   ci_success:
     name: "CI Success"
