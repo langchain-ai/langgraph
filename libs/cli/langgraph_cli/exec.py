@@ -147,7 +147,7 @@ async def monitor_stream(
                 on_line = None
                 display = True
 
-    """Adapted from asyncio.StreamReader.readline() to handle LimitOverrunError."""
+    """Monitor stream output line by line, handling buffer overruns gracefully."""
     sep = b"\n"
     seplen = len(sep)
     while True:
@@ -158,12 +158,38 @@ async def monitor_stream(
             line = e.partial
             overrun = False
         except asyncio.LimitOverrunError as e:
-            if stream._buffer.startswith(sep, e.consumed):
-                line = stream._buffer[: e.consumed + seplen]
-            else:
-                line = stream._buffer.clear()
+            # Buffer limit exceeded - read what we can and continue
+            # Read up to the consumed bytes (the limit)
+            line = await stream.read(e.consumed)
             overrun = True
-            stream._maybe_resume_transport()
+            
+            # Check if the next byte is the separator
+            peek = await stream.read(seplen)
+            if peek == sep:
+                # Include the separator in the line
+                line += peek
+            elif peek:
+                # Not a separator, we'll handle this data in the next iteration
+                # Put it back by reading the rest and reconstructing
+                # Since we can't "unread", we'll just continue reading until we find a separator
+                remaining = bytearray(peek)
+                while True:
+                    try:
+                        rest = await stream.readuntil(sep)
+                        remaining.extend(rest)
+                        break
+                    except asyncio.IncompleteReadError as e2:
+                        remaining.extend(e2.partial)
+                        break
+                    except asyncio.LimitOverrunError:
+                        # Another overrun, read in chunks
+                        chunk = await stream.read(8192)
+                        if not chunk:
+                            break
+                        remaining.extend(chunk)
+                        if sep in chunk:
+                            break
+                line = bytes(remaining)
         await asyncio.to_thread(handle, line, overrun)
         if line == b"":
             break
