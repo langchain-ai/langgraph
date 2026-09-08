@@ -191,14 +191,8 @@ def add_messages(
     if not isinstance(right, list):
         right = [right]  # type: ignore[assignment]
     # coerce to message
-    left = [
-        message_chunk_to_message(cast(BaseMessageChunk, m))
-        for m in convert_to_messages(left)
-    ]
-    right = [
-        message_chunk_to_message(cast(BaseMessageChunk, m))
-        for m in convert_to_messages(right)
-    ]
+    left = [message_chunk_to_message(m) for m in convert_to_messages(left)]
+    right = [message_chunk_to_message(m) for m in convert_to_messages(right)]
     # assign missing ids
     for m in left:
         if m.id is None:
