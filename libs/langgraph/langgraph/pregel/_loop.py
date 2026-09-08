@@ -437,9 +437,17 @@ class PregelLoop:
             writes_to_save = writes
 
         # check if any writes are to an UntrackedValue channel
-        if any(
-            isinstance(channel, UntrackedValue) for channel in self.channels.values()
-        ):
+        # Whether any channel is an UntrackedValue depends only on `channels`,
+        # which is fixed for the lifetime of the loop - compute it once instead of
+        # rescanning every channel on every put_writes (O(tasks * channels)).
+        has_untracked = getattr(self, "_has_untracked_value", None)
+        if has_untracked is None:
+            has_untracked = any(
+                isinstance(channel, UntrackedValue)
+                for channel in self.channels.values()
+            )
+            self._has_untracked_value = has_untracked
+        if has_untracked:
             # we do not persist untracked values in checkpoints
             writes_to_save = [
                 # sanitize UntrackedValues that are nested within Send packets
