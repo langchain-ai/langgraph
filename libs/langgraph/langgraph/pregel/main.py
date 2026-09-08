@@ -2870,7 +2870,12 @@ class Pregel(
             server_info = _build_server_info(config, parent_runtime)
 
             runtime = Runtime(
-                context=_coerce_context(self.context_schema, context),
+                context=_coerce_context(
+                    self.context_schema,
+                    context
+                    if context is not None
+                    else getattr(self, "bound_context", None),
+                ),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
@@ -3313,7 +3318,12 @@ class Pregel(
             server_info = _build_server_info(config, parent_runtime)
 
             runtime = Runtime(
-                context=_coerce_context(self.context_schema, context),
+                context=_coerce_context(
+                    self.context_schema,
+                    context
+                    if context is not None
+                    else getattr(self, "bound_context", None),
+                ),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
