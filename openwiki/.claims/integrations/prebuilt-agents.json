@@ -1,0 +1,230 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:0742925da1ba9fb7025338e614c60c9f8c476bb8dfedf39fc71e1f4b0bd18048",
+  "claims": [
+    {
+      "id": "claim_d4d60e9b8ac44560b9ebb4cc3244b9ff",
+      "statement": "create_react_agent() is a factory function that builds a compiled StateGraph implementing a ReAct-style agent loop: it takes a language model and tools as input, automatically binds tools to the model, creates an \"agent\" node for LLM calls and a \"tools\" node for tool execution via ToolNode, routes conditionally between them based on tool call presence, and returns a CompiledStateGraph runnable.",
+      "evidence": [
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L278-L308",
+          "version": "repo-lines-v1:sha256:57fc403d0f6bb9cec6ccecea81eeece0dfd536fe6a3dda17709e2194ca8053b2:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4ZmZiZTBjNThhOWIyMzc4MzNkNjhjMWFiMTVhYTM4Yzk4NjAxNzMxN2ExY2I3YWJkZDg2NjFhODQ4YWJhNTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEyYjlhODRhZDBiOTYyNjY0ZjA1M2VhZGMxNGE4YTAwMjZmMzYwNTNhYjE3MTRiNTgyZTkyM2I4MTBkOTA4NjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU3ZDZkZWZkMmQ5YTg1ZDcwY2VlYjNlYWQ5MWZhZmQ2YzhkZmRhY2NlOWU2YmFkY2I1ZDk5M2MxZmIyNTYwMzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE5MzVjOWIwZmVkYTBhYjAxNzEyZmRlY2E0MjkxMTkwMDRkNjFiMjg3NGVhYmRjNmE3MjkyMTQxZGE5NmNlNmIifQ"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L475-L516",
+          "version": "repo-lines-v1:sha256:cd27236d2a3417e9e3a1b463a98314be4c34314f4fee1693475365c298ea2409:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJmODQ2MzEwYTA4NzRmNGQyNjIxZGZlODIzYmE3YjQ2NDIyZjFjMGI3N2ZkZWY2MjhlNGM3YmRjNWU2YmM5Y2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2YTcxNTI1NzJlZTg0ZjEwOTA2Yzc0YjlmMmE5MjQzNGRkYWIwZTNjNDI4MTNiMDRlNTk3ZWZjZWM5NTFiMjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk2ODhlZjFkZGYwMDAyZDk5OGNkMjEwYzk1MjVhOGYzYmMwZWNiYjEzYjc1MTZlZTJmYzM4ZjUyYzFjNGNjODYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgwNDk5NmFkZWFiMGU1Nzc2ODU4NDlhYjU2NjNkYjI5MzZhNmZkNWRkNGZkYTFjOTdhMDU5NGIxYTc1MGIzODgifQ"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L862-L895",
+          "version": "repo-lines-v1:sha256:cbcd6783e7a6a64317dd72aae96f282ad430b1a308716168a23bc861ec04844a:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZkMTNjYzY2OGRmMGUxYzQ0ZjBkMjRiMjg1OTE0ZTRhMjRjMDVlZWYyZTY4ZTQ0ZjFkMjM2ZTM3OTI1NWU0NDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5YzcxNDk3Y2ZjODJlNmZlMGZmZmYwYjA2MjM2NWVmNDk3MTUzODhhNjU0N2I5N2ExMzAwZjdlZWEyOGYwMmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYzMzVkOTZhMTI0NWZlYjgxNWEwODMzOGIzZmEyMDY2ODVkZDRlMDRlMWJlMDI2MDFmMDdhYmU1MDQ4ZjNmZWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgzYjAzYmEyMjQ5ODFjZDcwZjU1OTE3NTM2ZDdhZDc4NTE2MzE4ZTdiODQxY2M5ODY0M2JlMWRhMDYzNGFjNGMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c64b5928ee9c446698d5296cd3d4acec",
+      "statement": "Agent state uses a messages list with add_messages reducer that deduplicates and accumulates conversation history across multiple agent-tool-agent cycles, enabling the model to see the full interaction context including tool results in ToolMessage format.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/message.py#L61-L200",
+          "version": "repo-lines-v1:sha256:815d836112d70f302994d67962f63e1675534a349ae0fe3f9e8809f6c63cfada:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzMDg5ODllY2U0MzA1NWYwMTY5N2VmOGE5OTA5OTJhMDFhZGU5NGJjZDZmZTg1ZmIwOGQ0ZWFlMDc5NmJiZWJlIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIwMWI2ZmZhMjVkZTAyYzYxOTAwZTgwYzQxMTc3NWEyNzFkZjQ3YzUxNDA2Y2FiOWZkMTRmOWVhNmI3OTU0OWNkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI2ZWVkM2ZjYjdmYmI4MDA1YTgxY2I4N2UxYTg2NzVjZDA5NGE1OTc5YTUzMTViYWE4ODg0OWQwZDI2ZDQxNzgwIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJmNWZiZTIzOGMxNjdiYjNhNDlmMGI5ZWVmZTg1YmY4ZjU2ZDcwOGVjNzQxOWQ4MzgxYmMxYTA2YzNjNmI3NThiIn0"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L57-L62",
+          "version": "repo-lines-v1:sha256:2f006ebced37bf36c2dd3a98282d37a3b26c036435a52e98136a90fda6416056:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDg2NzU5YTk1N2I0YjkxNjBkYmUxYjMyMDAyMmQ3YzY5N2Y3ZjY2MDMzYzk4ZGMwYWU0MjY1YmNmYmJhNjRiOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMGQyMzBhMTU5NmQxMjJkMWNkZjBjZGNjOWQ5YWUxNGMyNGRmNjkyM2NiODk0ZWQxMGFhN2NmYmZiNGJlMWNmOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzNmOWJjMGExZDVjYTIxNzU5YmFhYTI2NGNmODUwZGIyZTk4Y2M1Mjk2OGExZjhlMTllNWZjM2E2ZGFiNDI5NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzRiZGRhNmY3OTdkMDAzODM3NmQ3M2QzMTg3OGY4NzFiMTk0Mjk3YTZjZTFmZTY2NmQ3ZmQwZTI2YWYwM2NmYyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_d4ac8b2341f64e9d8d22f0274eb514b4",
+      "statement": "ToolNode is a RunnableCallable that extracts tool calls from AIMessage tool_calls or direct tool_call input formats, validates tool names against its tools_by_name registry, injects state/store/runtime context into tool parameters via InjectedState/InjectedStore annotations, executes tools in parallel via thread pool or async executor, handles errors per handle_tool_errors configuration, and returns ToolMessage objects with results or error content.",
+      "evidence": [
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/tool_node.py#L1315-L1400",
+          "version": "repo-lines-v1:sha256:d05fec22e0593b8e7a137f26caf37424291ec9128da40189373c8651bd5bf780:eyJzZWxlY3RlZExpbmVDb3VudCI6ODYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk5NGFjMTFhNDY0NzA2NzIyMDk0ZmFmM2VkMmFjYzUzMjdmZDliMWE3NzkyYTY0OWVkYWNiZDAwMWI2YWQ1NWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU2NGI4OTY5MGI3ZjUwZmUyOGQyZTA5NTc0ZTJhMjBlNGE0ZDk2ODcyZWU0MzMxMzU1ZmFkZTg4ZmNiYmUyZjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdmMmU1NWFiY2MwMjNlZmI1MjRlNmRhMmJiM2Q1YmYyNDNmNjU4ODBhMWMzMWI1YzU1ZjVmZDYxOWNhNmJjYTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdiMjkxZTliMTY0NGI0NGQzMjRmMjI2MTllZjQ1YzM2YjJlMmFlYjc2YzM3ZmQxYTBmNTJkZTgzZGVhMjAwYzUifQ"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/tool_node.py#L622-L740",
+          "version": "repo-lines-v1:sha256:12859b4dc78fbcc80806513baf6fbd31f133f15591100b88fd97c1fde69538ba:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE5LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJlOTMwODIxNzUxNDRjYjVhYWQ5NjY2YjA0MDFhY2ZiOTVjMGJkMDAyOWJhYmMwMWZhYTU2ZTQyNGIwZDdkYmVjIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIwMWJhNDcxOWM4MGI2ZmU5MTFiMDkxYTdjMDUxMjRiNjRlZWVjZTk2NGUwOWMwNThlZjhmOTgwNWRhY2E1NDZiIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJhNWNmOTg5ZTQyYzY0MzJiNjBiZGY3NWJjNGMwYTk2N2E5OTQyOWI5YTc0OWU4OTQ0NjcwNTUyZjNhMmEwZjljIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJhMDg2NjdlMjZmM2NlMGZhNDkyNjAwZmVjZTY1YmU1ZmJmMzgxODA4N2I0MmM0MDZiY2U1YTNkNDNkOGVjNjQ1In0"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/tool_node.py#L793-L826",
+          "version": "repo-lines-v1:sha256:da0073353f9152e11b002695d5014b21aa3c956fee883c7d152159ea4006b2f3:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyY2M4YmU1ZDIwMGRjYWY1NTFjMjcyZGE5MWRjOTg5ZTM2YmI3NmNmMDVhMzlmNTFmMTUwNmRmOTczMzAzMWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFjZDdiMjFlNGQ1ODhjYzg1N2RhNzA0YTg5NGYxZjZhZWYxMGQzNWEwYzFlOWZmNzZjMzMxM2RkOTBlYTZmMDMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3MmVhOTBiYTlkMDAyNTU0NmRhYmY0MGEwYmU3NDA5ZDIwZGQ0NmZkZjE2OWQzZWVmODY4NzI2OTllZTJiY2MiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRiZDIwMzFmZTNlNjAwZTZiNTVjY2E3ZWNkY2RiZWM2NTU5NDEyNDUwOTNjZWEwMjdhNDM2NzE4YTYxMDBkNmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_bc18b13040fe4346b9c239bdc79406d0",
+      "statement": "tools_condition() is a routing function that examines the last AIMessage in state and returns \"tools\" if tool_calls are present or \"__end__\" if absent, providing the standard conditional logic for tool-calling agent workflows that can be reused in custom StateGraph definitions.",
+      "evidence": [
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/tool_node.py#L1582-L1659",
+          "version": "repo-lines-v1:sha256:ca3e2e8d684d923063d1321b0e0cb5fe381347e31971c8dd99f6ff97a9036ef6:eyJzZWxlY3RlZExpbmVDb3VudCI6NzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg2MWVmZTE3MDY4MDM1MjEwYWYxMjVlYTcxMGYxZjQwOTg2ZWY5MzNmMWU1ZjQxYWM4YjNmMmMxNDdlMmViNTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRkYjEwODAyYTRhMTMxNmE3MWNiZjI3Y2Q4ZDMzODkwNmUwMTI3YjZmOWE2YjAyNjBhODFjN2FhNjRjYjgyNDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM4MzRmOWQ1ODUxNDQ0MTZjODQ3MjNiN2JmOWE3ZmU0NzVjNTg5MzUwZWYzZjA3ZWRjMTc2ZjljMWViNDM5NDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZjMWYwMmZkN2VjMWQ0NjJjMGNiODE4Yjk0OGZmZTRmNzE1YjJjMmM0MzI2MzBjMjMyZGZlMzRkNDI3NDNmYTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6fdc41147430419bb714651f5d4a0430",
+      "statement": "Tools can request graph state, persistent stores, or runtime information using InjectedState, InjectedStore, and ToolRuntime annotations; ToolNode automatically injects these dependencies at invocation time without exposing them to the model, enabling tools to access context while keeping tool schemas clean.",
+      "evidence": [
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/tool_node.py#L1315-L1400",
+          "version": "repo-lines-v1:sha256:d05fec22e0593b8e7a137f26caf37424291ec9128da40189373c8651bd5bf780:eyJzZWxlY3RlZExpbmVDb3VudCI6ODYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk5NGFjMTFhNDY0NzA2NzIyMDk0ZmFmM2VkMmFjYzUzMjdmZDliMWE3NzkyYTY0OWVkYWNiZDAwMWI2YWQ1NWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU2NGI4OTY5MGI3ZjUwZmUyOGQyZTA5NTc0ZTJhMjBlNGE0ZDk2ODcyZWU0MzMxMzU1ZmFkZTg4ZmNiYmUyZjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdmMmU1NWFiY2MwMjNlZmI1MjRlNmRhMmJiM2Q1YmYyNDNmNjU4ODBhMWMzMWI1YzU1ZjVmZDYxOWNhNmJjYTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdiMjkxZTliMTY0NGI0NGQzMjRmMjI2MTllZjQ1YzM2YjJlMmFlYjc2YzM3ZmQxYTBmNTJkZTgzZGVhMjAwYzUifQ"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/tool_node.py#L14-L38",
+          "version": "repo-lines-v1:sha256:de33f22c3e6ce0d2cc44dfbe44fd0cbad00c15c70dd427ec36f39c4231afc086:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1YzIwMGVkYzdhZDkzNjA4ZjVmODVmMTA3MjIwNGM2OWE4MjUyYzQwNGJjNDNhOTE0NzRmODdiNmYxNTRlMmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzMDNlY2RkNGE0ZDEwZjE5YzczZmQ0MmZkMTI0MzdmZDMzNTRhODI2ODE2MDVkYTUyNTVhOTdhMzkwNjhkYmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYzM2IzNzU5YTJjMTJkZDE4YjE0YWM4ZjMyOTcwZDAwNTQ0NzMzMmRjYzg2ZjMzMjJlMTAzMjdhZWM0Nzc1N2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU1YjZlODcwNmI0MzA0N2YyYTZkYjY3ZjEzMjYzODU5NTYwNGU2N2YzNjk2Njg3NmNlMDE1OGYwMDUzZTZiZDEifQ"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/tool_node.py#L1662-L1700",
+          "version": "repo-lines-v1:sha256:910ce387be788f6bbfd895935f1222f90e52c6451e34ee94edb31dfad4cc0c34:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2ZmJhZTBiOTFkNDRmYzBkNDlmNWRlNjkxZGE2ZmM0MzFmMjYwMTM0YmY3MzFlMGUyMWY3NjQ4MDk0MzM0Y2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIzYjk2ZTU2MGQ1MzFlZjM0OWVmYjFkYzkzN2U0ZGVlNjAyMzUzMzk4OGU3ZThlZjA4MDBmMDU0MzBhNmFlZTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI2Nzc4NTdkNTM0N2Y2YjhjZTlhMGI3ZTBiNDZlNTQwZTM4OTdiZjU2NTBkYzQ0MjUyNGQ2YWEzNjA3ZjVlZWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMyNzYxNWRjZDUzNzIyZGU5Y2Y2ZTliYjMzMmQ1NGY4MWRkNGQ1Y2UyZWQ2NDY2OWQxYzc5YjY1N2I0YjRkYzcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1c6eb0d96f254319a60196327276814d",
+      "statement": "ToolNode distinguishes between validation errors (invalid model-provided arguments) and execution errors (tool logic failures); validation errors are caught and returned as ToolMessage for model retry, while execution errors can be configured to propagate or be caught via handle_tool_errors parameter supporting bool, str, Callable, or Exception type patterns.",
+      "evidence": [
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/tool_node.py#L339-L392",
+          "version": "repo-lines-v1:sha256:4b7333389ff7eb96bdb19542eadf478a30cb342a2c473f5e9d80a003e687e798:eyJzZWxlY3RlZExpbmVDb3VudCI6NTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEyYTE1YjhlZmMyM2NjYzc2NzQyYzllZjZlM2QzNzA0Zjc4MjBhMjVmYmRlMTI2YzI2OWNjMjdkZTAzM2NiZDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM2YWRhYjljODgxYzdiODkzZWRhZmNiYzE0YWEyY2Q1OTQ3MDI5YzZmNGM1MzlmN2VjYzA3NTQ2MDAyZTY4MGIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg1MDBjNDcyYmJmOThjODgxNjBhY2ZkMzZjNjA0NjkyNDFmOWEyNjFhZDdhNmUzNjY0YTZkZjQ3NTllZWIwMzEifQ"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/tool_node.py#L510-L563",
+          "version": "repo-lines-v1:sha256:207907e246c6933f32a81746ea8b5e42d2095ddc99048f62ecce535765d8f95a:eyJzZWxlY3RlZExpbmVDb3VudCI6NTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI4MTZhYmM1YjhhY2E5ZDIzZTY4M2UyNDg0YjdkNGQxNTc2MDFjOTdkNTVmYzY2N2Y2NGJiZWZlN2U5M2YwODQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNlN2JhZGY0NjdiMmY5YWJkN2E0N2UwOTMyOTYxOWQzOWI5MDgyZGVkNTVhZGNmYThhY2RkMTEzNTUzMmQ5YTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVhY2E0ZTNlNzViYTAxZGE4OTI5NGJmOTA1OTRjYzdhNDk4ZjAwMWU0MGUwZmY3NmNhMTkwOTIwYjk3MDMwMmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZjMWYwMmZkN2VjMWQ0NjJjMGNiODE4Yjk0OGZmZTRmNzE1YjJjMmM0MzI2MzBjMjMyZGZlMzRkNDI3NDNmYTkifQ"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/tool_node.py#L743-L757",
+          "version": "repo-lines-v1:sha256:5c077dacb3716bdea3f63eebd2ebfdb2c96d1977ecfa89951f9edc8dfcb678f3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlmZDdhMDdhODNkZDE5OTZmYjUxNjg0YjQyYWVjYWY0ZTkwZmI3OGJhNzIzMGU1NDJlZDdiZDAxZDQyMzAxYmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0MTNlOWUzM2I3OGFlMTcxODZlMDNhMDFmNDEwNGMxZjRjMzg5MjQ0ZGM0MjRjZjgwM2NiOGUzZWZjMTVmZGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdjNTUyM2RhNTVkZWJhYThhN2NjNzFiMWQzMTljMWQ1NTc0YmJjMWNhN2Q0OTYzOTc0ODBhMTgxZWNjZTEzMTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMzMGYzNDFiMTlhMzQ1ZjdhOGFjNGE5YTZhMDJjMDBmYjkzZDhkMDc0NzFmNDYyNjkxOGEyOWI5MWJmMGFlNTMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c841ca46f46641f88cf23540176dac1e",
+      "statement": "create_react_agent() supports v1 and v2 versions: v1 processes all tool calls from one message in a single ToolNode invocation, while v2 distributes each tool call to separate tool node instances via the Send API, enabling independent state updates and better support for human-in-the-loop interrupts and post_model_hook configuration.",
+      "evidence": [
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L533-L536",
+          "version": "repo-lines-v1:sha256:6af7e89639dd1da376ce6ec5a914a82b8402ad989e905552a20d5c53a5f80bdc:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzE3MzgwYzc5YWQ5M2JhNDA4NDkzZTRiZDhkYTIxYTEwNTQyYzE1NjBmNGNjMDQ1YjhiMmQ2NDllMGE1NzYzMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTkwOWE1M2E2MThkMDI4ZTFkMzAwMGMwYTdhYmNlZWNiZTVmYjM3ZjRlNTExZWZlNDY2NDNmYWQ2ZTY2ODcyZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmQwNmM2ZWZiZTQwM2EyZDA1MzU4YmVmNGE3NDE1MGVhMDJmZDIwZGMzYTM2MGY3MDc4MzQ5NmY2Nzc2YmVjZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTVkYWJmYzM0ZTY4YzQ2MmFlOTkwZWU1OTQyMTkyMDJiNTEyZjhkMDRhZDNkZGQ5MmUyOGExYTU2OTY0NDkyYSJ9"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L843-L859",
+          "version": "repo-lines-v1:sha256:8dec07fa872c07a57114093d1e7b0e1703a4f07204c8edd7d329929fc0bf3407:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE5N2I0N2JiODFjZTkzY2JhNjdhZmMwODY5OGE4MGNmYTA5M2E4NjY3ZTljOWY5NjUzMzc4MThkNjU3OGQxODUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE0ZmMwM2RmODViMTU3MjdkODRkZDRiYWY2OTViYzYxNjllODE5MTQ3Y2Y5NDc3YzRiNGFlNjM2YjZmZmY3YjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVmZmNjYjExNDNlNWJlOTJhMWVjMjdiYWE2NzlkZWNmMGY0OTk5MzJhYzAyY2FmZjhhMTRiNGNkNmI2ZjBhNzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYyYzc5YTdjY2FhYmE5YzgyNDg0M2VlNjcwNzUxN2U1NDUxMzBhMDkzYWVmODI0MTU4NWJiZmJhYWFkMGVmNGEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6163e6fd05f4461bbf9156a1b684c650",
+      "statement": "create_react_agent() accepts a dynamic model callable with signature (state, runtime) -> BaseChatModel or async equivalent, enabling context-aware model selection at runtime where the callable can choose different models based on graph state and runtime context.",
+      "evidence": [
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L278-L290",
+          "version": "repo-lines-v1:sha256:c6192e83f5fbd5c1afc5f4f32589da922486796ef8ed75ed3c49e091c6a0e248:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4ZmZiZTBjNThhOWIyMzc4MzNkNjhjMWFiMTVhYTM4Yzk4NjAxNzMxN2ExY2I3YWJkZDg2NjFhODQ4YWJhNTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZjOGQxNzgzOTMwNjI5ZGUxNWUwZWIzMjQ5MDhhOTg4ZGY2MThlYmQ3MjI1NmY5ZmJlMjBjMWQ4Zjc1NjljMjEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU3ZDZkZWZkMmQ5YTg1ZDcwY2VlYjNlYWQ5MWZhZmQ2YzhkZmRhY2NlOWU2YmFkY2I1ZDk5M2MxZmIyNTYwMzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJkZWQ5ZWZjZTg2MTA4Yzg4YjY2NDAwYjFiMDhjMGNkMWIxYzRjY2MwMGMyOGQ1YjFhMGMwZmI3ZWNmODEyYWEifQ"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L563-L606",
+          "version": "repo-lines-v1:sha256:225a2d953387fc85839747f000c3a8ca0fd3ae6c96a8fa3ae06995a1292e8dea:eyJzZWxlY3RlZExpbmVDb3VudCI6NDQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJiYWM2ZDMzOTJlY2MxY2QzNjk2ZTI1NmRlZDcyMTE0MmM4ZTdkMjEwZjA0NGIzYWMxNmE2MzBiZTllMGIwZTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI5OTIzN2YxZDdiODA4M2M0NjAzY2NhYzk0NDEyNWYyNTVjM2FjODY0OTUzNTk0MzNiYzBjYzM2NTI4MDQzOTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA1MGFlNTE3NGM3YTAxYjU0NTk3MGQxODZlYTkxNmM2Yzc3YjhkZGUwNDY0MWE2MTA0MDBkMWM4YzhmODQxNDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYyYzY3YzEwZTUxYjIyNmMxMWNlZGM2NzJhYzJjM2M0Yzg1Y2FhZWZhNDQwYTI5M2U5ZWE5NWNhNWI2NzA2ZjIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1c46933011754ba1925775890911cd2f",
+      "statement": "create_react_agent() supports pre_model_hook and post_model_hook parameters for injecting custom nodes before and after LLM calls: pre_model_hook handles message trimming or summarization, post_model_hook enables validation, rejection, or modification of model outputs and human-in-the-loop workflows; post_model_hook is only available in v2.",
+      "evidence": [
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L396-L430",
+          "version": "repo-lines-v1:sha256:a4e31430cf6deef911f8fdf36d12f455819636865ca6c40629a3f74056abdf66:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhZGUyMjA2MWRkOTZlMmM1MDk2Y2EwODkyYTdiZTNiOTMwMDViZDA1Yjg2ZmQ0NWI4MzAyNjFjMmJiN2Y0MWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJlYjc1MjNjNzk2NDE2ZGY4YTViYzJmNzhkOTVhYjk5MjE2M2VjZTFlNzA5ZTExYjg4MGU1Nzk5NzI1NTc2YTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVjMjEwMDAwM2U4YTYwMDQ1YTA5ZGJmOGU4NTcwMTI1YmI0NDMwNjM2NGNmOWRkMzQzYjJlZGE3MzNkZWIwMjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNlNTM1YzVjOGUyOGFjOWM1OWM0Mzg3MWM3ZmE5OTg1ZmJjMmVlNDk0OWY0ZTdhOTcwMTliZDZkYzA2Yzg2YjUifQ"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L874-L895",
+          "version": "repo-lines-v1:sha256:13542a555a60eddba5aa0b55af09e6f9c2ecea443a68d9fd261d3ab53df45b8b:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjczNGRjMjc1MjhmNGZhY2IwYjYwNzk4ZmM1YTFiNjYzYjFkMWZlYzk5ZWVmMzc1M2ViNjgzZTBhZmY2MDVmYjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5YzcxNDk3Y2ZjODJlNmZlMGZmZmYwYjA2MjM2NWVmNDk3MTUzODhhNjU0N2I5N2ExMzAwZjdlZWEyOGYwMmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU3OWM3NmU3NmRiNjVmOGQ0ZDgxMmZhYmFlZDNkY2NkMmUyMDBlZmI0M2JkOTQwNDliNzg2ZWMyNDA3N2NmNjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgzYjAzYmEyMjQ5ODFjZDcwZjU1OTE3NTM2ZDdhZDc4NTE2MzE4ZTdiODQxY2M5ODY0M2JlMWRhMDYzNGFjNGMifQ"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L917-L962",
+          "version": "repo-lines-v1:sha256:2059600276dbcdd4dc46354559a0211c6eee0c384985a26e76577aa41f6b6684:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVjOGIxMTZjMzhkNmM4OGRmYTdkZDVjYmU1OGNjYjNhOWU2NTAzNTc5YzU2ZTU2YmU0ZmMyYTg1N2E3MzU1NDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5MDlhNTNhNjE4ZDAyOGUxZDMwMDBjMGE3YWJjZWVjYmU1ZmIzN2Y0ZTUxMWVmZTQ2NjQzZmFkNmU2Njg3MmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJkN2E2YzgyNDY3OTVmY2Q0MmI2ZGYwYTNlMjQ4N2EwMDE3MjI0OTQ3ODZjZjFjYTI4YjE0MzEyNTFkMTczY2MiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM0NmYxNGFmODQwNDQ2MzBjNGY4NWFlYjljZTliZjk4YTRjMWQ5YTliNTA2ZjZhNTg2ZTUxN2M3MmY2OGRkMDEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_464feb77c47946fa8aae70cf483238c9",
+      "statement": "Agent state includes remaining_steps field that tracks recursion limit progress; when remaining_steps < 2 and tool calls are present, agent returns a \"need more steps\" message instead of executing tools, implementing implicit iteration limits without raising GraphRecursionError.",
+      "evidence": [
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L431-L440",
+          "version": "repo-lines-v1:sha256:378b048cbfbc67cd6d7ee9ef6631ec4d9279458a128df25c54315a8166140f28:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE5Y2JmNzRlMzgwNTNlODYxMGYwNmVkMTA2Mjg0MzZkNTk3YWIxMTE3YjQzNjA4YzI0ZjNhODE2ZGM4ZTlhMzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2OTA0MTA4MDkyOGNkZDcxYWZkOTY2MWQ3MTY3NWQ5NjE4MzA1NjZkOTczMjA0Mjc1ZmUzMDRhNzQ0ODdhYjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA2Njc2ZjNmNjc5MmZlNjc1MDJkMzk5ZDhjYWFlNDRhM2ZmZDdjY2VkZTM1NDI5NWNiNTBlNTBmNDQxZjMzMTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY5ZTkxZTg1MzVlZTFkN2IwYmNlNDgwZjU5ZmFmNmE5ZDNlYTM2MThhOTk3M2QzOGI5MzBmNzQ4NjE3YmIxNmEifQ"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L620-L634",
+          "version": "repo-lines-v1:sha256:cd6867c3487838ce539fe21ef4cbaeb4d1e737959858d518eaf85bc5229f9ece:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwNmNjMmY3Zjc3ODM4YjA4YTY4YTI1ZGIwMmEzOTllODM3OWM0Yjk5MDUxZGNmZTlkZWZkNjhhNjY3OWM0N2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI5N2M3MTI0N2FmM2NkMWVkZjU1NWE3ZDEwNzU5MzE1N2Y2ZGMyYTIyYWYwZGU4MmU3Nzc0YWJmMTBmOGFkZTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFhMTA3YTBhOWJjYWVmMGM3OTgyNTE4ZjRiOTk4MjVjODIyYjg4MzNmYjU5ZTc1YzllYWNmNzI5YTQwOTM0OWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVmMmQwMGIwNTI1MThkYzVjYjVkYjQxODc2OWQwNzQwMTY4Y2I4OGZiZmNjY2UxZjEwMjFlZDFlMjM0NjU4MDcifQ"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L684-L694",
+          "version": "repo-lines-v1:sha256:54f282f9ecfcf75cbe9704c2c24c90df3ae2924843f69e64265485d89936e426:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJiYzZkZjhiMzIyZWUyNjI2YzAzMjk2NTkyOGMzMjRhOTFlODAzNzRmNTQzN2RiMzY3N2RiZDgwZmIxYmMxYzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQzZWY5OTcyMTAzYjExODFiMzY5MzBmNWEyZjk5NzczNzY4YzczZDlmNzk0ZWQ3ZDEyZDVlOTU5OGY3NDU0M2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjUxYjY2ZDU2M2QyNTFkNTY2ZTJkMDk4N2MyZWQyNjg0MzljYjEwODk3OGJjY2Q3MWM2YjVhYWVlYWQyZDM5MjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjliNDFiYThlNTZjMjJjZjgzOGU5MTBjZmI2ZDFlYmI3Y2ZjZDA2ZTU1ZmQwZmMyOWYxNzQyMjFjNGU5ZTRmYjkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_aa9bb8c1b7804a14864a2f51c5f42e20",
+      "statement": "When response_format parameter is provided to create_react_agent(), the agent makes an additional LLM call after the main tool-using loop completes to extract structured output via model.with_structured_output(), supporting schema, pydantic model, or (prompt, schema) tuple formats.",
+      "evidence": [
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L373-L395",
+          "version": "repo-lines-v1:sha256:5ef4ee96d5efa4c2de026d57d4ae1b27cd75da48750bf8eb6037edd6b79df385:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmYzI3MGM0M2U0ZjljNGU0YmQwNGNhMGQ3NWRlNTA1ZmM4N2QyZWQ2MjNjOGIyYmVlOGNmN2UzYWRkODAyMDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRkZjNiOWUwNDFhZDZmZmM4OGI1NWI2YzI1MjM3OWEwMjJjNGI1M2NhOTIwZWUzZjEzZTk0MzRkM2UzZDRjZDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQyZGExZDBmMmJlYjczMjQ4ZDlkNmQ0ZDRmMzQ2YjI1YzNkMjNmY2EwNmUzOGJhZTNmMDczMGY1MjliMTBlZDgifQ"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L744-L785",
+          "version": "repo-lines-v1:sha256:15218704671958ff7c7eadb7ced4abe0f0ab0b4b54d3939f0add54d38ecfc842:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI0MTA4YWM2NTBkMjY1MGRjNTBmZGRiMDFmM2QzY2RlZDgxNjY0NzE2NWZhNGQxMWEwODAyZGQ2YmJmMzg5ZDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEzNTc0YTc0Nzk5YTk1MmIzZTk2NmRlOTIwYTVmODllYWI1ZjRkODBlYzk5NmFiYzY2ZDI1NDZiMTI5N2Q5MWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgxNzBjZTA0ZjE5NGRlYTI3ZWZhZWQwMjU1MDNkMWMxODA4NWI2M2RjMDAxYzA5Yjk5NWMwYTliMDhlMTQ1NDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhZDZkYTc0OGJhNzI5NDEwZDE1YWRlMjBhMTY2YzY2NDg0ZjhiNmYyYmYwOGY4YWFiMGI4ZTNmNGRlZTQxYWMifQ"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L898-L920",
+          "version": "repo-lines-v1:sha256:1918c7411b7b059acaed61dfb72fb0ad7d0a212d3451b0a14204d7844271543b:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyYTc5NDIzNDM4MTY1ZDE4NDQyNGI0YTY0MWJjYjU0OTZjZWQxODdmYWU5ZjE2Yjk2ZWU4YjQ4ZTQ0ZDMxODciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM3ZmJjODA3NDJiODY1NTk4MmQ5YTc0OGM4YTE4ZjNmNDg3MGVhZjM3NmMzMDAxMDgxMDJkZWJjZGU4MTMxYjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY3ZjY2MzhjZTc3ZjA4NzJhMDU2MDY5ODVmOTY2ZmYwMmY1YzcyNTMyMDk5YzNiMzUyMmQzYjE0YjMzZjFhYmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA5OWM3NjAwNjFlOGU2ZDFkMDk3MjA3OGJhMTZlZTdiMjFiNWIxMjY4OTNiZWI1NGZiMzIzNzJmNjNjODVmOTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2f77653567f349faa4a43fc0c2596844",
+      "statement": "ToolNode accepts wrap_tool_call and awrap_tool_call parameters for middleware that intercepts tool execution: middleware receives ToolCallRequest and execute callable, can modify requests or retry execution, returns ToolMessage or Command, enabling use cases like request validation, caching, and multi-attempt execution strategies.",
+      "evidence": [
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/tool_node.py#L202-L283",
+          "version": "repo-lines-v1:sha256:477d47f81284538bb8bff1e5c6f5f5e49c792232a799be0262cfaca97858d7e1:eyJzZWxlY3RlZExpbmVDb3VudCI6ODIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY3NWJkNDE4ZGEyM2IwNTdmYjE0ZGE2NDg5NGM4OTljYjc1MzAwMzQ2YTUxM2YwMjhiOTBlZTkwMTQ1MjkyYjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVkOTg5NmZmZDI2M2M1NTBhZDM2MzZhOTdmYjA0MzBiNDkyNGE4MjJkNGJmOGRlMjZiNTViYWJiNDhjMWFlZDUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjllM2U3YTMyMjI2YmE0MjQ3MmYwMzZkYTU4ZDAzMjFjOTk2MTZmNDRjNGM3OTRmZDQ1YWMwMzQxMzk2OTlkYjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA4MDAwODE0YTE0ZjAwODdmZTYxMTBkNzQ2ZDcxZTVhNWIzM2JiZWEwZTlhZmJjZjdmY2RkMWIwMjMxMTA0YTQifQ"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/tool_node.py#L755-L771",
+          "version": "repo-lines-v1:sha256:ceda5823ce6f63eac0b9aa66f0abb38bfbb1cdb8bb35d7405c5dde19399c45e1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE0YmNjYmEzN2ZiNWE2ZGUzNTM1ZDEzMzQwYjVhMzZhZTgwNjFkZDMzZTYzNmE4MzkyMDA3M2UzYmI5NWM0ZmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwZGUyNTg3MTk2MTQ5MjYwNzFjOGZiMTlmZDg2NjE1MDU1NWYxYjAxMzU0ZjhjZDE2MDNhMTA5YTdkZGFlNDAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNjZDdmMTVlZjVlZGVmMWZjYmJlODZiYzQxZDEyYjM1NWRjOTNmN2M4ZjBmMzQwZTM0YWE4M2EwYmU3YTNlY2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ3MDRmNDk5YTQzODY5ZGYzOWFlMzdiYmFmOGNjYzE3YzU0MmEzODNjZDdkNGE4MWNlYjIzOWU2ZWZmM2E3MjcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_92c096421c6446d480ccb37cc0340631",
+      "statement": "Tools can have return_direct=True flag; when such a tool is executed in the agent loop, execution terminates immediately and returns final state without looping back to the model, enabling short-circuit completion patterns when tool results are self-contained final answers.",
+      "evidence": [
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L595-L597",
+          "version": "repo-lines-v1:sha256:4f05d8ad4f93448e6f8daca725f92452b9e2bd43738ff1998486793a84c89236:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDY3YmFmNDA0ZWVkZmM0NDdjZTFlYzVkMDJjZWJmMDYwYTg0OWVkYzljM2JkZDI2YTM1OGQ2ZGQ4MzIxZjYzZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTRiOGZiOGJhMDk5MjVmYTQwZGNmMTMwNTdkNGE3ZGZhNTY2NTU0MDllMTk5NDUzYmQ2YTViYTc5ZjQyMmYzMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2Y2Nzc4ODBjNzJmNjljNGFmNDVmNmJiMDVhYzMwMzU3NWY3NjFjNTQzNTZhYTM1NDNhNTM1MTg4MDdlOGRhOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNGVjMzdhMWRmOGNkYTg0MGFkZWUwOWE5YWY4MjFkMTM4MjE2MGVhNzE1MmE4Yjk0ZDIyODFhZTk4MjFiODc4YSJ9"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L970-L990",
+          "version": "repo-lines-v1:sha256:779743a68621ac3e485ad0caadd13604b2d21ab384d6354864614e8d26421234:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRjMGE3ZWFkYmUwYWVhZTVhOGVlMGZmYzRlMDc0YTVlZTUyMTQ3MGU4OGMzZjlmMmY4YzI1MWEzZTg1OWM5MjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY3NGRjODFhODljYzUwMzVmMTNhZDgyYmIxM2IwZjliMzlmZDIyODExNDQyZTRmZjczNDlhYjU4Mzg3ZGIzODciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk4NWIwYTczMmQwYjQyYTJmZjRkNTNjMjI1N2Y3YmY2MmMyN2UzNTI4YjE3Mjk1MWVlZGRmNjg0Yjg1OWRiMTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIxNzZlYjYwMmUyYmI3ZTI0OWZkYjM4OThlZWQ2MDE0NzkxNzdmZDgwMjBiNjY0ZDEwMzE4OTE0ZmJmYTA4NDgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_abe7adee65a540798ed4e87b6cc4d38b",
+      "statement": "ValidationNode is a deprecated legacy component for validating tool call arguments against Pydantic schemas without executing tools; it has been moved to langchain.agents and support will be removed in v2.0, replaced by custom error handling in ToolNode or create_agent middleware.",
+      "evidence": [
+        {
+          "resource": "repo://libs/prebuilt/README.md#L88-L119",
+          "version": "repo-lines-v1:sha256:6b962cfa40fdc611ecd02ee1e66c90dd67ac3db96754ab75dd872dd9b27be739:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzYTQzNzU1OWEyMzEwNDJhODVjYWM5OWM5Zjg0OGVjYzUyNDliZjQ0OWYxYzVmZTNlMDIzZDhhZDE2YjcyMzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ5YzI5ZDcwZGQzYWJlMzllMjRiYTZkYjFjMzQ2NDVkN2M4MzQ5NzFiMmIxNzZmMjRjYjdiY2I3NGJhMzQ4ZDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBkZjJlMDAxNmQzMjA2MWVlN2I3Yzc1ZDhjZTFjZTEzMjQxN2JlMmQ1YjM0NjUzMThhNDU3YmZjMTQyZDc1NDMifQ"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/tool_validator.py#L43-L46",
+          "version": "repo-lines-v1:sha256:8ecd7b4cd45059dd191d5c5770e0bffbce7fc90efbe82416b2cd69d413032ded:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjljNjIxNzE1MjA1N2ExOGU0MmIyODkzZGI0MTkzZjVhNzEyZDgxMmMzZGNjZTMyN2RhNTljMDE5YzEzY2U3NiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmFmYmEwNTI3YzM5NTNjNGI2ZTBlNWI1NzM5YmE4MzYxMmY4MDUzYmNkYzk0NjY3MzAxOTNjZDFkNTkwYjQwOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzUzZDYxZjMyMzEwOWJmYzk2NTQyNWQ0OWQ2ZDY2YmNjNGUyYzU0YWYyZTkwM2RiMmY5YzgxZWE0MzNmYmY4YyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTEyMzg1ZTBiNTAxYTFmYjYzOTU4MzM1NzUxM2RiYmNkMjE0Y2JkYjUxNjJkZWIzYzg3MTY0MTZkMzQzZWI4MCJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-03T15:19:56.419Z"
+  }
+}
