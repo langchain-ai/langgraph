@@ -1185,6 +1185,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         debug: bool = False,
         name: str | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+        input_validators: Sequence[Callable[[dict[str, Any]], dict[str, Any]]]
+        | None = None,
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
@@ -1397,6 +1399,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         for start, branches in self.branches.items():
             for name, branch in branches.items():
                 compiled.attach_branch(start, name, branch)
+
+        if input_validators:
+                    compiled.input_validators = list(input_validators)
 
         return compiled.validate()
 
