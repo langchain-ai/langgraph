@@ -29,6 +29,12 @@ PREVIOUS = sys.intern("__previous__")
 CACHE_NS_WRITES = sys.intern("__pregel_ns_writes")
 # cache namespace for node writes
 
+# --- Reserved queue names ---
+QUEUE_NS = sys.intern("__queue__")
+# checkpoint namespace (suffix) holding a graph's queued state updates
+QUEUED = sys.intern("__queued__")
+# channel of a queued-update checkpoint holding the update payload
+
 # --- Reserved config.configurable keys ---
 CONFIG_KEY_SEND = sys.intern("__pregel_send")
 # holds the `write` function that accepts writes to state/edges/reserved keys
