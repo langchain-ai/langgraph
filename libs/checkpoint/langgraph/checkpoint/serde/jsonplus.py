@@ -400,6 +400,30 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             ),
         )
     elif isinstance(obj, datetime):
+        if obj.tzinfo is not None and not isinstance(obj.tzinfo, timezone):
+            # A real zone (e.g. ZoneInfo), not a fixed UTC offset: isoformat()
+            # would bake in the offset in effect at this instant and lose the
+            # zone rule, so DST arithmetic after a round-trip would be wrong.
+            return ormsgpack.Ext(
+                EXT_CONSTRUCTOR_KW_ARGS,
+                _msgpack_enc(
+                    (
+                        obj.__class__.__module__,
+                        obj.__class__.__name__,
+                        {
+                            "year": obj.year,
+                            "month": obj.month,
+                            "day": obj.day,
+                            "hour": obj.hour,
+                            "minute": obj.minute,
+                            "second": obj.second,
+                            "microsecond": obj.microsecond,
+                            "tzinfo": obj.tzinfo,
+                            "fold": obj.fold,
+                        },
+                    ),
+                ),
+            )
         return ormsgpack.Ext(
             EXT_METHOD_SINGLE_ARG,
             _msgpack_enc(

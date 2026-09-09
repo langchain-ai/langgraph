@@ -9,7 +9,7 @@ import sys
 import tempfile
 import uuid
 from collections import deque
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
 from ipaddress import IPv4Address
@@ -334,6 +334,80 @@ def test_serde_jsonplus_bytes() -> None:
 
     assert dumped == ("bytes", some_bytes)
     assert serde.loads_typed(dumped) == some_bytes
+
+
+def test_serde_jsonplus_datetime_zoneinfo_survives_dst_boundary() -> None:
+    """A zone-aware datetime must keep its zone rule, not just its instant."""
+    serde = JsonPlusSerializer(allowed_msgpack_modules=True)
+    tz = ZoneInfo("America/New_York")
+    before = datetime(2026, 3, 7, 9, 0, tzinfo=tz)  # day before US DST starts
+
+    after = serde.loads_typed(serde.dumps_typed(before))
+
+    assert before == after
+    assert isinstance(after.tzinfo, ZoneInfo)
+    assert after.tzinfo.key == "America/New_York"
+    # Same zone arithmetic across the DST boundary must agree, not just the
+    # instant: a fixed-offset restore is off by an hour here.
+    assert (before + timedelta(days=1)).astimezone(tz) == (
+        after + timedelta(days=1)
+    ).astimezone(tz)
+
+
+def test_serde_jsonplus_datetime_fold_preserved() -> None:
+    """`fold` disambiguates the repeated hour at the end of DST."""
+    serde = JsonPlusSerializer(allowed_msgpack_modules=True)
+    tz = ZoneInfo("America/New_York")
+    ambiguous = datetime(2026, 11, 1, 1, 30, tzinfo=tz, fold=1)
+
+    result = serde.loads_typed(serde.dumps_typed(ambiguous))
+
+    assert result.fold == 1
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        datetime(2024, 1, 1, 12, 0, 0),
+        datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone(timedelta(hours=5, minutes=30))),
+        datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+    ],
+    ids=["naive", "fixed_offset", "utc"],
+)
+def test_serde_jsonplus_datetime_non_zone_wire_format_unchanged(
+    value: datetime,
+) -> None:
+    """Naive/fixed-offset/UTC datetimes keep the pre-existing iso encoding."""
+    serde = JsonPlusSerializer(allowed_msgpack_modules=True)
+
+    dumped = serde.dumps_typed(value)
+
+    assert serde.loads_typed(dumped) == value
+    assert (
+        _msgpack_enc(
+            (
+                value.__class__.__module__,
+                value.__class__.__name__,
+                value.isoformat(),
+                "fromisoformat",
+            )
+        )
+        in dumped[1]
+    )
+
+
+def test_serde_jsonplus_datetime_zoneinfo_roundtrips_under_strict_allowlist() -> None:
+    """`datetime` and `zoneinfo.ZoneInfo` are both already safe types, so the
+    zone-aware encoding must not require any allowlist change."""
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    tz = ZoneInfo("America/New_York")
+    aware = datetime(2026, 3, 7, 9, 0, tzinfo=tz)
+
+    result = serde.loads_typed(serde.dumps_typed(aware))
+
+    assert result == aware
+    assert isinstance(result.tzinfo, ZoneInfo)
+    assert result.tzinfo.key == "America/New_York"
 
 
 def test_lc2_json_safe_type_revives_without_allowlist() -> None:
