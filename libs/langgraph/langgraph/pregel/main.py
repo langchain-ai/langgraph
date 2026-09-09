@@ -2523,6 +2523,9 @@ class Pregel(
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
+        if getattr(self, "input_validators", None):
+            for _validator in self.input_validators:
+                values = _validator(values)
         return self.bulk_update_state(config, [[StateUpdate(values, as_node, task_id)]])
 
     async def aupdate_state(
@@ -2536,6 +2539,9 @@ class Pregel(
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
+        if getattr(self, "input_validators", None):
+            for _validator in self.input_validators:
+                values = _validator(values)
         return await self.abulk_update_state(
             config, [[StateUpdate(values, as_node, task_id)]]
         )

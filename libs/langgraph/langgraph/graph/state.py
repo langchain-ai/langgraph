@@ -1400,10 +1400,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             for name, branch in branches.items():
                 compiled.attach_branch(start, name, branch)
 
+        compiled = compiled.validate()
         if input_validators:
-                    compiled.input_validators = list(input_validators)
-
-        return compiled.validate()
+            compiled.input_validators = list(input_validators)
+        return compiled
 
 
 class CompiledStateGraph(
