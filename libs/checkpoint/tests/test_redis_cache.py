@@ -1,12 +1,151 @@
 """Unit tests for Redis cache implementation."""
 
+import fnmatch
+import itertools
 import time
+from typing import Any
 
 import pytest
 import redis
 
 from langgraph.cache.base import FullKey
 from langgraph.cache.redis import RedisCache
+
+
+class FakePipeline:
+    """Minimal in-memory stand-in for a Redis pipeline."""
+
+    def __init__(self, store: dict[str, bytes]) -> None:
+        self.store = store
+
+    def set(self, key: str, value: bytes) -> None:
+        self.store[key] = value
+
+    def setex(self, key: str, ttl: int, value: bytes) -> None:
+        self.store[key] = value
+
+    def execute(self) -> list[Any]:
+        return []
+
+
+class FakeRedis:
+    """Minimal in-memory stand-in for a Redis client (no server needed)."""
+
+    def __init__(self) -> None:
+        self.store: dict[str, bytes] = {}
+
+    def mget(self, keys: list[str]) -> list[bytes | None]:
+        return [self.store.get(key) for key in keys]
+
+    def pipeline(self) -> FakePipeline:
+        return FakePipeline(self.store)
+
+    def keys(self, pattern: str) -> list[str]:
+        return [key for key in self.store if fnmatch.fnmatchcase(key, pattern)]
+
+    def delete(self, *keys: str) -> None:
+        for key in keys:
+            self.store.pop(key, None)
+
+
+class TestRedisCacheKeyEncoding:
+    """Regression tests for issue #8851: non-injective key encoding.
+
+    These tests exercise the key encoding only and do not require a live
+    Redis server.
+    """
+
+    def make_cache(self) -> tuple[RedisCache, FakeRedis]:
+        client = FakeRedis()
+        return RedisCache(client, prefix="test:cache:"), client
+
+    def test_make_key_is_injective(self) -> None:
+        """Distinct FullKeys must map to distinct Redis keys."""
+        cache, _ = self.make_cache()
+        full_keys: list[FullKey] = [
+            (("a", "b"), "k"),
+            (("a:b",), "k"),
+            (("a",), "b:k"),
+            ((), "a:b"),
+            (("a",), "b"),
+            ((), "a"),
+            (("a", "b", "c"), "k"),
+            (("a:b:c",), "k"),
+        ]
+        redis_keys = [cache._make_key(ns, key) for ns, key in full_keys]
+        for (left_full, left), (right_full, right) in itertools.combinations(
+            zip(full_keys, redis_keys, strict=True), 2
+        ):
+            assert left != right, f"{left_full} and {right_full} both encode to {left}"
+
+    def test_parse_key_round_trip(self) -> None:
+        """_parse_key must invert _make_key exactly."""
+        cache, _ = self.make_cache()
+        full_keys: list[FullKey] = [
+            (("a", "b"), "k"),
+            (("a:b",), "k"),
+            (("a",), "b:k"),
+            ((), "a:b"),
+            (("graph:with:colons", "node"), "key"),
+            (("with space", "with%percent"), "with*glob"),
+            ((), "plain"),
+        ]
+        for ns, key in full_keys:
+            assert cache._parse_key(cache._make_key(ns, key)) == (ns, key)
+
+    def test_plain_segments_keep_legacy_encoding(self) -> None:
+        """Keys without reserved characters keep their pre-fix Redis keys."""
+        cache, _ = self.make_cache()
+        assert (
+            cache._make_key(("graph", "node"), "key1") == "test:cache:graph:node:key1"
+        )
+        assert cache._make_key((), "key1") == "test:cache:key1"
+
+    def test_colliding_logical_keys_store_independent_values(self) -> None:
+        """Logical keys that previously collided must not overwrite each other."""
+        cache, _ = self.make_cache()
+        key1: FullKey = (("a", "b"), "k")
+        key2: FullKey = (("a:b",), "k")
+        key3: FullKey = (("a",), "b:k")
+
+        cache.set(
+            {
+                key1: ({"value": 1}, None),
+                key2: ({"value": 2}, None),
+                key3: ({"value": 3}, None),
+            }
+        )
+
+        result = cache.get([key1, key2, key3])
+        assert result[key1] == {"value": 1}
+        assert result[key2] == {"value": 2}
+        assert result[key3] == {"value": 3}
+
+    def test_clear_namespace_with_colon_is_unambiguous(self) -> None:
+        """clear() must not delete a sibling namespace whose encoded prefix
+        would overlap under the old colon-joined encoding."""
+        cache, client = self.make_cache()
+        nested: FullKey = (("a", "b"), "k")
+        colon: FullKey = (("a:b",), "k")
+        cache.set({nested: ({"value": 1}, None), colon: ({"value": 2}, None)})
+
+        # Clearing ("a:b",) must leave ("a", "b") untouched.
+        cache.clear([("a:b",)])
+        result = cache.get([nested, colon])
+        assert result == {nested: {"value": 1}}
+
+        # And clearing ("a",) must clear the nested namespace, not ("a:b",).
+        cache.set({colon: ({"value": 2}, None)})
+        cache.clear([("a",)])
+        result = cache.get([nested, colon])
+        assert result == {colon: {"value": 2}}
+
+    def test_clear_all_with_fake_client(self) -> None:
+        cache, client = self.make_cache()
+        cache.set({(("a:b",), "k"): ({"value": 1}, None)})
+        assert client.store
+        cache.clear()
+        assert not client.store
 
 
 class TestRedisCache:

@@ -2,9 +2,23 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from typing import Any
+from urllib.parse import quote, unquote
 
 from langgraph.cache.base import BaseCache, FullKey, Namespace, ValueT
 from langgraph.checkpoint.serde.base import SerializerProtocol
+
+
+def _encode_segment(segment: str) -> str:
+    """Percent-encode a namespace segment or cache key.
+
+    Escaping every character outside `[A-Za-z0-9_.~-]` guarantees that an
+    encoded segment can never contain the `:` separator (or the Redis glob
+    metacharacters `*`, `?`, `[` and `]`), which makes the joined key
+    injective: distinct `(namespace, key)` pairs always map to distinct
+    Redis keys. Segments without reserved characters are unchanged, so keys
+    produced by earlier releases remain valid for them.
+    """
+    return quote(segment, safe="")
 
 
 class RedisCache(BaseCache[ValueT]):
@@ -29,9 +43,15 @@ class RedisCache(BaseCache[ValueT]):
         self.prefix = prefix
 
     def _make_key(self, ns: Namespace, key: str) -> str:
-        """Create a Redis key from namespace and key."""
-        ns_str = ":".join(ns) if ns else ""
-        return f"{self.prefix}{ns_str}:{key}" if ns_str else f"{self.prefix}{key}"
+        """Create a Redis key from namespace and key.
+
+        Each namespace segment and the key are percent-encoded before being
+        joined with `:` so that separators occurring inside segments cannot
+        collide with the segment boundaries (e.g. `(("a", "b"), "k")` versus
+        `(("a:b",), "k")`).
+        """
+        parts = [_encode_segment(segment) for segment in (*ns, key)]
+        return f"{self.prefix}{':'.join(parts)}"
 
     def _parse_key(self, redis_key: str) -> tuple[Namespace, str]:
         """Parse a Redis key back to namespace and key."""
@@ -41,13 +61,8 @@ class RedisCache(BaseCache[ValueT]):
             )
 
         remaining = redis_key[len(self.prefix) :]
-        if ":" in remaining:
-            parts = remaining.split(":")
-            key = parts[-1]
-            ns_parts = parts[:-1]
-            return (tuple(ns_parts), key)
-        else:
-            return (tuple(), remaining)
+        *ns_parts, key = remaining.split(":")
+        return (tuple(unquote(part) for part in ns_parts), unquote(key))
 
     def get(self, keys: Sequence[FullKey]) -> dict[FullKey, ValueT]:
         """Get the cached values for the given keys."""
@@ -125,7 +140,9 @@ class RedisCache(BaseCache[ValueT]):
                 # Clear specific namespaces
                 keys_to_delete = []
                 for ns in namespaces:
-                    ns_str = ":".join(ns) if ns else ""
+                    # Encoded segments contain no glob metacharacters, so the
+                    # pattern matches exactly the requested namespace.
+                    ns_str = ":".join(_encode_segment(segment) for segment in ns)
                     pattern = (
                         f"{self.prefix}{ns_str}:*" if ns_str else f"{self.prefix}*"
                     )
