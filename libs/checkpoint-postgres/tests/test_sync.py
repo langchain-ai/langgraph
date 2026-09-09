@@ -259,6 +259,26 @@ def test_search(saver_name: str, test_data) -> None:
 
 
 @pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
+def test_delete_thread_ignores_late_writes(saver_name: str) -> None:
+    with _saver(saver_name) as saver:
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-delete",
+                "checkpoint_ns": "",
+            }
+        }
+
+        stored = saver.put(config, empty_checkpoint(), {}, {})
+        saver.delete_thread("thread-delete")
+
+        saver.put(stored, empty_checkpoint(), {"step": 99}, {})
+        saver.put_writes(stored, [("ch", "late-write")], str(uuid4()))
+
+        assert saver.get_tuple({"configurable": {"thread_id": "thread-delete"}}) is None
+        assert list(saver.list({"configurable": {"thread_id": "thread-delete"}})) == []
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
 def test_null_chars(saver_name: str, test_data) -> None:
     with _saver(saver_name) as saver:
         config = saver.put(
