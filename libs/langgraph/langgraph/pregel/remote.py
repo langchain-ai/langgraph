@@ -110,9 +110,33 @@ def _sanitize_config_value(v: Any) -> Any:
 
 
 class RemoteException(Exception):
-    """Exception raised when an error occurs in the remote graph."""
+    """Exception raised when an error occurs in the remote graph.
 
-    pass
+    The raw server payload is preserved on ``payload``, and the structured
+    fields it carries (error type, message, traceback) are rendered into the
+    message. Previously the payload was flattened into a single line, which
+    made remote failures such as ``InvalidUpdateError`` impossible to diagnose.
+    """
+
+    def __init__(self, payload: Any = None) -> None:
+        self.payload = payload
+        super().__init__(_render_remote_payload(payload))
+
+
+def _render_remote_payload(payload: Any) -> str:
+    """Flatten a remote error payload into a readable, detailed message."""
+    if isinstance(payload, dict):
+        lines: list[str] = []
+        for key in ("error", "message", "type"):
+            value = payload.get(key)
+            if value:
+                lines.append(f"{key}: {value}")
+        traceback = payload.get("traceback")
+        if traceback:
+            lines.append(f"traceback:\n{traceback}")
+        if lines:
+            return "\n".join(lines)
+    return str(payload)
 
 
 class RemoteGraph(PregelProtocol):
