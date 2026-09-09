@@ -1399,10 +1399,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             for name, branch in branches.items():
                 compiled.attach_branch(start, name, branch)
 
+        compiled = compiled.validate()
         if context is not None:
-                    compiled.bound_context = context
-
-        return compiled.validate()
+            compiled.bound_context = context
+        return compiled
 
 
 class CompiledStateGraph(
