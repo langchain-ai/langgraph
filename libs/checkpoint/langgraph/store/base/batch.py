@@ -68,10 +68,16 @@ class AsyncBatchedBaseStore(BaseStore):
         self._ensure_task()
 
     def __del__(self) -> None:
+        """Best-effort cleanup of background task.
+
+        Note: For reliable cleanup, use the context manager protocol.
+        """
         try:
-            if self._task:
+            if hasattr(self, "_task") and self._task:
                 self._task.cancel()
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
+            # RuntimeError: Event loop is closed
+            # AttributeError: Attribute doesn't exist during shutdown
             pass
 
     def _ensure_task(self) -> None:
