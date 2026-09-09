@@ -438,6 +438,18 @@ def prepare_next_tasks(
     checkpoint_id_bytes = binascii.unhexlify(checkpoint["id"].replace("-", ""))
     null_version = checkpoint_null_version(checkpoint)
     tasks: list[PregelTask | PregelExecutableTask] = []
+    # Only RESUME writes can match either scratchpad lookup, and the global resume
+    # write is task-independent. Resolve both once per superstep instead of once
+    # per task, so preparing N tasks costs O(writes + N) rather than O(N * writes).
+    null_resume_write: Any = _UNSET
+    resume_writes: list[PendingWrite] = []
+    for w in pending_writes:
+        if w[1] == RESUME:
+            resume_writes.append(w)
+            if w[0] == NULL_TASK_ID and null_resume_write is _UNSET:
+                null_resume_write = w
+    if null_resume_write is _UNSET:
+        null_resume_write = None
     # Consume pending tasks
     tasks_channel = cast(Topic[Send] | None, channels.get(TASKS))
     if tasks_channel and tasks_channel.is_available():
@@ -508,9 +520,15 @@ def prepare_next_tasks(
             input_cache=input_cache,
             cache_policy=cache_policy,
             retry_policy=retry_policy,
+            null_resume_write=null_resume_write,
+            resume_writes=resume_writes,
         ):
             tasks.append(task)
     return {t.id: t for t in tasks}
+
+
+_UNSET: Any = object()
+"""Sentinel for "caller did not supply this", distinct from a supplied `None`."""
 
 
 PUSH_TRIGGER = (PUSH,)
@@ -542,6 +560,8 @@ def prepare_single_task(
     input_cache: dict[INPUT_CACHE_KEY_TYPE, Any] | None = None,
     cache_policy: CachePolicy | None = None,
     retry_policy: Sequence[RetryPolicy] = (),
+    null_resume_write: Any = _UNSET,
+    resume_writes: list[PendingWrite] | None = None,
 ) -> None | PregelTask | PregelExecutableTask:
     """Prepares a single task for the next Pregel step, given a task path, which
     uniquely identifies a PUSH or PULL task within the graph."""
@@ -631,6 +651,8 @@ def prepare_single_task(
                 config[CONF].get(CONFIG_KEY_RESUME_MAP),
                 step,
                 stop,
+                null_resume_write=null_resume_write,
+                resume_writes=resume_writes,
             )
             # create task input
             try:
@@ -1285,28 +1307,36 @@ def _scratchpad(
     resume_map: dict[str, Any] | None,
     step: int,
     stop: int,
+    *,
+    null_resume_write: Any = _UNSET,
+    resume_writes: list[PendingWrite] | None = None,
 ) -> PregelScratchpad:
+    # Only RESUME writes can match either lookup below, so a caller preparing many
+    # tasks at once can pass a pre-filtered list and avoid rescanning every write
+    # once per task (see `prepare_next_tasks`).
+    scan = resume_writes if resume_writes is not None else pending_writes
+    # NOTE: the guard stays on `pending_writes`, not on `scan`, so the `resume_map`
+    # branch below keeps its original behaviour even when there are no RESUME writes.
     if len(pending_writes) > 0:
         # find global resume value
-        for w in pending_writes:
-            if w[0] == NULL_TASK_ID and w[1] == RESUME:
-                null_resume_write = w
-                break
-        else:
-            # None cannot be used as a resume value, because it would be difficult to
-            # distinguish from missing when used over http
-            null_resume_write = None
+        if null_resume_write is _UNSET:
+            for w in scan:
+                if w[0] == NULL_TASK_ID and w[1] == RESUME:
+                    null_resume_write = w
+                    break
+            else:
+                # None cannot be used as a resume value, because it would be difficult to
+                # distinguish from missing when used over http
+                null_resume_write = None
 
         # find task-specific resume value
-        for w in pending_writes:
+        task_resume_write: list[Any] = []
+        for w in scan:
             if w[0] == task_id and w[1] == RESUME:
                 task_resume_write = w[2]
                 if not isinstance(task_resume_write, list):
                     task_resume_write = [task_resume_write]
                 break
-        else:
-            task_resume_write = []
-        del w
 
         # find namespace and task-specific resume value
         if resume_map and namespace_hash in resume_map:
