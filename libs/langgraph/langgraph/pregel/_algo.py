@@ -45,6 +45,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_SEND,
+    CONFIG_KEY_SUBGRAPH_KEY,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
     ERROR,
@@ -68,7 +69,7 @@ from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
-from langgraph.errors import NodeError
+from langgraph.errors import InvalidUpdateError, NodeError
 from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel._call import get_runnable_for_task, identifier
 from langgraph.pregel._io import read_channels
@@ -441,7 +442,20 @@ def prepare_next_tasks(
     # Consume pending tasks
     tasks_channel = cast(Topic[Send] | None, channels.get(TASKS))
     if tasks_channel and tasks_channel.is_available():
-        for idx, _ in enumerate(tasks_channel.get()):
+        seen_keys: set[tuple[str, str]] = set()
+        for idx, packet in enumerate(tasks_channel.get()):
+            if for_execution and isinstance(packet, Send) and packet.key is not None:
+                # Keyed packets derive their task id from the key, so two of
+                # them for one node in one step would be one task. Refuse the
+                # step instead of silently dropping one (or, if they invoke a
+                # subgraph, running one memory concurrently). This runs
+                # wherever tasks are prepared, so it holds across processes.
+                if (packet.node, packet.key) in seen_keys:
+                    raise InvalidUpdateError(
+                        f"Duplicate Send key {packet.key!r} for node "
+                        f"{packet.node!r} in the same step"
+                    )
+                seen_keys.add((packet.node, packet.key))
             if task := prepare_single_task(
                 (PUSH, idx),
                 None,
@@ -982,18 +996,21 @@ def prepare_push_task_send(
         proc_node = proc.node
         if proc_node is None:
             return
-        # create task id
+        # create task id: from the packet's key if it has one (position
+        # independent, deterministic across retries and resumes), else from
+        # its position in the pending sends
         triggers = PUSH_TRIGGER
         checkpoint_ns = (
             f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
         )
+        send_key: str | None = getattr(packet, "key", None)
         task_id = task_id_func(
             checkpoint_id_bytes,
             checkpoint_ns,
             str(step),
             packet.node,
             PUSH,
-            str(idx),
+            send_key if send_key is not None else str(idx),
         )
     else:
         logger.warning(f"Ignoring invalid PUSH task path {task_path}")
@@ -1092,6 +1109,12 @@ def prepare_push_task_send(
                     CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                     CONFIG_KEY_SCRATCHPAD: scratchpad,
                     CONFIG_KEY_RUNTIME: runtime,
+                    # subgraphs invoked inside a keyed task are keyed by it
+                    **(
+                        {CONFIG_KEY_SUBGRAPH_KEY: send_key}
+                        if send_key is not None
+                        else {}
+                    ),
                 },
             ),
             triggers,
@@ -1341,7 +1364,7 @@ def _scratchpad(
         resume=task_resume_write,
         get_null_resume=get_null_resume,
         # subgraph
-        subgraph_counter=LazyAtomicCounter(),
+        subgraph_counter=LazyAtomicCounters(),
     )
 
 
@@ -1437,6 +1460,29 @@ class LazyAtomicCounter:
                 if self._counter is None:
                     self._counter = itertools.count(0).__next__
         return self._counter()
+
+
+class LazyAtomicCounters:
+    """Lazily created per-key counters; each key counts from 0.
+
+    Used to number repeated subgraph invocations under the same base
+    namespace within one task."""
+
+    __slots__ = ("_counters",)
+
+    _counters: dict[str, Callable[[], int]] | None
+
+    def __init__(self) -> None:
+        self._counters = None
+
+    def __call__(self, key: str) -> int:
+        with LAZY_ATOMIC_COUNTER_LOCK:
+            if self._counters is None:
+                self._counters = {}
+            counter = self._counters.get(key)
+            if counter is None:
+                counter = self._counters[key] = itertools.count(0).__next__
+            return counter()
 
 
 def sanitize_untracked_values_in_send(

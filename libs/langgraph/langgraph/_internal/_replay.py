@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from langgraph._internal._constants import NS_END
+from langgraph._internal._constants import NS_END, NS_SEP
 
 if TYPE_CHECKING:
     from langchain_core.runnables import RunnableConfig
@@ -38,10 +38,12 @@ class ReplayState:
         (e.g. ``"sub_node"``) is recognized across loop iterations even
         though each iteration has a different task id.
         """
-        # "sub_node:task_id" -> "sub_node"
+        # "sub_node:task_id" -> "sub_node"; a keyed instance ("...|:key") is
+        # already stable and identifies one logical subgraph on its own.
+        last = checkpoint_ns.rsplit(NS_SEP, 1)[-1]
         stable_ns = (
             checkpoint_ns.rsplit(NS_END, 1)[0]
-            if NS_END in checkpoint_ns
+            if NS_END in checkpoint_ns and not last.startswith(NS_END)
             else checkpoint_ns
         )
         if stable_ns in self._visited_ns:
