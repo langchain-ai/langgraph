@@ -9,6 +9,7 @@ from langgraph_sdk.auth.types import BaseUser
 from typing_extensions import TypedDict, Unpack
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
+from langgraph.errors import GraphRecursionError
 from langgraph.config import get_config
 from langgraph.types import _DC_KWARGS, StreamWriter
 from langgraph.typing import ContextT
@@ -119,6 +120,13 @@ class _RuntimeOverrides(TypedDict, Generic[ContextT], total=False):
     execution_info: ExecutionInfo
     server_info: ServerInfo | None
     control: RunControl | None
+
+
+class NodeCallLimitError(GraphRecursionError):
+    """Raised when a node exceeds its configured per-node call limit.
+
+    Subclasses `GraphRecursionError` so existing handlers keep working.
+    """
 
 
 @dataclass(**_DC_KWARGS)
@@ -236,6 +244,35 @@ class Runtime(Generic[ContextT]):
     Populated automatically during graph runs. None outside an active
     graph runtime.
     """
+
+    node_call_counts: dict[str, int] = field(default_factory=dict)
+    """Number of times each node has been called during this run.
+
+    Populated by the task execution path, so nodes/guards can read it without
+    threading counters through user state.
+    """
+
+    node_call_limits: dict[str, int] = field(default_factory=dict)
+    """Optional per-node call limits.
+
+    When a node's count exceeds its limit, `record_node_call` raises
+    `NodeCallLimitError`. Nodes without an entry are unlimited.
+    """
+
+    def record_node_call(self, node_name: str) -> int:
+        """Record a call to `node_name` and enforce its limit, if configured.
+
+        Returns the updated call count for `node_name`.
+        """
+        count = self.node_call_counts.get(node_name, 0) + 1
+        self.node_call_counts[node_name] = count
+        limit = self.node_call_limits.get(node_name)
+        if limit is not None and count > limit:
+            raise NodeCallLimitError(
+                f"Node '{node_name}' exceeded its call limit of {limit} "
+                f"(called {count} times)."
+            )
+        return count
 
     def merge(self, other: Runtime[ContextT]) -> Runtime[ContextT]:
         """Merge two runtimes together.
