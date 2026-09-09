@@ -650,7 +650,8 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
 
         async with self.lock, self.conn.cursor() as cur:
             await cur.execute(
-                DELTA_STAGE1_SQL, (thread_id, checkpoint_ns, checkpoint_id)
+                DELTA_STAGE1_SQL,
+                (thread_id, checkpoint_ns, checkpoint_id, thread_id, checkpoint_ns),
             )
             async for row in cur:
                 cid, parent_cid, type_tag, blob = row

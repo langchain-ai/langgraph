@@ -538,7 +538,10 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         seeded: set[str] = set()
 
         with self.cursor(transaction=False) as cur:
-            cur.execute(DELTA_STAGE1_SQL, (thread_id, checkpoint_ns, checkpoint_id))
+            cur.execute(
+                DELTA_STAGE1_SQL,
+                (thread_id, checkpoint_ns, checkpoint_id, thread_id, checkpoint_ns),
+            )
             for row in cur:
                 cid, parent_cid, type_tag, blob = row
                 if step_walk_with_row(
