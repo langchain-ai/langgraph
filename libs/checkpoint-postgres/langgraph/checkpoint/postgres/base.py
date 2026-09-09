@@ -435,15 +435,26 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
           (c) the next ancestor cid isn't in `parent_of` yet (waiting for
               a later page; the cursor stays put).
 
+        A walk that hasn't started yet is a fourth state, distinct from all
+        three: pages arrive newest-first from the head of the thread, so a
+        target deeper than one page isn't in `parent_of` on the early pages
+        and the walk can only begin once its own row lands.
+
         Mutates `chain_by_ch`, `seed_ver_by_ch`, `seed_inline_by_ch`,
         `walk_cursor_by_ch`, and `seeded` in place.
         """
         for i, ch in enumerate(channels):
             if ch in seeded:
                 continue
-            # First-time entry: cursor starts at the target's parent.
+            # First-time entry: cursor starts at the target's parent, but
+            # only once the target's own row has loaded. Reading it earlier
+            # would record `None` for "target not seen yet" the same way it
+            # records `None` for "target is a root", and this guard fires
+            # only once, so the walk would stay stranded for good.
             if ch not in walk_cursor_by_ch:
-                walk_cursor_by_ch[ch] = parent_of.get(target_id)
+                if target_id not in parent_of:
+                    continue
+                walk_cursor_by_ch[ch] = parent_of[target_id]
             cur_cid = walk_cursor_by_ch[ch]
             ch_chain = chain_by_ch[ch]
             hb_i = hb_by_i_by_cid[i]
