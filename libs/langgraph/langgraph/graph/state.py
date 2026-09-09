@@ -1185,6 +1185,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         debug: bool = False,
         name: str | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+        private_channels: Sequence[str] | None = None,
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
@@ -1397,6 +1398,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         for start, branches in self.branches.items():
             for name, branch in branches.items():
                 compiled.attach_branch(start, name, branch)
+
+        if private_channels:
+                    compiled.private_channels = frozenset(private_channels)
 
         return compiled.validate()
 
