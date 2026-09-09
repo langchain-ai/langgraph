@@ -1399,10 +1399,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             for name, branch in branches.items():
                 compiled.attach_branch(start, name, branch)
 
+        compiled = compiled.validate()
         if private_channels:
-                    compiled.private_channels = frozenset(private_channels)
-
-        return compiled.validate()
+            compiled.private_channels = frozenset(private_channels)
+        return compiled
 
 
 class CompiledStateGraph(

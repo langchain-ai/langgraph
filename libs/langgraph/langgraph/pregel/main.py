@@ -1142,6 +1142,13 @@ class Pregel(
                 checkpoint["channel_versions"].values()
             )
 
+    def _public_values(self, values: dict[str, Any]) -> dict[str, Any]:
+        """Hide private channels from public state reads."""
+        channels = getattr(self, "private_channels", None)
+        if not channels:
+            return values
+        return {k: v for k, v in values.items() if k not in channels}
+
     def _prepare_state_snapshot(
         self,
         config: RunnableConfig,
@@ -1255,7 +1262,7 @@ class Pregel(
         )
         # assemble the state snapshot
         return StateSnapshot(
-            read_channels(channels, self.stream_channels_asis),
+            self._public_values(read_channels(channels, self.stream_channels_asis)),
             tuple(t.name for t in next_tasks.values() if not t.writes),
             patch_checkpoint_map(saved.config, saved.metadata),
             saved.metadata,
@@ -1379,7 +1386,7 @@ class Pregel(
         )
         # assemble the state snapshot
         return StateSnapshot(
-            read_channels(channels, self.stream_channels_asis),
+            self._public_values(read_channels(channels, self.stream_channels_asis)),
             tuple(t.name for t in next_tasks.values() if not t.writes),
             patch_checkpoint_map(saved.config, saved.metadata),
             saved.metadata,
