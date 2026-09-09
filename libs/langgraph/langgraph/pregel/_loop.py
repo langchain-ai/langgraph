@@ -1078,18 +1078,9 @@ class PregelLoop:
             self._push_graph_lifecycle_event("resume")
         return updated_channels
 
-    def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
-        # `is` (object identity) — not `==`. Three of four call sites pass a
-        # fresh dict ({"source":"input"|"loop"|"fork"}); only
-        # `_suppress_interrupt`(will rename to _on_loop_exit soon)
-        # at exit reuses the existing `self.checkpoint_metadata` instance. So
-        # `metadata is self.checkpoint_metadata` is True only on the exit call,
-        # which is what we use to gate exit-only behaviour (skip count-bump,
-        # don't replace metadata). Could be replaced by an explicit
-        # `exiting: bool = False` parameter; left as-is to match the existing
-        # idiom in this file.
-        # TODO: replace with an explicit `exiting: bool = False` parameter.
-        exiting = metadata is self.checkpoint_metadata
+    def _put_checkpoint(
+        self, metadata: CheckpointMetadata, *, exiting: bool = False
+    ) -> None:
         if exiting and self.checkpoint["id"] == self.checkpoint_id_saved:
             # checkpoint already saved
             return
@@ -1330,7 +1321,7 @@ class PregelLoop:
             or all(NS_END not in part for part in self.checkpoint_ns)
         ):
             self._put_exit_delta_writes()
-            self._put_checkpoint(self.checkpoint_metadata)
+            self._put_checkpoint(self.checkpoint_metadata, exiting=True)
             self._put_pending_writes()
         # suppress interrupt
         if isinstance(exc_value, GraphInterrupt) and not self.is_nested:
