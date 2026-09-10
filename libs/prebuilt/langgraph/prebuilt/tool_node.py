@@ -479,7 +479,7 @@ def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception], 
             origin = get_origin(first_param.annotation)
             if origin in [Union, UnionType]:
                 args = get_args(first_param.annotation)
-                if all(issubclass(arg, Exception) for arg in args):
+                if all(isinstance(arg, type) and issubclass(arg, Exception) for arg in args):
                     return tuple(args)
                 msg = (
                     "All types in the error handler error annotation must be "
@@ -490,7 +490,7 @@ def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception], 
                 raise ValueError(msg)
 
             exception_type = type_hints[first_param.name]
-            if Exception in exception_type.__mro__:
+            if isinstance(exception_type, type) and issubclass(exception_type, Exception):
                 return (exception_type,)
             msg = (
                 f"Arbitrary types are not supported in the error handler "
