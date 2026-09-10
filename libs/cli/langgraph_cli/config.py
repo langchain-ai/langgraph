@@ -6,6 +6,7 @@ import re
 import shlex
 import textwrap
 from collections import Counter
+from collections.abc import Iterable
 from typing import Literal, NamedTuple
 
 import click
@@ -36,6 +37,10 @@ DISALLOWED_BUILD_COMMAND_CHARS = [
 # This blocks background execution (cmd &) while allowing command
 # chaining (cmd1 && cmd2) which is common in build commands.
 _SINGLE_AMPERSAND_RE = re.compile(r"(?<!&)&(?:&&)*(?!&)")
+_GIT_HTTP_AUTHORITY_RES = (
+    re.compile(r"git\+https?://(?P<authority>[^/\s\"']+)", re.I),
+    re.compile(r"\bgit\s*=\s*[\"']https?://(?P<authority>[^/\s\"']+)", re.I),
+)
 _API_VERSION_PATTERN = re.compile(
     r"^(?P<major>\d+)"
     r"(?:\.(?P<minor>\d+))?"
@@ -76,6 +81,62 @@ def has_disallowed_build_command_content(command: str) -> bool:
     if _SINGLE_AMPERSAND_RE.search(command):
         return True
     return False
+
+
+def _has_git_http_url_userinfo(dependency: str) -> bool:
+    """Check whether a Git HTTP URL contains userinfo."""
+    return any(
+        "@" in match.group("authority")
+        for pattern in _GIT_HTTP_AUTHORITY_RES
+        for match in pattern.finditer(dependency)
+    )
+
+
+def _validate_git_http_url_userinfo(
+    values: Iterable[str], *, source: pathlib.Path | None = None
+) -> None:
+    """Reject credential-bearing Git HTTP URLs without echoing their values."""
+    if not any(_has_git_http_url_userinfo(value) for value in values):
+        return
+    message = (
+        "Git dependency URLs must not contain credentials or other URL "
+        "userinfo because generated Dockerfiles and image layers can retain "
+        "them. Use a credential-free Git URL and provide short-lived "
+        "credentials through your build environment's secret-backed Git "
+        "credential helper."
+    )
+    if source is not None:
+        message += f" Found in: {source}"
+    raise click.UsageError(message)
+
+
+def _validate_git_http_url_userinfo_files(paths: Iterable[pathlib.Path]) -> None:
+    """Reject credential-bearing Git HTTP URLs in dependency files."""
+    for path in paths:
+        path = path.resolve()
+        if not path.is_file():
+            continue
+        try:
+            contents = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            raise click.UsageError(
+                f"Could not inspect dependency file for embedded credentials: {path}"
+            ) from None
+        _validate_git_http_url_userinfo([contents], source=path)
+
+
+def _validate_local_dependency_files(config_path: pathlib.Path, config: Config) -> None:
+    """Validate dependency files copied into a non-uv Python image."""
+    paths: list[pathlib.Path] = []
+    for dependency in config["dependencies"]:
+        if not isinstance(dependency, str) or not dependency.startswith("."):
+            continue
+        root = (config_path.parent / dependency).resolve()
+        paths.extend(
+            root / name
+            for name in ("requirements.txt", "pyproject.toml", "setup.py", "setup.cfg")
+        )
+    _validate_git_http_url_userinfo_files(paths)
 
 
 MIN_PYTHON_VERSION = "3.11"
@@ -320,7 +381,9 @@ def _get_source_kind(config: Config) -> str | None:
     return kind if isinstance(kind, str) else None
 
 
-def validate_config(config: Config) -> Config:
+def validate_config(
+    config: Config, *, source_path: pathlib.Path | None = None
+) -> Config:
     """Validate a configuration dictionary."""
 
     graphs = config.get("graphs", {})
@@ -414,6 +477,15 @@ def validate_config(config: Config) -> Config:
                 "Consider using uv-based source management instead:\n\n"
                 '  "source": {"kind": "uv", "root": ".."}'
             )
+
+    _validate_git_http_url_userinfo(
+        (
+            dependency
+            for dependency in config["dependencies"]
+            if isinstance(dependency, str)
+        ),
+        source=source_path,
+    )
 
     source = config.get("source")
     source_kind = _get_source_kind(config)
@@ -609,7 +681,7 @@ def validate_config_file(config_path: pathlib.Path) -> Config:
     """Load and validate a configuration file."""
     with open(config_path) as f:
         config = json.load(f)
-    validated = validate_config(config)
+    validated = validate_config(config, source_path=config_path.resolve())
     # Enforce the package.json doesn't enforce an
     # incompatible Node.js version
     if validated.get("node_version"):
@@ -1280,6 +1352,7 @@ def python_config_to_docker(
             api_version=api_version,
             build_tools_to_uninstall=build_tools_to_uninstall,
         )
+    _validate_local_dependency_files(config_path, config)
     if pip_installer == "auto":
         if _image_supports_uv(base_image):
             pip_installer = "uv"
@@ -1490,7 +1563,18 @@ def node_config_to_docker(
 ) -> tuple[str, dict[str, str]]:
     # Calculate paths for monorepo support
     install_root = (
-        pathlib.Path(build_context).resolve() if build_context else config_path.parent
+        pathlib.Path(build_context).resolve()
+        if build_context
+        else config_path.parent.resolve()
+    )
+    config_root = config_path.parent.resolve()
+    dependency_roots = (
+        (install_root, config_root) if install_root != config_root else (install_root,)
+    )
+    _validate_git_http_url_userinfo_files(
+        root / name
+        for root in dependency_roots
+        for name in ("package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml")
     )
     install_cmd = install_command or _get_node_pm_install_cmd(install_root)
     if build_context:
