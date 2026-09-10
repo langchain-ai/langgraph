@@ -21,6 +21,16 @@ updates:
     directory: "/libs/checkpoint"
     schedule:
       interval: "monthly"
+    versioning-strategy: increase
+    ignore:
+      - dependency-name: "langgraph"
+      - dependency-name: "langgraph-cli"
+      - dependency-name: "langgraph-sdk"
+      - dependency-name: "langgraph-prebuilt"
+      - dependency-name: "langgraph-checkpoint"
+      - dependency-name: "langgraph-checkpoint-postgres"
+      - dependency-name: "langgraph-checkpoint-sqlite"
+      - dependency-name: "langgraph-checkpoint-conformance"
     groups:
       minor-and-patch:
         patterns:
@@ -38,6 +48,16 @@ updates:
     directory: "/libs/checkpoint-conformance"
     schedule:
       interval: "monthly"
+    versioning-strategy: increase
+    ignore:
+      - dependency-name: "langgraph"
+      - dependency-name: "langgraph-cli"
+      - dependency-name: "langgraph-sdk"
+      - dependency-name: "langgraph-prebuilt"
+      - dependency-name: "langgraph-checkpoint"
+      - dependency-name: "langgraph-checkpoint-postgres"
+      - dependency-name: "langgraph-checkpoint-sqlite"
+      - dependency-name: "langgraph-checkpoint-conformance"
     groups:
       minor-and-patch:
         patterns:
@@ -55,6 +75,16 @@ updates:
     directory: "/libs/checkpoint-postgres"
     schedule:
       interval: "monthly"
+    versioning-strategy: increase
+    ignore:
+      - dependency-name: "langgraph"
+      - dependency-name: "langgraph-cli"
+      - dependency-name: "langgraph-sdk"
+      - dependency-name: "langgraph-prebuilt"
+      - dependency-name: "langgraph-checkpoint"
+      - dependency-name: "langgraph-checkpoint-postgres"
+      - dependency-name: "langgraph-checkpoint-sqlite"
+      - dependency-name: "langgraph-checkpoint-conformance"
     groups:
       minor-and-patch:
         patterns:
@@ -72,6 +102,16 @@ updates:
     directory: "/libs/checkpoint-sqlite"
     schedule:
       interval: "monthly"
+    versioning-strategy: increase
+    ignore:
+      - dependency-name: "langgraph"
+      - dependency-name: "langgraph-cli"
+      - dependency-name: "langgraph-sdk"
+      - dependency-name: "langgraph-prebuilt"
+      - dependency-name: "langgraph-checkpoint"
+      - dependency-name: "langgraph-checkpoint-postgres"
+      - dependency-name: "langgraph-checkpoint-sqlite"
+      - dependency-name: "langgraph-checkpoint-conformance"
     groups:
       minor-and-patch:
         patterns:
@@ -89,6 +129,16 @@ updates:
     directory: "/libs/cli"
     schedule:
       interval: "monthly"
+    versioning-strategy: increase
+    ignore:
+      - dependency-name: "langgraph"
+      - dependency-name: "langgraph-cli"
+      - dependency-name: "langgraph-sdk"
+      - dependency-name: "langgraph-prebuilt"
+      - dependency-name: "langgraph-checkpoint"
+      - dependency-name: "langgraph-checkpoint-postgres"
+      - dependency-name: "langgraph-checkpoint-sqlite"
+      - dependency-name: "langgraph-checkpoint-conformance"
     groups:
       minor-and-patch:
         patterns:
@@ -106,6 +156,16 @@ updates:
     directory: "/libs/langgraph"
     schedule:
       interval: "monthly"
+    versioning-strategy: increase
+    ignore:
+      - dependency-name: "langgraph"
+      - dependency-name: "langgraph-cli"
+      - dependency-name: "langgraph-sdk"
+      - dependency-name: "langgraph-prebuilt"
+      - dependency-name: "langgraph-checkpoint"
+      - dependency-name: "langgraph-checkpoint-postgres"
+      - dependency-name: "langgraph-checkpoint-sqlite"
+      - dependency-name: "langgraph-checkpoint-conformance"
     groups:
       minor-and-patch:
         patterns:
@@ -123,6 +183,16 @@ updates:
     directory: "/libs/prebuilt"
     schedule:
       interval: "monthly"
+    versioning-strategy: increase
+    ignore:
+      - dependency-name: "langgraph"
+      - dependency-name: "langgraph-cli"
+      - dependency-name: "langgraph-sdk"
+      - dependency-name: "langgraph-prebuilt"
+      - dependency-name: "langgraph-checkpoint"
+      - dependency-name: "langgraph-checkpoint-postgres"
+      - dependency-name: "langgraph-checkpoint-sqlite"
+      - dependency-name: "langgraph-checkpoint-conformance"
     groups:
       minor-and-patch:
         patterns:
@@ -140,6 +210,16 @@ updates:
     directory: "/libs/sdk-py"
     schedule:
       interval: "monthly"
+    versioning-strategy: increase
+    ignore:
+      - dependency-name: "langgraph"
+      - dependency-name: "langgraph-cli"
+      - dependency-name: "langgraph-sdk"
+      - dependency-name: "langgraph-prebuilt"
+      - dependency-name: "langgraph-checkpoint"
+      - dependency-name: "langgraph-checkpoint-postgres"
+      - dependency-name: "langgraph-checkpoint-sqlite"
+      - dependency-name: "langgraph-checkpoint-conformance"
     groups:
       minor-and-patch:
         patterns:
@@ -172,6 +252,41 @@ updates:
 
   - package-ecosystem: "npm"
     directory: "/libs/cli/js-monorepo-example"
+    schedule:
+      interval: "monthly"
+    groups:
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
+
+  # CI builds this maintained integration image and Compose stack.
+  - package-ecosystem: "docker"
+    directory: "/libs/sdk-py/integration"
+    schedule:
+      interval: "monthly"
+    groups:
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
+
+  - package-ecosystem: "docker-compose"
+    directory: "/libs/sdk-py/integration"
     schedule:
       interval: "monthly"
     groups:
