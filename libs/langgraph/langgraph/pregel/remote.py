@@ -12,6 +12,8 @@ from typing import (
 from uuid import UUID
 
 import langsmith as ls
+from langchain_core.messages import BaseMessage
+from langchain_core.messages.utils import convert_to_messages
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.graph import (
     Edge as DrawableEdge,
@@ -1203,10 +1205,10 @@ class RemoteGraph(PregelProtocol):
         try:
             if version == "v2":
                 return GraphOutput(
-                    value=chunk["data"],
+                    value=_hydrate_output_messages(chunk["data"]),
                     interrupts=tuple(chunk.get("interrupts", ())),
                 )
-            return chunk
+            return _hydrate_output_messages(chunk)
         except UnboundLocalError:
             logger.warning("No events received from remote graph")
             return None
@@ -1285,13 +1287,66 @@ class RemoteGraph(PregelProtocol):
         try:
             if version == "v2":
                 return GraphOutput(
-                    value=chunk["data"],
+                    value=_hydrate_output_messages(chunk["data"]),
                     interrupts=tuple(chunk.get("interrupts", ())),
                 )
-            return chunk
+            return _hydrate_output_messages(chunk)
         except UnboundLocalError:
             logger.warning("No events received from remote graph")
             return None
+
+
+# Message type and role names that langchain_core's convert_to_messages
+# understands. Anything outside this set (e.g. Anthropic-style content blocks
+# like {"type": "text"}) is not treated as a message.
+_MESSAGE_TYPE_NAMES = frozenset(
+    {
+        "human",
+        "user",
+        "ai",
+        "assistant",
+        "system",
+        "tool",
+        "function",
+        "chat",
+        "remove",
+        "developer",
+    }
+)
+
+
+def _is_message_like_list(value: Any) -> bool:
+    """True for a list whose items all look like (serialized) chat messages."""
+    if not isinstance(value, list):
+        return False
+    return all(
+        isinstance(item, BaseMessage)
+        or (
+            isinstance(item, dict)
+            and (
+                item.get("type") in _MESSAGE_TYPE_NAMES
+                or item.get("role") in _MESSAGE_TYPE_NAMES
+            )
+        )
+        for item in value
+    )
+
+
+def _hydrate_output_messages(value: Any) -> Any:
+    """Hydrate message-shaped lists in a returned state dict to BaseMessage.
+
+    Local graphs hydrate message channels through the add_messages reducer,
+    but RemoteGraph drains the langgraph-sdk stream and returns the final
+    state as raw JSON, so "messages" (and any other message-shaped list)
+    arrives as plain dicts. Convert those lists with convert_to_messages;
+    every other value passes through untouched.
+    """
+    if not isinstance(value, dict):
+        return value
+    return {
+        key: convert_to_messages(val) if _is_message_like_list(val) else val
+        for key, val in value.items()
+    }
 
 
 def _merge_tracing_headers(headers: dict[str, str] | None) -> dict[str, str] | None:

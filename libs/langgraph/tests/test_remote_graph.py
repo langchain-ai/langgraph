@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import langsmith as ls
 import pytest
-from langchain_core.messages import AnyMessage, BaseMessage
+from langchain_core.messages import AIMessage, AnyMessage, BaseMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.graph import Edge as DrawableEdge
 from langchain_core.runnables.graph import Node as DrawableNode
@@ -841,7 +841,7 @@ def test_invoke():
         {"input": {"messages": [{"type": "human", "content": "hello"}]}}, config
     )
 
-    assert result == {"messages": [{"type": "human", "content": "world"}]}
+    assert result == {"messages": [HumanMessage(content="world")]}
 
 
 def test_invoke_sanitizes_thread_id():
@@ -909,7 +909,102 @@ async def test_ainvoke():
         {"input": {"messages": [{"type": "human", "content": "hello"}]}}, config
     )
 
-    assert result == {"messages": [{"type": "human", "content": "world"}]}
+    assert result == {"messages": [HumanMessage(content="world")]}
+
+
+def test_invoke_hydrates_message_lists():
+    # RemoteGraph returns the drained state as raw JSON; message-shaped lists
+    # must come back as BaseMessage instances (the local-graph contract),
+    # while non-message values pass through untouched.
+    mock_sync_client = MagicMock()
+    mock_sync_client.runs.stream.return_value = [
+        StreamPart(
+            event="values",
+            data={
+                "messages": [
+                    {"type": "human", "content": "hello"},
+                    {"role": "assistant", "content": "hi there"},
+                ],
+                "custom_messages": [{"type": "ai", "content": "custom key"}],
+                "content_blocks": [{"type": "text", "text": "not a message"}],
+                "empty": [],
+                "scalar": 42,
+            },
+        ),
+    ]
+
+    remote_pregel = RemoteGraph(
+        "test_graph_id",
+        sync_client=mock_sync_client,
+    )
+
+    config = {"configurable": {"thread_id": "thread_1"}}
+    result = remote_pregel.invoke({"input": {}}, config)
+
+    assert result["messages"] == [
+        HumanMessage(content="hello"),
+        AIMessage(content="hi there"),
+    ]
+    assert all(isinstance(m, BaseMessage) for m in result["messages"])
+    # shape detection works for custom keys too
+    assert result["custom_messages"] == [AIMessage(content="custom key")]
+    # anthropic-style content blocks are not messages: untouched
+    assert result["content_blocks"] == [{"type": "text", "text": "not a message"}]
+    assert result["empty"] == []
+    assert result["scalar"] == 42
+
+
+def test_invoke_v2_hydrates_graph_output_value():
+    mock_sync_client = MagicMock()
+    mock_sync_client.runs.stream.return_value = [
+        StreamPart(
+            event="values",
+            data={"messages": [{"type": "human", "content": "hello"}]},
+        ),
+    ]
+
+    remote_pregel = RemoteGraph(
+        "test_graph_id",
+        sync_client=mock_sync_client,
+    )
+
+    config = {"configurable": {"thread_id": "thread_1"}}
+    result = remote_pregel.invoke({"input": {}}, config, version="v2")
+
+    assert result.value["messages"] == [HumanMessage(content="hello")]
+    assert result.interrupts == ()
+
+
+@pytest.mark.anyio
+async def test_ainvoke_hydrates_message_lists():
+    mock_async_client = MagicMock()
+    async_iter = MagicMock()
+    async_iter.__aiter__.return_value = [
+        StreamPart(
+            event="values",
+            data={
+                "messages": [
+                    {"type": "human", "content": "hello"},
+                    {"type": "ai", "content": "hi there"},
+                ],
+            },
+        ),
+    ]
+    mock_async_client.runs.stream.return_value = async_iter
+
+    remote_pregel = RemoteGraph(
+        "test_graph_id",
+        client=mock_async_client,
+    )
+
+    config = {"configurable": {"thread_id": "thread_1"}}
+    result = await remote_pregel.ainvoke({"input": {}}, config)
+
+    assert result["messages"] == [
+        HumanMessage(content="hello"),
+        AIMessage(content="hi there"),
+    ]
+    assert all(isinstance(m, BaseMessage) for m in result["messages"])
 
 
 def test_stream_context():
