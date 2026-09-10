@@ -163,8 +163,9 @@ def test_interrupt_response_schema(
     }
 
 
+@pytest.mark.parametrize("resume_style", ["null", "map"])
 def test_interrupt_response_schema_rejects_invalid_resume(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointSaver, resume_style: str
 ) -> None:
     class State(TypedDict):
         answer: Any
@@ -180,10 +181,14 @@ def test_interrupt_response_schema_rejects_invalid_resume(
     )
     config = {"configurable": {"thread_id": "1"}}
     graph.invoke({"answer": None}, config)
+    [pending] = graph.get_state(config).tasks[0].interrupts
+
+    def resume(value: dict[str, Any]) -> Command:
+        return Command(resume=value if resume_style == "null" else {pending.id: value})
 
     with pytest.raises(ValidationError, match="approved"):
-        graph.invoke(Command(resume={"approved": "nope"}), config)
+        graph.invoke(resume({"approved": "nope"}), config)
 
-    assert graph.invoke(Command(resume={"approved": False}), config) == {
+    assert graph.invoke(resume({"approved": False}), config) == {
         "answer": Decision(approved=False)
     }
