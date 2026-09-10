@@ -13,7 +13,7 @@ install:
 	@for dir in $(LIBS_DIRS); do \
 		if [ -f $$dir/pyproject.toml ]; then \
 			echo "Installing dependencies for $$dir"; \
-			uv pip install -e $$dir; \
+			uv pip install -e $$dir || exit $$?; \
 		fi; \
 	done
 
@@ -23,7 +23,7 @@ lint:
 	@for dir in $(LIBS_DIRS); do \
 		if [ -f $$dir/Makefile ]; then \
 			echo "Running lint in $$dir"; \
-			$(MAKE) -C $$dir lint; \
+			$(MAKE) -C $$dir lint || exit $$?; \
 		fi; \
 	done
 
@@ -33,7 +33,7 @@ format:
 	@for dir in $(LIBS_DIRS); do \
 		if [ -f $$dir/Makefile ]; then \
 			echo "Running format in $$dir"; \
-			$(MAKE) -C $$dir format; \
+			$(MAKE) -C $$dir format || exit $$?; \
 		fi; \
 	done
 
@@ -43,7 +43,7 @@ lock:
 	@for dir in $(LIBS_DIRS); do \
 		if [ -f $$dir/Makefile ]; then \
 			echo "Running lock in $$dir"; \
-			(cd $$dir && uv lock); \
+			(cd $$dir && uv lock) || exit $$?; \
 		fi; \
 	done
 
@@ -53,7 +53,7 @@ lock-upgrade:
 	@for dir in $(LIBS_DIRS); do \
 		if [ -f $$dir/Makefile ]; then \
 			echo "Running lock-upgrade in $$dir"; \
-			(cd $$dir && uv lock --upgrade); \
+			(cd $$dir && uv lock --upgrade) || exit $$?; \
 		fi; \
 	done
 
@@ -63,6 +63,6 @@ test:
 	@for dir in $(LIBS_DIRS); do \
 		if [ -f $$dir/Makefile ]; then \
 			echo "Running test in $$dir"; \
-			$(MAKE) -C $$dir test; \
+			$(MAKE) -C $$dir test || exit $$?; \
 		fi; \
 	done
