@@ -1,9 +1,13 @@
+from typing import Any
+
 import pytest
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from pydantic import BaseModel, ValidationError
 from typing_extensions import TypedDict
 
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import Durability
+from langgraph.types import Command, Durability, Interrupt, interrupt
+from tests.any_str import AnyStr
 
 pytestmark = pytest.mark.anyio
 
@@ -90,3 +94,96 @@ async def test_interruption_without_state_updates_async(
     assert (await graph.aget_state(thread)).next == ()
     n_checkpoints = len([c async for c in graph.aget_state_history(thread)])
     assert n_checkpoints == (5 if durability != "exit" else 3)
+
+
+class Decision(BaseModel):
+    approved: bool
+    note: str | None = None
+
+
+class DecisionDict(TypedDict):
+    approved: bool
+
+
+RAW_SCHEMA = {"type": "object", "properties": {"approved": {"type": "boolean"}}}
+
+
+@pytest.mark.parametrize(
+    ("response_schema", "expected_schema", "expected_answer"),
+    [
+        (None, None, {"approved": True, "extra": 1}),
+        (RAW_SCHEMA, RAW_SCHEMA, {"approved": True, "extra": 1}),
+        (Decision, Decision.model_json_schema(), Decision(approved=True)),
+        (
+            DecisionDict,
+            {
+                "properties": {"approved": {"title": "Approved", "type": "boolean"}},
+                "required": ["approved"],
+                "title": "DecisionDict",
+                "type": "object",
+            },
+            {"approved": True},
+        ),
+    ],
+    ids=["none", "raw_dict", "pydantic", "typeddict"],
+)
+def test_interrupt_response_schema(
+    sync_checkpointer: BaseCheckpointSaver,
+    response_schema: Any,
+    expected_schema: dict[str, Any] | None,
+    expected_answer: Any,
+) -> None:
+    class State(TypedDict):
+        answer: Any
+
+    def node(state: State) -> State:
+        return {
+            "answer": interrupt(
+                {"question": "approve?"}, response_schema=response_schema
+            )
+        }
+
+    graph = (
+        StateGraph(State)
+        .add_node("node", node)
+        .add_edge(START, "node")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = {"configurable": {"thread_id": "1"}}
+    expected = Interrupt(
+        value={"question": "approve?"}, id=AnyStr(), response_schema=expected_schema
+    )
+
+    assert list(graph.stream({"answer": None}, config)) == [
+        {"__interrupt__": (expected,)}
+    ]
+    assert graph.get_state(config).tasks[0].interrupts == (expected,)
+    assert graph.invoke(Command(resume={"approved": True, "extra": 1}), config) == {
+        "answer": expected_answer
+    }
+
+
+def test_interrupt_response_schema_rejects_invalid_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        answer: Any
+
+    def node(state: State) -> State:
+        return {"answer": interrupt("approve?", response_schema=Decision)}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node", node)
+        .add_edge(START, "node")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = {"configurable": {"thread_id": "1"}}
+    graph.invoke({"answer": None}, config)
+
+    with pytest.raises(ValidationError, match="approved"):
+        graph.invoke(Command(resume={"approved": "nope"}), config)
+
+    assert graph.invoke(Command(resume={"approved": False}), config) == {
+        "answer": Decision(approved=False)
+    }
