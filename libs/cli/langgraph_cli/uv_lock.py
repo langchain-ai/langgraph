@@ -1035,7 +1035,7 @@ def python_config_to_docker_uv_lock(
         docker_plan.add_instruction("WORKDIR", plan.working_dir)
         docker_plan.add_instruction(
             "RUN",
-            f"{_get_node_pm_install_cmd(plan.target_root)} && "
+            f"{_get_node_pm_install_cmd(plan.target_root)[0]} && "
             "tsx /api/langgraph_api/js/build.mts",
         )
         docker_plan.add_raw("# -- End of JS dependencies install --")
