@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import traceback
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from uuid import uuid4
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -263,6 +263,83 @@ async def test_put_writes_cleared_on_next_checkpoint(
     assert len(writes) == 0
 
 
+async def test_put_writes_idempotent_across_restart(
+    saver: BaseCheckpointSaver,
+    saver_factory: Callable[[], AsyncGenerator[BaseCheckpointSaver, None]] | None = None,
+) -> None:
+    """Duplicate (task_id, idx) doesn't duplicate writes after saver restart.
+
+    This test verifies the retry-safe contract survives process restarts,
+    not just same-instance duplicates. If no saver_factory is provided,
+    the test falls back to same-instance verification (matching
+    test_put_writes_idempotent behavior).
+    """
+    tid = str(uuid4())
+    config = generate_config(tid)
+    cp = generate_checkpoint()
+    stored = await saver.aput(config, cp, generate_metadata(), {})
+
+    task_id = str(uuid4())
+    await saver.aput_writes(stored, [("ch", "val")], task_id)
+
+    # Verify write exists before restart
+    tup_before = await saver.aget_tuple(stored)
+    assert tup_before is not None
+    assert tup_before.pending_writes is not None
+    pre_count = len(tup_before.pending_writes)
+    assert pre_count == 1, f"Expected 1 write before restart, got {pre_count}"
+
+    if saver_factory is not None:
+        # Close the original saver first to simulate a true restart —
+        # persistent backends should flush/release their connections
+        # before a second instance opens.
+        if hasattr(saver, "__aexit__"):
+            await saver.__aexit__(None, None, None)
+        elif hasattr(saver, "aclose"):
+            await saver.aclose()
+
+        # Re-open the saver — simulates process restart
+        gen = saver_factory()
+        saver2 = await gen.__anext__()
+        try:
+            # Replay the exact same write on the fresh instance
+            await saver2.aput_writes(stored, [("ch", "val")], task_id)
+
+            tup_after = await saver2.aget_tuple(stored)
+            assert tup_after is not None
+            assert tup_after.pending_writes is not None
+            post_count = len(tup_after.pending_writes)
+            assert post_count == 1, (
+                f"Expected 1 write after restart replay, got {post_count} "
+                f"(restart duplicated writes)"
+            )
+            matching = [
+                w
+                for w in tup_after.pending_writes
+                if w[0] == task_id and w[1] == "ch"
+            ]
+            assert len(matching) == 1, (
+                f"Expected 1 matching write, got {len(matching)}"
+            )
+            assert matching[0][2] == "val", f"Value mismatch: {matching[0][2]!r}"
+        finally:
+            try:
+                await gen.__anext__()
+            except StopAsyncIteration:
+                pass
+    else:
+        # Fallback: same-instance replay (weaker guarantee, matches existing test)
+        await saver.aput_writes(stored, [("ch", "val")], task_id)
+
+        tup_after = await saver.aget_tuple(stored)
+        assert tup_after is not None
+        assert tup_after.pending_writes is not None
+        post_count = len(tup_after.pending_writes)
+        assert post_count == 1, (
+            f"Expected 1 write after replay, got {post_count}"
+        )
+
+
 ALL_PUT_WRITES_TESTS = [
     test_put_writes_basic,
     test_put_writes_multiple_writes_same_task,
@@ -274,20 +351,34 @@ ALL_PUT_WRITES_TESTS = [
     test_put_writes_special_channels,
     test_put_writes_across_namespaces,
     test_put_writes_cleared_on_next_checkpoint,
+    # Restart-safety test — requires factory for full coverage
+    test_put_writes_idempotent_across_restart,
 ]
 
 
 async def run_put_writes_tests(
     saver: BaseCheckpointSaver,
     on_test_result: Callable[[str, str, bool, str | None], None] | None = None,
+    saver_factory: Callable[[], AsyncGenerator[BaseCheckpointSaver, None]] | None = None,
 ) -> tuple[int, int, list[str]]:
-    """Run all put_writes tests. Returns (passed, failed, failure_names)."""
+    """Run all put_writes tests. Returns (passed, failed, failure_names).
+
+    Args:
+        saver: The checkpointer instance to test.
+        on_test_result: Optional callback for per-test results.
+        saver_factory: Optional factory for creating fresh saver instances.
+            When provided, enables restart-safety tests that verify
+            idempotency across saver restarts (process/network failure).
+    """
     passed = 0
     failed = 0
     failures: list[str] = []
     for test_fn in ALL_PUT_WRITES_TESTS:
         try:
-            await test_fn(saver)
+            if test_fn is test_put_writes_idempotent_across_restart:
+                await test_fn(saver, saver_factory=saver_factory)
+            else:
+                await test_fn(saver)
             passed += 1
             if on_test_result:
                 on_test_result("put_writes", test_fn.__name__, True, None)
