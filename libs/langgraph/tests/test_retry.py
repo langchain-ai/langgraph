@@ -246,6 +246,35 @@ def test_should_retry_default_retry_on():
     assert _should_retry_on(policy, CustomException("custom error")) is True
 
 
+def test_should_retry_default_retry_on_real_requests_response():
+    """4xx responses built from a real requests.Response must not be retried.
+
+    `requests.Response.__bool__` is `status_code < 400`, so a truthiness check
+    on the response classifies every client error as "no response" and retries
+    it. Mocks are always truthy, so they hide the bug.
+    """
+
+    def raise_for(status_code: int) -> requests.HTTPError:
+        response = requests.Response()
+        response.status_code = status_code
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            return exc
+        raise AssertionError(status_code)  # pragma: no cover
+
+    policy = RetryPolicy()
+
+    # Client errors: never retried.
+    assert _should_retry_on(policy, raise_for(400)) is False
+    assert _should_retry_on(policy, raise_for(404)) is False
+    assert _should_retry_on(policy, raise_for(429)) is False
+
+    # Server errors: retried.
+    assert _should_retry_on(policy, raise_for(500)) is True
+    assert _should_retry_on(policy, raise_for(503)) is True
+
+
 def test_graph_with_single_retry_policy():
     """Test a simple graph with a single RetryPolicy for a node."""
 

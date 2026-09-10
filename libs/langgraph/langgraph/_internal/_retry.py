@@ -7,7 +7,11 @@ def default_retry_on(exc: Exception) -> bool:
     if isinstance(exc, httpx.HTTPStatusError):
         return 500 <= exc.response.status_code < 600
     if isinstance(exc, requests.HTTPError):
-        return 500 <= exc.response.status_code < 600 if exc.response else True
+        # `requests.Response.__bool__` is `status_code < 400`, so a truthiness
+        # check would classify every 4xx response as missing and retry it.
+        return (
+            500 <= exc.response.status_code < 600 if exc.response is not None else True
+        )
     if isinstance(
         exc,
         (
