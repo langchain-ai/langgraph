@@ -99,20 +99,20 @@ class TestMemorySaver:
 
     async def test_search(self) -> None:
         # set up test
-        # save checkpoints
+        # save checkpoints (capture returned configs with actual checkpoint IDs)
         self.memory_saver.put(
             self.config_1,
             self.chkpnt_1,
             self.metadata_1,
             self.chkpnt_1["channel_versions"],
         )
-        self.memory_saver.put(
+        saved_config_2 = self.memory_saver.put(
             self.config_2,
             self.chkpnt_2,
             self.metadata_2,
             self.chkpnt_2["channel_versions"],
         )
-        self.memory_saver.put(
+        saved_config_3 = self.memory_saver.put(
             self.config_3,
             self.chkpnt_3,
             self.metadata_3,
@@ -152,24 +152,39 @@ class TestMemorySaver:
             search_results_5[1].config["configurable"]["checkpoint_ns"],
         } == {"", "inner"}
 
-        # TODO: test before and limit params
+        # test limit
+        search_results_limit = list(self.memory_saver.list(None, limit=2))
+        assert len(search_results_limit) == 2
+
+        # test before (use saved_config_3 which has the actual stored checkpoint ID)
+        search_results_before = list(
+            self.memory_saver.list(
+                {"configurable": {"thread_id": "thread-2"}},
+                before=saved_config_3,
+            )
+        )
+        assert len(search_results_before) == 1
+        assert (
+            search_results_before[0].config["configurable"]["checkpoint_id"]
+            == saved_config_2["configurable"]["checkpoint_id"]
+        )
 
     async def test_asearch(self) -> None:
         # set up test
-        # save checkpoints
+        # save checkpoints (capture returned configs with actual checkpoint IDs)
         self.memory_saver.put(
             self.config_1,
             self.chkpnt_1,
             self.metadata_1,
             self.chkpnt_1["channel_versions"],
         )
-        self.memory_saver.put(
+        saved_config_2 = self.memory_saver.put(
             self.config_2,
             self.chkpnt_2,
             self.metadata_2,
             self.chkpnt_2["channel_versions"],
         )
-        self.memory_saver.put(
+        saved_config_3 = self.memory_saver.put(
             self.config_3,
             self.chkpnt_3,
             self.metadata_3,
@@ -206,6 +221,25 @@ class TestMemorySaver:
             c async for c in self.memory_saver.alist(None, filter=query_4)
         ]
         assert len(search_results_4) == 0
+
+        # test limit
+        search_results_limit = [
+            c async for c in self.memory_saver.alist(None, limit=2)
+        ]
+        assert len(search_results_limit) == 2
+
+        # test before (use saved_config_3 which has the actual stored checkpoint ID)
+        search_results_before = [
+            c async for c in self.memory_saver.alist(
+                {"configurable": {"thread_id": "thread-2"}},
+                before=saved_config_3,
+            )
+        ]
+        assert len(search_results_before) == 1
+        assert (
+            search_results_before[0].config["configurable"]["checkpoint_id"]
+            == saved_config_2["configurable"]["checkpoint_id"]
+        )
 
 
 async def test_memory_saver() -> None:
