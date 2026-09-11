@@ -36,11 +36,14 @@ class HostBackendClient:
             headers["X-Tenant-ID"] = tenant_id
         self._base_url = base_url.rstrip("/")
         self._client = httpx.Client(
-            base_url=self._base_url,
             headers=headers,
             transport=transport,
             timeout=30,
         )
+
+    @property
+    def base_url(self) -> str:
+        return self._base_url
 
     def _request(
         self,
@@ -50,7 +53,8 @@ class HostBackendClient:
         params: dict[str, Any] | None = None,
     ) -> Any:
         try:
-            resp = self._client.request(method, path, json=payload, params=params)
+            full_url = self._base_url + path
+            resp = self._client.request(method, full_url, json=payload, params=params)
             resp.raise_for_status()
         except httpx.HTTPStatusError as err:
             detail = err.response.text or str(err.response.status_code)
@@ -126,6 +130,27 @@ class HostBackendClient:
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "revision_source": "internal_docker",
+            "source_revision_config": {"image_uri": image_uri},
+        }
+        if tracked_packages:
+            payload["tracked_packages"] = tracked_packages
+        if secrets is not None:
+            payload["secrets"] = secrets
+        return self._request(
+            "PATCH",
+            f"/v2/deployments/{deployment_id}",
+            payload,
+        )
+
+    def update_deployment_external(
+        self,
+        deployment_id: str,
+        image_uri: str,
+        secrets: list[dict[str, str]] | None = None,
+        tracked_packages: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Update a deployment with a pre-built external image."""
+        payload: dict[str, Any] = {
             "source_revision_config": {"image_uri": image_uri},
         }
         if tracked_packages:
