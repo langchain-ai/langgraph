@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import copy
 import dataclasses
 import decimal
@@ -11,7 +12,7 @@ import pickle
 import re
 import sys
 from collections import deque
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
 from inspect import isclass
@@ -23,7 +24,15 @@ from ipaddress import (
     IPv6Interface,
     IPv6Network,
 )
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    Literal,
+    Optional,
+    Union,
+    cast,
+)
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -300,6 +309,96 @@ EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
 EXT_DELTA_SNAPSHOT = 7
+
+
+# Restricted namespace used to resolve type expressions inside parameterized
+# pydantic generic names (e.g. ``MyGeneric[Optional[MyModel]]``). No eval():
+# names resolve only via these typing aliases, builtins, or attributes of the
+# already-allowlisted module.
+_GENERIC_TYPING_NAMES: dict[str, Any] = {
+    "List": list,
+    "Dict": dict,
+    "Set": set,
+    "FrozenSet": frozenset,
+    "Tuple": tuple,
+    "Optional": Optional,
+    "Union": Union,
+    "Literal": Literal,
+    "Annotated": Annotated,
+    "Sequence": Sequence,
+    "Mapping": Mapping,
+    "Any": Any,
+}
+
+
+def _split_generic_args(args: str) -> list[str]:
+    """Split ``A[B, C], D`` on top-level commas, respecting nested brackets."""
+    parts: list[str] = []
+    depth = 0
+    start = 0
+    for i, ch in enumerate(args):
+        if ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            parts.append(args[start:i].strip())
+            start = i + 1
+    tail = args[start:].strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+def _resolve_type_expr(expr: str, mod: Any) -> Any:
+    """Resolve a dotted, possibly generic type expression without eval()."""
+    expr = expr.strip()
+    if "[" in expr:
+        head, _, rest = expr.partition("[")
+        origin = _resolve_type_expr(head, mod)
+        arg_exprs = _split_generic_args(rest[:-1])  # strip trailing ]
+        args = tuple(_resolve_type_expr(a, mod) for a in arg_exprs)
+        return origin[args]
+    if expr in _GENERIC_TYPING_NAMES:
+        return _GENERIC_TYPING_NAMES[expr]
+    if expr in dir(builtins):
+        return getattr(builtins, expr)
+    target: Any = mod
+    for part in expr.split("."):
+        target = getattr(target, part, None)
+        if target is None:
+            return None
+    return target
+
+
+def _resolve_pydantic_class(module_name: str, qualname: str) -> Any:
+    """Look up the class recorded at encode time.
+
+    Plain names resolve via ``getattr`` as before. Parameterized pydantic
+    generics record ``__name__`` values like ``MyGeneric[MyModel]`` (the
+    parameterized class is a distinct, pydantic-cached subclass), which no
+    ``getattr`` can find; re-apply the type args to the origin class instead.
+    """
+    mod = importlib.import_module(module_name)
+    cls = getattr(mod, qualname, None)
+    if cls is not None or "[" not in qualname:
+        return cls
+    origin_name, _, args_repr = qualname.partition("[")
+    origin = getattr(mod, origin_name, None)
+    if origin is None:
+        return None
+    arg_exprs = _split_generic_args(args_repr[:-1])
+    args = tuple(_resolve_type_expr(a, mod) for a in arg_exprs)
+    if any(a is None for a in args):
+        # A parameter we can no longer resolve (e.g. the class was renamed
+        # since encode time). We can't rebuild the parameterized class, and
+        # constructing the unparameterized origin would silently skip field
+        # validation; degrade to the raw kwargs like any other unknown type.
+        return None
+    try:
+        return origin[args if len(args) > 1 else args[0]]
+    except Exception:
+        return None
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
@@ -716,7 +815,7 @@ def _create_msgpack_ext_hook(
                 if not _check_allowed(tup[0], tup[1]):
                     return tup[2]
                 # module, name, kwargs, method
-                cls = getattr(importlib.import_module(tup[0]), tup[1])
+                cls = _resolve_pydantic_class(tup[0], tup[1])
                 try:
                     return cls(**tup[2])
                 except Exception:
