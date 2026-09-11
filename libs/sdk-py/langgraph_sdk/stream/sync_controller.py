@@ -199,25 +199,6 @@ class SyncStreamController:
             for sub in self._subscriptions.values():
                 sub.queue.put(None)
 
-    def _reconnect_shared_stream(self) -> bool:
-        with self._lock:
-            base_filter = self._shared_stream_filter
-        if base_filter is None:
-            return False
-        for _ in range(self._max_reconnect_attempts):
-            with self._lock:
-                if self._closed:
-                    return False
-                params = self._filter_with_since(base_filter)
-            try:
-                new_stream = self._transport.open_event_stream(params)
-            except Exception:
-                continue
-            with self._lock:
-                self._shared_stream = new_stream
-            return True
-        return False
-
     def _compute_current_union(
         self, extra: SubscribeParams | None = None
     ) -> dict[str, Any]:
@@ -298,26 +279,37 @@ class SyncStreamController:
         Returns True if a new stream was successfully opened, False if all
         reconnect attempts were exhausted or the controller was closed.
         """
-        base_filter = self._shared_stream_filter
+        with self._lock:
+            base_filter = self._shared_stream_filter
         if base_filter is None:
             return False
         for attempt in range(self._max_reconnect_attempts):
-            if self._closed:
-                return False
             if attempt > 0:
                 self._reconnect_sleep(attempt - 1)
+            with self._lock:
+                if self._closed:
+                    return False
+                params = self._filter_with_since(base_filter)
             try:
-                new_handle = self._transport.open_event_stream(
-                    self._filter_with_since(base_filter)
-                )
-                old = self._shared_stream
-                self._shared_stream = new_handle
-                if old is not None:
-                    with contextlib.suppress(Exception):
-                        old.close()
-                return True
+                new_handle = self._transport.open_event_stream(params)
             except Exception as err:
                 _logger.debug("sync reconnect attempt %d failed: %r", attempt, err)
+                continue
+            with self._lock:
+                # `close()` may have run while the stream was being opened.
+                # Installing the handle now would leak it, so hand it back.
+                stale = self._closed
+                old = None if stale else self._shared_stream
+                if not stale:
+                    self._shared_stream = new_handle
+            if stale:
+                with contextlib.suppress(Exception):
+                    new_handle.close()
+                return False
+            if old is not None:
+                with contextlib.suppress(Exception):
+                    old.close()
+            return True
         return False
 
     def close(self) -> None:
