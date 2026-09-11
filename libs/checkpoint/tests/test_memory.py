@@ -152,7 +152,36 @@ class TestMemorySaver:
             search_results_5[1].config["configurable"]["checkpoint_ns"],
         } == {"", "inner"}
 
-        # TODO: test before and limit params
+        # limit returns at most N checkpoints across all stored results
+        search_results_limit = list(self.memory_saver.list(None, filter={}, limit=2))
+        assert len(search_results_limit) == 2
+
+        # before excludes checkpoints at or after the given checkpoint_id
+        thread_2_results = list(
+            self.memory_saver.list({"configurable": {"thread_id": "thread-2"}})
+        )
+        assert len(thread_2_results) == 2
+        checkpoint_ids = [
+            result.config["configurable"]["checkpoint_id"]
+            for result in thread_2_results
+        ]
+        before_id = max(checkpoint_ids)
+        before_config = next(
+            result.config
+            for result in thread_2_results
+            if result.config["configurable"]["checkpoint_id"] == before_id
+        )
+        search_results_before = list(
+            self.memory_saver.list(
+                {"configurable": {"thread_id": "thread-2"}},
+                before=before_config,
+            )
+        )
+        assert len(search_results_before) == 1
+        assert (
+            search_results_before[0].config["configurable"]["checkpoint_id"]
+            == min(checkpoint_ids)
+        )
 
     async def test_asearch(self) -> None:
         # set up test
@@ -206,6 +235,41 @@ class TestMemorySaver:
             c async for c in self.memory_saver.alist(None, filter=query_4)
         ]
         assert len(search_results_4) == 0
+
+        search_results_limit = [
+            c async for c in self.memory_saver.alist(None, filter={}, limit=2)
+        ]
+        assert len(search_results_limit) == 2
+
+        thread_2_results = [
+            c
+            async for c in self.memory_saver.alist(
+                {"configurable": {"thread_id": "thread-2"}}
+            )
+        ]
+        assert len(thread_2_results) == 2
+        checkpoint_ids = [
+            result.config["configurable"]["checkpoint_id"]
+            for result in thread_2_results
+        ]
+        before_id = max(checkpoint_ids)
+        before_config = next(
+            result.config
+            for result in thread_2_results
+            if result.config["configurable"]["checkpoint_id"] == before_id
+        )
+        search_results_before = [
+            c
+            async for c in self.memory_saver.alist(
+                {"configurable": {"thread_id": "thread-2"}},
+                before=before_config,
+            )
+        ]
+        assert len(search_results_before) == 1
+        assert (
+            search_results_before[0].config["configurable"]["checkpoint_id"]
+            == min(checkpoint_ids)
+        )
 
 
 async def test_memory_saver() -> None:
