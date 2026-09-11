@@ -57,6 +57,7 @@ from langgraph.pregel._retry import (
     arun_with_retry,
     run_with_retry,
 )
+from langgraph.pregel._runner import FuturesDict
 from langgraph.pregel.protocol import StreamProtocol
 from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
 from langgraph.types import (
@@ -2819,6 +2820,105 @@ def test_error_handler_resumes_after_crash_multiple_nodes():
     assert call_count["handler_b"] == 2  # ran again on resume
     assert "recovered_a:a" in result["results"]
     assert "recovered_b:b" in result["results"]
+
+
+def test_skip_reraise_state_not_shared_across_invocations():
+    """Regression guard for #8861: the futures whose exceptions were already
+    routed to a graph-level error handler (and so should not be re-raised via
+    the normal fatal path) used to be tracked in a module-level
+    `weakref.WeakSet` (`SKIP_RERAISE_SET`), shared by every `tick()`/`atick()`
+    call in the process for the lifetime of the interpreter.
+
+    That is an order-dependent global: if any future from an earlier,
+    unrelated Pregel invocation was still alive (kept alive by a stray
+    reference held in a closure, cache, or traceback - exactly the kind of
+    thing tests and long-running processes do), its presence in the shared
+    set could affect a later, unrelated invocation's re-raise decision. This
+    is the mechanism suspected in the order-dependent `pytest tests/` flake
+    reported in #8861 (this test passes alone, fails only in the full suite).
+
+    The fix scopes this state to a single tick()/atick() call via
+    `FuturesDict.skip_reraise`, created fresh every time. This test reuses
+    the exact crash-then-resume graph from
+    ``test_error_handler_resumes_after_crash_multiple_nodes`` above - the
+    same graph shape the original flake was reported against - and asserts
+    the invariant directly: the initial (crashing) invocation and the
+    resuming invocation must never be handed the same `skip_reraise`
+    container.
+    """
+
+    class State(TypedDict):
+        results: Annotated[list[str], operator.add]
+
+    call_count = {"a": 0, "b": 0, "handler_a": 0, "handler_b": 0}
+    handler_a_started = threading.Event()
+
+    def node_a(state: State) -> State:
+        call_count["a"] += 1
+        raise RuntimeError("a failed")
+
+    def node_b(state: State) -> State:
+        call_count["b"] += 1
+        assert handler_a_started.wait(timeout=5), "handler_a never started"
+        raise RuntimeError("b failed")
+
+    handler_should_fail = [True]
+
+    def handler_a(state: State, error: NodeError) -> State:
+        call_count["handler_a"] += 1
+        handler_a_started.set()
+        if handler_should_fail[0]:
+            raise RuntimeError("handler_a crash")
+        return {"results": [f"recovered_a:{error.node}"]}
+
+    def handler_b(state: State, error: NodeError) -> State:
+        call_count["handler_b"] += 1
+        if handler_should_fail[0]:
+            raise RuntimeError("handler_b crash")
+        return {"results": [f"recovered_b:{error.node}"]}
+
+    checkpointer = MemorySaver()
+    graph = (
+        StateGraph(State)
+        .add_node("a", node_a, error_handler=handler_a)
+        .add_node("b", node_b, error_handler=handler_b)
+        .add_edge(START, "a")
+        .add_edge(START, "b")
+        .compile(checkpointer=checkpointer)
+    )
+    config = {"configurable": {"thread_id": "skip-reraise-isolation"}}
+
+    seen_skip_reraise: list[Any] = []
+    original_init = FuturesDict.__init__
+
+    def spy_init(self: Any, *args: Any, **kwargs: Any) -> None:
+        seen_skip_reraise.append(kwargs["skip_reraise"])
+        original_init(self, *args, **kwargs)
+
+    with patch.object(FuturesDict, "__init__", spy_init):
+        # First invoke: both handlers crash -> populates skip_reraise for the
+        # handler-scheduling futures, then re-raises.
+        with pytest.raises(RuntimeError):
+            graph.invoke({"results": []}, config)
+
+        # Resume: handlers succeed this time -> a fresh tick()/atick() cycle,
+        # with its own skip_reraise container.
+        handler_should_fail[0] = False
+        handler_a_started.clear()
+        result = graph.invoke(None, config)
+        assert "recovered_a:a" in result["results"]
+        assert "recovered_b:b" in result["results"]
+
+    # Both invocations must have gone through the error-handler-routing path
+    # that populates skip_reraise (not the single-task fast path).
+    assert len(seen_skip_reraise) >= 2
+    for i, container in enumerate(seen_skip_reraise):
+        for other in seen_skip_reraise[i + 1 :]:
+            assert container is not other, (
+                "skip_reraise was shared across independent tick() calls - "
+                "this is exactly the cross-invocation leak the old "
+                "module-level SKIP_RERAISE_SET allowed"
+            )
 
 
 @NEEDS_TASK_CANCELLING
