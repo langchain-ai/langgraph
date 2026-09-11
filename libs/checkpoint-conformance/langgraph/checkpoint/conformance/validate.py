@@ -27,6 +27,9 @@ from langgraph.checkpoint.conformance.spec.test_list import run_list_tests
 from langgraph.checkpoint.conformance.spec.test_prune import run_prune_tests
 from langgraph.checkpoint.conformance.spec.test_put import run_put_tests
 from langgraph.checkpoint.conformance.spec.test_put_writes import run_put_writes_tests
+from langgraph.checkpoint.conformance.spec.test_write_ownership import (
+    run_write_ownership_tests,
+)
 
 # Maps capability to its runner function.
 _RUNNERS = {
@@ -39,6 +42,7 @@ _RUNNERS = {
     Capability.COPY_THREAD: run_copy_thread_tests,
     Capability.PRUNE: run_prune_tests,
     Capability.DELTA_CHANNEL_HISTORY: run_delta_channel_history_tests,
+    Capability.WRITE_OWNERSHIP: run_write_ownership_tests,
 }
 
 

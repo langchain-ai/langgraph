@@ -17,6 +17,9 @@ from langgraph.checkpoint.conformance.spec.test_list import run_list_tests
 from langgraph.checkpoint.conformance.spec.test_prune import run_prune_tests
 from langgraph.checkpoint.conformance.spec.test_put import run_put_tests
 from langgraph.checkpoint.conformance.spec.test_put_writes import run_put_writes_tests
+from langgraph.checkpoint.conformance.spec.test_write_ownership import (
+    run_write_ownership_tests,
+)
 
 __all__ = [
     "run_put_tests",
@@ -28,4 +31,5 @@ __all__ = [
     "run_copy_thread_tests",
     "run_prune_tests",
     "run_delta_channel_history_tests",
+    "run_write_ownership_tests",
 ]

@@ -24,6 +24,7 @@ class Capability(str, Enum):
     COPY_THREAD = "copy_thread"
     PRUNE = "prune"
     DELTA_CHANNEL_HISTORY = "delta_channel_history"
+    WRITE_OWNERSHIP = "write_ownership"
 
 
 # Capabilities that every checkpointer must support.
@@ -44,6 +45,7 @@ EXTENDED_CAPABILITIES = frozenset(
         Capability.COPY_THREAD,
         Capability.PRUNE,
         Capability.DELTA_CHANNEL_HISTORY,
+        Capability.WRITE_OWNERSHIP,
     }
 )
 
@@ -60,6 +62,11 @@ _CAPABILITY_METHOD_MAP: dict[Capability, str] = {
     Capability.COPY_THREAD: "acopy_thread",
     Capability.PRUNE: "aprune",
     Capability.DELTA_CHANNEL_HISTORY: "aget_delta_channel_history",
+    # Absent from BaseCheckpointSaver entirely -- which is why adding this capability
+    # needs no base-class change. `_is_overridden` below returns True for a method the
+    # base class does not define, so a saver is detected purely by defining it. See
+    # ownership.py.
+    Capability.WRITE_OWNERSHIP: "aclaim_write_ownership",
 }
 
 
