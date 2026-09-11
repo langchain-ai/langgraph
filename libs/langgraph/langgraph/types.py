@@ -14,6 +14,7 @@ from typing import (
     NamedTuple,
     TypeVar,
     final,
+    overload,
 )
 from warnings import warn
 
@@ -37,6 +38,7 @@ from langgraph.warnings import LangGraphDeprecatedSinceV10, LangGraphDeprecatedS
 # when used in standalone type aliases.
 StateT = TypeVar("StateT")
 OutputT = TypeVar("OutputT")
+ResponseT = TypeVar("ResponseT")
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
@@ -859,6 +861,14 @@ class Command(Generic[N], ToolOutputMixin):
             return []
 
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
+
+
+@overload
+def interrupt(value: Any, *, response_schema: type[ResponseT]) -> ResponseT: ...
+
+
+@overload
+def interrupt(value: Any, *, response_schema: dict[str, Any] | None = None) -> Any: ...
 
 
 def interrupt(

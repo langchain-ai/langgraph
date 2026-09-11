@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -105,6 +106,11 @@ class DecisionDict(TypedDict):
     approved: bool
 
 
+@dataclass
+class DecisionData:
+    approved: bool
+
+
 RAW_SCHEMA = {"type": "object", "properties": {"approved": {"type": "boolean"}}}
 
 
@@ -124,8 +130,18 @@ RAW_SCHEMA = {"type": "object", "properties": {"approved": {"type": "boolean"}}}
             },
             {"approved": True},
         ),
+        (
+            DecisionData,
+            {
+                "properties": {"approved": {"title": "Approved", "type": "boolean"}},
+                "required": ["approved"],
+                "title": "DecisionData",
+                "type": "object",
+            },
+            DecisionData(approved=True),
+        ),
     ],
-    ids=["none", "raw_dict", "pydantic", "typeddict"],
+    ids=["none", "raw_dict", "pydantic", "typeddict", "dataclass"],
 )
 def test_interrupt_response_schema(
     sync_checkpointer: BaseCheckpointSaver,
