@@ -1,3 +1,4 @@
+import datetime
 import math
 import os
 import random
@@ -28,6 +29,7 @@ from langgraph.store.sqlite.base import (
     SqliteIndexConfig,
     _escape_glob_literal,
     _namespace_match_pattern,
+    _namespace_to_text,
 )
 
 
@@ -1435,3 +1437,168 @@ def test_list_namespaces_metacharacter_labels(store: SqliteStore) -> None:
         assert set(store.list_namespaces(prefix=[label, "child"], limit=100)) == {
             (label, "child"),
         }
+
+
+# --- omit_expired ---------------------------------------------------------
+#
+# `expires_at` is written in two formats: the insert path stores a Python
+# datetime (`2026-01-01 00:00:00.123456+00:00`) and the TTL refresh path stores
+# SQLite's `DATETIME()` output (`2026-01-01 00:00:00`). The helpers below
+# backdate a row in either format so both are covered without sleeping.
+
+OMIT_TTL_MINUTES = 5
+
+
+def _expire_now(
+    store: SqliteStore, ns: tuple[str, ...], key: str, *, sqlite_format: bool = False
+) -> None:
+    """Backdate a row's expires_at into the past without deleting it (unswept)."""
+    if sqlite_format:
+        store.conn.execute(
+            "UPDATE store SET expires_at = DATETIME('now', '-1 minute') "
+            "WHERE prefix = ? AND key = ?",
+            (_namespace_to_text(ns), key),
+        )
+    else:
+        past = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+            minutes=1
+        )
+        store.conn.execute(
+            "UPDATE store SET expires_at = ? WHERE prefix = ? AND key = ?",
+            (past, _namespace_to_text(ns), key),
+        )
+    store.conn.commit()
+
+
+def _row_exists(store: SqliteStore, ns: tuple[str, ...], key: str) -> bool:
+    row = store.conn.execute(
+        "SELECT COUNT(*) FROM store WHERE prefix = ? AND key = ?",
+        (_namespace_to_text(ns), key),
+    ).fetchone()
+    return row[0] == 1
+
+
+def _stored_expires_at(store: SqliteStore, ns: tuple[str, ...], key: str) -> Any:
+    row = store.conn.execute(
+        "SELECT expires_at FROM store WHERE prefix = ? AND key = ?",
+        (_namespace_to_text(ns), key),
+    ).fetchone()
+    return row[0]
+
+
+def test_omit_expired_filters_read_paths() -> None:
+    with SqliteStore.from_conn_string(
+        ":memory:", ttl={"default_ttl": OMIT_TTL_MINUTES, "omit_expired": True}
+    ) as store:
+        store.setup()
+
+        py_ns = ("omit", "expired-python-format")
+        sq_ns = ("omit", "expired-sqlite-format")
+        control_ns = ("omit", "control")
+        store.put(py_ns, "e", {"data": "gone"}, ttl=OMIT_TTL_MINUTES)
+        store.put(sq_ns, "e", {"data": "gone"}, ttl=OMIT_TTL_MINUTES)
+        store.put(control_ns, "c", {"data": "keep"}, ttl=None)
+        _expire_now(store, py_ns, "e")
+        _expire_now(store, sq_ns, "e", sqlite_format=True)
+
+        # Both rows are expired but physically still present (unswept).
+        assert _row_exists(store, py_ns, "e")
+        assert _row_exists(store, sq_ns, "e")
+
+        # get omits them; the never-expiring control is still returned.
+        assert store.get(py_ns, "e") is None
+        assert store.get(sq_ns, "e") is None
+        assert store.get(control_ns, "c") is not None
+
+        # search omits them but returns the control.
+        assert store.search(py_ns) == []
+        assert store.search(sq_ns) == []
+        assert [i.key for i in store.search(control_ns)] == ["c"]
+
+        # list_namespaces drops the expired-only namespaces, keeps the control.
+        namespaces = store.list_namespaces(prefix=("omit",))
+        assert py_ns not in namespaces
+        assert sq_ns not in namespaces
+        assert control_ns in namespaces
+
+
+@pytest.mark.parametrize("omit", [None, False], ids=["default", "explicit-false"])
+def test_omit_expired_disabled_preserves_expired_rows(omit: bool | None) -> None:
+    ttl: dict[str, Any] = {"default_ttl": OMIT_TTL_MINUTES}
+    if omit is not None:
+        ttl["omit_expired"] = omit
+    with SqliteStore.from_conn_string(":memory:", ttl=ttl) as store:
+        store.setup()
+
+        ns = ("keep",)
+        store.put(ns, "k", {"data": "still-here"}, ttl=OMIT_TTL_MINUTES)
+        _expire_now(store, ns, "k")
+
+        assert store.get(ns, "k", refresh_ttl=False) is not None
+        assert [i.key for i in store.search(ns, refresh_ttl=False)] == ["k"]
+        assert ns in store.list_namespaces(prefix=("keep",))
+
+
+def test_omit_expired_refresh_ttl_only_refreshes_live_rows() -> None:
+    with SqliteStore.from_conn_string(
+        ":memory:",
+        ttl={
+            "default_ttl": OMIT_TTL_MINUTES,
+            "refresh_on_read": True,
+            "omit_expired": True,
+        },
+    ) as store:
+        store.setup()
+
+        ns = ("refresh",)
+        store.put(ns, "expired", {"n": 0}, ttl=OMIT_TTL_MINUTES)
+        store.put(ns, "live_get", {"n": 1}, ttl=OMIT_TTL_MINUTES)
+        store.put(ns, "live_search", {"n": 2}, ttl=OMIT_TTL_MINUTES)
+        _expire_now(store, ns, "expired")
+
+        expired_before = _stored_expires_at(store, ns, "expired")
+        get_before = _stored_expires_at(store, ns, "live_get")
+        search_before = _stored_expires_at(store, ns, "live_search")
+
+        # refresh_ttl=True must NOT resurrect the expired row (via get or search)...
+        assert store.get(ns, "expired", refresh_ttl=True) is None
+        assert "expired" not in [i.key for i in store.search(ns, refresh_ttl=True)]
+        assert _stored_expires_at(store, ns, "expired") == expired_before
+
+        # ...but must still extend the live rows that were read. The refresh
+        # rewrites expires_at in SQLite's DATETIME() format, so the stored
+        # value changes as soon as the UPDATE has run.
+        assert store.get(ns, "live_get", refresh_ttl=True) is not None
+        assert _stored_expires_at(store, ns, "live_get") != get_before
+        assert "live_search" in [i.key for i in store.search(ns, refresh_ttl=True)]
+        assert _stored_expires_at(store, ns, "live_search") != search_before
+
+
+def test_omit_expired_search_pagination() -> None:
+    with SqliteStore.from_conn_string(
+        ":memory:", ttl={"default_ttl": OMIT_TTL_MINUTES, "omit_expired": True}
+    ) as store:
+        store.setup()
+
+        ns = ("page",)
+        for k in ("a", "b", "c"):
+            store.put(ns, k, {"k": k}, ttl=OMIT_TTL_MINUTES)
+        store.put(ns, "expired", {"k": "x"}, ttl=OMIT_TTL_MINUTES)
+        _expire_now(store, ns, "expired")
+
+        # updated_at DESC orders these a, expired, b, c, so the expired row sits
+        # inside the first limit=2 window. Filtering before LIMIT yields live
+        # pages [a, b] then [c]; filtering after LIMIT would underfill page 1.
+        seconds_ago = {"a": 1, "expired": 2, "b": 3, "c": 4}
+        for key, secs in seconds_ago.items():
+            store.conn.execute(
+                "UPDATE store SET updated_at = DATETIME('now', ?) "
+                "WHERE prefix = ? AND key = ?",
+                (f"-{secs} seconds", _namespace_to_text(ns), key),
+            )
+        store.conn.commit()
+
+        page1 = store.search(ns, limit=2, offset=0)
+        page2 = store.search(ns, limit=2, offset=2)
+        assert [i.key for i in page1] == ["a", "b"]
+        assert [i.key for i in page2] == ["c"]

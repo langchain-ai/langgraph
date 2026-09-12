@@ -262,6 +262,15 @@ def _group_ops(ops: Iterable[Op]) -> tuple[dict[type, list[tuple[int, Op]]], int
     return grouped_ops, tot
 
 
+# `expires_at` is written in two formats: Python inserts a timezone-aware ISO
+# string (`2026-01-01 00:00:00.123456+00:00`) while the TTL refresh path writes
+# SQLite's `DATETIME()` output (`2026-01-01 00:00:00`). SQLite compares TEXT
+# lexically, so `expires_at > CURRENT_TIMESTAMP` is wrong for rows in the same
+# second as now (the longer string sorts greater). `julianday()` parses both
+# formats to a real number, so the comparison is exact and format-independent.
+_LIVE_ROW_CLAUSE = "(expires_at IS NULL OR julianday(expires_at) > julianday('now'))"
+
+
 class PreparedGetQuery(NamedTuple):
     query: str  # Main query to execute
     params: tuple  # Parameters for the main query
@@ -279,6 +288,11 @@ class BaseSqliteStore:
     index_config: SqliteIndexConfig | None = None
     ttl_config: TTLConfig | None = None
 
+    @property
+    def _omit_expired(self) -> bool:
+        """Whether expired-but-unswept rows should be filtered from reads."""
+        return bool(self.ttl_config and self.ttl_config.get("omit_expired"))
+
     def _get_batch_GET_ops_queries(
         self, get_ops: Sequence[tuple[int, GetOp]]
     ) -> list[PreparedGetQuery]:
@@ -295,6 +309,8 @@ class BaseSqliteStore:
             namespace_groups[op.namespace].append((idx, op.key))
             refresh_ttls[op.namespace].append(getattr(op, "refresh_ttl", False))
 
+        expiry_clause = f"AND {_LIVE_ROW_CLAUSE}" if self._omit_expired else ""
+
         results = []
         for namespace, items in namespace_groups.items():
             _, keys = zip(*items, strict=False)
@@ -306,6 +322,7 @@ class BaseSqliteStore:
                 SELECT key, value, created_at, updated_at, expires_at, ttl_minutes
                 FROM store
                 WHERE prefix = ? AND key IN ({",".join(["?"] * len(keys))})
+                {expiry_clause}
             """
             select_params = (_namespace_to_text(namespace), *keys)
             results.append(
@@ -318,13 +335,15 @@ class BaseSqliteStore:
                 and self.ttl_config
                 and self.ttl_config.get("refresh_on_read", False)
             ):
+                # Same gate as the SELECT so a refresh cannot revive an expired row.
                 placeholders = ",".join(["?"] * len(keys))
                 update_query = f"""
                     UPDATE store
                     SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
-                    WHERE prefix = ? 
+                    WHERE prefix = ?
                     AND key IN ({placeholders})
                     AND ttl_minutes IS NOT NULL
+                    {expiry_clause}
                 """
                 update_params = (_namespace_to_text(namespace), *keys)
                 results.append(
@@ -498,6 +517,11 @@ class BaseSqliteStore:
                             # orjson.dumps returns bytes → decode to str so SQLite sees TEXT
                             filter_params.append(orjson.dumps(value).decode())
 
+            if self._omit_expired:
+                # Unaliased `expires_at` is unambiguous in both branches below:
+                # only `store` has the column, `store_vectors` does not.
+                filter_conditions.append(_LIVE_ROW_CLAUSE)
+
             # Vector search branch
             if op.query and self.index_config:
                 embedding_requests.append((idx, op.query))
@@ -614,6 +638,9 @@ class BaseSqliteStore:
         for _, op in list_ops:
             where_clauses: list[str] = []
             params: list[Any] = []
+
+            if self._omit_expired:
+                where_clauses.append(_LIVE_ROW_CLAUSE)
 
             if op.match_conditions:
                 for cond in op.match_conditions:
@@ -878,62 +905,6 @@ class SqliteStore(BaseSqliteStore, BaseStore):
         self.ttl_config = ttl
         self._ttl_sweeper_thread: threading.Thread | None = None
         self._ttl_stop_event = threading.Event()
-
-    def _get_batch_GET_ops_queries(
-        self, get_ops: Sequence[tuple[int, GetOp]]
-    ) -> list[PreparedGetQuery]:
-        """
-        Build queries to fetch (and optionally refresh the TTL of) multiple keys per namespace.
-
-        Returns a list of PreparedGetQuery objects, which may include:
-        - Queries with kind='refresh' for TTL refresh operations
-        - Queries with kind='get' for data retrieval operations
-        """
-        namespace_groups = defaultdict(list)
-        refresh_ttls = defaultdict(list)
-        for idx, op in get_ops:
-            namespace_groups[op.namespace].append((idx, op.key))
-            refresh_ttls[op.namespace].append(getattr(op, "refresh_ttl", False))
-
-        results = []
-        for namespace, items in namespace_groups.items():
-            _, keys = zip(*items, strict=False)
-            this_refresh_ttls = refresh_ttls[namespace]
-            refresh_ttl_any = any(this_refresh_ttls)
-
-            # Always add the main query to get the data
-            select_query = f"""
-                SELECT key, value, created_at, updated_at, expires_at, ttl_minutes
-                FROM store
-                WHERE prefix = ? AND key IN ({",".join(["?"] * len(keys))})
-            """
-            select_params = (_namespace_to_text(namespace), *keys)
-            results.append(
-                PreparedGetQuery(select_query, select_params, namespace, items, "get")
-            )
-
-            # Add a TTL refresh query if needed
-            if (
-                refresh_ttl_any
-                and self.ttl_config
-                and self.ttl_config.get("refresh_on_read", False)
-            ):
-                placeholders = ",".join(["?"] * len(keys))
-                update_query = f"""
-                    UPDATE store
-                    SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
-                    WHERE prefix = ? 
-                    AND key IN ({placeholders})
-                    AND ttl_minutes IS NOT NULL
-                """
-                update_params = (_namespace_to_text(namespace), *keys)
-                results.append(
-                    PreparedGetQuery(
-                        update_query, update_params, namespace, items, "refresh"
-                    )
-                )
-
-        return results
 
     def _get_filter_condition(self, key: str, op: str, value: Any) -> tuple[str, list]:
         """Helper to generate filter conditions."""

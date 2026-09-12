@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import os
 import tempfile
 import uuid
@@ -16,8 +17,8 @@ from langgraph.store.base import (
 )
 
 from langgraph.store.sqlite import AsyncSqliteStore
-from langgraph.store.sqlite.base import SqliteIndexConfig
-from tests.test_store import CharacterEmbeddings
+from langgraph.store.sqlite.base import SqliteIndexConfig, _namespace_to_text
+from tests.test_store import OMIT_TTL_MINUTES, CharacterEmbeddings
 
 
 @pytest.fixture(scope="function", params=["memory", "file"])
@@ -745,3 +746,164 @@ async def test_async_namespace_segment_boundary(store: AsyncSqliteStore) -> None
     assert set(await store.alist_namespaces(suffix=["alice"], limit=100)) == {
         ("uid", "users", "alice"),
     }
+
+
+# --- omit_expired ---------------------------------------------------------
+# Async mirror of the sync tests in test_store.py; see the note there on the
+# two `expires_at` formats.
+
+
+async def _aexpire_now(
+    store: AsyncSqliteStore,
+    ns: tuple[str, ...],
+    key: str,
+    *,
+    sqlite_format: bool = False,
+) -> None:
+    """Backdate a row's expires_at into the past without deleting it (unswept)."""
+    if sqlite_format:
+        await store.conn.execute(
+            "UPDATE store SET expires_at = DATETIME('now', '-1 minute') "
+            "WHERE prefix = ? AND key = ?",
+            (_namespace_to_text(ns), key),
+        )
+    else:
+        past = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+            minutes=1
+        )
+        await store.conn.execute(
+            "UPDATE store SET expires_at = ? WHERE prefix = ? AND key = ?",
+            (past, _namespace_to_text(ns), key),
+        )
+
+
+async def _arow_exists(store: AsyncSqliteStore, ns: tuple[str, ...], key: str) -> bool:
+    async with store.conn.execute(
+        "SELECT COUNT(*) FROM store WHERE prefix = ? AND key = ?",
+        (_namespace_to_text(ns), key),
+    ) as cur:
+        row = await cur.fetchone()
+    return row is not None and row[0] == 1
+
+
+async def _astored_expires_at(
+    store: AsyncSqliteStore, ns: tuple[str, ...], key: str
+) -> object:
+    async with store.conn.execute(
+        "SELECT expires_at FROM store WHERE prefix = ? AND key = ?",
+        (_namespace_to_text(ns), key),
+    ) as cur:
+        row = await cur.fetchone()
+    return None if row is None else row[0]
+
+
+async def test_async_omit_expired_filters_read_paths() -> None:
+    async with AsyncSqliteStore.from_conn_string(
+        ":memory:", ttl={"default_ttl": OMIT_TTL_MINUTES, "omit_expired": True}
+    ) as store:
+        await store.setup()
+
+        py_ns = ("omit", "expired-python-format")
+        sq_ns = ("omit", "expired-sqlite-format")
+        control_ns = ("omit", "control")
+        await store.aput(py_ns, "e", {"data": "gone"}, ttl=OMIT_TTL_MINUTES)
+        await store.aput(sq_ns, "e", {"data": "gone"}, ttl=OMIT_TTL_MINUTES)
+        await store.aput(control_ns, "c", {"data": "keep"}, ttl=None)
+        await _aexpire_now(store, py_ns, "e")
+        await _aexpire_now(store, sq_ns, "e", sqlite_format=True)
+
+        assert await _arow_exists(store, py_ns, "e")
+        assert await _arow_exists(store, sq_ns, "e")
+
+        assert await store.aget(py_ns, "e") is None
+        assert await store.aget(sq_ns, "e") is None
+        assert await store.aget(control_ns, "c") is not None
+
+        assert await store.asearch(py_ns) == []
+        assert await store.asearch(sq_ns) == []
+        assert [i.key for i in await store.asearch(control_ns)] == ["c"]
+
+        namespaces = await store.alist_namespaces(prefix=("omit",))
+        assert py_ns not in namespaces
+        assert sq_ns not in namespaces
+        assert control_ns in namespaces
+
+
+@pytest.mark.parametrize("omit", [None, False], ids=["default", "explicit-false"])
+async def test_async_omit_expired_disabled_preserves_expired_rows(
+    omit: bool | None,
+) -> None:
+    ttl: dict[str, object] = {"default_ttl": OMIT_TTL_MINUTES}
+    if omit is not None:
+        ttl["omit_expired"] = omit
+    async with AsyncSqliteStore.from_conn_string(":memory:", ttl=ttl) as store:
+        await store.setup()
+
+        ns = ("keep",)
+        await store.aput(ns, "k", {"data": "still-here"}, ttl=OMIT_TTL_MINUTES)
+        await _aexpire_now(store, ns, "k")
+
+        assert await store.aget(ns, "k", refresh_ttl=False) is not None
+        assert [i.key for i in await store.asearch(ns, refresh_ttl=False)] == ["k"]
+        assert ns in await store.alist_namespaces(prefix=("keep",))
+
+
+async def test_async_omit_expired_refresh_ttl_only_refreshes_live_rows() -> None:
+    async with AsyncSqliteStore.from_conn_string(
+        ":memory:",
+        ttl={
+            "default_ttl": OMIT_TTL_MINUTES,
+            "refresh_on_read": True,
+            "omit_expired": True,
+        },
+    ) as store:
+        await store.setup()
+
+        ns = ("refresh",)
+        await store.aput(ns, "expired", {"n": 0}, ttl=OMIT_TTL_MINUTES)
+        await store.aput(ns, "live_get", {"n": 1}, ttl=OMIT_TTL_MINUTES)
+        await store.aput(ns, "live_search", {"n": 2}, ttl=OMIT_TTL_MINUTES)
+        await _aexpire_now(store, ns, "expired")
+
+        expired_before = await _astored_expires_at(store, ns, "expired")
+        get_before = await _astored_expires_at(store, ns, "live_get")
+        search_before = await _astored_expires_at(store, ns, "live_search")
+
+        assert await store.aget(ns, "expired", refresh_ttl=True) is None
+        assert "expired" not in [
+            i.key for i in await store.asearch(ns, refresh_ttl=True)
+        ]
+        assert await _astored_expires_at(store, ns, "expired") == expired_before
+
+        assert await store.aget(ns, "live_get", refresh_ttl=True) is not None
+        assert await _astored_expires_at(store, ns, "live_get") != get_before
+        assert "live_search" in [
+            i.key for i in await store.asearch(ns, refresh_ttl=True)
+        ]
+        assert await _astored_expires_at(store, ns, "live_search") != search_before
+
+
+async def test_async_omit_expired_search_pagination() -> None:
+    async with AsyncSqliteStore.from_conn_string(
+        ":memory:", ttl={"default_ttl": OMIT_TTL_MINUTES, "omit_expired": True}
+    ) as store:
+        await store.setup()
+
+        ns = ("page",)
+        for k in ("a", "b", "c"):
+            await store.aput(ns, k, {"k": k}, ttl=OMIT_TTL_MINUTES)
+        await store.aput(ns, "expired", {"k": "x"}, ttl=OMIT_TTL_MINUTES)
+        await _aexpire_now(store, ns, "expired")
+
+        seconds_ago = {"a": 1, "expired": 2, "b": 3, "c": 4}
+        for key, secs in seconds_ago.items():
+            await store.conn.execute(
+                "UPDATE store SET updated_at = DATETIME('now', ?) "
+                "WHERE prefix = ? AND key = ?",
+                (f"-{secs} seconds", _namespace_to_text(ns), key),
+            )
+
+        page1 = await store.asearch(ns, limit=2, offset=0)
+        page2 = await store.asearch(ns, limit=2, offset=2)
+        assert [i.key for i in page1] == ["a", "b"]
+        assert [i.key for i in page2] == ["c"]
