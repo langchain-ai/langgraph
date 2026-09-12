@@ -292,33 +292,6 @@ class SyncStreamController:
         jitter = random.uniform(0, delay * 0.25)
         time.sleep(delay + jitter)
 
-    def _reconnect_shared_stream(self) -> bool:
-        """Attempt to reopen the shared stream after a transport drop.
-
-        Returns True if a new stream was successfully opened, False if all
-        reconnect attempts were exhausted or the controller was closed.
-        """
-        base_filter = self._shared_stream_filter
-        if base_filter is None:
-            return False
-        for attempt in range(self._max_reconnect_attempts):
-            if self._closed:
-                return False
-            if attempt > 0:
-                self._reconnect_sleep(attempt - 1)
-            try:
-                new_handle = self._transport.open_event_stream(
-                    self._filter_with_since(base_filter)
-                )
-                old = self._shared_stream
-                self._shared_stream = new_handle
-                if old is not None:
-                    with contextlib.suppress(Exception):
-                        old.close()
-                return True
-            except Exception as err:
-                _logger.debug("sync reconnect attempt %d failed: %r", attempt, err)
-        return False
 
     def close(self) -> None:
         with self._lock:
