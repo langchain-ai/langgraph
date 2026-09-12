@@ -509,7 +509,12 @@ def _resolve_env_path(
     if isinstance(env_field, dict) and env_field:
         return None
     if isinstance(env_field, str):
-        env_path = (config_path.parent / env_field).resolve()
+        project_root = config_path.parent.resolve()
+        env_path = (project_root / env_field).resolve()
+        if not env_path.is_relative_to(project_root):
+            raise click.UsageError(
+                f"env file '{env_field}' specified in langgraph.json resolves outside the project directory."
+            )
         if not env_path.exists():
             _get_emitter().note(
                 f"Warning: env file '{env_field}' specified in langgraph.json not found."
