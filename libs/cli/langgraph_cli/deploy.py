@@ -1230,13 +1230,8 @@ def _run_remote_build(
 # ---------------------------------------------------------------------------
 
 
-def _create_host_backend_client(
-    host_url: str | None,
-    api_key: str | None,
-    env_vars: dict[str, str] | None = None,
-) -> HostBackendClient:
-    if env_vars is None:
-        env_vars = _parse_env_from_config({}, pathlib.Path.cwd() / DEFAULT_CONFIG)
+def _resolve_tenant_id(env_vars: dict[str, str]) -> str | None:
+    """Resolve the tenant ID from either supported environment variable."""
     tenant_id = None
     for name in ("LANGSMITH_TENANT_ID", "LANGSMITH_WORKSPACE_ID"):
         value = env_vars.get(name) or os.environ.get(name)
@@ -1248,6 +1243,17 @@ def _create_host_backend_client(
                 "Set only one."
             )
         tenant_id = value
+    return tenant_id
+
+
+def _create_host_backend_client(
+    host_url: str | None,
+    api_key: str | None,
+    env_vars: dict[str, str] | None = None,
+) -> HostBackendClient:
+    if env_vars is None:
+        env_vars = _parse_env_from_config({}, pathlib.Path.cwd() / DEFAULT_CONFIG)
+    tenant_id = _resolve_tenant_id(env_vars)
     resolved_api_key = api_key
     if not resolved_api_key:
         for key_name in _API_KEY_ENV_NAMES:
