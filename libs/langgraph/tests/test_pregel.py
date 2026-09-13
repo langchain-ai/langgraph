@@ -9368,6 +9368,54 @@ def test_overwrite_parallel_error(
         graph.invoke({"messages": ["START"]}, config)
 
 
+def test_error_traceback_excludes_internal_frames() -> None:
+    """Exceptions raised in user code should not expose internal langgraph frames.
+
+    This guards against the exclusion list silently going stale when internal
+    modules get renamed (frames are only stripped while the head of the traceback
+    matches one of the excluded modules).
+    """
+
+    class State(TypedDict):
+        value: int
+
+    def failing_node(state: State) -> State:
+        raise ValueError("user error")
+
+    builder = StateGraph(State)
+    builder.add_node("failing_node", failing_node)
+    builder.add_edge(START, "failing_node")
+    graph = builder.compile()
+
+    with pytest.raises(ValueError, match="user error") as exc_info:
+        graph.invoke({"value": 1})
+
+    frames = []
+    tb = exc_info.value.__traceback__
+    while tb is not None:
+        frames.append(tb.tb_frame)
+        tb = tb.tb_next
+
+    # the frame from user code is preserved
+    assert any(f.f_code.co_name == "failing_node" for f in frames)
+
+    internal_filenames = (
+        "pregel/_runner.py",
+        "pregel/_retry.py",
+        "pregel/_executor.py",
+        "_internal/_runnable.py",
+    )
+    leaked = [
+        f"{f.f_code.co_filename}:{f.f_lineno} in {f.f_code.co_name}"
+        for f in frames
+        if any(
+            name in f.f_code.co_filename.replace("\\", "/")
+            for name in internal_filenames
+        )
+    ]
+    assert not leaked, f"internal langgraph frames leaked into traceback: {leaked}"
+
+
 def test_fork_does_not_apply_pending_writes(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
