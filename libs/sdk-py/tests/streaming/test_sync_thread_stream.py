@@ -90,6 +90,16 @@ def test_sync_subscribe_before_run_start_waits_on_gate():
 # ---------------------------------------------------------------------------
 
 
+
+
+def test_sync_reconnect_shared_stream_defined_once():
+    """Locking reconnect must not be shadowed by a second class-body definition (#8896)."""
+    import inspect
+
+    source = inspect.getsource(SyncStreamController)
+    assert source.count("def _reconnect_shared_stream") == 1
+
+
 def test_sync_reconnect_uses_backoff_between_attempts(monkeypatch):
     """_reconnect_shared_stream sleeps between retry attempts with exp+jitter
     backoff, mirroring the async reconnect behavior."""
