@@ -1237,6 +1237,17 @@ def _create_host_backend_client(
 ) -> HostBackendClient:
     if env_vars is None:
         env_vars = _parse_env_from_config({}, pathlib.Path.cwd() / DEFAULT_CONFIG)
+    tenant_id = env_vars.get("LANGSMITH_TENANT_ID") or os.environ.get(
+        "LANGSMITH_TENANT_ID"
+    )
+    workspace_id = env_vars.get("LANGSMITH_WORKSPACE_ID") or os.environ.get(
+        "LANGSMITH_WORKSPACE_ID"
+    )
+    if tenant_id and workspace_id:
+        raise click.UsageError(
+            "LANGSMITH_TENANT_ID and LANGSMITH_WORKSPACE_ID cannot both be set. "
+            "Set only one."
+        )
     resolved_api_key = api_key
     if not resolved_api_key:
         for key_name in _API_KEY_ENV_NAMES:
@@ -1259,13 +1270,9 @@ def _create_host_backend_client(
             fg="yellow",
         )
         resolved_api_key = click.prompt("Enter LangSmith API key", hide_input=True)
-    tenant_id = (
-        env_vars.get("LANGSMITH_TENANT_ID")
-        or os.environ.get("LANGSMITH_TENANT_ID")
-        or env_vars.get("LANGSMITH_WORKSPACE_ID")
-        or os.environ.get("LANGSMITH_WORKSPACE_ID")
+    return HostBackendClient(
+        host_url, resolved_api_key, tenant_id=tenant_id or workspace_id
     )
-    return HostBackendClient(host_url, resolved_api_key, tenant_id=tenant_id)
 
 
 def _call_host_backend_with_optional_tenant(

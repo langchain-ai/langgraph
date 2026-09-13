@@ -542,20 +542,18 @@ class TestCreateHostBackendClientNoInput:
 
 
 @pytest.mark.parametrize("source", ["config", "shell"])
-@pytest.mark.parametrize("existing_tenant", [None, "existing-tenant"])
-def test_workspace_id_alias(monkeypatch, source, existing_tenant):
+@pytest.mark.parametrize("name", ["LANGSMITH_TENANT_ID", "LANGSMITH_WORKSPACE_ID"])
+def test_workspace_id_alias(monkeypatch, source, name):
     monkeypatch.delenv("LANGSMITH_WORKSPACE_ID", raising=False)
     monkeypatch.delenv("LANGSMITH_TENANT_ID", raising=False)
     env_vars = {}
     if source == "config":
-        env_vars["LANGSMITH_WORKSPACE_ID"] = "workspace"
+        env_vars[name] = "workspace"
     else:
-        monkeypatch.setenv("LANGSMITH_WORKSPACE_ID", "workspace")
-    if existing_tenant:
-        monkeypatch.setenv("LANGSMITH_TENANT_ID", existing_tenant)
+        monkeypatch.setenv(name, "workspace")
 
     def handler(request):
-        assert request.headers["X-Tenant-ID"] == (existing_tenant or "workspace")
+        assert request.headers["X-Tenant-ID"] == "workspace"
         return httpx.Response(200, json={"resources": []})
 
     monkeypatch.setattr(
@@ -568,6 +566,30 @@ def test_workspace_id_alias(monkeypatch, source, existing_tenant):
         client.list_deployments()
     finally:
         client._client.close()
+
+
+@pytest.mark.parametrize("tenant_source", ["config", "shell"])
+@pytest.mark.parametrize("workspace_source", ["config", "shell"])
+@pytest.mark.parametrize("workspace_id", ["tenant-id", "workspace-id"])
+def test_rejects_both_workspace_names(
+    monkeypatch, tenant_source, workspace_source, workspace_id
+):
+    env_vars = {}
+    for name, source, value in [
+        ("LANGSMITH_TENANT_ID", tenant_source, "tenant-id"),
+        ("LANGSMITH_WORKSPACE_ID", workspace_source, workspace_id),
+    ]:
+        monkeypatch.delenv(name, raising=False)
+        if source == "config":
+            env_vars[name] = value
+        else:
+            monkeypatch.setenv(name, value)
+
+    with pytest.raises(
+        click.UsageError,
+        match="LANGSMITH_TENANT_ID and LANGSMITH_WORKSPACE_ID cannot both be set",
+    ):
+        _create_host_backend_client("https://api.example.com", "test-key", env_vars)
 
 
 def test_workspace_id_is_not_uploaded_as_secret():
