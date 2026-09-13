@@ -55,17 +55,31 @@ from langgraph.types import (
 F = TypeVar("F", concurrent.futures.Future, asyncio.Future)
 E = TypeVar("E", threading.Event, asyncio.Event)
 
-# List of filenames to exclude from exception traceback
+# List of modules to exclude from exception traceback
 # Note: Frames will be removed if they are the last frame in traceback, recursively
-EXCLUDED_FRAME_FNAMES = (
-    "langgraph/pregel/retry.py",
-    "langgraph/pregel/runner.py",
-    "langgraph/pregel/executor.py",
-    "langgraph/utils/runnable.py",
-    "langchain_core/runnables/config.py",
-    "concurrent/futures/thread.py",
-    "concurrent/futures/_base.py",
+EXCLUDED_FRAME_MODULES = frozenset(
+    (
+        "langgraph.pregel._retry",
+        "langgraph.pregel._runner",
+        "langgraph.pregel._executor",
+        "langgraph._internal._runnable",
+        "langchain_core.runnables.config",
+        "concurrent.futures.thread",
+        "concurrent.futures._base",
+    )
 )
+
+
+def _strip_excluded_frames(exc: BaseException) -> None:
+    """Trim leading internal frames from an exception's traceback, in place."""
+    if tb := exc.__traceback__:
+        while (
+            tb.tb_next is not None
+            and tb.tb_frame.f_globals.get("__name__") in EXCLUDED_FRAME_MODULES
+        ):
+            tb = tb.tb_next
+        exc.__traceback__ = tb
+
 
 SKIP_RERAISE_SET: weakref.WeakSet[concurrent.futures.Future | asyncio.Future] = (
     weakref.WeakSet()
@@ -238,13 +252,7 @@ class PregelRunner:
                         fut.set_exception(exc)
                         futures.done.add(fut)
                 elif reraise and id(exc) not in self._handled_exception_ids:
-                    if tb := exc.__traceback__:
-                        while tb.tb_next is not None and any(
-                            tb.tb_frame.f_code.co_filename.endswith(name)
-                            for name in EXCLUDED_FRAME_FNAMES
-                        ):
-                            tb = tb.tb_next
-                        exc.__traceback__ = tb
+                    _strip_excluded_frames(exc)
                     raise
             if not futures and not scheduled_error_handler:
                 # maybe `t` scheduled another task
@@ -348,13 +356,7 @@ class PregelRunner:
                 handled_futures=handled_futures,
             )
         except Exception as exc:
-            if tb := exc.__traceback__:
-                while tb.tb_next is not None and any(
-                    tb.tb_frame.f_code.co_filename.endswith(name)
-                    for name in EXCLUDED_FRAME_FNAMES
-                ):
-                    tb = tb.tb_next
-                exc.__traceback__ = tb
+            _strip_excluded_frames(exc)
             raise
 
     async def atick(
@@ -429,13 +431,7 @@ class PregelRunner:
                         fut.set_exception(exc)
                         futures.done.add(fut)
                 elif reraise and id(exc) not in self._handled_exception_ids:
-                    if tb := exc.__traceback__:
-                        while tb.tb_next is not None and any(
-                            tb.tb_frame.f_code.co_filename.endswith(name)
-                            for name in EXCLUDED_FRAME_FNAMES
-                        ):
-                            tb = tb.tb_next
-                        exc.__traceback__ = tb
+                    _strip_excluded_frames(exc)
                     raise
             if not futures and not scheduled_error_handler:
                 # maybe `t` scheduled another task
@@ -562,13 +558,7 @@ class PregelRunner:
                 handled_futures=handled_futures,
             )
         except Exception as exc:
-            if tb := exc.__traceback__:
-                while tb.tb_next is not None and any(
-                    tb.tb_frame.f_code.co_filename.endswith(name)
-                    for name in EXCLUDED_FRAME_FNAMES
-                ):
-                    tb = tb.tb_next
-                exc.__traceback__ = tb
+            _strip_excluded_frames(exc)
             raise
 
     def commit(

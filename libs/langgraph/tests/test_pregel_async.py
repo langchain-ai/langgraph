@@ -6,6 +6,7 @@ import logging
 import operator
 import random
 import sys
+import traceback
 import uuid
 from collections import Counter, defaultdict, deque
 from dataclasses import replace
@@ -9716,3 +9717,35 @@ async def test_node_error_handler_handles_subgraph_internal_failure_async() -> N
     assert result["foo"] == "handled_async_subgraph"
     assert captured["from_node_name"] == "subgraph_node"
     assert isinstance(captured["from_node_error"], BaseException)
+
+
+async def test_error_traceback_excludes_internal_frames_async() -> None:
+    class State(TypedDict):
+        foo: str
+
+    async def bad_node(state: State) -> State:
+        raise ValueError("boom")
+
+    graph = (
+        StateGraph(State)
+        .add_node("bad_node", bad_node)
+        .add_edge(START, "bad_node")
+        .compile()
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        await graph.ainvoke({"foo": ""})
+
+    frames = traceback.extract_tb(exc_info.value.__traceback__)
+    assert any(frame.name == "bad_node" for frame in frames)
+    assert not any(
+        frame.filename.replace("\\", "/").endswith(
+            (
+                "pregel/_runner.py",
+                "pregel/_retry.py",
+                "pregel/_executor.py",
+                "_internal/_runnable.py",
+            )
+        )
+        for frame in frames
+    )

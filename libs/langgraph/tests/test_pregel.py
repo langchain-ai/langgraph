@@ -7,6 +7,7 @@ import operator
 import random
 import threading
 import time
+import traceback
 import uuid
 from collections import Counter, defaultdict, deque
 from collections.abc import Sequence
@@ -8316,6 +8317,38 @@ def test_imp_exception(
         {"my_task": 2},
         {"my_workflow": "done"},
     ]
+
+
+def test_error_traceback_excludes_internal_frames() -> None:
+    class State(TypedDict):
+        foo: str
+
+    def bad_node(state: State) -> State:
+        raise ValueError("boom")
+
+    graph = (
+        StateGraph(State)
+        .add_node("bad_node", bad_node)
+        .add_edge(START, "bad_node")
+        .compile()
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        graph.invoke({"foo": ""})
+
+    frames = traceback.extract_tb(exc_info.value.__traceback__)
+    assert any(frame.name == "bad_node" for frame in frames)
+    assert not any(
+        frame.filename.replace("\\", "/").endswith(
+            (
+                "pregel/_runner.py",
+                "pregel/_retry.py",
+                "pregel/_executor.py",
+                "_internal/_runnable.py",
+            )
+        )
+        for frame in frames
+    )
 
 
 @pytest.mark.parametrize("with_timeout", [False, "inner", "outer", "both"])
