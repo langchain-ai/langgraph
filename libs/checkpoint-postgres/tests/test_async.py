@@ -417,3 +417,31 @@ async def test_delta_channel_chain_reconstruction(saver_name: str) -> None:
         assert msgs[1].content == "reply-1"
         assert msgs[2].content == "there"
         assert msgs[3].content == "reply-3"
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
+async def test_adelete_thread(saver_name: str) -> None:
+    """adelete_thread removes a thread's checkpoints and writes.
+
+    AsyncShallowPostgresSaver inherited this from BaseCheckpointSaver, which
+    raises NotImplementedError, so calling it left the thread's rows in place.
+    """
+    async with _saver(saver_name) as saver:
+        config: RunnableConfig = {
+            "configurable": {"thread_id": "thread-delete", "checkpoint_ns": ""}
+        }
+        other: RunnableConfig = {
+            "configurable": {"thread_id": "thread-keep", "checkpoint_ns": ""}
+        }
+        saved = await saver.aput(config, empty_checkpoint(), {}, {})
+        await saver.aput_writes(saved, [("channel", "value")], "task-1")
+        await saver.aput(other, empty_checkpoint(), {}, {})
+
+        assert await saver.aget_tuple(config) is not None
+
+        await saver.adelete_thread("thread-delete")
+
+        assert await saver.aget_tuple(config) is None
+        assert [c async for c in saver.alist(config)] == []
+        # a sibling thread must be untouched
+        assert await saver.aget_tuple(other) is not None

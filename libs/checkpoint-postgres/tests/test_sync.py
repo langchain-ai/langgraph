@@ -358,3 +358,31 @@ def test_get_checkpoint_no_channel_values(
 
         checkpoint = saver.get_tuple(config)
         assert checkpoint.checkpoint["channel_values"] == {}
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
+def test_delete_thread(saver_name: str) -> None:
+    """delete_thread removes a thread's checkpoints and writes.
+
+    ShallowPostgresSaver inherited this from BaseCheckpointSaver, which raises
+    NotImplementedError, so calling it left the thread's rows in place.
+    """
+    with _saver(saver_name) as saver:
+        config: RunnableConfig = {
+            "configurable": {"thread_id": "thread-delete", "checkpoint_ns": ""}
+        }
+        other: RunnableConfig = {
+            "configurable": {"thread_id": "thread-keep", "checkpoint_ns": ""}
+        }
+        saved = saver.put(config, empty_checkpoint(), {}, {})
+        saver.put_writes(saved, [("channel", "value")], "task-1")
+        saver.put(other, empty_checkpoint(), {}, {})
+
+        assert saver.get_tuple(config) is not None
+
+        saver.delete_thread("thread-delete")
+
+        assert saver.get_tuple(config) is None
+        assert list(saver.list(config)) == []
+        # a sibling thread must be untouched
+        assert saver.get_tuple(other) is not None

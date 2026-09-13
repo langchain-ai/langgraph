@@ -483,6 +483,29 @@ class ShallowPostgresSaver(BasePostgresSaver):
                 ),
             )
 
+    def delete_thread(self, thread_id: str) -> None:
+        """Delete all checkpoints and writes associated with a thread ID.
+
+        Args:
+            thread_id: The thread ID to delete.
+
+        Returns:
+            None
+        """
+        with self._cursor(pipeline=True) as cur:
+            cur.execute(
+                "DELETE FROM checkpoints WHERE thread_id = %s",
+                (str(thread_id),),
+            )
+            cur.execute(
+                "DELETE FROM checkpoint_blobs WHERE thread_id = %s",
+                (str(thread_id),),
+            )
+            cur.execute(
+                "DELETE FROM checkpoint_writes WHERE thread_id = %s",
+                (str(thread_id),),
+            )
+
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
         """Create a database cursor as a context manager.
@@ -819,6 +842,42 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         )
         async with self._cursor(pipeline=True) as cur:
             await cur.executemany(query, params)
+
+    async def adelete_thread(self, thread_id: str) -> None:
+        """Delete all checkpoints and writes associated with a thread ID.
+
+        Args:
+            thread_id: The thread ID to delete.
+
+        Returns:
+            None
+        """
+        async with self._cursor(pipeline=True) as cur:
+            await cur.execute(
+                "DELETE FROM checkpoints WHERE thread_id = %s",
+                (str(thread_id),),
+            )
+            await cur.execute(
+                "DELETE FROM checkpoint_blobs WHERE thread_id = %s",
+                (str(thread_id),),
+            )
+            await cur.execute(
+                "DELETE FROM checkpoint_writes WHERE thread_id = %s",
+                (str(thread_id),),
+            )
+
+    def delete_thread(self, thread_id: str) -> None:
+        """Delete all checkpoints and writes associated with a thread ID.
+
+        Args:
+            thread_id: The thread ID to delete.
+
+        Returns:
+            None
+        """
+        return asyncio.run_coroutine_threadsafe(
+            self.adelete_thread(thread_id), self.loop
+        ).result()
 
     @asynccontextmanager
     async def _cursor(
