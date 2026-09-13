@@ -86,6 +86,27 @@ langgraph dockerfile SAVE_PATH [OPTIONS]
   -c, --config FILE       Config file path
 ```
 
+### `langgraph deploy`
+
+Build and deploy your app to LangSmith Deployment:
+
+```bash
+langgraph deploy
+```
+
+Set `LANGSMITH_WORKSPACE_ID` to select a workspace. The legacy name
+`LANGSMITH_TENANT_ID` remains supported. Resolution uses the first nonempty value
+in this order:
+
+1. `LANGSMITH_WORKSPACE_ID` in the configured env file/inline env, or default `.env`.
+2. `LANGSMITH_WORKSPACE_ID` in the shell environment.
+3. `LANGSMITH_TENANT_ID` in the configured env file/inline env, or default `.env`.
+4. `LANGSMITH_TENANT_ID` in the shell environment.
+
+This applies to `deploy` and its subcommands. The selected workspace is sent in
+the existing `X-Tenant-ID` request header; neither name is uploaded as a deployment
+secret.
+
 ## Configuration
 
 The CLI uses a `langgraph.json` configuration file with these key settings:
