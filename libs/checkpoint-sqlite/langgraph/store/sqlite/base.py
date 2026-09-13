@@ -279,6 +279,11 @@ class BaseSqliteStore:
     index_config: SqliteIndexConfig | None = None
     ttl_config: TTLConfig | None = None
 
+    @property
+    def _omit_expired(self) -> bool:
+        """Whether expired-but-unswept rows should be filtered from reads."""
+        return bool(self.ttl_config and self.ttl_config.get("omit_expired"))
+
     def _get_batch_GET_ops_queries(
         self, get_ops: Sequence[tuple[int, GetOp]]
     ) -> list[PreparedGetQuery]:
@@ -295,6 +300,12 @@ class BaseSqliteStore:
             namespace_groups[op.namespace].append((idx, op.key))
             refresh_ttls[op.namespace].append(getattr(op, "refresh_ttl", False))
 
+        expiry_clause = (
+            "AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)"
+            if self._omit_expired
+            else ""
+        )
+
         results = []
         for namespace, items in namespace_groups.items():
             _, keys = zip(*items, strict=False)
@@ -306,6 +317,7 @@ class BaseSqliteStore:
                 SELECT key, value, created_at, updated_at, expires_at, ttl_minutes
                 FROM store
                 WHERE prefix = ? AND key IN ({",".join(["?"] * len(keys))})
+                {expiry_clause}
             """
             select_params = (_namespace_to_text(namespace), *keys)
             results.append(
@@ -449,6 +461,17 @@ class BaseSqliteStore:
         """
         queries = []
         embedding_requests = []
+        omit_expired = self._omit_expired
+        search_expiry_clause_s = (
+            "(s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP)"
+            if omit_expired
+            else ""
+        )
+        search_expiry_clause = (
+            "(expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)"
+            if omit_expired
+            else ""
+        )
 
         for idx, (_, op) in enumerate(search_ops):
             # Build filter conditions first
@@ -535,6 +558,15 @@ class BaseSqliteStore:
                     else:
                         prefix_filter_str = ""
 
+                if search_expiry_clause_s:
+                    if prefix_filter_str:
+                        prefix_filter_str = (
+                            prefix_filter_str.rstrip()
+                            + f" AND {search_expiry_clause_s} "
+                        )
+                    else:
+                        prefix_filter_str = f"WHERE {search_expiry_clause_s} "
+
                 # We use a CTE to compute scores, with a SQLite-compatible approach for distinct results
                 base_query = f"""
                     WITH scored AS (
@@ -582,6 +614,9 @@ class BaseSqliteStore:
                     params.extend(filter_params)
                     base_query += " AND " + " AND ".join(filter_conditions)
 
+                if search_expiry_clause:
+                    base_query += f" AND {search_expiry_clause}"
+
                 base_query += " ORDER BY updated_at DESC"
                 base_query += " LIMIT ? OFFSET ?"
                 params.extend([op.limit, op.offset])
@@ -610,10 +645,16 @@ class BaseSqliteStore:
         list_ops: Sequence[tuple[int, ListNamespacesOp]],
     ) -> list[tuple[str, Sequence]]:
         queries: list[tuple[str, Sequence]] = []
+        omit_expired = self._omit_expired
 
         for _, op in list_ops:
             where_clauses: list[str] = []
             params: list[Any] = []
+
+            if omit_expired:
+                where_clauses.append(
+                    "(expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)"
+                )
 
             if op.match_conditions:
                 for cond in op.match_conditions:
@@ -895,6 +936,12 @@ class SqliteStore(BaseSqliteStore, BaseStore):
             namespace_groups[op.namespace].append((idx, op.key))
             refresh_ttls[op.namespace].append(getattr(op, "refresh_ttl", False))
 
+        expiry_clause = (
+            "AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)"
+            if self._omit_expired
+            else ""
+        )
+
         results = []
         for namespace, items in namespace_groups.items():
             _, keys = zip(*items, strict=False)
@@ -906,6 +953,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                 SELECT key, value, created_at, updated_at, expires_at, ttl_minutes
                 FROM store
                 WHERE prefix = ? AND key IN ({",".join(["?"] * len(keys))})
+                {expiry_clause}
             """
             select_params = (_namespace_to_text(namespace), *keys)
             results.append(

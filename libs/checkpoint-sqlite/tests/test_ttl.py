@@ -1,6 +1,7 @@
 """Test SQLite store Time-To-Live (TTL) functionality."""
 
 import asyncio
+import datetime
 import os
 import tempfile
 import time
@@ -427,3 +428,84 @@ async def test_async_asearch_refresh_ttl(temp_db_file: str) -> None:
         assert item1_final_check is None, (
             "Item1 should be gone after its refreshed TTL expired"
         )
+
+
+def _expire_row_now(store: SqliteStore, key: str) -> None:
+    """Set a row's expires_at in the past without running the sweeper."""
+    past = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=1)
+    store.conn.execute(
+        "UPDATE store SET expires_at = ? WHERE key = ?",
+        (str(past), key),
+    )
+    store.conn.commit()
+
+
+def test_omit_expired_hides_unswept_rows(temp_db_file: str) -> None:
+    """omit_expired=True hides expired-but-unswept rows from all read paths."""
+    with SqliteStore.from_conn_string(
+        temp_db_file, ttl={"default_ttl": 5, "omit_expired": True}
+    ) as store:
+        store.setup()
+
+        store.put(("ns",), "live", {"v": 1})
+        store.put(("ns",), "expired", {"v": 2}, ttl=5)
+        # A namespace whose only row is expired must vanish from listings too.
+        store.put(("gone",), "k", {"v": 3}, ttl=5)
+
+        _expire_row_now(store, "expired")
+        _expire_row_now(store, "k")
+
+        assert store.get(("ns",), "expired") is None
+        assert store.get(("ns",), "live") is not None
+
+        assert [item.key for item in store.search(("ns",))] == ["live"]
+
+        assert store.list_namespaces() == [("ns",)]
+
+        # The row is only hidden, not deleted: sweeping still removes it.
+        assert store.sweep_ttl() == 2
+
+
+def test_expired_rows_visible_without_omit_expired(temp_db_file: str) -> None:
+    """Without omit_expired, expired-but-unswept rows remain readable (default)."""
+    with SqliteStore.from_conn_string(
+        temp_db_file, ttl={"default_ttl": 5}
+    ) as store:
+        store.setup()
+
+        store.put(("ns",), "item1", {"v": 1}, ttl=5)
+
+        _expire_row_now(store, "item1")
+
+        assert store.get(("ns",), "item1") is not None
+        assert [item.key for item in store.search(("ns",))] == ["item1"]
+        assert store.list_namespaces() == [("ns",)]
+
+
+@pytest.mark.asyncio
+async def test_async_omit_expired_hides_unswept_rows(temp_db_file: str) -> None:
+    """omit_expired=True also applies to the async store read paths."""
+    async with AsyncSqliteStore.from_conn_string(
+        temp_db_file, ttl={"default_ttl": 5, "omit_expired": True}
+    ) as store:
+        await store.setup()
+
+        await store.aput(("ns",), "live", {"v": 1})
+        await store.aput(("ns",), "expired", {"v": 2}, ttl=5)
+
+        past = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+            minutes=1
+        )
+        await store.conn.execute(
+            "UPDATE store SET expires_at = ? WHERE key = 'expired'",
+            (str(past),),
+        )
+        await store.conn.commit()
+
+        assert await store.aget(("ns",), "expired") is None
+        assert await store.aget(("ns",), "live") is not None
+
+        results = await store.asearch(("ns",))
+        assert [item.key for item in results] == ["live"]
+
+        assert await store.alist_namespaces() == [("ns",)]
