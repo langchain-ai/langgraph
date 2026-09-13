@@ -51,6 +51,7 @@ RESERVED_ENV_VARS = frozenset(
         "LANGGRAPH_AUTH_TYPE",
         "LANGSMITH_AUTH_ENDPOINT",
         "LANGSMITH_TENANT_ID",
+        "LANGSMITH_WORKSPACE_ID",
         "LANGSMITH_AUTH_VERIFY_TENANT_ID",
         "LANGSMITH_HOST_PROJECT_ID",
         "LANGSMITH_HOST_PROJECT_NAME",
@@ -63,8 +64,6 @@ RESERVED_ENV_VARS = frozenset(
         "DD_TRACE_REDIS_ENABLED",
         "LANGSMITH_DEPLOYMENT_NAME",
         "LANGGRAPH_CLOUD_LICENSE_KEY",
-        # CLI workspace selection must not override the deployed runtime.
-        "LANGSMITH_WORKSPACE_ID",
         # ALLOWED_SELF_HOSTED_ENV_VARS (rejected for non-self-hosted)
         "LANGSMITH_API_KEY",
         "LANGSMITH_ENDPOINT",
@@ -1260,13 +1259,11 @@ def _create_host_backend_client(
             fg="yellow",
         )
         resolved_api_key = click.prompt("Enter LangSmith API key", hide_input=True)
-    # Prefer the public workspace name, retaining tenant as a legacy alias.
-    # As with API keys, config/.env takes precedence over the shell per name.
     tenant_id = (
-        env_vars.get("LANGSMITH_WORKSPACE_ID")
-        or os.environ.get("LANGSMITH_WORKSPACE_ID")
-        or env_vars.get("LANGSMITH_TENANT_ID")
+        env_vars.get("LANGSMITH_TENANT_ID")
         or os.environ.get("LANGSMITH_TENANT_ID")
+        or env_vars.get("LANGSMITH_WORKSPACE_ID")
+        or os.environ.get("LANGSMITH_WORKSPACE_ID")
     )
     return HostBackendClient(host_url, resolved_api_key, tenant_id=tenant_id)
 
@@ -1296,8 +1293,7 @@ def _call_host_backend_with_optional_tenant(
                 if _no_input:
                     raise click.ClickException(
                         "API key is org-scoped and requires a workspace ID. "
-                        "Set LANGSMITH_WORKSPACE_ID (or LANGSMITH_TENANT_ID) "
-                        "in your environment or .env file, or "
+                        "Set LANGSMITH_TENANT_ID in your .env file or "
                         "use a workspace-scoped API key."
                     ) from None
                 click.secho(
@@ -1553,8 +1549,6 @@ def _deploy_base_options(
         "[Beta] Build and deploy a LangGraph image to LangSmith Deployment.\n\n"
         "This command is in beta and under active development. "
         "Expect frequent updates and improvements.\n\n"
-        "Set LANGSMITH_WORKSPACE_ID in your environment or .env file to select "
-        "a workspace. LANGSMITH_TENANT_ID is supported as a fallback.\n\n"
         "Run from the root of your LangGraph project (where langgraph.json "
         "is located). This command also accepts build flags (--base-image, "
         "--config, --pull, etc.). See 'langgraph build --help' for details."

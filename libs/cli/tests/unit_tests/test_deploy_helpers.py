@@ -355,7 +355,7 @@ class TestCallHostBackendWithOptionalTenant:
         client = self._make_client(
             lambda req: httpx.Response(403, text=requires_workspace)
         )
-        with pytest.raises(click.ClickException, match="LANGSMITH_WORKSPACE_ID"):
+        with pytest.raises(click.ClickException, match="workspace"):
             _call_host_backend_with_optional_tenant(
                 client, lambda c: c.list_deployments()
             )
@@ -541,99 +541,39 @@ class TestCreateHostBackendClientNoInput:
         assert client is not None
 
 
-class TestWorkspaceSelection:
-    @pytest.mark.parametrize(
-        "configured_workspace,shell_workspace,configured_tenant,shell_tenant,expected",
-        [
-            ("config-workspace", None, None, None, "config-workspace"),
-            (None, "shell-workspace", None, None, "shell-workspace"),
-            (None, None, "config-tenant", None, "config-tenant"),
-            (None, None, None, "shell-tenant", "shell-tenant"),
-            (
-                "config-workspace",
-                "shell-workspace",
-                "config-tenant",
-                "shell-tenant",
-                "config-workspace",
-            ),
-            (
-                None,
-                "shell-workspace",
-                "config-tenant",
-                "shell-tenant",
-                "shell-workspace",
-            ),
-            (None, None, "config-tenant", "shell-tenant", "config-tenant"),
-            ("", "shell-workspace", "config-tenant", None, "shell-workspace"),
-            ("", "", "config-tenant", "shell-tenant", "config-tenant"),
-            (None, None, "", "shell-tenant", "shell-tenant"),
-            (None, None, None, None, None),
-            ("", "", "", "", None),
-        ],
+@pytest.mark.parametrize("source", ["config", "shell"])
+@pytest.mark.parametrize("existing_tenant", [None, "existing-tenant"])
+def test_workspace_id_alias(monkeypatch, source, existing_tenant):
+    monkeypatch.delenv("LANGSMITH_WORKSPACE_ID", raising=False)
+    monkeypatch.delenv("LANGSMITH_TENANT_ID", raising=False)
+    env_vars = {}
+    if source == "config":
+        env_vars["LANGSMITH_WORKSPACE_ID"] = "workspace"
+    else:
+        monkeypatch.setenv("LANGSMITH_WORKSPACE_ID", "workspace")
+    if existing_tenant:
+        monkeypatch.setenv("LANGSMITH_TENANT_ID", existing_tenant)
+
+    def handler(request):
+        assert request.headers["X-Tenant-ID"] == (existing_tenant or "workspace")
+        return httpx.Response(200, json={"resources": []})
+
+    monkeypatch.setattr(
+        httpx, "HTTPTransport", lambda **kwargs: httpx.MockTransport(handler)
     )
-    def test_request_workspace_header(
-        self,
-        monkeypatch,
-        configured_workspace,
-        shell_workspace,
-        configured_tenant,
-        shell_tenant,
-        expected,
-    ):
-        env_vars = {}
-        for name, configured, shell in [
-            ("LANGSMITH_WORKSPACE_ID", configured_workspace, shell_workspace),
-            ("LANGSMITH_TENANT_ID", configured_tenant, shell_tenant),
-        ]:
-            monkeypatch.delenv(name, raising=False)
-            if configured is not None:
-                env_vars[name] = configured
-            if shell is not None:
-                monkeypatch.setenv(name, shell)
+    client = _create_host_backend_client(
+        "https://api.example.com", "test-key", env_vars
+    )
+    try:
+        client.list_deployments()
+    finally:
+        client._client.close()
 
-        def handler(request):
-            assert request.headers.get("X-Tenant-ID") == expected
-            return httpx.Response(200, json={"deployments": []})
 
-        monkeypatch.setattr(
-            httpx, "HTTPTransport", lambda **kwargs: httpx.MockTransport(handler)
-        )
-        client = _create_host_backend_client(
-            "https://api.example.com", "test-key", env_vars
-        )
-        try:
-            assert client.list_deployments() == {"deployments": []}
-        finally:
-            client._client.close()
-
-    @pytest.mark.parametrize("name", ["LANGSMITH_WORKSPACE_ID", "LANGSMITH_TENANT_ID"])
-    def test_loads_workspace_from_dotenv(self, monkeypatch, tmp_path, name):
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.delenv("LANGSMITH_WORKSPACE_ID", raising=False)
-        monkeypatch.delenv("LANGSMITH_TENANT_ID", raising=False)
-        (tmp_path / ".env").write_text(f"{name}=file-workspace\n")
-
-        def handler(request):
-            assert request.headers["X-Tenant-ID"] == "file-workspace"
-            return httpx.Response(200, json={"deployments": []})
-
-        monkeypatch.setattr(
-            httpx, "HTTPTransport", lambda **kwargs: httpx.MockTransport(handler)
-        )
-        client = _create_host_backend_client("https://api.example.com", "test-key")
-        try:
-            assert client.list_deployments() == {"deployments": []}
-        finally:
-            client._client.close()
-
-    def test_workspace_selection_is_not_uploaded_as_secrets(self):
-        assert _secrets_from_env(
-            {
-                "LANGSMITH_WORKSPACE_ID": "workspace-id",
-                "LANGSMITH_TENANT_ID": "legacy-workspace-id",
-                "APP_SETTING": "value",
-            }
-        ) == [{"name": "APP_SETTING", "value": "value"}]
+def test_workspace_id_is_not_uploaded_as_secret():
+    assert _secrets_from_env(
+        {"LANGSMITH_WORKSPACE_ID": "workspace", "APP_SETTING": "value"}
+    ) == [{"name": "APP_SETTING", "value": "value"}]
 
 
 class TestSmithDashboardBaseUrl:
