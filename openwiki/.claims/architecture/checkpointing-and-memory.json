@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:2dac30a30e37126d790ae5ca809b61a26f7765982b40a1b77f82b0b6b672265b",
+  "claims": [
+    {
+      "id": "claim_64e597627b564b4ea29bd2d9758d53e4",
+      "statement": "BaseCheckpointSaver is the core abstraction for checkpoint persistence in LangGraph, defining a generic interface with core methods for put, get_tuple, list, delete_thread, and put_writes, plus async equivalents and optional delta channel history walking.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L177-L250",
+          "version": "repo-lines-v1:sha256:bd4e8765dc365374cc9775f5a237825cdb67c5678ed0a948b11a5e95c5abaeb5:eyJzZWxlY3RlZExpbmVDb3VudCI6NzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUzZjMxNGRjZWFlYjg3ZDI5Mzk4YmY4OGI1ZWQ1NWZkNTVjM2Q4OGI3YmFkY2U4MGU3OGE2Mzc0Njk4NjkwNWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmN2UxZGE1MTU0OGFlODAzMjM2YjU3MzYyYTUyNjMwZTc1ODczMmNkNjk1NzI0ODYzNjM0M2RkMzQxYTA5YzYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg0ODBmOWVmYzViMTI3ZmY4YzlmZmU5OGEyYzUzYjJmMDRhMTg3OGEzMmZkZDNjYjNmMmU1YzVjZTEwOTEwMDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk4NjNhNzc0MWQwODE4ZmJlYzE4YjM4MmU3ZjI3NmNlNDE0ZWU4ZjU0ZjJjNmM1ZTQ4YTNhN2Q0MjM0MDE3ODEifQ"
+        },
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L301-L320",
+          "version": "repo-lines-v1:sha256:ec1734eaa019e6cdfcc8ad2c8a9225b190db3e3236c55c0128c9539712224411:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVmYzNlMjYxODgxZmM1YTU5MzBhODRiNzg2YmVmNWMzMmQ2Mjg1ZGJhYzc0MTRhOWI5ZjM2NDg2ZmVkMmQ0YWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk4NjNhNzc0MWQwODE4ZmJlYzE4YjM4MmU3ZjI3NmNlNDE0ZWU4ZjU0ZjJjNmM1ZTQ4YTNhN2Q0MjM0MDE3ODEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBkZGZkZWRmY2I1ZWJlN2UzZjQzNjI4ZGZhMmQxNGI3ODcxOTg0YjJlYTUzMGNmNTIxYmYzYjYxOTM1MGI3ZjMifQ"
+        },
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L583-L651",
+          "version": "repo-lines-v1:sha256:0c7a1ddb0752cf8592dad92058154a66aafb433646a455002264927eee303850:eyJzZWxlY3RlZExpbmVDb3VudCI6NjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxMTIxOWY4ZTc0Mzc4MTIxYjE3MzY2ODMzMDhiMzgyYjI2MDJmNWQ4YWVhYzYyOWNjYTYxYmRmZmRiYzU4N2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk4NjNhNzc0MWQwODE4ZmJlYzE4YjM4MmU3ZjI3NmNlNDE0ZWU4ZjU0ZjJjNmM1ZTQ4YTNhN2Q0MjM0MDE3ODEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkyM2M5YTdmYjIwMTU2Njg4YzdlNTc0ZDhhMzNiYjRjMzk1ZmJkZmE0NTkxMzQ5OWYwNGY5ZGU1NzE4YTFlMjUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a81e150ffaf94d0386a447edb4b6bfec",
+      "statement": "A Checkpoint TypedDict captures complete state at a logical point: version (v), unique monotonically-increasing ID, ISO 8601 timestamp, channel_values dict, channel_versions for tracking, versions_seen per-node map, and optional updated_channels list.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L93-L125",
+          "version": "repo-lines-v1:sha256:be6973faf14ecc9fce26fa9571aaab51ae8ecdc787f9566c1347098a19fb31e2:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxODZkMjY3M2NiN2MwMDI1Y2U3YzFjNTliMWJhY2JkYTM5MjdiYjc2YTY1ZTBmZThmYTFhZTIyZGVmODM4YjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI1Yzk0MTQ4ZGIxNDY0YTExNzI0NzU5Mzk5Nzk1ZjE5MTlmMzM4YzY2ZTNkNmJmY2UyOGViYzUwMTUxMDc3NDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZiNjVlOGNjZDJiYjU4ODFkOGMxNDE1MjIzYjBkNTBhMzczNzZlNzE5YTM5NTEzZjhjMzFjYzQ3NWRmYTVjYWYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d11bb279ffd24f9c81750f7396ec5c40",
+      "statement": "CheckpointTuple pairs a checkpoint with its operational context: config (thread_id, checkpoint_ns, checkpoint_id), checkpoint data, metadata (source, step, parents, delta counters), parent_config for chain walking, and pending_writes for fault recovery.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L140-L148",
+          "version": "repo-lines-v1:sha256:4cd55dcd1c40a70265f6ff49bad2c524de24c2a560c58be0bcfeb46a3bcec792:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzhkMzdiNjM4YTZhZWJhNjlmYzU0MDQ3OWNkYmE4MzE5ZmJlZjhmMDgzNWYxZGQ4MGE3OGNjZjk0MDBhMjVhYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGNjNGE3ZDFjYzc5NmFiYTNlNDY3MjMzMjdmNTE3ZTlmODExOTgyZDI1MGYwNzAyOTg2ZTRiNTc2NGFkOTU4OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjg4ZjVkNWNjOTE3OTIzZDMxNzU3ZWRhNzc3ZTM0N2NhMDFhNTY5NTg0NjdkNTJlY2VmZDU2MWQwZWY3ZmJhZCJ9"
+        },
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L39-L87",
+          "version": "repo-lines-v1:sha256:b93ccaac83fcb6d764b41097bed7f48f731254113b5834e07f6aa82f780f3b53:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQwODA4OTRkMGFkNDNiNjExNWQ3YjYyYzhmOGIzZDcyNWIzMmMxMDQwZGRhOGY5M2IxNTgzZjQ3Yjc3YTY2N2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2YTcxNTI1NzJlZTg0ZjEwOTA2Yzc0YjlmMmE5MjQzNGRkYWIwZTNjNDI4MTNiMDRlNTk3ZWZjZWM5NTFiMjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYyOGYxYmQ2NjY1MjE5ODAxNWNmODljN2MxZGNkZjFiODE5ZjU2OTA4ZTQ2YjVkZmIzOGNjMjdkZjEwOGU5NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhNTNjMmFlY2ViY2EyODIwYTc4YzY4MTY3NGQ3MWRhNDQyY2FlNmVlZWUxODM4YmY1Yzk0ZGIzMzcwYTVhY2EifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c50e0046eb114ea1af72b4fd0723b745",
+      "statement": "Thread ID and checkpoint ID are the primary keys enabling multi-session state: thread_id isolates independent execution contexts (conversational memory), checkpoint_id enables time-travel resumption from historical snapshots.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/_internal/_constants.py#L52-L59",
+          "version": "repo-lines-v1:sha256:2d69c3e2e0f901535c405bad56eefd2495b73ada16ac10fff767a418705cf218:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTg3NWU1ZTY1ODk5OGQwNDU3YTFhNGUxMWFmMzA2NzVmZmQyYzY4YzljZWIzNzUwMzczMTc1MTY5Zjk2YWVjMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjFmMDAwNDNlMDlkM2ZjNjI2MDJmM2FiMmRjNDU4NmJjZWNhZTZjZmU2Njg4MmEyNzNkM2I4Y2FhZjliZWM4MyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmJhYzM2YTc4YWE5OGE3ODdmYWRiMDk3ZTc3MTVlNmMzYzZiODg0YjIzZDQ2YTc5ZjIzZWE3N2FlYmE3MTM4MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2VkNjE5Nzk0ZjA5ODJiNDQ3NTdlZGNkNTIxMmYyMzg3NTZkZjMxYzY5NTVkY2IzYzU3YTkxN2MyYzIyMTE5YSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_13e58f860c804d89a7afec2065097562",
+      "statement": "Checkpoint namespace (checkpoint_ns) isolates state for subgraphs and nested execution contexts using pipe-separated hierarchy; root graph uses empty string.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/_internal/_constants.py#L58-L59",
+          "version": "repo-lines-v1:sha256:224c53fbeaced8a27ab88cd30e31c4a6af93299588acce3944cceae5c1d83348:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODJiYWQzY2I1Nzk1MTg2MTU3MmE1YWFlOGU0M2M5YzVhNTFiZTJmYTJiOWE3MDE3ODUwYWJhOGE4NTA4N2I1ZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjFmMDAwNDNlMDlkM2ZjNjI2MDJmM2FiMmRjNDU4NmJjZWNhZTZjZmU2Njg4MmEyNzNkM2I4Y2FhZjliZWM4MyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTgwZGE5N2E2M2JkODdlYmEyNTBiZGFjMDRhMmQ5Y2UwOTMzMzMxMjNiYTFlZTljOTAwMzBkOTY0NjZhZjQxOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2VkNjE5Nzk0ZjA5ODJiNDQ3NTdlZGNkNTIxMmYyMzg3NTZkZjMxYzY5NTVkY2IzYzU3YTkxN2MyYzIyMTE5YSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_dfdaafc1ab11427d88a0740aa63dbf4a",
+      "statement": "The execution loop (PregelLoop._put_checkpoint) creates checkpoints with captured channel state, advanced versions, delta snapshots, and metadata; asynchronously persists via saver.put to ensure ordered saves without blocking task execution.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_loop.py#L1081-L1220",
+          "version": "repo-lines-v1:sha256:a09918c6f3914e47612ddd123aff955434893c05083257303db6db4375cc8113:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIyZmI2ZGM0YjNhZDA3NDYzMmFlYzk1MWQ0OTYxMzk5ZWE0OTQxNzI4OGY0ODk2NThjYWFkMWE0MDliZTRkNzQxIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIwMWJhNDcxOWM4MGI2ZmU5MTFiMDkxYTdjMDUxMjRiNjRlZWVjZTk2NGUwOWMwNThlZjhmOTgwNWRhY2E1NDZiIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI3NGUzNjgxNThmNmE5ZTUwYTVkNDc2NTkzYWFmZmZkYmE3NjRkY2NhMjliYjhiMDI2NDNjYTA1Yzg0NjQwNzYyIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJhYmE0YzkxZmY4NTgxMTRmYmYyYTA3NjNlMDkxODJlZmM4MzU4MzA5MGVhZWFlNTI2ZTVjM2FkZDRjNDJlNTAyIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_8b14bdde8491496e9bd0a67e2cbbda4f",
+      "statement": "Resumption from checkpoint via channels_from_checkpoint hydrates regular channels from checkpoint values, replays delta channels via ancestor walks and pending_writes from failed tasks.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_checkpoint.py#L229-L277",
+          "version": "repo-lines-v1:sha256:ecc1509654081d4839d637e35a2475212e2a29800c17d82ac79550a619bba254:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM0NGNkNjc0MGYzZDczNGRkYWVhOGQ3YTdkODk5MzIzNTlmMjVlNzVhZWYxOTU5NWY3ZTJhZjQ0YWU4ZGVjYTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmODM3NjQ0NzllYTY2MTY2MDYyY2E5MDZlODMyODhhOGY1OGZhNWFjNWFhYmRlYjhiZWUxZmUxMGVlZjE5OTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVkZTJiZTAwMDI0NGUxMDhjNjk3NDUyMzIyOTg1MzE4NWRiMjk3M2U3NGM5OGZlNzljMjk5NjAxYzc0YWYyMzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJhOGVkMTgxZDQ3OTQ1OWRhNWFjYzA2NDAyMzFjMzI1MmE1ZmIxZDdhZDllYzMzODRmYjQwNjRlODNjMTkxMTYifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_checkpoint.py#L280-L319",
+          "version": "repo-lines-v1:sha256:77c0b409aa18e8253e263d7218f1284897183c90e4f4e3e85ed312c06a0bbe15:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE4ZDY5Zjg4ZGU3YmY0NWFhZjgwMGViMzQ4ODg3NGFkNjVkZDhiOTRjMjNhMDY3ZDYyNzU2MjFhYzFiOTRjNjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmODM3NjQ0NzllYTY2MTY2MDYyY2E5MDZlODMyODhhOGY1OGZhNWFjNWFhYmRlYjhiZWUxZmUxMGVlZjE5OTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI0Y2ViNzllNGY2NDIxM2EzZTY5NTYxNDdlZTM3ZGNhZDYyYmNjNGVjYmE5NDg5ZjgyZjE3YzQwMzhkYWJkOWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYxY2E3MGU4M2FlYWRiNzVkMzhlOWFlODUxMWM2YmY4MzgwNTI3OGQyNTA4ZWQ0ZmFjNGVhYTJmY2Y5YjhjNzcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_49d71ea029bb4984baab6e8dbb68ae64",
+      "statement": "Pending writes are writes from failed task nodes that succeeded; stored separately and replayed on resume to ensure successful side effects are not lost on downstream failures.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L140-L148",
+          "version": "repo-lines-v1:sha256:4cd55dcd1c40a70265f6ff49bad2c524de24c2a560c58be0bcfeb46a3bcec792:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzhkMzdiNjM4YTZhZWJhNjlmYzU0MDQ3OWNkYmE4MzE5ZmJlZjhmMDgzNWYxZGQ4MGE3OGNjZjk0MDBhMjVhYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGNjNGE3ZDFjYzc5NmFiYTNlNDY3MjMzMjdmNTE3ZTlmODExOTgyZDI1MGYwNzAyOTg2ZTRiNTc2NGFkOTU4OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjg4ZjVkNWNjOTE3OTIzZDMxNzU3ZWRhNzc3ZTM0N2NhMDFhNTY5NTg0NjdkNTJlY2VmZDU2MWQwZWY3ZmJhZCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_bb1027a96d5c4e99b7d9b3398144f1ea",
+      "statement": "InMemorySaver stores checkpoints in nested dicts (thread → namespace → checkpoint_id → data) with separate blob storage and write history; includes DeltaChannel support and context manager lifecycle.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/memory/__init__.py#L142-L199",
+          "version": "repo-lines-v1:sha256:de3be918bcdb8221379c0018d5a9c357285103381b56085f527f13fbcfbb1921:eyJzZWxlY3RlZExpbmVDb3VudCI6NTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxMTIxOWY4ZTc0Mzc4MTIxYjE3MzY2ODMzMDhiMzgyYjI2MDJmNWQ4YWVhYzYyOWNjYTYxYmRmZmRiYzU4N2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk4NDU2OWI0YzA2YzkxMzkyNTBlZDllOTAzNGY5NjYxYTg3NTM2OGViZGI5NTEzNzg5OWNhMGI3Y2VmYjMxZmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE0NDlkMDcwNmY3MmMwN2NiY2MxM2ZkMThkZWEwMzEyZmFiMTc0MTExNDNkZTMyZTcxMzhlMDgxMGE0ZjU3M2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMxZGFjZTVkMGUzMmQzNDI1Y2E3MjM4OGQwZWM1ZWQyZTMwOGM3M2M1YTdhNDA5MTEyMTVmZDZiMGU4YzczZWQifQ"
+        },
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/memory/__init__.py#L33-L124",
+          "version": "repo-lines-v1:sha256:d594bda5b23cd5d97db168ccd273d17790a31b694c6705c8af8d93ec417cf147:eyJzZWxlY3RlZExpbmVDb3VudCI6OTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg2ZjBlOWY1ODk0M2U4YmU3MGE1MDk0Yjg5ZjJiMDY1NTQyNzlhMmVjZjQyYmRlMDMyN2I4NmEyNWZmZWUwM2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMDA5N2U0YWE1MDA2OGJhMTU3ZjlhMjczOWZhZDg2OTk1ZTFlMGNkY2NkYWRjNTg5N2MyMDM0Yzc0ZDNlZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRmZTUzOGE5MTQ5ZTg3NTg1ZTg4NDljNDY3YjRiNDI3ZWViNGM2MTE5NmVhNDgwMmM0NmQ5NDliMjljY2UzYzMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_570deb01e2a540208b731f111940f97d",
+      "statement": "Durability modes control checkpoint persistence timing: sync (before next node, strong guarantee), async (during next node, better throughput), exit (only at completion/interrupt, minimum I/O).",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_loop.py#L1132-L1135",
+          "version": "repo-lines-v1:sha256:2b4aeb22a78f116910ee2b2c0d210bcfacdd4d443856b49c67655f561367cdbc:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjc5MmFjNmQzMTc0ZTQ3ODRjZTk1N2QyZWNjYmJmOTI1MmM2NDFjYjhhMTViZDhjNmExODM3YjBjNTlmYmZmYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTkwOWE1M2E2MThkMDI4ZTFkMzAwMGMwYTdhYmNlZWNiZTVmYjM3ZjRlNTExZWZlNDY2NDNmYWQ2ZTY2ODcyZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDQ2Y2NmZWY4NGU4NmIxYWUwMTYzNWJhM2ZiYzdlM2ZhY2RjY2EwNjI4ZGYwMDJjN2FkMmNjZjFkMzVmYTY3MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGZjYjY5M2Q3MDhmZjk3NDgyODY5MmY5YmY2ZjBlNmFmOTYzZWVlYWZiYjcxYmNlNDFhZjRlOWNlZjRjN2VmNyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_a77a1eb840d94ab6aaa97eebb5c949b6",
+      "statement": "JsonPlusSerializer encodes checkpoints to msgpack with fallback JSON support for LangChain types (dates, times, messages, tools, enums, UUIDs, dataclasses); configurable via LANGGRAPH_STRICT_MSGPACK environment variable for strict type allowlisting.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/serde/jsonplus.py#L82-L105",
+          "version": "repo-lines-v1:sha256:91d918f869f94cff70bfd6bb5934b191f65adefd4af0794ba79ec6c3b8968bd1:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgwNzJkNjRjOGQ0MDgzYTA1MWIxYTQ1OWY3YWU0NjdlMTBkNTk1YTE2ZDIyMTIwMmI2NjBkNGI0NDYwMDJlODQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUzN2E4MzJiOGQ2OWE2ZGU4MDNhM2ZmOGM2Y2RjMjM4YjVmYzE2M2VlOTc4Mjc2MTUyMTYwZDc2MDQwZDRjMzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRkMWYwNDczZWQxMGU5YWY0ZDI0OTRlNDAwNjQ5YmMxNTg4N2U0NmIxYmJlNTU3Njg0ZjQxZGY0YzBhYmEwYzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc4MTgxMjEwYWVlZWYwZDUwNWNhNDIwN2EyNDA1ZjE3MDE5MDNmNDAxYmExMDY5NjFkNDU2ZWE3N2M4YWUyNjMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_52001838b1724c1da2a46e027a5fa7b2",
+      "statement": "DeltaChannel stores only incremental writes between periodic snapshots (_DeltaSnapshot blobs), reconstructed via ancestor walk with seed value and write replay; counters in CheckpointMetadata drive snapshot frequency.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L64-L87",
+          "version": "repo-lines-v1:sha256:4baa119a5f6934fe6a6df2020db41d579268f8158a56125ebd5048077a41540d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU0ZWNhNGY1NDI1ZTA4MDU1ZTVkMDk5ZThhOWQ5OWI0ZTlkMDBlYTYzNmYzNjQ3OWYzZDgwYWNhMmJkNThhY2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2YTcxNTI1NzJlZTg0ZjEwOTA2Yzc0YjlmMmE5MjQzNGRkYWIwZTNjNDI4MTNiMDRlNTk3ZWZjZWM5NTFiMjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE1YmQ0YTlmOGZmMjMzNGYxZGUxNTMxZTM4YjM4MTQzNDcxNDlhZWYzOWEyNjc0NzY1YTBjMDM0MThkZmQ2OWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhNTNjMmFlY2ViY2EyODIwYTc4YzY4MTY3NGQ3MWRhNDQyY2FlNmVlZWUxODM4YmY1Yzk0ZGIzMzcwYTVhY2EifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_checkpoint.py#L50-L71",
+          "version": "repo-lines-v1:sha256:687f932bbf498219e8a5c86a69a2ecc7540f9a5041cb53a7ab4b013cd2e4b138:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM3MDljMjVmMGNiNGMwNjgzN2VjYzc1ZDE4NTdmMjAwOGE3ODc3ZWYwNGE0NTE2ZDdlYmI0ODU5NTg5NzIxYzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhMTFjMDU2N2QwYTVmOWU5YjEzNWY2NWNkMjUzNzJkZmQ2Mjg3NzVmN2MxZWQyNTNmOGJhZDQyZGQyZDY2NjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZWY5MzMxMDM4YmU3NDMwYTc2NGMwZTMyNDVhODY1ZmI2OWY2OWE1NDViNGNmMTM2MWIyMmU5ZGY4Y2ZmYzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAwOGE2Mzk4MzYxOGQ1YmYzMTc1ZjcwODQ3ZTQ3Zjg1MzM3ZWU5MDZiMjE2MmI2Nzg0NTcyNDg4ZmNjMWY4ZjUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b2e2b478bb144b7b8f749f273f60a7b6",
+      "statement": "GraphInterrupt pauses graph execution and saves checkpoint (unless durability=exit); caller resumes with same thread_id and automatic checkpoint hydration, pending write replay, and task continuation.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_loop.py#L1336-L1336",
+          "version": "repo-lines-v1:sha256:c348eb784a0c6b71b6923dc7551704c4fdab73f2c017fa16e4c33179fd19d559:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzM0OGViNzg0YTBjNmI3MWI2OTIzZGM3NTUxNzA0YzRmZGFiNzNmMmMwMTdmYTE2ZTRjMzMxNzlmZDE5ZDU1OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzM0OGViNzg0YTBjNmI3MWI2OTIzZGM3NTUxNzA0YzRmZGFiNzNmMmMwMTdmYTE2ZTRjMzMxNzlmZDE5ZDU1OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGI5NzkxY2Q2ZGI1OGViZTY1MTYwMmE3YTI5Mjc0YTQ0YmU4YjBkNjZjY2YyMGI5Yjc1Y2JhMWEwMDcwOWRkNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzUzYzJiYTg3NzJjMGYzNjY3MDg3YzdhZjYxNzE4YTAxMDRhZjQ0NTZmZjAzYmVmMDU0OWEzNGQyYzM3YjM3YSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_15c4e0a5a75c4c67b1a9bd77fcaef992",
+      "statement": "PostgresSaver and SQLiteSaver (from langgraph-checkpoint-postgres and langgraph-checkpoint-sqlite packages) provide production-grade persistent storage with relational schema, async variants, and setup() method for table creation.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint-postgres/langgraph/checkpoint/postgres/base.py",
+          "version": "repo-file-v1:sha256:34a76ad89892b7200b91d0574333060f78c3cd7afd3f61111b56fc871c3e9f79"
+        }
+      ]
+    },
+    {
+      "id": "claim_023be7ed32e6400fa1e5a3c0e46c4d6f",
+      "statement": "Custom checkpoint savers must store (thread_id, checkpoint_ns, checkpoint_id) composite keys, maintain parent chain links for delta channel ancestor walks, respect pending_writes contract, and ensure put idempotence or atomicity.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint/langgraph/checkpoint/base/__init__.py#L177-L250",
+          "version": "repo-lines-v1:sha256:bd4e8765dc365374cc9775f5a237825cdb67c5678ed0a948b11a5e95c5abaeb5:eyJzZWxlY3RlZExpbmVDb3VudCI6NzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUzZjMxNGRjZWFlYjg3ZDI5Mzk4YmY4OGI1ZWQ1NWZkNTVjM2Q4OGI3YmFkY2U4MGU3OGE2Mzc0Njk4NjkwNWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmN2UxZGE1MTU0OGFlODAzMjM2YjU3MzYyYTUyNjMwZTc1ODczMmNkNjk1NzI0ODYzNjM0M2RkMzQxYTA5YzYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg0ODBmOWVmYzViMTI3ZmY4YzlmZmU5OGEyYzUzYjJmMDRhMTg3OGEzMmZkZDNjYjNmMmU1YzVjZTEwOTEwMDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk4NjNhNzc0MWQwODE4ZmJlYzE4YjM4MmU3ZjI3NmNlNDE0ZWU4ZjU0ZjJjNmM1ZTQ4YTNhN2Q0MjM0MDE3ODEifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-03T15:19:56.419Z"
+  }
+}

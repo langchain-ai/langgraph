@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:105aec8bc5e9fb97b83d72dfa6cfd10945674974d93a46513244e2885e15778d",
+  "claims": [
+    {
+      "id": "claim_84f4e72c770543aabb0710b90a58499b",
+      "statement": "Managed values are special state fields automatically populated by the LangGraph runtime before node execution, providing deterministic metadata without version tracking or checkpoint persistence.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/managed/base.py",
+          "version": "repo-file-v1:sha256:1ffbac50065dc163dcee0d9ee21d42891652c5d5e9ab4c9f7c74e26e37cd3689"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/managed/is_last_step.py",
+          "version": "repo-file-v1:sha256:6fe0e58317aa0b0b01cb119e2589fcc9d5b788c6c06645a4282d3032d993f791"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_algo.py#L1348-L1393",
+          "version": "repo-lines-v1:sha256:377464d08113ba8abf983f0ec157699e9191b316a3cfe48e2c09dcac59a77d37:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU3ZmJkNzBmNDQ4MjBiOWYyYzY1OWRlOWE3NzhmODlmOTYxZDkyYzIzY2Q5NTBkMDcxZjk2N2FiMjg5N2YwZjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhjYzRhN2QxY2M3OTZhYmEzZTQ2NzIzMzI3ZjUxN2U5ZjgxMTk4MmQyNTBmMDcwMjk4NmU0YjU3NjRhZDk1ODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY3ZjZlOGMzZjM2NjhkNTJkODc3NGViNWZhNjNhM2U0NDUwZjQwY2JjYzVhZjZhNzg1ODZlYzdlZTdkMThkZTMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1d06abb6f5dc4d21bee6c155163d0d61",
+      "statement": "Managed values are declared using Annotated type hints with a ManagedValue subclass (e.g., Annotated[bool, IsLastStep]), and the StateGraph parser recognizes and separates them from regular channels during schema processing.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L1815-L1942",
+          "version": "repo-lines-v1:sha256:48d02d9bdce2ae9f15c0d1af8938a39c2ee48385a03b5b0c1f3196c541046801:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJmNmVhNGQ4N2UwZjBhOTc2OWViZTU4NWQ4ZTk2MjY5YTFiNDZkNGY3NjBiNjIzYjk1NmI4YjIyOTMyNWRkZWFhIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIwMWJhNDcxOWM4MGI2ZmU5MTFiMDkxYTdjMDUxMjRiNjRlZWVjZTk2NGUwOWMwNThlZjhmOTgwNWRhY2E1NDZiIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJmOTZlMDYyMzU2NjRlMWU3Yjk5OTRjYmUwNWUwYWJhNmI1NDk0MDJjMTAzNTc4YjBiMmI4OTY5Zjk4MjYxYzY2IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI1ZGY3MmY3OTZiMGRhOTZlNzI1NWQ2ODYwNTRiNGFjNTdmNjJmNWEwY2Y0NzFkZGNkZTE3MjAwYTM0ODk5Yzc1In0"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/managed/is_last_step.py#L9-L24",
+          "version": "repo-lines-v1:sha256:7b50743256cbc9637ec4ae61566c0c2427499398be77b98ddfea19392a947d27:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhYmY2MTU4NDc3NDI1YjE1Y2ZkNzlmMGY0YWZmMjBkMWNmZTRjODFmNGZlYTUzNTZmNjJkNTZiYzViZTUwM2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc4NmUzNGUxZmE4NTQ3YmM5ZTA5Yjg1ZDRlM2E4NDQ1N2I4NmU1OTRiYzRjMGQ3MzI0YTIzZjVlNDM0ZTk0NTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJmMDdiODAxM2UyYjc1NDU2YmVhNjMzNzlmMmE5ZDM1N2Y3OWY2MjJjMjg3MGUyN2UyZmQ5YWRmMDQ0N2FhMzUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d0946e594d2e481d8d50bd704af2d599",
+      "statement": "IsLastStepManager is a ManagedValue implementation that returns true when the current execution step equals (stop - 1), enabling conditional logic for the final node before graph termination.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/_internal/_scratchpad.py#L8-L19",
+          "version": "repo-lines-v1:sha256:bc77336b45fb879eeaa545663ae2d30808535a532ddc63387f350e03c7096732:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYxNTliNTcxODkyZTQ4NGM2YzNjY2I4MWI2YTcwMTc5Y2RmYTAwYzM2ZmM1ZDVmZGZmMTRkZDVjOTYwMDhkMmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmYTAzMzM4ZmMwNDk0YzQ5NGM1NzA2MWJjMmZlMDc2MjQ0N2E0ZDFlNmZkMDYwYjFjOWI3OWExYjkyNjg4MzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA4ZmFjMzY2ZDJlOWFmYWEyODY2NjY0N2M4NTY5ODJmMDllZWU4ODUxOWU2OWExOTg0ZmY1Y2IxZGVhMWRhZGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/managed/is_last_step.py#L9-L15",
+          "version": "repo-lines-v1:sha256:c119c93e932acd95aa0955006d4327e482848187936f30f122e12aa7e3ff4b65:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYWFiZjYxNTg0Nzc0MjViMTVjZmQ3OWYwZjRhZmYyMGQxY2ZlNGM4MWY0ZmVhNTM1NmY2MmQ1NmJjNWJlNTAzYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNmUzYWZjYWFhMTJmOTYzZDYwM2VkYTQ3MzlhOTZmY2M3MGQyMTNiYWJhMDA4NjdhZDQ3M2VlZjg4ZDU1NTcxMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmYwN2I4MDEzZTJiNzU0NTZiZWE2MzM3OWYyYTlkMzU3Zjc5ZjYyMmMyODcwZTI3ZTJmZDlhZGYwNDQ3YWEzNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2UwNDJmMDEwODUxNjhhNDE5M2JiMzdmYThmY2NkNzczNTU5ZmIwOWJiNDM4NjQyMTYzNzE1MzdhOWE5Y2FiNCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_d5a53d64b09d473699a8bf724d211cf9",
+      "statement": "RemainingStepsManager is a ManagedValue implementation that returns the count of steps remaining in the current run (stop - step), allowing adaptive behavior based on execution budget.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/managed/is_last_step.py#L18-L24",
+          "version": "repo-lines-v1:sha256:0e4a01e6bbb2fd68114f99c2855d93031969ed3d316bc76c63d24eea23292c27:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDQ5MWVjOTVhYzM2ZTQyN2FiNTJmYmQxMzc2Y2U2NmQ4MWU3MDc4ODNiYjJlMDkzNmQ5ZGFkMWRjMzFiNTA2NyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzg2ZTM0ZTFmYTg1NDdiYzllMDliODVkNGUzYTg0NDU3Yjg2ZTU5NGJjNGMwZDczMjRhMjNmNWU0MzRlOTQ1OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzc4NGExMzk1YjgyNTZiMjJmOTFiZWM4OGYxMTMxZTFkN2U4ZDE2OTE5OGRhZjU2OWM2ZmJkOGZhNDg3MWQ3YSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_ad9ed20647254a3f83de10d07b395eb6",
+      "statement": "Managed values are read-only within node execution: they are populated by the runtime before input preparation but cannot be written by nodes, preventing accidental state mutations.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L1859-L1863",
+          "version": "repo-lines-v1:sha256:a2f6f3d44aea574e7d20ed3f4aa76ef3ca9d16982b9631c5ed9c98df7bcd47b9:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWM1MzliY2NlZjJiOGNmZmUxOTliMTVkZmFhNzk0ZTgyYjJhN2U4ODFmOGJhYTdhYmExZDhkZDcyMGEzYzI0NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTcxNzBkMzc1NzlmNWYwOWQ2ODkxMzU2NzM3ZjZhNGQ1NTU3NmMyZmVmMzNjMDFiOTQwNzhlMTQ5MzYyYWY0NSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzExMDljODhmMzliMjYyMWE0YThmZTQyN2M5Y2U0OGEyNzJmMjg5MjkwNWZkNmZlZjQ3YTlkZTM1MTNkZTI0MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2JhMzVlMTliZmM2NDJiYWY2OWY3NzAyYjFmMTlmMzExZWE1NzQ3MzYzMTkwMzQwNjg2YzY1OTkwMDI0OGIzZSJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_algo.py#L1365-L1370",
+          "version": "repo-lines-v1:sha256:0f8fe200dc41ab256a5453cf53e8c9a7c1eb31a1a6dc4f5e56f1a7b429e845a3:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2IwZWYzNTk5ZDhmYjYzZmFkYzQ1Nzc1ZDA0Y2YzNzQ5OWFmZTU0OTQ5YWRlMjg1ZjJkZWJlOTM4MDE0ODRjOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDE4NWNkY2VlYmVmNDMyN2NhZTgxZWYxZjBlOWUwYWQ5YzljZmFmM2EyM2M4YmY2NmFlY2JmMGQxODM3NzdhZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzNkY2MyNTZjZDU3MjFmNGQ4M2E4Y2M3MjAzODVlMGFhNmYxMTMzZjFjNGM4YjlkNDc2ZTA1YTdkMzBkY2NhYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDViZTMxYzY5OGE2MjE4N2QyN2RiOGI1NzQzYzQzZGQ2NjA3ZTUyN2EyMmNhZDA0YjMwY2RmZGM3OGM5ZTU4MCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_680409b5a83e41b0800db6fd27cf0a31",
+      "statement": "Managed values are restricted to the state schema and are not permitted in input or output schemas, enforced by the allow_managed parameter in StateGraph schema processing.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L269-L270",
+          "version": "repo-lines-v1:sha256:063ce56283c5c18140d94bd2110568d82e14cc30474c85df8f2a218fe9f126ad:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTc5ZmY0N2VmZGQyOGMxMzZmNjgyYmM2YzU2OGU2MTUyNTc3NjAxMDk1NjY1NGM3OGM4MGJmYTM1YTlhYTk2OCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzlkNjA2ZDY4MWQyN2U0YjFkM2NhMjI1ZTIwNTcyM2NmZTk2MTU2MzgwZDZkNDAwYTlkMTVjMDgwNzZiMmVlZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzA3ODVhYWYxMDU5M2YzODRkMTA1ZGQzYmI1NTFiNTVjMTg0NWUyMmViNGNmNmFmZWFhMTdkNGUwYTU3OGE0NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTgxYTkxODM4YzAwNjU3Zjk2MDIyMTEwN2JmYzUzZTUwZDdmMWUwYTU4ZmUxZDRjZGFlM2Q0MGM4ZTFhZDMwOCJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L343-L353",
+          "version": "repo-lines-v1:sha256:a775ebe886c7c8880a4dcfa089661cdeb840bf69ad1cef9f8ac2b24ea7d757da:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzYjUwZTk5NTQ2MjJhMTdmM2YzMDNiYjlkOGFhOWEzZWQ1OWYxMzljMDc5OGRiYzljMGZjNGI5YjgxNGY1ZGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxMDM0ODFjNTdkMGYwZGMwZjc2Y2QyY2M4YjM2MDRjNGU4Mjk2ZGE0MTIyYWRkMTllODE3NDVkYzdlMzMxYTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjlkMmM2ZjFlOTQ0MGUxMTMwMWEwOWJhOWQ3MzE2YTQxY2Q3YjUwZmU3ZGYzYTA1MmQyOGNlZDRiNDUyNDc5ODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ2ZTFmNDgxMThlODJlZjRlNjQ4ZDllMDg1ZjlhMzM3YzE5YmZjMDcyMDY3ZjQzOTFmMjUyYzkzNjU1NTg3MDEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7822067f222b4f2582eec2764504b0b3",
+      "statement": "Managed values do not participate in version tracking and are never saved to checkpoints; they are recomputed from the PregelScratchpad (step, stop) context before each node execution.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/managed/is_last_step.py",
+          "version": "repo-file-v1:sha256:6fe0e58317aa0b0b01cb119e2589fcc9d5b788c6c06645a4282d3032d993f791"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_algo.py#L1280-L1345",
+          "version": "repo-lines-v1:sha256:c956cf30c64f5dab19740fd750d59969616d37260f978675da5024d23c82b7c7:eyJzZWxlY3RlZExpbmVDb3VudCI6NjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2MTkzMzkxNjZkZjljODliMzVlMjJlYjBmN2UyN2Q5NTVmMzcwYTMyM2QxZDU4Y2ZjM2YyMzE0NmJmM2YyNzciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwYzFmMTg4ZjE0MmVkN2E4MjQ2ODBiMjA3MTcyYzU1MTliYzYxNGE0OGZkYTdjZjE2N2VkYjhkZGY3OTk1NmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUwYjIxYmY4OTVmYWUyZDczOTIwZDkzMTc4Y2ZkNTg0MWNkZjhmOTUyNDUxNmM4YTU2NTg0MzZhNGFjNDhmM2IiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZjMGVlZDRhMDhjYzBkN2Y4N2M1MzIyNWM2ZDYwMTFiZDU5MTBjNjRlNjFkNDhmOWZhMzE1YzFkNTM5ODg2NmYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b6975134f0e74d6c88d17427b387f116",
+      "statement": "Managed value computation relies on PregelScratchpad, a runtime-maintained context that holds step (current execution step) and stop (total step limit) counters used by ManagedValue.get() methods.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/_internal/_scratchpad.py",
+          "version": "repo-file-v1:sha256:8d60ef91c783d8aae3e3c393f384a5940430d74cd280de543e6de48e5bbdd446"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/managed/base.py#L18-L21",
+          "version": "repo-lines-v1:sha256:f95c23444abb8eb4abbd35c7d3a4ecdb48374190eb348ee4e477f142e045eece:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTM1NjlkOGE4YjM5NDcyODhiZjEwNzAyNmIyNjRlOTM2MGZhODcwYTIxYjJlYjJiYWI3ODIwOGI3YTU5NmY0ZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2I5NTljYWIwZTRmM2MxYTU2ZThiNzQ4Y2M4ZDdhMDhmYTk0NmJhOTgwMDhkYWQ0MGIzZjI1ZTFhZGQ0NDUzNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmQ3Nzg0M2I0ZDQyZjliM2IyMjhlYWI1ODE4YTU0NzUyNjQ4YzFiYmU0NzUzMTEzODI0ZmJhMTUwNjRlNGE5NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTg5YWE2MjBkNGVhMzdhMjMzZDVlYzY2NmJhMTU2MjQzY2RiNmRlMjUxNjg2ZTRhNmMxZDY5NGIyMDdjMTc5YyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_662af669a919401389d3c625491e297b",
+      "statement": "Managed values can be marked with NotRequired or Required wrappers in TypedDict schemas; these wrappers are unwrapped during schema parsing while the managed value annotation is preserved.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L1853-L1858",
+          "version": "repo-lines-v1:sha256:14ae712705315964e9884902b06eabb4ac84ce70c9c3a3032d4cdc9e38c64f5f:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDhkZmNiMjM1YTY4ZWFjY2E3ZWQzZGY1MjY3MDgxMGQ4OWI1Nzg4YjUwNGMyYTFjNzkzYjE5ZTU1ZWI3M2ExNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODVkNjc2YjhhNzUzMzAwNDVlZWQ4MDQ5Y2ZkNjIyNTA5ZGRkMTk4ZGEwNGM5NDkxZmNhNjNiNDE4N2I3YmU0NiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGQyNjI2YWQ3ZDkwNWJmZTc1YTY1NWNjMzhhMTVjYmMyMzg5YjBkNGU1MjAzMzQ4ZGIxYmNlYjE4YzkzMzRmYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYWM5NjU4ZWIyMDVkZmRkZmViNzVjZDJhY2VjN2FlZTVkMDk4YmQzNTYwOTU4ZjkxMTQwOGU0YTk5NDYwZmRhMiJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/tests/test_managed_values.py#L11-L26",
+          "version": "repo-lines-v1:sha256:626c3ef39552962d7de7bcd94b05591ffe8f9de37989f428a282000713aaa64a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYwN2VmYTlhMjI3YjgyMmUyNTYxNGJiZmRjYWUxMjc2YjcwMDliZjJiZGM4MzdlODVjNGQwYjYxNmEwN2UwMGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4M2FmN2EyYjIxMTY2MTQ5MGI3Mjc4YzBkZmU0Y2ZjZjg2MDY5MWQ5NmIzNzIxM2JkMzMxYzk1N2FkOTc3NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQxMzcwZjViZTc4MDlhZTRkMDEyM2JmNGVjMDBhZGUzYWU4YmI0MTNjZDM2ZjNlZDJjOTBhNjdjMzZlNWUyMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJhYzY3NDEyY2U3NDAzM2MwYTNmYmNjZmI5M2EyNzc4NjczNGE4MzkzMzFkMGMyYmY2YTIxODdkMWY5Nzk0ZDUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_45ee4287c36d4efc9932fe3c7599cbe7",
+      "statement": "Custom managed values can be created by subclassing ManagedValue and implementing a static get(scratchpad: PregelScratchpad) method that computes and returns the managed value from runtime context.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/managed/base.py#L18-L21",
+          "version": "repo-lines-v1:sha256:f95c23444abb8eb4abbd35c7d3a4ecdb48374190eb348ee4e477f142e045eece:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTM1NjlkOGE4YjM5NDcyODhiZjEwNzAyNmIyNjRlOTM2MGZhODcwYTIxYjJlYjJiYWI3ODIwOGI3YTU5NmY0ZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2I5NTljYWIwZTRmM2MxYTU2ZThiNzQ4Y2M4ZDdhMDhmYTk0NmJhOTgwMDhkYWQ0MGIzZjI1ZTFhZGQ0NDUzNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmQ3Nzg0M2I0ZDQyZjliM2IyMjhlYWI1ODE4YTU0NzUyNjQ4YzFiYmU0NzUzMTEzODI0ZmJhMTUwNjRlNGE5NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTg5YWE2MjBkNGVhMzdhMjMzZDVlYzY2NmJhMTU2MjQzY2RiNmRlMjUxNjg2ZTRhNmMxZDY5NGIyMDdjMTc5YyJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/managed/is_last_step.py#L9-L24",
+          "version": "repo-lines-v1:sha256:7b50743256cbc9637ec4ae61566c0c2427499398be77b98ddfea19392a947d27:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhYmY2MTU4NDc3NDI1YjE1Y2ZkNzlmMGY0YWZmMjBkMWNmZTRjODFmNGZlYTUzNTZmNjJkNTZiYzViZTUwM2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc4NmUzNGUxZmE4NTQ3YmM5ZTA5Yjg1ZDRlM2E4NDQ1N2I4NmU1OTRiYzRjMGQ3MzI0YTIzZjVlNDM0ZTk0NTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJmMDdiODAxM2UyYjc1NDU2YmVhNjMzNzlmMmE5ZDM1N2Y3OWY2MjJjMjg3MGUyN2UyZmQ5YWRmMDQ0N2FhMzUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d90f217b37c64f61915162375fc5bab7",
+      "statement": "The chat_agent_executor prebuilt module uses RemainingSteps as a NotRequired managed field to track step budget in agent execution loops.",
+      "evidence": [
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L38-L38",
+          "version": "repo-lines-v1:sha256:7793cea2b71a10e713e1e98e0e2d2e323d16c25d610fb3dbed8218bbf4f5e715:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzc5M2NlYTJiNzFhMTBlNzEzZTFlOThlMGUyZDJlMzIzZDE2YzI1ZDYxMGZiM2RiZWQ4MjE4YmJmNGY1ZTcxNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzc5M2NlYTJiNzFhMTBlNzEzZTFlOThlMGUyZDJlMzIzZDE2YzI1ZDYxMGZiM2RiZWQ4MjE4YmJmNGY1ZTcxNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmI5YzEzNDdmYTI1N2I5MTc5NzQ5MzY0Yjg4Njk3NzA0MmFkYmZhMDQ1M2UwN2Q1NDk1NGViZjFhNDdjZDc5MyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOWNmZGI4YmViNmYxMzFmNmIzN2U0MzBiYjQyZWIwYjUzODRmMTdjMTMxOWExYjM1ODEyOTY3MmU2YTJjNjYxZSJ9"
+        },
+        {
+          "resource": "repo://libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py#L62-L62",
+          "version": "repo-lines-v1:sha256:0d230a1596d122d1cdf0cdcc9d9ae14c24df6923cb894ed10aa7cfbfb4be1cf9:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMGQyMzBhMTU5NmQxMjJkMWNkZjBjZGNjOWQ5YWUxNGMyNGRmNjkyM2NiODk0ZWQxMGFhN2NmYmZiNGJlMWNmOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMGQyMzBhMTU5NmQxMjJkMWNkZjBjZGNjOWQ5YWUxNGMyNGRmNjkyM2NiODk0ZWQxMGFhN2NmYmZiNGJlMWNmOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZGE3YmQ2YmM5ODg4ZTA4NjFkNDZkNzcxNzJmNjYxN2M4YTczYzVkMTk0MzQ2YzM1NGZhOGYxOTdiZjJjOGFkYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzRiZGRhNmY3OTdkMDAzODM3NmQ3M2QzMTg3OGY4NzFiMTk0Mjk3YTZjZTFmZTY2NmQ3ZmQwZTI2YWYwM2NmYyJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-03T15:19:56.419Z"
+  }
+}

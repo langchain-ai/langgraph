@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:14d9ba112f4d8d14ca0a74900170b9aa01494ea30811b4ee38ca3a4446a9ffdd",
+  "claims": [
+    {
+      "id": "claim_078b629bfdd34fe38cfa857252b5e466",
+      "statement": "Subgraph nesting is enabled by adding a compiled StateGraph as a node in a parent graph using add_node(), where the subgraph runs its own superstep loop internally and returns final state to parent.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L1444-L1550",
+          "version": "repo-lines-v1:sha256:1747254d5bbc89d5b079cca3e4ebd15cfe66dd19bdf1d9cf8ea267a7253614c7:eyJzZWxlY3RlZExpbmVDb3VudCI6MTA3LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJlNjE1MzMxZGNkODQ1ZGU3YWZkMWEyMjQ3MDRlYjA2MGMzMjJjYWY5NDEzYmRmMzk1MTRkMjBmYmRkZWIyYzE4IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIwMWJhNDcxOWM4MGI2ZmU5MTFiMDkxYTdjMDUxMjRiNjRlZWVjZTk2NGUwOWMwNThlZjhmOTgwNWRhY2E1NDZiIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIyYjgwZjY4MTM5ZjM5OWI4NGE0MmIyNzZhMmMxZDkxNWFhMWFjZDk0MzJjMDdhYTQ3NzI1YTg2YzgyOWM0YTBhIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJkNWFiYzEzNzgwMTgxMWJjOTM2YjhiYWVjMGE1OWQ0ZGU0NDdjN2ExYmJlMjJlYjkyMDU3NmYyMWU2MTJkMzE0In0"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L1515-L1547",
+          "version": "repo-lines-v1:sha256:c2824665f3981d34801e2eae27cd8cc71dd4d338a73e0bc01227fac5f825baeb:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdiNjQwNzU5YWU0YzZkMzM3MmY1NGQwZGE3Y2MzMDNiODg1MWY3ZTVmMDIwMTFkYTI3OWIyZDc2M2E4NzQyZGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MDMyZTk2NGQwOTMyMzUxZTVkMTg1MjY5MjgxYjE3MWEzYTA5YjA4YjI4NmU2NjFlYTQ3MDMyM2M4MmViNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZhMzI2ZGQyNjA5NmUzZWVjODFjMmNkNmQ1OTE1YTMwMmUwNTgzZjQ5OWU0NTdmYzQ0ZjZhYzE2YWI1YjJhNDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU2OGFiNmExYTIxZmQzYzdlOTMwMzEwODFhY2RkNWMyZDMxN2ZlYmNkZTBlYzdhMmUzMmJkMzIzYmM5MzBmOTMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_33fcdaf87ccd46eda8aa9c469a1087d8",
+      "statement": "Subgraph input_schema defines the expected input structure (default: subgraph's state_schema), and output_schema defines what state is extracted back to parent (default: subgraph's state_schema); automatic mapping occurs on invocation and completion.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/bench/fanout_to_subgraph.py#L40-L50",
+          "version": "repo-lines-v1:sha256:eb45cde4bd3b8516bfab6faf4d473c6cae095eb26b755e5c78c42aada7049aea:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0YjI5MjY0NzZlZTMzNmM2M2E0NmM0NGE5MGEzYzA1YzIyZDkxNmI1MDVhZTIzOTExYTkxMDUzZjcyZTkyNDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU1ZmU2NmUxZTgzNzZlMjNkZWIyYmUxODYxN2ZiNjlmODhkZmMyYzA1NTViMmM3NzU0Njg5MjE0ZDhhMDg5N2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVlNWQ3NDFhNDA4YTM4YTA5YmYxN2JkNWM5NTE4ZTRiZTNmN2JhZjJmY2YyMjU4ZDliZDQyOTBkOTJkNDc0OGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA0NWEyNTAwZTgxMzRmYzEzNTE4NDc0ZjYyM2I3OTk4MTE2YTE2ZDRlNTExMjFmOWY0ZWMzMzg3Yjc1ZDFmMmIifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L1237-L1250",
+          "version": "repo-lines-v1:sha256:4c791936d3e36c5a7187cfb222307270848444850054a347fcfacee3681e24dd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc2MmY3MTQyZDJhOTA4Mjg3OGM5MDE1ZDY5NzJiYjE2MTljNGU0MzFiZDQ4MzE4ZmNiOTExMGMwZjkyYzIyNjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRhNGEzYzI5MmIxZDBiNjVhOGQ4ODhjYzY1ZDAyZjg3OWU1NTViZTNlYzM4ZTkzMjYxNWYxOWFiZTEwNmNhYjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjUxMzQ3OWQyYzIxMjFhNGI5Zjk5MTJkOTJjZGRhMGRhNmU0MDYwMDBlYjQ1Y2RmNGU2YWQ4Yjc3ZTljMGVjYzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlmYzRmM2RhMDg5NjkxNjE1ZjUxM2EzYTQ0NzUwZWM3YTQzNWU3ZDk1NzJhM2VkYjliNWE1MDk2NDk1MDQxNTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_339d8427891b4904a47141b2fb17dfec",
+      "statement": "Subgraph maintains independent state channels separate from parent's state; parent cannot directly access internal subgraph channels except those in output_schema; communication occurs solely through input_schema and output_schema mapping.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L1515-L1547",
+          "version": "repo-lines-v1:sha256:c2824665f3981d34801e2eae27cd8cc71dd4d338a73e0bc01227fac5f825baeb:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdiNjQwNzU5YWU0YzZkMzM3MmY1NGQwZGE3Y2MzMDNiODg1MWY3ZTVmMDIwMTFkYTI3OWIyZDc2M2E4NzQyZGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MDMyZTk2NGQwOTMyMzUxZTVkMTg1MjY5MjgxYjE3MWEzYTA5YjA4YjI4NmU2NjFlYTQ3MDMyM2M4MmViNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZhMzI2ZGQyNjA5NmUzZWVjODFjMmNkNmQ1OTE1YTMwMmUwNTgzZjQ5OWU0NTdmYzQ0ZjZhYzE2YWI1YjJhNDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU2OGFiNmExYTIxZmQzYzdlOTMwMzEwODFhY2RkNWMyZDMxN2ZlYmNkZTBlYzdhMmUzMmJkMzIzYmM5MzBmOTMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_04e53d489eb34080be16a50a035f5b4a",
+      "statement": "Each subgraph invocation receives its own checkpoint namespace with automatic suffixes containing task_ids, enabling independent checkpoint history, time-travel, and replay per invocation without affecting parent's checkpoints or sibling subgraphs.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/_internal/_replay.py#L1-L80",
+          "version": "repo-lines-v1:sha256:79c1e754558ff1f3dc78701cf6f09eff92c87c7261d0f2ffb4f9d8874be03775:eyJzZWxlY3RlZExpbmVDb3VudCI6ODAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQzZGUwZTZiOWNlZTNmOWE2Y2U0OWI3NGYxOWZmMGEzYWE0MWY3MmVmMzcxMGEzMWM2NTI3NzAwYTNhZWQwMDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc4YzA2ZGQ5ODM3ZWJmMWI0MWMxOWMzYWMwNjZhYWZhMTQ1NjdlMGQ3MTAxY2Q4Zjk5MDY3NDE1MGEyZDRkYjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA2ZTM2OWExMzU0MjQyZjllMTUzZTA1OWJiYWExMDhkMWIxNjQ1NDRiZjAyZjMyYzYzY2MzYmY0NGE0Y2I4Y2IifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/callbacks.py#L56-L56",
+          "version": "repo-lines-v1:sha256:85c4e5b42cdb92d3b3c659a8b7c406f403f5159c9a8079d71733d16d2f01320c:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODVjNGU1YjQyY2RiOTJkM2IzYzY1OWE4YjdjNDA2ZjQwM2Y1MTU5YzlhODA3OWQ3MTczM2QxNmQyZjAxMzIwYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODVjNGU1YjQyY2RiOTJkM2IzYzY1OWE4YjdjNDA2ZjQwM2Y1MTU5YzlhODA3OWQ3MTczM2QxNmQyZjAxMzIwYyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTM0ZDdiZmEwOGJjNzY2NWNjMDg4ZDk1N2ZlM2ViY2M4OTQ4YjY0ZDNhOGI3ZTA5M2QxOWIyZmI0NjMyNmUzMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjZmNmE1Yzk4OTZiYWM2NTA4YzlmMjBiYzg1N2E0ODljMDQ0NDNlYTg5YmUxMTk0YWUwZWQ1YWMyN2NjY2ZkMyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_a76ed7e102dd4220b66752f81d540139",
+      "statement": "When subgraph is compiled with checkpointer=None (default), it does not persist state across separate parent invocations but inherits parent's checkpointer for interrupt/resume support only; state resets on each parent invocation.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L100-L106",
+          "version": "repo-lines-v1:sha256:133d35db24f0aae5eacdd82f7ec24c12f09f9210dd789c877c4e201620f2a8b7:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzE3NGE1YzE1ZWFlY2RhMDMxNDJmYzZjMjFmOTUxMDg4ZDQyZTFmNjVhNTFkMmJjOTgzYmU2MDRiNzRiNDIzNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTMwM2VjZGQ0YTRkMTBmMTljNzNmZDQyZmQxMjQzN2ZkMzM1NGE4MjY4MTYwNWRhNTI1NWE5N2EzOTA2OGRiYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDY4NmU1ZDM5MGE3MGVjOGU3NGM2NmU0ZDk2NTA2NjQ2ODY2YTZmNTNlNWZiYmJmMWE5NjNlM2RiZWZlMWUxMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGRiZjZkZDFlYzZkYmQwNDI1Yzc0YjNlZjUwNTFhNjJlYTU4MDIxMGIzODEzYmZjOGVjNjI3ZTRlZmFiZjhhOSJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/tests/test_subgraph_persistence.py#L85-L144",
+          "version": "repo-lines-v1:sha256:5934cbe25eb932858f041b4978f13b814df4c30ae737a753abd0ccf1f3ae6bf6:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNiNmJiMTdhMjQxZDNhOTcxMGNkZDE0NWM3ZDZlN2UxMmY0YWFiZTBkYmE1YjRhOGViYTY1MmJhZDAyNTBkM2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc0Yzc3Y2I5NDhmMDMzYzYxNmJkN2RhMTdlODkyNjRjODhjZjYyODU3Nzk4NDRhOGRiYmJiNGFmM2E4ZmNkODUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY3YThhZTU4YzA2Mzc2ZTBkNTkwNzhhYmY2OTExMGYwZmI1NGQ4ODVmNjhlYzg5MDZjODU5NDI2N2IzOTMwYmIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_01b3c7bb2d3f4d5ebbeec0c54fe66732",
+      "statement": "When subgraph is compiled with checkpointer=True, it accumulates state across invocations on the same thread with persistent checkpoint namespace separate from parent, enabling memory of prior invocations.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L100-L106",
+          "version": "repo-lines-v1:sha256:133d35db24f0aae5eacdd82f7ec24c12f09f9210dd789c877c4e201620f2a8b7:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzE3NGE1YzE1ZWFlY2RhMDMxNDJmYzZjMjFmOTUxMDg4ZDQyZTFmNjVhNTFkMmJjOTgzYmU2MDRiNzRiNDIzNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTMwM2VjZGQ0YTRkMTBmMTljNzNmZDQyZmQxMjQzN2ZkMzM1NGE4MjY4MTYwNWRhNTI1NWE5N2EzOTA2OGRiYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDY4NmU1ZDM5MGE3MGVjOGU3NGM2NmU0ZDk2NTA2NjQ2ODY2YTZmNTNlNWZiYmJmMWE5NjNlM2RiZWZlMWUxMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGRiZjZkZDFlYzZkYmQwNDI1Yzc0YjNlZjUwNTFhNjJlYTU4MDIxMGIzODEzYmZjOGVjNjI3ZTRlZmFiZjhhOSJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/tests/test_subgraph_persistence.py#L297-L373",
+          "version": "repo-lines-v1:sha256:cca3562b43f89d8671c6f992286e1462352713fb9811a500dd755c9a1862dc3c:eyJzZWxlY3RlZExpbmVDb3VudCI6NzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIzMDE2ZGVmYjU5M2E5ZjU1YmQ2ZDRmZWE0MWI3MDc5NDdiNDY4YTk3ODYyZjI0ZTZhNDBiOGNkYWZlMjczNmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJlZGVkOGVlYjE3ODhiOTY3MGMwOGZhMWUyODhmMzJjNDQxMTNkYWJlYjZhNWFlODNjMzRjMGEzNTUwZDAxYzMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU0ZGJkNWU0ZDRiNDljOGNjM2NjNWFlN2IzMDQxOTVhN2FiY2I5YTRlZDVjNDgzMDM4ODRjOGY1NmM0Y2ZjMDYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg3NmNkMjYxYjJhNzkyM2ZlNzczMTBjOWY3ZDEwY2Q1ZDQwOWQ4MDAyODRjZDc2MzE5Zjg0OWE0NGJlZDVlMmMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1ff55934d4034d6d97c8f9181fc44036",
+      "statement": "When subgraph is compiled with checkpointer=False, no checkpointing occurs and no checkpointer is inherited from parent, creating stateless fire-and-forget behavior.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L100-L106",
+          "version": "repo-lines-v1:sha256:133d35db24f0aae5eacdd82f7ec24c12f09f9210dd789c877c4e201620f2a8b7:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzE3NGE1YzE1ZWFlY2RhMDMxNDJmYzZjMjFmOTUxMDg4ZDQyZTFmNjVhNTFkMmJjOTgzYmU2MDRiNzRiNDIzNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTMwM2VjZGQ0YTRkMTBmMTljNzNmZDQyZmQxMjQzN2ZkMzM1NGE4MjY4MTYwNWRhNTI1NWE5N2EzOTA2OGRiYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDY4NmU1ZDM5MGE3MGVjOGU3NGM2NmU0ZDk2NTA2NjQ2ODY2YTZmNTNlNWZiYmJmMWE5NjNlM2RiZWZlMWUxMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGRiZjZkZDFlYzZkYmQwNDI1Yzc0YjNlZjUwNTFhNjJlYTU4MDIxMGIzODEzYmZjOGVjNjI3ZTRlZmFiZjhhOSJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/tests/test_subgraph_persistence.py#L233-L293",
+          "version": "repo-lines-v1:sha256:02ace33f60a735d68a2fdb4b55d05f066bf5b1b20382824f08e936fa61490aa9:eyJzZWxlY3RlZExpbmVDb3VudCI6NjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzODZlMDQ2YTc4ZDI5ODAxNGQwYjQ2MGY5MGE0MGI5NTI0MmQ4Yjc1ZGE1NmM3MzE2MDE1Y2U0YzcxNzllY2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY2MGI5OTQ5NGQ1NTEzZDQxMDhiOGMzMTAyNTMzOWVmYjlkZDQyMWIzYzllY2M4MmMyNGZkZTVmNTE5YWNlYzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU0ZGJkNWU0ZDRiNDljOGNjM2NjNWFlN2IzMDQxOTVhN2FiY2I5YTRlZDVjNDgzMDM4ODRjOGY1NmM0Y2ZjMDYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f0074621e41a4c4487f17928eb844ff1",
+      "statement": "When a subgraph node issues Command(graph=Command.PARENT, goto=...), LangGraph raises ParentCommand exception that propagates to parent, allowing parent's exception handler or error handler node to intercept and route execution.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/errors.py#L129-L134",
+          "version": "repo-lines-v1:sha256:e68a87bd77c2d6147a627cc23700b3ae8c16b2189bf323416c0b67ad58bda585:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmE1NmY4NTA3N2VlNzJiMzU3ZDgyODJjMzNiY2U0ZDQ5ZjBiYWEyMjcwMWMwZjM2NGMzY2EzZjAwYmE4NDg0MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOWJlYTdmMGFkMzkwOGVmOGRkOGU3ODU0ZDZhODRkN2Y5ZTg3YzBmM2JmZjA5MDZkOGNhNjlhYzIyNTVmMmRmNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzRiMWM1YTNlNTdhZjE0ZDJmMTZkY2FiZDM3N2Q3NzI2ODFiOGI4NTkzNDIzYWM5ODM1NDk2MjA4MTRlZmUzOCJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/tests/test_parent_command.py#L9-L53",
+          "version": "repo-lines-v1:sha256:1166f453fcb113d793110e8b0487786c0fc645ae9c2e1643fcf92dfecde6be81:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY3N2Y4OWFhNDQ1NGM2OGE5NWI3OTA1ZWNmODkwY2Q1ODQ4Y2I0YjI0ZTE4YWFhNTU1MzU5YzI3N2JiMzlkZjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEwMGM4MWM0MWVmMDQ3MTMxMDYwZjlkYWNiOGU5MDczMjM5NDNhZGI5MWFiNWM5YmQ5OTI1ZTU1MzdiM2Q5YjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc1ZjNlOTBmZDRjMmRkY2Q5MGZmYTI3YTliZmE4MGU4NjNlY2ZkZjgzMzBjNDhkZGZjYzQ0Yjk1NGY4MDI2YzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_763290073cff470db661b26f0bf4da31",
+      "statement": "Parent graph's context_schema (via Runtime parameter in nodes) is propagated read-only to subgraph scopes; subgraph nodes can read context but cannot modify it, protecting cross-cutting concerns like user_id and db_connection.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L184-L199",
+          "version": "repo-lines-v1:sha256:8d5d38f75ad8a6f7a1f72e766265bbfa40400d4d768594a32385833c2b4a9898:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2ZWY2ZDQ3NjI3Yzk4YzFjYWFkYTM4MDMzZDQzZTEyYzE5YTA3OTNiN2E5OTNjNWUwYTdmZDdlNjRiMmNmNTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEwODQyM2I1NTAxOGU2NGY3MDc3NTFhMTg3MGJjN2Y2MTZhNzM1MjBlYmIxNDk2ZWE4NDMwMzFhZmU5MDIzZmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY3ZDk4N2VjODU4M2U2NjA0ZDZmY2MzZDU4YTM1ZTUxMWMxZmUxMzA0M2RhMTgwMmFiMTIzZDI1MDY5NDYxYmEifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/tests/test_runtime.py#L271-L300",
+          "version": "repo-lines-v1:sha256:cc6d394ce44eb21322425adebb593d9d4fb415299ebd6139a10c98d6af338af5:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc3MDI1NzgzNzczZWRkZWZhNjg5NDlhYzA2ZTcwZTZmM2UzNmJhYzJhNDI4YWNjMWIzYTdhNGJmZTIzMTg2MDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE0MTg1YWI2Mzg4ZmUwZDE5ZDkwNTE0Zjc1M2QxNGM1OGUwZmM4ODE2YzNlOGYwMTliOGIwYjhhMzIzNzZiZWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYzMjA2ODE4ZDZjZGU5MzZlMGNhYmJmZTBkMWU1ZGVkYWY1N2U4MzUyMjJiOGU5ZTVhYTRkYzk1N2Q0MDQzYzYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAzZDNkNGRlMTE5YzdiNzg4YzI2ZWU1MmE0ZTk5NGZjNDE4OTdkN2Q2NjhjNTQwZjZjY2RlMzY5ODNkZWMyNTcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_465ec98a0acb4ffcbda70ddb85375cc1",
+      "statement": "Subgraphs can be arbitrarily nested (subgraph contains subgraph contains subgraph, etc.) with execution depth bounded by recursion_limit (default 25 supersteps); each level maintains independent checkpoint namespace with correct time-travel semantics.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_algo.py",
+          "version": "repo-file-v1:sha256:29d54dc6704e4e4a0385d36317faa74f4fa2ceefd6836aca03f1938b9fa51fa5"
+        },
+        {
+          "resource": "repo://libs/langgraph/tests/test_time_travel.py#L1585-L1650",
+          "version": "repo-lines-v1:sha256:93bc0eec5b35394e58a8ae3985180454bc8adda9f407627652debe42ca30f9d7:eyJzZWxlY3RlZExpbmVDb3VudCI6NjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJhN2Q1NDdkNDYyMThiYTc3NjYyMDVjNWRiYmUwNjZkMzcxZjcxZWFkMDQwYTMwZGQ3MGQyNTkwNzkxY2M3NDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM3ZTk4NGJhOTVkYTU3MjBhN2JlZTE0OGVmNDhiMWQ5Mzc1MTM1ZmQxN2I5YTM1NDhkNTI5ZDljYmQ0N2U0ZjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRkYjFjMjY4YWVmNWMyZmNkMzc5MDllNzZlMGQ2ZjNlN2I2MzJkNWI1NzJlZjJiZWIzOTUyOGEwMDcwMzZlZjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc5M2UyYTgwODhhNjNhZWUzY2IwNzA0YzAzODg5ODMyOTZiNzQxNDNhMDIyMzM2ODFiMTcwYTMyMjIzYWNjYzcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ae92a9987e8b426191bfd3192b0978e6",
+      "statement": "LangGraph automatically detects when a node is a compiled graph (subgraph) and applies subgraph-specific semantics (namespace isolation, input/output mapping, checkpointer inheritance) without explicit configuration.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/test_subgraph_detection.py#L1-L40",
+          "version": "repo-lines-v1:sha256:9d11fed3b681be5afe8aac039e8beaf033b0ea9bfbc6c9d4a3bb07ce34de02a6:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjllYjg1NmQxZTg4YTEzZTIwM2JmN2FiN2FkNGZlOGQ0ZGE2YThkMWJjNThhYWFkODVkNDhjNzYxNGE3YTVkYTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUzZGZkYmE3NjZmNDc5YTg4ODNjNTUwODIyMzQ0MWJlN2UxODJkOWYwNGY4NTkxNjNhMmJlMDVlYjQ3NTc1MDkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQzZTRkMGY2NTlmZWMxNmIwZDMzYmNjYWY4NmVhNWFkMWJiMzdiY2Y2ZWZjNWU4Zjg0ZjU3ZTUyMjEzODRlM2MifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-03T15:19:56.419Z"
+  }
+}

@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:3694d61d18995120d0333c7dc6fbf93f85888ca5eeb666805d156f844e1d4111",
+  "claims": [
+    {
+      "id": "claim_620ae087d8fb4f7bb64ce300f7f76079",
+      "statement": "RetryPolicy is a NamedTuple with fields initial_interval, backoff_factor, max_interval, max_attempts, jitter, and retry_on; it configures exponential, linear, or constant backoff with exception filtering and maximum retry limits per node.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L418-L437",
+          "version": "repo-lines-v1:sha256:663890799b74b6e985b56179ba8bb1e0bdc40c4693f64f6c6d7295d6d3214548:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZkMGJmMjMxYWUxODY0ZDFiZGNkOTdhNjFhMzgxNWNjY2VkZmM5NDgxZTBmYjc0Y2JjYzdhMGQyYzFkZmNjYmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkMTdlODM0NWZiMTk0NjBkMjE3MmRhN2Q3YThlMjIyNTBjMzc3MjExNzI1OTZkZTYyNTQ1MTM2NDEyMzAxMzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU1NzllODFmYzYxNjg3NGZlMTllNzZjZDNmNDJmNTQ3NDdjZTJmOWM4OTQyOTJiMjIxNzViZGExNzBhMGZjNWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc5OWNlNzY0NjdhMTAzMjFmMzhjMzQzYjNmY2QwNThkY2U4MTg4MTY4ODFlMjU3MmM2NjYyN2RmOGUzMGYyZTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_53228f57a9274721a135dfeb50e7335d",
+      "statement": "default_retry_on function retries ConnectionError and HTTP 5xx responses but never retries ValueError, TypeError, ArithmeticError, ImportError, LookupError, NameError, SyntaxError, RuntimeError, ReferenceError, StopIteration, StopAsyncIteration, and OSError.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/_internal/_retry.py#L1-L29",
+          "version": "repo-lines-v1:sha256:cee7f2f7b1541bc0ac90484e9f48879f80a407e2d92c52d9a8a3bab78face13e:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU4M2Q1NWFhOTdjNjRiMmUxNjJkMTg4MzA4YzAyNDYyMTQ4NDY1ZWMyMjNlM2EwMWQ1MTI0Mzg5NTBiMTM3YjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwZTJhNDY1MDA5NWZhOTVkMGUyYmI0MWIyZGIyOTA5NGQzNDA0ZDI4Y2UxMjMzOWVjODhiYjRiNWM1YmU4ZjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b87a52cc2b20482186dd259fd65bac06",
+      "statement": "TimeoutPolicy configures per-node timeout enforcement with run_timeout (hard wall-clock cap never refreshed) and idle_timeout (progress-based, refreshed on observable signals or heartbeats); refresh_on='auto' or 'heartbeat' controls which signals refresh idle_timeout.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/types.py#L451-L514",
+          "version": "repo-lines-v1:sha256:23afa259c64622dd6d9844a0e4650e5a308d0874fa4fc6f5aab3d6c93517d7dd:eyJzZWxlY3RlZExpbmVDb3VudCI6NjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4YThkOWFiYTRiNTQ2NzYwMTk5MWYwZmQ2Y2RkNmNiMzQ3ZmIxMjM5YTVkMzMzMTFkZDRjNjFmZjc4MGI1Y2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5MDlhNTNhNjE4ZDAyOGUxZDMwMDBjMGE3YWJjZWVjYmU1ZmIzN2Y0ZTUxMWVmZTQ2NjQzZmFkNmU2Njg3MmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImViYWFkZWY4NzkyNWNjZmM5YjE2NWNmNDRhNDk1YWU1Zjc2ZjliNDQ2YjQ5NjI1MTdkMTFhYzgxOWQ5ZWExNjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU3ZTZiMzAzOTEzYzVhYjg0MmU2M2VkMDE2OTgxYjkzMDQ4ZGQxNTM3OGRkMWMzM2Q2NWUyOTNkMzJiYjQyMmIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_08ada7591fd74cb3a843224d1dadfe78",
+      "statement": "NodeTimeoutError is not a subclass of OSError and includes fields: node, kind ('idle' or 'run'), timeout, elapsed, run_timeout, and idle_timeout; it is retried by default unless explicitly excluded by a retry policy.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/errors.py#L190-L241",
+          "version": "repo-lines-v1:sha256:76ded862f030cb7f65dfbd1de9b3fd47d5931d8c2a79436d56e61170c63339e3:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQzY2U3YmIzYWI1YjAyOWQxNzE1YjYxN2I4NDkxNGZiMzFhM2ZiZjU2NjhmMDg0YjI0NjQyOGZjNmI3NDIwNjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ5NGYxMDNjMWI1ZjczZGZiOGQ5MjU0ZjRiYjZhOWViMzk3MzI2ZGMwNzk3OTdkOTBjNTVhZTMyNmIyNDg4YTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjlkMWY1ZDJlOGFkNzM5NDg4OGUyNGY4Mjg4YzFiOTljNDgxZjcwMjA3ZmExOGM1MGQ0MDhkOGI5MmViY2UwODIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9d631d53649b4bf0a7ed23c2499df2f4",
+      "statement": "NodeError is a frozen dataclass passed to node-level error handlers; it contains node (name of failed node) and error (the exception that was raised).",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/errors.py#L148-L166",
+          "version": "repo-lines-v1:sha256:78278064642374c75d74f93554d8822e2e6a163a5ee67bad8f4a4e84f863588a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBlM2ZiMWU1OGZiYzkwNDc5NGQ1MDczMTRmYTkxYzlmMmYxOThjODhkM2ZmMzk1ZTAwODI4OTAxYzM3ZGM5MWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg1NDEyNzMwOWZkZTJiZWUxOWQzODY1MWRkOWU5ZmJiZmQzM2E5MGM2Yjc1ODk4NjY4MzM3N2U1YmNjNzUyOWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM2OTQzY2M0N2I4NzE4YWM4ZGEzZGYzNmM1MmYzNWI4YTk2YmNkNDg4MDQ5YzI1MGI1ZDA0M2UzNDdkMzcxYzIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_5a9b57cc073d49f2acd8d616a3bab52b",
+      "statement": "Node-level error handlers are registered via add_node(..., error_handler=...) or set_node_defaults(error_handler=...); handlers receive the failed node's state and a NodeError, and return a Command to decide recovery (update state, route to fallback, or re-raise).",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/errors.py#L148-L166",
+          "version": "repo-lines-v1:sha256:78278064642374c75d74f93554d8822e2e6a163a5ee67bad8f4a4e84f863588a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBlM2ZiMWU1OGZiYzkwNDc5NGQ1MDczMTRmYTkxYzlmMmYxOThjODhkM2ZmMzk1ZTAwODI4OTAxYzM3ZGM5MWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg1NDEyNzMwOWZkZTJiZWUxOWQzODY1MWRkOWU5ZmJiZmQzM2E5MGM2Yjc1ODk4NjY4MzM3N2U1YmNjNzUyOWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM2OTQzY2M0N2I4NzE4YWM4ZGEzZGYzNmM1MmYzNWI4YTk2YmNkNDg4MDQ5YzI1MGI1ZDA0M2UzNDdkMzcxYzIifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L277-L332",
+          "version": "repo-lines-v1:sha256:c97b815c4d7af42d7e77a3649e0e79ea95bfcd29217a05add6b605ff2686dd67:eyJzZWxlY3RlZExpbmVDb3VudCI6NTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE0OGFhYWY3NWJkMGY3MDI4MDAyZTk1MGFjNzU2Mzc2MmNmMGM4ZWUyZmM1ZDlmNTUxODczNTFmZGRhYzRmZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmYmQxMWFhMmI3OGI3MTU4YWJiYjA1Yjk5N2QxZmMyMTZmZjUzNjQ0MDM5N2JjNjZkODJlNTlhZDVhNjkwZDciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg0YTQ2NjE1YzI3ZmQ1ZWY2MGYwYjUwMjE0Nzk0OGQ3OGNkZTVhYTFlNTIzODBmYjA5MGYxMmY4NTZlMTNmNWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY4MDJmOTQ0NmQxYWY1NmM3NzhmMDZlOTk2ZGE0YmJlYzk2MGE5ZTdkYzg3YWU2ZWU5MzhkZGUxZmY0MDdhZTgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_04046d83a35646d99987f5659b50377b",
+      "statement": "GraphDrained is raised when RunControl.request_drain() is called, indicating cooperative shutdown at a superstep boundary; the checkpoint is saved and the run can be resumed later.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/errors.py#L54-L65",
+          "version": "repo-lines-v1:sha256:f928f879e183acc8623a62315e801f6d1eb0df8abb2ae0870932e9ec624ce4bd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIxY2VlMTVjNDRkOWI4NmU1ZTljZWVhMzIxNjJkNmMwY2Y2YTJhZjFlYzk1OWVjMzc2YjllMTI4YTAzNjU1YmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg1NDEyNzMwOWZkZTJiZWUxOWQzODY1MWRkOWU5ZmJiZmQzM2E5MGM2Yjc1ODk4NjY4MzM3N2U1YmNjNzUyOWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNmZGFlYzI3MmQ3YWNjY2M5MmViMTE4NjM1Y2IxZjEwNWRhZjc2MzM4OGRlOTk1Y2JjMjU2MGJhM2M2ZjNjNmQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_839c87348285477f9b0c29ae31613e54",
+      "statement": "GraphInterrupt is raised by interrupt() to pause graph execution at human-in-the-loop checkpoints; it is suppressed by the root graph and never surfaces as an error to the user.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/errors.py#L102-L127",
+          "version": "repo-lines-v1:sha256:d9f5714b2f73c0c3e6b6a8ef1a45af28e6cbfab17fc69c8db278cd463a49946d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZlNjI4M2IwZTk0ZDE4Y2M5MTJjZjBiYmQ5ZDUwNDhmN2FlODEwYzQ1MmY4MGEyNjZiY2MzNmVlNDJmMDgzYzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg1NDEyNzMwOWZkZTJiZWUxOWQzODY1MWRkOWU5ZmJiZmQzM2E5MGM2Yjc1ODk4NjY4MzM3N2U1YmNjNzUyOWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQzNWQ1NTlhN2QyZmNjM2FkZDY0OTc3NzEyOWIwOWJjNTY3MjNkZGRjNjhhNWFiZjgxZTk5NTM2MDNiYWNiNWEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7035dbbaf62540ff961e6ed10151880c",
+      "statement": "ParentCommand is a special exception raised by a subgraph to send a Command to its parent graph; the parent's error handler can catch and apply it, allowing subgraphs to coordinate recovery with their parent.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/errors.py#L129-L134",
+          "version": "repo-lines-v1:sha256:e68a87bd77c2d6147a627cc23700b3ae8c16b2189bf323416c0b67ad58bda585:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmE1NmY4NTA3N2VlNzJiMzU3ZDgyODJjMzNiY2U0ZDQ5ZjBiYWEyMjcwMWMwZjM2NGMzY2EzZjAwYmE4NDg0MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOWJlYTdmMGFkMzkwOGVmOGRkOGU3ODU0ZDZhODRkN2Y5ZTg3YzBmM2JmZjA5MDZkOGNhNjlhYzIyNTVmMmRmNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzRiMWM1YTNlNTdhZjE0ZDJmMTZkY2FiZDM3N2Q3NzI2ODFiOGI4NTkzNDIzYWM5ODM1NDk2MjA4MTRlZmUzOCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_f631e704204f4b97be4821c0edce7d13",
+      "statement": "GraphRecursionError is raised when graph execution exceeds the recursion_limit (default 25), indicating an infinite loop; the limit can be increased via config passed to invoke().",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/errors.py#L67-L87",
+          "version": "repo-lines-v1:sha256:6ae2114dcfd44ea369568c3794ff6997d01616e6fd2a296918b774c8ebaa1f76:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxNTI0OTM3MTRkZGYxZDQzNmM3ZGI0ZDNhNWE1ZGU1M2EwMjI2NWZhZTg0ZDg1NTZlNjFjZTE3MDllMjE1MzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU0NDVlMTdhZGVkMzA5NzQ1ZmZkYTMyOWZjZDY1ODYyZDUyOTZjNGVkN2IwZmVjZWIzMzA0NzVmNmUyNzRjNjEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgxZjU2ODliZWZjMWZiYjcwM2NjY2E1NjRmNmE1NjkyMDYxMjBmMDU1YjFhZDVhYTA0ZGY5YjBhNjUwNmQxYjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFhZDY1ZGYxNDUwMGE4YmM5NGYzN2ZjZWQ5Zjc0OTQ2NmNlNjdmY2U3ZDYwYmUxMmIyNzQzMWJmZjMwOTEzNGIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8cbac83af825427f9ab13dee26ad1ec7",
+      "statement": "InvalidUpdateError is raised when a node returns an update that conflicts with channel definitions, such as multiple nodes writing incompatible values to a channel without a reducer or an update using a non-string key.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/errors.py#L90-L99",
+          "version": "repo-lines-v1:sha256:8a2d3f30b041f8adc6a980c331e94f58aae0e0f52d45e5bbb718a76bf949f981:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwZjFkYmNkYTAwNGJjYTQ5ZDM3OGMxOGJhZDQ5ZmE5MDNhZmYxN2Q3NWE2YTE1NGUxYTI4MTU1MWRiMmZmOTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU0NDVlMTdhZGVkMzA5NzQ1ZmZkYTMyOWZjZDY1ODYyZDUyOTZjNGVkN2IwZmVjZWIzMzA0NzVmNmUyNzRjNjEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg1NDEyNzMwOWZkZTJiZWUxOWQzODY1MWRkOWU5ZmJiZmQzM2E5MGM2Yjc1ODk4NjY4MzM3N2U1YmNjNzUyOWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVlODMyZDMzNzNhOTczMGIwNTk1YzRhMjlhNmYxYWU4M2Y5OTBjYjRmNGI4MGUwNjc5ZGI1ZTcyNzEyYTE2ZmIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7b2bd0c2bb1a4e9db8792097a186fb4c",
+      "statement": "Runtime.execution_info exposes node_attempt (1-indexed current attempt number, constant across retries) and node_first_attempt_time (Unix timestamp of first attempt for the node), enabling nodes to track retry context and implement adaptive behavior.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_retry.py#L573-L612",
+          "version": "repo-lines-v1:sha256:8b1bafe7cbe6dffd31b5a019187c2b5a04e501e921f386dd020df5fdf7589c29:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc5NzM3NGYwMDFmZGE5ZDJlMTI4NWY2NWJiZTMxMjNhN2Q5MjljYWRiNzQ1NmU3NGNiZTExNDc5MjZlN2RmMjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1MDMyZTk2NGQwOTMyMzUxZTVkMTg1MjY5MjgxYjE3MWEzYTA5YjA4YjI4NmU2NjFlYTQ3MDMyM2M4MmViNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg5MzE3MDBjMmQ2ZDE5ODQxNmVlN2NhNWNhMTgzZmIzNTBhNzFkYzY1OWU5NzM1NGZmZjZlNTQxNmFhNzk4ZTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgxNjliN2QyNzFiOTMzZmJiMTZmMWU5MDExMDNjMGE4YzA2ZmEwODUyNDgxMmI5NDU5NjJlNWQ2ZjA5YmExZmUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_74f8df23b00446aea46202987895f0ae",
+      "statement": "prepare_node_error_handler_task creates an error handler task with the same state snapshot the failed node saw; the handler receives a NodeError and returns a Command to update state, route to fallback nodes, or re-raise.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_algo.py#L1110-L1230",
+          "version": "repo-lines-v1:sha256:64163043600d81e0d6e93eb3f35c37b98481dc7799f3771df8b3136630c8134e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIxLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI5N2Q2MzQxNDE0ZGUwZWEwMTZlMjMyYWU0M2RmZTdlYzBiOTNmYzRhYjZlM2YwYWRiZGQzODAyNzk1MzE2MTJkIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIwYmVhZDJlYTNjYmRiMGJhYTAzMTVhOGI3Nzk5OTBmNDU3MjAyMWRmYjc2YWFkNDRjY2M4N2ZhNDIwMzg3ZGRiIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlODBkZTExNzkzY2Q4MGQ4OGM1ZjMwZWUwNzhhODNiODMxODc3N2Y4ZDY1MzJkMTVmNDg4MjVkYWEyMWUzNzYwIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlMWRiYWM3NDRiNzQ0MGIxMTU4OTQwNTA4OTllZGQ0NmYzMmJkZjliZjAyMzY5Y2JiMmYwZTc1MDljMzBiNmYzIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_e0d2d61af4164cb3b01ffcd8a283f8ce",
+      "statement": "Retry mechanism in run_with_retry and arun_with_retry enforces maximum attempts, applies backoff with jitter, allows retries only for matching exception policies, and clears writes between retry attempts to prevent duplicate state updates.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/pregel/_retry.py#L573-L670",
+          "version": "repo-lines-v1:sha256:9e89d75cb9509c3d07ebd5b69f9443943630c4d1044a9006fbf48c0f5c23f0fb:eyJzZWxlY3RlZExpbmVDb3VudCI6OTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc5NzM3NGYwMDFmZGE5ZDJlMTI4NWY2NWJiZTMxMjNhN2Q5MjljYWRiNzQ1NmU3NGNiZTExNDc5MjZlN2RmMjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlkMzdmMDVjNmFkMmE5MzVkNWJlMTU4ODJkMTVmN2E2YmQ1NzRlMTRkMWE2YjlkZGFjYjA3Y2MzZmYxMDgxN2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg5MzE3MDBjMmQ2ZDE5ODQxNmVlN2NhNWNhMTgzZmIzNTBhNzFkYzY1OWU5NzM1NGZmZjZlNTQxNmFhNzk4ZTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhmZDhkMjFjZmI1ZDljNTZjMDA5NmE0ZDNmOGQ5YzgzZTMxODZlZDE4MDE2NGJlMzhlZDc2ZjQ4OTZkYWI1ZGQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_cc86a69eac924c77ab72579ad90d4c20",
+      "statement": "Error handlers are excluded from default error handlers (handlers never catch themselves), and per-node handlers always override set_node_defaults handlers, preventing infinite recursion and allowing fine-grained recovery control.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L1292-L1321",
+          "version": "repo-lines-v1:sha256:0b904f2086b518e8e739a2fa2d9764c7ba5dc6407782b130a61593d898a5826e:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImExYTFhNmU4YzQxOTM5YTA2NGEyMDgwNjU1ODRiMWVhNDAxYTkyOTVjODQwZGM1NjY3MTE0NGVlMWVmYzM5M2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc3ZWJkMDFiMDAwOTE2MzUyNjA2MzM0MWUxM2UxMTExZWYxNmZlMTExYzFkMTFmYjAxMDM3NGFiNjAyODQ3MWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU2ZmQ3OTM2YTk3OTU1MDM2ZDg2NmYyNjA3Y2I1OTdmNzU0YjgxZTJhYTgxY2U1MTc5MzQxYzVlYzljMDc0MTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJkYmI2ODljOGY1NTkzYWYxNWJmMmE0NjM1Y2YzNmY1NzEyZTM4MzFkNjIwNWQxZDljMDE5Y2I0YjAyMmQ3MzcifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-03T15:19:56.419Z"
+  }
+}
