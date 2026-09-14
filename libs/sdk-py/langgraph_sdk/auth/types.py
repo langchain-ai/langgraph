@@ -218,6 +218,8 @@ class BaseUser(typing.Protocol):
 class StudioUser:
     """A user object that's populated from authenticated requests from the LangGraph studio.
 
+    `ls_user_id` is the canonical LangSmith user ID when supplied by Agent Server.
+
     Note: Studio auth can be disabled in your `langgraph.json` config.
 
     ```json
@@ -250,10 +252,11 @@ class StudioUser:
         ```
     """
 
-    __slots__ = ("_is_authenticated", "_permissions", "username")
+    __slots__ = ("_is_authenticated", "_permissions", "ls_user_id", "username")
 
     def __init__(self, username: str, is_authenticated: bool = False) -> None:
         self.username = username
+        self.ls_user_id: str | None = None
         self._is_authenticated = is_authenticated
         self._permissions = ["authenticated"] if is_authenticated else []
 
