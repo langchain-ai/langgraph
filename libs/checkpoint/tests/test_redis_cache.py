@@ -4,22 +4,47 @@ import time
 
 import pytest
 import redis
+from redis.backoff import NoBackoff
+from redis.retry import Retry
 
 from langgraph.cache.base import FullKey
 from langgraph.cache.redis import RedisCache
+
+
+def _redis_available() -> bool:
+    """Probe Redis once with a single fast connection attempt.
+
+    A default redis-py 8.x client retries a failed connection ten times with
+    backoff, and on Windows a refused loopback connection takes ~2s per address
+    family, so deciding to skip costs ~49s per probe. One attempt with a short
+    connect timeout keeps the skip path fast on every platform.
+    """
+    try:
+        redis.Redis(
+            host="localhost",
+            port=6379,
+            db=0,
+            decode_responses=False,
+            socket_connect_timeout=1,
+            retry=Retry(NoBackoff(), 0),
+        ).ping()
+    except (redis.ConnectionError, redis.TimeoutError):
+        return False
+    return True
+
+
+REDIS_AVAILABLE = _redis_available()
 
 
 class TestRedisCache:
     @pytest.fixture(autouse=True)
     def setup(self) -> None:
         """Set up test Redis client and cache."""
+        if not REDIS_AVAILABLE:
+            pytest.skip("Redis server not available")
         self.client = redis.Redis(
             host="localhost", port=6379, db=0, decode_responses=False
         )
-        try:
-            self.client.ping()
-        except redis.ConnectionError:
-            pytest.skip("Redis server not available")
 
         self.cache: RedisCache = RedisCache(self.client, prefix="test:cache:")
 
@@ -165,11 +190,9 @@ class TestRedisCache:
     async def test_async_operations(self) -> None:
         """Test async set and get operations with sync Redis client."""
         # Create sync Redis client and cache (like main integration tests)
-        client = redis.Redis(host="localhost", port=6379, db=1, decode_responses=False)
-        try:
-            client.ping()
-        except Exception:
+        if not REDIS_AVAILABLE:
             pytest.skip("Redis not available")
+        client = redis.Redis(host="localhost", port=6379, db=1, decode_responses=False)
 
         cache: RedisCache = RedisCache(client, prefix="test:async:")
 
@@ -191,11 +214,9 @@ class TestRedisCache:
     async def test_async_clear(self) -> None:
         """Test async clear operations with sync Redis client."""
         # Create sync Redis client and cache (like main integration tests)
-        client = redis.Redis(host="localhost", port=6379, db=1, decode_responses=False)
-        try:
-            client.ping()
-        except Exception:
+        if not REDIS_AVAILABLE:
             pytest.skip("Redis not available")
+        client = redis.Redis(host="localhost", port=6379, db=1, decode_responses=False)
 
         cache: RedisCache = RedisCache(client, prefix="test:async:")
 
