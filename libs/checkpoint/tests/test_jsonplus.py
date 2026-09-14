@@ -596,6 +596,8 @@ def test_serde_jsonplus_bytearray() -> None:
         np.arange(9, dtype=np.int32).reshape(3, 3),
         np.asfortranarray(np.arange(9, dtype=np.float64).reshape(3, 3)),
         np.arange(12, dtype=np.int16)[::2].reshape(3, 2),
+        np.array(["2020-01-01", "2020-02-01"], dtype="datetime64[D]"),
+        np.array([1, 2], dtype="timedelta64[D]"),
     ],
 )
 def test_serde_jsonplus_numpy_array(arr: np.ndarray) -> None:
