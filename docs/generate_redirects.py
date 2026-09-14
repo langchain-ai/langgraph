@@ -12,6 +12,7 @@ which is SEO-friendly and treated similarly to 301 redirects by Google.
 To add new redirects, simply edit redirects.json and re-run this script.
 """
 
+import http.client
 import json
 import os
 import urllib.error
@@ -113,8 +114,16 @@ def fetch_canonical_llms_txt():
                 print(f"Refusing {CANONICAL_LLMS_URL}: redirected to {response.url}")
                 return None
             body = response.read(LLMS_MAX_BYTES + 1)
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        print(f"Could not fetch {CANONICAL_LLMS_URL}: {exc}")
+    # A connection dropped mid-body raises http.client.IncompleteRead, which
+    # descends from HTTPException rather than OSError, so catching only the
+    # urllib and OS errors would let it escape and fail the whole deploy.
+    except (
+        urllib.error.URLError,
+        http.client.HTTPException,
+        TimeoutError,
+        OSError,
+    ) as exc:
+        print(f"Could not fetch {CANONICAL_LLMS_URL}: {type(exc).__name__}: {exc}")
         return None
 
     if len(body) > LLMS_MAX_BYTES:
