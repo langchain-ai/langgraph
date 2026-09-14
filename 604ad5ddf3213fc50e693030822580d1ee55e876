@@ -1,0 +1,21 @@
+libs/langgraph/langgraph/_internal/_config.py
+  s_70066badf95926::t_ec6a26ba306252 310,315-319,327
+libs/langgraph/tests/test_utils.py
+  s_70066badf95926::t_7cbfe66daf02b1 580-596
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "604ad5ddf3213fc50e693030822580d1ee55e876",
+  "prompts": {},
+  "sessions": {
+    "s_70066badf95926": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aea03cf4-eb46-4b2a-865d-dc57ad81e057",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Nick Hollon <nick.hollon@langchain.dev>"
+    }
+  }
+}

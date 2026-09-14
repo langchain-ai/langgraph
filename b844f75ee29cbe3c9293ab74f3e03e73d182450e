@@ -1,0 +1,24 @@
+libs/sdk-py/CHANGELOG.md
+  s_993c3eb647e0df::t_1e0907568a65c6 48-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "b844f75ee29cbe3c9293ab74f3e03e73d182450e",
+  "prompts": {},
+  "humans": {
+    "h_e6aca5e1220677": {
+      "author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  },
+  "sessions": {
+    "s_993c3eb647e0df": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a043bb-e191-7b33-a49a-8e240a4102d4",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  }
+}

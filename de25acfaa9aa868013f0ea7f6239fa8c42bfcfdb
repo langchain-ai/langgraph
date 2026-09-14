@@ -1,0 +1,21 @@
+libs/langgraph/tests/test_utils.py
+  s_8a1aad820b728d::t_593a9472e9ce38 652-676
+libs/langgraph/langgraph/_internal/_config.py
+  s_8a1aad820b728d::t_981c54c07d54cb 96-100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "de25acfaa9aa868013f0ea7f6239fa8c42bfcfdb",
+  "prompts": {},
+  "sessions": {
+    "s_8a1aad820b728d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "22be6939-e14c-4c4e-a35a-1bc1a3771e23",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Mason Daugherty <github@mdrxy.com>"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+libs/langgraph/tests/test_delta_channel_update_state.py
+  s_b3d27cd44c008d::t_89e9cfe5488f5d 1-284
+libs/langgraph/langgraph/pregel/main.py
+  s_b3d27cd44c008d::t_5ae106bd9c581b 2013-2027
+  s_b3d27cd44c008d::t_3dc8668c113f59 2474-2488
+  s_b3d27cd44c008d::t_c1bb4ffd1414dc 111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8413f78c85057cec0b254a35473cf68c086fc3ce",
+  "prompts": {},
+  "sessions": {
+    "s_b3d27cd44c008d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1b2c018f-65f2-4ee8-a4ad-350f395ce217",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Quanzheng Long <long@langchain.dev>"
+    }
+  }
+}

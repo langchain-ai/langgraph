@@ -1,0 +1,12 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "941c170c58c0c619ab1a837ee48f72276461f35b",
+  "prompts": {},
+  "humans": {
+    "h_152f5d9f78d224": {
+      "author": "Sydney Runkle <sydneymarierunkle@gmail.com>"
+    }
+  }
+}

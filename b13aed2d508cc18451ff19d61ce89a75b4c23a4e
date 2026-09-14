@@ -1,0 +1,25 @@
+libs/langgraph/pyproject.toml
+  s_015e9aefd67dc6::t_c8c89a71862a75 7
+libs/langgraph/uv.lock
+  s_015e9aefd67dc6::t_6334b55f865773 1385
+libs/sdk-py/uv.lock
+  s_015e9aefd67dc6::t_6334b55f865773 301
+libs/prebuilt/uv.lock
+  s_015e9aefd67dc6::t_6334b55f865773 288
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "b13aed2d508cc18451ff19d61ce89a75b4c23a4e",
+  "prompts": {},
+  "sessions": {
+    "s_015e9aefd67dc6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6aa7defc-b351-4969-a10b-92a5e35c683b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Nick Hollon <nick.hollon@langchain.dev>"
+    }
+  }
+}

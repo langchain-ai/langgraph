@@ -1,0 +1,25 @@
+libs/langgraph/pyproject.toml
+  s_b3d27cd44c008d::t_e6829df79f20c2 7
+libs/langgraph/uv.lock
+  s_b3d27cd44c008d::t_7ff01613af154a 1441
+libs/prebuilt/uv.lock
+  s_b3d27cd44c008d::t_3b84a21c9a7465 288
+libs/sdk-py/uv.lock
+  s_b3d27cd44c008d::t_1f0e4cc30f0cd5 301
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "32661228fe189d57e5cab521b773324ac2dd9ed4",
+  "prompts": {},
+  "sessions": {
+    "s_b3d27cd44c008d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1b2c018f-65f2-4ee8-a4ad-350f395ce217",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Quanzheng Long <long@langchain.dev>"
+    }
+  }
+}

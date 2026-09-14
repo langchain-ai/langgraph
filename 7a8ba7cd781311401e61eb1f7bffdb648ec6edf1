@@ -1,0 +1,22 @@
+libs/sdk-py/langgraph_sdk/auth/__init__.py
+  s_993c3eb647e0df::t_fd7b903e372d67 428-434
+libs/sdk-py/tests/test_auth.py
+  s_993c3eb647e0df::t_fd7b903e372d67 1-10,12-20
+  s_993c3eb647e0df::t_022cd4bf44797c 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "7a8ba7cd781311401e61eb1f7bffdb648ec6edf1",
+  "prompts": {},
+  "sessions": {
+    "s_993c3eb647e0df": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a043bb-e191-7b33-a49a-8e240a4102d4",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+libs/sdk-py/langgraph_sdk/__init__.py
+  h_e6aca5e1220677 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "a9a4b83c4c9de51cd635c9856ff218619da52987",
+  "prompts": {},
+  "humans": {
+    "h_e6aca5e1220677": {
+      "author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  }
+}

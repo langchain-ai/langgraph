@@ -1,0 +1,77 @@
+libs/langgraph/langgraph/pregel/main.py
+  s_a1b5c4b23631ae::t_2a35e81884c57e 2036-2062,2066
+  s_a1b5c4b23631ae::t_da96ff52c3749b 2526-2552,2557
+  s_a1b5c4b23631ae::t_ca53e9e8d8e1e9 133
+libs/checkpoint/tests/test_memory.py
+  s_a1b5c4b23631ae::t_58ff9e681e1fdd 462-466,470
+  s_a1b5c4b23631ae::t_96ef7cec7b9ebf 618-621,625
+  s_a1b5c4b23631ae::t_a1f02fe5ef0a93 354-356,359
+libs/checkpoint/langgraph/checkpoint/memory/__init__.py
+  s_a1b5c4b23631ae::t_9aa174552ec026 148-161,169,174-187,189-191,196-198,200,204-208,213,227-228,243,248-260
+  s_a1b5c4b23631ae::t_3b12cd73c88bc3 26
+  s_a1b5c4b23631ae::t_e74e0fd1c05a1d 209-212,214-226,229-242,244-247
+libs/checkpoint-postgres/langgraph/checkpoint/postgres/__init__.py
+  s_a1b5c4b23631ae::t_591ae1e0c8e072 32-34,36
+  s_a1b5c4b23631ae::t_f88b1d2be9e814 544-552
+  s_a1b5c4b23631ae::t_e5993c01b7646c 17
+  s_a1b5c4b23631ae::t_2206db68174f6f 452-455,457,459-469,475-476,478-479,481-506,509-510,513-523,525-543,553-557,559,563-564,566-568,570,572-573,575,577,579-580,582
+libs/checkpoint/langgraph/checkpoint/base/__init__.py
+  s_a1b5c4b23631ae::t_43362927dc438d 653,655-658,660-665,669-672,674-676,690,692-695,697-702,706-709,711-725,738-743,746-750,755,769-770,780-789
+  s_a1b5c4b23631ae::t_f88b1d2be9e814 775
+  s_a1b5c4b23631ae::t_26ea98c22e6758 726-737,751-754,756-768,771-774,776-779
+  s_a1b5c4b23631ae::t_a2dcf97b87f1df 37-67
+libs/checkpoint-sqlite/langgraph/checkpoint/sqlite/aio.py
+  s_a1b5c4b23631ae::t_c1e42e9a9cdfca 28,30-33
+  s_a1b5c4b23631ae::t_f88b1d2be9e814 679
+  s_a1b5c4b23631ae::t_892b14947822ed 630-634,641-642,644-645,647-673,675,678,680-708,710-713,715-716,718-719,721,731-733
+libs/checkpoint-sqlite/langgraph/checkpoint/sqlite/_delta.py
+  s_a1b5c4b23631ae::t_adc25195b1c1f5 131-134
+  s_a1b5c4b23631ae::t_4b1491d9dcfe7a 163-166,169-173,182-186,194-198
+  s_a1b5c4b23631ae::t_09a72583da27e4 25,35-36
+  s_a1b5c4b23631ae::t_2ffb5a3a2ff680 148-162,167-168,174-181,187-193,199-201
+  s_a1b5c4b23631ae::t_f30bd2245057aa 3-5,8-10,12-20,34,43,45-47,55-56,60,81,89,91-93,96,98-102,104-109,111-113,119-121,124,129-130,135-143,145,207-209,213,215,219-224,239-246,248-259
+  s_a1b5c4b23631ae::t_3b5e42789fa41e 29-33,37-41
+  s_a1b5c4b23631ae::t_bbc6cc9ad0f1ff 146-147
+libs/checkpoint-postgres/langgraph/checkpoint/postgres/base.py
+  s_a1b5c4b23631ae::t_e921787a41094d 401-402,404-405,407-415,419-420,430-432,434-436,442-448,453-456,460-461,463,465-476,482,484,486,494,497,500,504-512,516-526
+  s_a1b5c4b23631ae::t_3bd6cf0f42c6e5 24
+  s_a1b5c4b23631ae::t_709e77f0c9262f 3,19,22
+  s_a1b5c4b23631ae::t_c337309ddebaf8 166
+  s_a1b5c4b23631ae::t_443408b0996ac1 178-189,191,193-196,198-206,208-211,213-214,217-218,220-225,229,237-238,240-243,245-249,253-254,258,263,268,284,304-356
+  s_a1b5c4b23631ae::t_f561e5959b5285 416-418,421-428,437-441,449,451-452
+  s_a1b5c4b23631ae::t_f88b1d2be9e814 495,513
+  s_a1b5c4b23631ae::t_d85cb0ed6ee17f 23
+libs/checkpoint-postgres/langgraph/checkpoint/postgres/aio.py
+  s_a1b5c4b23631ae::t_f74fd7cf1032d2 32-34,36
+  s_a1b5c4b23631ae::t_a42e2c5cdae253 414-415,421-422,424-425,427-449,451-452,455-456,459-469,471-489,499,501-503,505,510-511,513-515,517,519-520,522,524,526-527,529
+  s_a1b5c4b23631ae::t_51b2e00257edd7 17
+  s_a1b5c4b23631ae::t_f88b1d2be9e814 490-498
+libs/langgraph/langgraph/pregel/_checkpoint.py
+  s_a1b5c4b23631ae::t_cd0a5f97e5a794 73-108
+libs/checkpoint-sqlite/langgraph/checkpoint/sqlite/__init__.py
+  s_a1b5c4b23631ae::t_e053fff82afbfb 27,29-32
+  s_a1b5c4b23631ae::t_dde94aff9a9511 510-512,514,516-523,529-530,532-533,535-561,563,566-601,603-604,606-607,609,618-620
+libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/test_delta_channel_history.py
+  s_a1b5c4b23631ae::t_c8444718e557f8 90-93,102-104,108-110,114-116,126-129
+  s_a1b5c4b23631ae::t_2749aea07a507a 167-169,171-172
+  s_a1b5c4b23631ae::t_c2af95381b9c5e 239-299,308
+  s_a1b5c4b23631ae::t_7540f1904675c9 194-197,210-212,222
+libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/_delta_fixtures.py
+  s_a1b5c4b23631ae::t_5a7667ac1a83f6 57-62,77-78,84-89,101-104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "728fb748be2992f2d8325e82e2dcc9c9b5155ff4",
+  "prompts": {},
+  "sessions": {
+    "s_a1b5c4b23631ae": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cc2a5546-6de5-4ed3-a8d5-eebad31a502b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Quanzheng Long <long@langchain.dev>"
+    }
+  }
+}
