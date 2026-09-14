@@ -14,12 +14,14 @@ from typing import (
     NamedTuple,
     TypeVar,
     final,
+    overload,
 )
 from warnings import warn
 
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
+from pydantic import TypeAdapter
 from typing_extensions import NotRequired, TypeAliasType, TypedDict, Unpack, deprecated
 from xxhash import xxh3_128_hexdigest
 
@@ -36,6 +38,7 @@ from langgraph.warnings import LangGraphDeprecatedSinceV10, LangGraphDeprecatedS
 # when used in standalone type aliases.
 StateT = TypeVar("StateT")
 OutputT = TypeVar("OutputT")
+ResponseT = TypeVar("ResponseT")
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
@@ -596,13 +599,19 @@ class Interrupt:
     id: str
     """The ID of the interrupt. Can be used to resume the interrupt directly."""
 
+    response_schema: dict[str, Any] | None = None
+    """JSON Schema for the value expected when resuming this interrupt, if the graph provided one."""
+
     def __init__(
         self,
         value: Any,
         id: str = _DEFAULT_INTERRUPT_ID,
+        *,
+        response_schema: dict[str, Any] | None = None,
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         self.value = value
+        self.response_schema = response_schema
 
         if (
             (ns := deprecated_kwargs.get("ns", MISSING)) is not MISSING
@@ -614,8 +623,14 @@ class Interrupt:
             self.id = id
 
     @classmethod
-    def from_ns(cls, value: Any, ns: str) -> Interrupt:
-        return cls(value=value, id=xxh3_128_hexdigest(ns.encode()))
+    def from_ns(
+        cls, value: Any, ns: str, *, response_schema: dict[str, Any] | None = None
+    ) -> Interrupt:
+        return cls(
+            value=value,
+            id=xxh3_128_hexdigest(ns.encode()),
+            response_schema=response_schema,
+        )
 
     @property
     @deprecated("`interrupt_id` is deprecated. Use `id` instead.", category=None)
@@ -848,7 +863,17 @@ class Command(Generic[N], ToolOutputMixin):
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
 
-def interrupt(value: Any) -> Any:
+@overload
+def interrupt(value: Any, *, response_schema: type[ResponseT]) -> ResponseT: ...
+
+
+@overload
+def interrupt(value: Any, *, response_schema: dict[str, Any] | None = None) -> Any: ...
+
+
+def interrupt(
+    value: Any, *, response_schema: dict[str, Any] | type[Any] | None = None
+) -> Any:
     """Interrupt the graph with a resumable exception from within a node.
 
     The `interrupt` function enables human-in-the-loop workflows by pausing graph
@@ -918,7 +943,7 @@ def interrupt(value: Any) -> Any:
         for chunk in graph.stream({\"foo\": \"abc\"}, config):
             print(chunk)
 
-        # > {'__interrupt__': (Interrupt(value='what is your age?', id='45fda8478b2ef754419799e10992af06'),)}
+        # > {'__interrupt__': (Interrupt(value='what is your age?', id='45fda8478b2ef754419799e10992af06', response_schema=None),)}
 
         command = Command(resume=\"some input from a human!!!\")
 
@@ -931,12 +956,20 @@ def interrupt(value: Any) -> Any:
 
     Args:
         value: The value to surface to the client when the graph is interrupted.
+        response_schema: Optional schema for the value expected on resume, surfaced
+            to clients so they can render a typed input form. Accepts a JSON Schema
+            `dict` (used as-is, resume values are not validated), or a Pydantic model
+            class, `TypedDict`, or dataclass, which are converted to JSON Schema for
+            clients and used to validate the resume value; the validated object is
+            what `interrupt` returns.
 
     Returns:
-        Any: On subsequent invocations within the same node (same task to be precise), returns the value provided during the first invocation
+        Any: On subsequent invocations within the same node (same task to be precise), returns the value provided during the first invocation,
+            validated against `response_schema` when one that supports validation was given.
 
     Raises:
         GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
+        pydantic.ValidationError: When a resume value does not match a Pydantic model, `TypedDict`, or dataclass `response_schema`.
     """
     from langgraph._internal._constants import (
         CONFIG_KEY_CHECKPOINT_NS,
@@ -948,27 +981,36 @@ def interrupt(value: Any) -> Any:
     from langgraph.errors import GraphInterrupt
 
     conf = get_config()["configurable"]
+    adapter = (
+        None
+        if response_schema is None or isinstance(response_schema, dict)
+        else TypeAdapter(response_schema)
+    )
     # track interrupt index
     scratchpad = conf[CONFIG_KEY_SCRATCHPAD]
     idx = scratchpad.interrupt_counter()
     # find previous resume values
     if scratchpad.resume:
         if idx < len(scratchpad.resume):
+            v = scratchpad.resume[idx]
+            validated = adapter.validate_python(v) if adapter else v
             conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
-            return scratchpad.resume[idx]
+            return validated
     # find current resume value
     v = scratchpad.get_null_resume(True)
     if v is not None:
         assert len(scratchpad.resume) == idx, (scratchpad.resume, idx)
+        validated = adapter.validate_python(v) if adapter else v
         scratchpad.resume.append(v)
         conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
-        return v
+        return validated
     # no resume value found
     raise GraphInterrupt(
         (
             Interrupt.from_ns(
                 value=value,
                 ns=conf[CONFIG_KEY_CHECKPOINT_NS],
+                response_schema=adapter.json_schema() if adapter else response_schema,
             ),
         )
     )
