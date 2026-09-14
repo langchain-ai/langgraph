@@ -1065,6 +1065,10 @@
           ],
           "description": "Optional. Defines which headers are excluded from logging."
         },
+        "mcp": {
+          "$ref": "#/$defs/McpConfig",
+          "description": "Optional. Configure the MCP Tasks extension for elicitation over protocol 2026-07-28."
+        },
         "middleware_order": {
           "anyOf": [
             {
@@ -1166,6 +1170,42 @@
         "max_age": {
           "type": "integer",
           "description": "Optional. How many seconds the browser may cache preflight responses.\n\nDefault might be 600 (10 minutes). Larger values reduce preflight requests but can cause stale configurations.\n"
+        }
+      },
+      "required": []
+    },
+    "McpConfig": {
+      "title": "McpConfig",
+      "type": "object",
+      "properties": {
+        "tasks": {
+          "$ref": "#/$defs/McpTasksConfig",
+          "description": "Polling, retention and URL settings for the MCP Tasks extension."
+        }
+      },
+      "required": [],
+      "description": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)"
+    },
+    "McpTasksConfig": {
+      "title": "McpTasksConfig",
+      "description": "Settings for authenticated MCP elicitation tasks.",
+      "type": "object",
+      "properties": {
+        "allow_insecure_urls": {
+          "type": "boolean",
+          "description": "Allow HTTP elicitation URLs for development. Defaults to False; production URLs require HTTPS."
+        },
+        "completed_grace_seconds": {
+          "type": "integer",
+          "description": "Result retention after completion, in seconds. Default 300; range 1\u201386400."
+        },
+        "poll_interval_ms": {
+          "type": "integer",
+          "description": "Suggested client polling interval, in milliseconds. Default 1000; range 100\u201360000."
+        },
+        "ttl_minutes": {
+          "type": "integer",
+          "description": "Maximum task lifetime, in minutes. Default 1440; range 1\u201310080."
         }
       },
       "required": []
