@@ -145,6 +145,83 @@ INSERT_CHECKPOINT_WRITES_SQL = """
 """
 
 
+def _ensure_shallow_schema_ready_sync(cur: Cursor[DictRow]) -> None:
+    expected_latest = len(MIGRATIONS) - 1
+    row = cur.execute(
+        "SELECT COALESCE(MAX(v), -1) AS v FROM checkpoint_migrations"
+    ).fetchone()
+    current_version = row["v"] if row is not None else -1
+    if current_version > expected_latest:
+        raise RuntimeError(
+            "incomplete shallow checkpoint schema: migration version is newer "
+            "than this runtime supports"
+        )
+
+    for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
+        table_row = cur.execute("SELECT to_regclass(%s) AS name", (table,)).fetchone()
+        if table_row is None or table_row["name"] is None:
+            raise RuntimeError(
+                "incomplete shallow checkpoint schema: missing table "
+                f"{table!r}. Re-run setup() on a clean migration state."
+            )
+
+    col_row = cur.execute(
+        """
+        SELECT 1
+        FROM pg_catalog.pg_attribute
+        WHERE attrelid = to_regclass(%s)
+          AND attname = 'task_path'
+          AND NOT attisdropped
+        """,
+        ("checkpoint_writes",),
+    ).fetchone()
+    if col_row is None:
+        raise RuntimeError(
+            "incomplete shallow checkpoint schema: missing "
+            "'checkpoint_writes.task_path' column. Re-run setup()."
+        )
+
+
+async def _ensure_shallow_schema_ready_async(cur: AsyncCursor[DictRow]) -> None:
+    expected_latest = len(MIGRATIONS) - 1
+    res = await cur.execute(
+        "SELECT COALESCE(MAX(v), -1) AS v FROM checkpoint_migrations"
+    )
+    row = await res.fetchone()
+    current_version = row["v"] if row is not None else -1
+    if current_version > expected_latest:
+        raise RuntimeError(
+            "incomplete shallow checkpoint schema: migration version is newer "
+            "than this runtime supports"
+        )
+
+    for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
+        res = await cur.execute("SELECT to_regclass(%s) AS name", (table,))
+        table_row = await res.fetchone()
+        if table_row is None or table_row["name"] is None:
+            raise RuntimeError(
+                "incomplete shallow checkpoint schema: missing table "
+                f"{table!r}. Re-run setup() on a clean migration state."
+            )
+
+    res = await cur.execute(
+        """
+        SELECT 1
+        FROM pg_catalog.pg_attribute
+        WHERE attrelid = to_regclass(%s)
+          AND attname = 'task_path'
+          AND NOT attisdropped
+        """,
+        ("checkpoint_writes",),
+    )
+    col_row = await res.fetchone()
+    if col_row is None:
+        raise RuntimeError(
+            "incomplete shallow checkpoint schema: missing "
+            "'checkpoint_writes.task_path' column. Re-run setup()."
+        )
+
+
 def _dump_blobs(
     serde: SerializerProtocol,
     thread_id: str,
@@ -253,6 +330,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
             ):
                 cur.execute(migration)
                 cur.execute("INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,))
+            _ensure_shallow_schema_ready_sync(cur)
         if self.pipe:
             self.pipe.sync()
 
@@ -619,6 +697,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                 await cur.execute(
                     "INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,)
                 )
+            await _ensure_shallow_schema_ready_async(cur)
         if self.pipe:
             await self.pipe.sync()
 
