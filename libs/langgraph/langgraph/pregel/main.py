@@ -108,6 +108,7 @@ from langgraph.callbacks import (
     get_sync_graph_callback_manager_for_config,
 )
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.topic import Topic
 from langgraph.config import get_config
 from langgraph.constants import END
@@ -133,6 +134,7 @@ from langgraph.pregel._checkpoint import (
     copy_checkpoint,
     create_checkpoint,
     create_checkpoint_plan_for_update_state_api,
+    create_fork_checkpoint,
     empty_checkpoint,
     get_updated_channels_from_tasks,
 )
@@ -1637,8 +1639,24 @@ class Pregel(
             else:
                 raise ValueError(f"Subgraph {recast} not found")
 
+        # Delta channels still owed a fork snapshot. Mirrors
+        # `_delta_channels_awaiting_fork_snapshot` in `_loop.py`: a fork is only
+        # sealed once a checkpoint actually carries the blob. Several superstep
+        # paths (`as_node` of INPUT, END or `__copy__`) write a checkpoint and
+        # return before reaching the plan, so a flag cleared after the first
+        # superstep would leave the branch unsealed and the next superstep would
+        # reconstruct through the shared base.
+        fork_pending: set[str] = (
+            {k for k, v in self.channels.items() if isinstance(v, DeltaChannel)}
+            if config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)
+            else set()
+        )
+
         def perform_superstep(
-            input_config: RunnableConfig, updates: Sequence[StateUpdate]
+            input_config: RunnableConfig,
+            updates: Sequence[StateUpdate],
+            *,
+            is_fork: bool,
         ) -> RunnableConfig:
             # get last checkpoint
             config = ensure_config(self.config, input_config)
@@ -1726,9 +1744,17 @@ class Pregel(
                         self.trigger_to_nodes,
                     )
                 # save checkpoint
+                next_checkpoint = create_fork_checkpoint(
+                    checkpoint,
+                    channels,
+                    step,
+                    is_fork=is_fork,
+                    get_next_version=checkpointer.get_next_version,
+                )
+                fork_pending.difference_update(next_checkpoint["channel_values"])
                 next_config = checkpointer.put(
                     checkpoint_config,
-                    create_checkpoint(checkpoint, channels, step),
+                    next_checkpoint,
                     {
                         "source": "update",
                         "step": step + 1,
@@ -1736,7 +1762,7 @@ class Pregel(
                     },
                     get_new_channel_versions(
                         checkpoint_previous_versions,
-                        checkpoint["channel_versions"],
+                        next_checkpoint["channel_versions"],
                     ),
                 )
                 return patch_checkpoint_map(
@@ -1765,9 +1791,17 @@ class Pregel(
                         if saved and saved.metadata.get("step") is not None
                         else -1
                     )
+                    next_checkpoint = create_fork_checkpoint(
+                        checkpoint,
+                        channels,
+                        next_step,
+                        is_fork=is_fork,
+                        get_next_version=checkpointer.get_next_version,
+                    )
+                    fork_pending.difference_update(next_checkpoint["channel_values"])
                     next_config = checkpointer.put(
                         checkpoint_config,
-                        create_checkpoint(checkpoint, channels, next_step),
+                        next_checkpoint,
                         {
                             "source": "input",
                             "step": next_step,
@@ -1777,7 +1811,7 @@ class Pregel(
                         },
                         get_new_channel_versions(
                             checkpoint_previous_versions,
-                            checkpoint["channel_versions"],
+                            next_checkpoint["channel_versions"],
                         ),
                     )
 
@@ -1873,6 +1907,9 @@ class Pregel(
                     return perform_superstep(
                         patch_checkpoint_map(next_config, saved.metadata),
                         [item for lst in user_group_by.values() for item in lst],
+                        # The checkpoint just written clears tasks and carries
+                        # no delta snapshot, so a fork is still unsealed here.
+                        is_fork=is_fork,
                     )
 
                 return patch_checkpoint_map(next_config, saved.metadata)
@@ -2020,6 +2057,7 @@ class Pregel(
                     parents=saved.metadata.get("parents", {}) if saved else {},
                     saved_metadata=saved.metadata if saved else None,
                     is_fresh_thread=saved is None,
+                    is_fork=is_fork,
                 )
             )
             checkpoint = create_checkpoint(
@@ -2032,6 +2070,8 @@ class Pregel(
                 else None,
                 channels_to_snapshot=channels_to_snapshot,
             )
+            if is_fork:
+                fork_pending.difference_update(checkpoint["channel_values"])
             next_config = checkpointer.put(
                 checkpoint_config,
                 checkpoint,
@@ -2049,8 +2089,14 @@ class Pregel(
         current_config = patch_configurable(
             config, {CONFIG_KEY_THREAD_ID: str(config[CONF][CONFIG_KEY_THREAD_ID])}
         )
+        # The flag cannot be derived from `current_config`: `perform_superstep`
+        # returns the config of the checkpoint it just wrote and the loop feeds
+        # that back in, so from the second superstep on it always names a
+        # checkpoint whether or not the caller addressed one.
         for superstep in supersteps:
-            current_config = perform_superstep(current_config, superstep)
+            current_config = perform_superstep(
+                current_config, superstep, is_fork=bool(fork_pending)
+            )
         return current_config
 
     async def abulk_update_state(
@@ -2103,8 +2149,24 @@ class Pregel(
             else:
                 raise ValueError(f"Subgraph {recast} not found")
 
+        # Delta channels still owed a fork snapshot. Mirrors
+        # `_delta_channels_awaiting_fork_snapshot` in `_loop.py`: a fork is only
+        # sealed once a checkpoint actually carries the blob. Several superstep
+        # paths (`as_node` of INPUT, END or `__copy__`) write a checkpoint and
+        # return before reaching the plan, so a flag cleared after the first
+        # superstep would leave the branch unsealed and the next superstep would
+        # reconstruct through the shared base.
+        fork_pending: set[str] = (
+            {k for k, v in self.channels.items() if isinstance(v, DeltaChannel)}
+            if config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)
+            else set()
+        )
+
         async def aperform_superstep(
-            input_config: RunnableConfig, updates: Sequence[StateUpdate]
+            input_config: RunnableConfig,
+            updates: Sequence[StateUpdate],
+            *,
+            is_fork: bool,
         ) -> RunnableConfig:
             # get last checkpoint
             config = ensure_config(self.config, input_config)
@@ -2190,16 +2252,25 @@ class Pregel(
                         self.trigger_to_nodes,
                     )
                 # save checkpoint
+                next_checkpoint = create_fork_checkpoint(
+                    checkpoint,
+                    channels,
+                    step,
+                    is_fork=is_fork,
+                    get_next_version=checkpointer.get_next_version,
+                )
+                fork_pending.difference_update(next_checkpoint["channel_values"])
                 next_config = await checkpointer.aput(
                     checkpoint_config,
-                    create_checkpoint(checkpoint, channels, step),
+                    next_checkpoint,
                     {
                         "source": "update",
                         "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
                     },
                     get_new_channel_versions(
-                        checkpoint_previous_versions, checkpoint["channel_versions"]
+                        checkpoint_previous_versions,
+                        next_checkpoint["channel_versions"],
                     ),
                 )
                 return patch_checkpoint_map(
@@ -2228,9 +2299,17 @@ class Pregel(
                         if saved and saved.metadata.get("step") is not None
                         else -1
                     )
+                    next_checkpoint = create_fork_checkpoint(
+                        checkpoint,
+                        channels,
+                        next_step,
+                        is_fork=is_fork,
+                        get_next_version=checkpointer.get_next_version,
+                    )
+                    fork_pending.difference_update(next_checkpoint["channel_values"])
                     next_config = await checkpointer.aput(
                         checkpoint_config,
-                        create_checkpoint(checkpoint, channels, next_step),
+                        next_checkpoint,
                         {
                             "source": "input",
                             "step": next_step,
@@ -2240,7 +2319,7 @@ class Pregel(
                         },
                         get_new_channel_versions(
                             checkpoint_previous_versions,
-                            checkpoint["channel_versions"],
+                            next_checkpoint["channel_versions"],
                         ),
                     )
 
@@ -2335,6 +2414,9 @@ class Pregel(
                     return await aperform_superstep(
                         patch_checkpoint_map(next_config, saved.metadata),
                         [item for lst in user_group_by.values() for item in lst],
+                        # The checkpoint just written clears tasks and carries
+                        # no delta snapshot, so a fork is still unsealed here.
+                        is_fork=is_fork,
                     )
 
                 return patch_checkpoint_map(
@@ -2480,6 +2562,7 @@ class Pregel(
                     parents=saved.metadata.get("parents", {}) if saved else {},
                     saved_metadata=saved.metadata if saved else None,
                     is_fresh_thread=saved is None,
+                    is_fork=is_fork,
                 )
             )
             checkpoint = create_checkpoint(
@@ -2492,6 +2575,8 @@ class Pregel(
                 else None,
                 channels_to_snapshot=channels_to_snapshot,
             )
+            if is_fork:
+                fork_pending.difference_update(checkpoint["channel_values"])
             next_config = await checkpointer.aput(
                 checkpoint_config,
                 checkpoint,
@@ -2508,8 +2593,14 @@ class Pregel(
         current_config = patch_configurable(
             config, {CONFIG_KEY_THREAD_ID: str(config[CONF][CONFIG_KEY_THREAD_ID])}
         )
+        # The flag cannot be derived from `current_config`: `aperform_superstep`
+        # returns the config of the checkpoint it just wrote and the loop feeds
+        # that back in, so from the second superstep on it always names a
+        # checkpoint whether or not the caller addressed one.
         for superstep in supersteps:
-            current_config = await aperform_superstep(current_config, superstep)
+            current_config = await aperform_superstep(
+                current_config, superstep, is_fork=bool(fork_pending)
+            )
         return current_config
 
     def update_state(
