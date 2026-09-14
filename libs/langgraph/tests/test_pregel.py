@@ -5696,7 +5696,16 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                     "step": 0,
                 },
                 "next": [],
-                "parent_config": None,
+                # under durability="exit" the final checkpoint is written at
+                # the boundary where the run finishes, so the event reports
+                # its real parent, the checkpoint the run resumed from
+                "parent_config": {
+                    "configurable": {
+                        "checkpoint_id": AnyStr(),
+                        "checkpoint_ns": "",
+                        "thread_id": AnyStr(),
+                    },
+                },
                 "tasks": [],
                 "values": None,
             },

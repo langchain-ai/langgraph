@@ -680,6 +680,19 @@ class PregelExecutableTask:
     timeout: TimeoutPolicy | None = None
 
 
+class QueuedUpdate(NamedTuple):
+    """A state update accepted by `queue_state` and not yet applied."""
+
+    id: str
+    """Id returned by `queue_state`."""
+    values: Any
+    """The state update, as given to `queue_state`."""
+    steer: str | None
+    """Node the update waits for, or `None` for the end of the run."""
+    accepted_at: str
+    """Timestamp of acceptance."""
+
+
 class StateSnapshot(NamedTuple):
     """Snapshot of the state of the graph at the beginning of a step."""
 
@@ -699,6 +712,8 @@ class StateSnapshot(NamedTuple):
     """Tasks to execute in this step. If already attempted, may contain an error."""
     interrupts: tuple[Interrupt, ...]
     """Interrupts that occurred in this step that are pending resolution."""
+    queued: tuple[QueuedUpdate, ...] = ()
+    """State updates accepted by `queue_state` and not yet applied."""
 
 
 class Send:
