@@ -1419,7 +1419,14 @@ class Pregel(
         if self.checkpointer is True:
             ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
             config = merge_configs(
-                config, {CONF: {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}}
+                config,
+                {
+                    CONF: {
+                        CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(
+                            ns, keep_keys=True
+                        )
+                    }
+                },
             )
         thread_id = config[CONF][CONFIG_KEY_THREAD_ID]
         if not isinstance(thread_id, str):
@@ -1463,7 +1470,14 @@ class Pregel(
         if self.checkpointer is True:
             ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
             config = merge_configs(
-                config, {CONF: {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}}
+                config,
+                {
+                    CONF: {
+                        CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(
+                            ns, keep_keys=True
+                        )
+                    }
+                },
             )
         thread_id = config[CONF][CONFIG_KEY_THREAD_ID]
         if not isinstance(thread_id, str):
@@ -2806,7 +2820,9 @@ class Pregel(
             # set up subgraph checkpointing
             if self.checkpointer is True:
                 ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
-                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
+                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(
+                    ns, keep_keys=True
+                )
             # set up messages stream mode
             if "messages" in stream_modes:
                 ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
@@ -3233,7 +3249,9 @@ class Pregel(
             # set up subgraph checkpointing
             if self.checkpointer is True:
                 ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
-                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
+                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(
+                    ns, keep_keys=True
+                )
             # set up messages stream mode
             if "messages" in stream_modes:
                 # namespace can be None in a root level graph?

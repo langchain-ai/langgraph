@@ -719,6 +719,12 @@ class Send:
         arg (Any): The state or message to send to the target node.
         timeout (TimeoutPolicy | None): Optional timeout policy for this specific
             pushed task. If omitted, the target node's timeout policy is used.
+        key (str | None): Optional key identifying this pushed task. When set,
+            the task's id derives from the key instead of the packet's position,
+            two packets with the same key for one node in one step are rejected,
+            and subgraphs invoked inside the task use the key as their
+            `subgraph_key`, giving them an addressable checkpoint namespace
+            (e.g. `tools|:<key>`) that a later task with the same key continues.
 
     !!! example
 
@@ -748,11 +754,12 @@ class Send:
         ```
     """
 
-    __slots__ = ("node", "arg", "timeout")
+    __slots__ = ("node", "arg", "timeout", "key")
 
     node: str
     arg: Any
     timeout: TimeoutPolicy | None
+    key: str | None
 
     def __init__(
         self,
@@ -761,6 +768,7 @@ class Send:
         arg: Any,
         *,
         timeout: float | timedelta | TimeoutPolicy | None = None,
+        key: str | None = None,
     ) -> None:
         """
         Initialize a new instance of the `Send` class.
@@ -770,18 +778,31 @@ class Send:
             arg: The state or message to send to the target node.
             timeout: Optional timeout policy for this specific pushed task. A
                 number or `timedelta` is treated as a hard `run_timeout`.
+            key: Optional key identifying this pushed task (e.g. a tool call id).
+                See the class docstring.
         """
         self.node = node
         self.arg = arg
         self.timeout = TimeoutPolicy.coerce(timeout)
+        if key is not None:
+            if not isinstance(key, str) or not key:
+                raise ValueError("Send key must be a non-empty str")
+            if "|" in key:
+                raise ValueError(
+                    "'|' is a reserved character and is not allowed in Send keys"
+                )
+        self.key = key
 
     def __hash__(self) -> int:
-        return hash((self.node, self.arg, self.timeout))
+        return hash((self.node, self.arg, self.timeout, self.key))
 
     def __repr__(self) -> str:
-        if self.timeout is None:
-            return f"Send(node={self.node!r}, arg={self.arg!r})"
-        return f"Send(node={self.node!r}, arg={self.arg!r}, timeout={self.timeout!r})"
+        extra = ""
+        if self.timeout is not None:
+            extra += f", timeout={self.timeout!r}"
+        if self.key is not None:
+            extra += f", key={self.key!r}"
+        return f"Send(node={self.node!r}, arg={self.arg!r}{extra})"
 
     def __eq__(self, value: object) -> bool:
         return (
@@ -789,6 +810,7 @@ class Send:
             and self.node == value.node
             and self.arg == value.arg
             and self.timeout == value.timeout
+            and self.key == value.key
         )
 
 

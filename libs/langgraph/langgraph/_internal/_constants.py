@@ -74,6 +74,12 @@ CONFIG_KEY_RESUME_MAP = sys.intern("__pregel_resume_map")
 CONFIG_KEY_STREAM_MESSAGES_V2 = sys.intern("__pregel_stream_messages_v2")
 # when True, attach StreamMessagesHandlerV2 so content-block (v2) events
 # flow through stream_mode="messages"; set by StreamingHandler only.
+CONFIG_KEY_SUBGRAPH_KEY = sys.intern("subgraph_key")
+# holds a caller-supplied key identifying a subgraph *instance*. When set, the
+# subgraph's checkpoint namespace is derived from the key (`parent|:key`)
+# instead of the invoking task id / call-order counter, so the instance is
+# addressable: parallel invocations with different keys never collide, and a
+# later invocation with the same key continues the same checkpoint history.
 CONFIG_KEY_NODE_ERROR = sys.intern("__pregel_node_error")
 # holds a `NodeError` (failed source node + exception) for the current
 # node-level error handler invocation, injected when handler signature
