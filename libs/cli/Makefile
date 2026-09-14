@@ -1,4 +1,4 @@
-.PHONY: test lint type format test-integration update-schema bump-version
+.PHONY: test lint type format test-integration update-schema bump-version test-ci-checks-classifier test-ci-checks-classifier-real-prs
 
 ######################
 # TESTING AND COVERAGE
@@ -9,6 +9,10 @@ test:
 	uv run pytest $(TEST)
 test-integration:
 	uv run pytest tests/integration_tests
+test-ci-checks-classifier:
+	uv run pytest tests/unit_tests/test_ci_checks_classifier.py
+test-ci-checks-classifier-real-prs:
+	uv run pytest tests/integration_tests/test_ci_checks_classifier_real_prs.py
 
 ######################
 # LINTING AND FORMATTING
