@@ -8,10 +8,11 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import click
+import pytest
 from click.testing import CliRunner
 
 import langgraph_cli.deploy as deploy_module
-from langgraph_cli.cli import cli, prepare_args_and_stdin
+from langgraph_cli.cli import _studio_link, cli, prepare_args_and_stdin
 from langgraph_cli.config import Config, _get_pip_cleanup_lines, validate_config
 from langgraph_cli.docker import DEFAULT_POSTGRES_URI, DockerCapabilities, Version
 from langgraph_cli.util import clean_empty_lines
@@ -56,8 +57,6 @@ def test_prepare_args_and_stdin() -> None:
         Config(dependencies=[".", "../../.."], graphs={"agent": "agent.py:graph"})
     )
     port = 8000
-    debugger_port = 8001
-    debugger_graph_url = f"http://127.0.0.1:{port}"
 
     actual_args, actual_stdin = prepare_args_and_stdin(
         capabilities=DEFAULT_DOCKER_CAPABILITIES,
@@ -65,8 +64,6 @@ def test_prepare_args_and_stdin() -> None:
         config=config,
         docker_compose=pathlib.Path("custom-docker-compose.yml"),
         port=port,
-        debugger_port=debugger_port,
-        debugger_base_url=debugger_graph_url,
         watch=True,
     )
 
@@ -110,16 +107,6 @@ services:
             retries: 5
             interval: 60s
             start_interval: 1s
-    langgraph-debugger:
-        image: langchain/langgraph-debugger
-        restart: on-failure
-        depends_on:
-            langgraph-postgres:
-                condition: service_healthy
-        ports:
-            - "{debugger_port}:3968"
-        environment:
-            VITE_STUDIO_LOCAL_GRAPH_URL: {debugger_graph_url}
     langgraph-api:
         ports:
             - "8000:8000"
@@ -135,7 +122,7 @@ services:
             test: python /api/healthcheck.py
             interval: 60s
             start_interval: 1s
-            start_period: 10s
+            start_period: 60s
         
         pull_policy: build
         build:
@@ -178,8 +165,6 @@ def test_prepare_args_and_stdin_with_image() -> None:
         Config(dependencies=[".", "../../.."], graphs={"agent": "agent.py:graph"})
     )
     port = 8000
-    debugger_port = 8001
-    debugger_graph_url = f"http://127.0.0.1:{port}"
 
     actual_args, actual_stdin = prepare_args_and_stdin(
         capabilities=DEFAULT_DOCKER_CAPABILITIES,
@@ -187,8 +172,6 @@ def test_prepare_args_and_stdin_with_image() -> None:
         config=config,
         docker_compose=pathlib.Path("custom-docker-compose.yml"),
         port=port,
-        debugger_port=debugger_port,
-        debugger_base_url=debugger_graph_url,
         watch=True,
         image="my-cool-image",
     )
@@ -233,16 +216,6 @@ services:
             retries: 5
             interval: 60s
             start_interval: 1s
-    langgraph-debugger:
-        image: langchain/langgraph-debugger
-        restart: on-failure
-        depends_on:
-            langgraph-postgres:
-                condition: service_healthy
-        ports:
-            - "{debugger_port}:3968"
-        environment:
-            VITE_STUDIO_LOCAL_GRAPH_URL: {debugger_graph_url}
     langgraph-api:
         ports:
             - "8000:8000"
@@ -259,7 +232,7 @@ services:
             test: python /api/healthcheck.py
             interval: 60s
             start_interval: 1s
-            start_period: 10s
+            start_period: 60s
         
         
         develop:
@@ -287,6 +260,82 @@ def test_version_option() -> None:
     assert "LangGraph CLI, version" in result.output, (
         "Expected version information in output"
     )
+
+
+def test_up_help_shows_hosted_studio_options() -> None:
+    result = CliRunner().invoke(cli, ["up", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "--studio-url" in result.output
+    assert "--api-url" in result.output
+    assert "--debugger-port" not in result.output
+    assert "--debugger-base-url" not in result.output
+
+
+def test_studio_link_defaults_to_hosted_studio() -> None:
+    assert _studio_link(
+        port=8123,
+        studio_url=None,
+        api_url=None,
+        debugger_base_url=None,
+    ) == ("https://smith.langchain.com/studio/?baseUrl=http%3A%2F%2F127.0.0.1%3A8123")
+
+
+def test_studio_link_supports_self_hosted_and_remote_urls() -> None:
+    assert _studio_link(
+        port=8123,
+        studio_url="https://langsmith.example.com/prefix/",
+        api_url="https://api.example.com/graph?tenant=a&region=eu",
+        debugger_base_url=None,
+    ) == (
+        "https://langsmith.example.com/prefix/studio/"
+        "?baseUrl=https%3A%2F%2Fapi.example.com%2Fgraph%3Ftenant%3Da%26region%3Deu"
+    )
+
+
+def test_studio_link_supports_deprecated_debugger_base_url(capsys) -> None:
+    assert _studio_link(
+        port=8123,
+        studio_url=None,
+        api_url=None,
+        debugger_base_url="https://api.example.com",
+    ).endswith("?baseUrl=https%3A%2F%2Fapi.example.com")
+    assert "--debugger-base-url is deprecated; use --api-url" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("studio_url", "api_url"),
+    [
+        ("javascript:alert(1)", None),
+        ("https://user:password@example.com", None),
+        ("https://smith.langchain.com?workspace=test", None),
+        (None, "file:///tmp/langgraph.sock"),
+        (None, "https://user:password@example.com"),
+    ],
+)
+def test_studio_link_rejects_unsafe_urls(
+    studio_url: str | None, api_url: str | None
+) -> None:
+    with pytest.raises(click.UsageError):
+        _studio_link(
+            port=8123,
+            studio_url=studio_url,
+            api_url=api_url,
+            debugger_base_url=None,
+        )
+
+
+def test_studio_link_rejects_conflicting_api_url_aliases() -> None:
+    with pytest.raises(
+        click.UsageError,
+        match="cannot specify different URLs",
+    ):
+        _studio_link(
+            port=8123,
+            studio_url=None,
+            api_url="https://api.example.com",
+            debugger_base_url="https://other.example.com",
+        )
 
 
 def test_top_level_help_shows_deploy_subcommands() -> None:
