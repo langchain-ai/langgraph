@@ -136,8 +136,8 @@ class ToolCallRequest:
     Attributes:
         tool_call: Tool call dict with name, args, and id from model output.
 
-            If `tool_call["name"]` differs from `tool`, `tool_call["name"]` is
-            preferred as the authoritative source for what tool is executed.
+            If an interceptor edits `tool_call["name"]` so it differs from `tool`,
+            `tool_call["name"]` is authoritative for what tool is executed.
         tool: BaseTool instance to be invoked, or None if tool is not
             registered with the `ToolNode`. When tool is `None`, interceptors can
             handle the request without validation. If the interceptor calls `execute()`,
