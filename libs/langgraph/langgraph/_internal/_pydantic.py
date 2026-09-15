@@ -17,6 +17,7 @@ from pydantic import (
     ConfigDict,
     Field,
     RootModel,
+    TypeAdapter,
 )
 from pydantic import (
     create_model as _create_model_base,
@@ -26,6 +27,7 @@ from pydantic.json_schema import (
     DEFAULT_REF_TEMPLATE,
     GenerateJsonSchema,
     JsonSchemaMode,
+    PydanticInvalidForJsonSchema,
 )
 from typing_extensions import TypedDict
 
@@ -273,3 +275,37 @@ def is_supported_by_pydantic(type_: Any) -> bool:
                 if sys.version_info >= (3, 12):
                     return True
     return False
+
+
+def get_json_schema(typ: type) -> dict[str, Any]:
+    """Generate a JSON schema for a given type.
+
+    Supports Pydantic BaseModel, TypedDict, dataclass, and any type
+    supported by Pydantic's TypeAdapter.
+
+    Args:
+        typ: The type to generate a JSON schema for.
+
+    Returns:
+        A JSON schema dictionary.
+
+    Raises:
+        TypeError: If the type cannot be converted to a JSON schema.
+    """
+    try:
+        return TypeAdapter(typ).json_schema()
+    except PydanticInvalidForJsonSchema as e:
+        msg = (
+            f"Cannot generate JSON schema for type {typ!r}. "
+            f"The type must be serializable to JSON. "
+            f"Pydantic error: {e}"
+        )
+        raise TypeError(msg) from e
+    except Exception as e:
+        msg = (
+            f"Cannot generate JSON schema for type {typ!r}. "
+            f"Supported types include: Pydantic BaseModel, TypedDict, "
+            f"dataclass, and other types supported by Pydantic's TypeAdapter. "
+            f"Error: {e}"
+        )
+        raise TypeError(msg) from e
