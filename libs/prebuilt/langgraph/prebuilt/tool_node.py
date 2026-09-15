@@ -135,6 +135,9 @@ class ToolCallRequest:
 
     Attributes:
         tool_call: Tool call dict with name, args, and id from model output.
+
+            If `tool_call["name"]` differs from `tool`, `tool_call["name"]` is
+            preferred as the authoritative source for what tool is executed.
         tool: BaseTool instance to be invoked, or None if tool is not
             registered with the `ToolNode`. When tool is `None`, interceptors can
             handle the request without validation. If the interceptor calls `execute()`,
@@ -1046,8 +1049,13 @@ class ToolNode(RunnableCallable):
             return self._execute_tool_sync(tool_request, input_type, config)
 
         # Define execute callable that can be called multiple times
+        original_name = call["name"]
+
         def execute(req: ToolCallRequest) -> ToolMessage | Command:
             """Execute tool with given request. Can be called multiple times."""
+            if req.tool_call["name"] != original_name:
+                # An interceptor (e.g., HITL) redirected the tool call
+                req = replace(req, tool=self.tools_by_name.get(req.tool_call["name"]))
             return self._execute_tool_sync(req, input_type, config)
 
         # Call wrapper with request and execute callable
@@ -1193,8 +1201,13 @@ class ToolNode(RunnableCallable):
             return await self._execute_tool_async(tool_request, input_type, config)
 
         # Define async execute callable that can be called multiple times
+        original_name = call["name"]
+
         async def execute(req: ToolCallRequest) -> ToolMessage | Command:
             """Execute tool with given request. Can be called multiple times."""
+            if req.tool_call["name"] != original_name:
+                # An interceptor (e.g., HITL) redirected the tool call
+                req = replace(req, tool=self.tools_by_name.get(req.tool_call["name"]))
             return await self._execute_tool_async(req, input_type, config)
 
         def _sync_execute(req: ToolCallRequest) -> ToolMessage | Command:

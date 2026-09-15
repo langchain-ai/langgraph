@@ -1,7 +1,7 @@
 """Unit tests for tool call interceptor in ToolNode."""
 
 import functools
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from unittest.mock import Mock
 
 import pytest
@@ -1471,3 +1471,36 @@ def test_tool_call_request_is_frozen() -> None:
     assert fresh_new_request.tool == add  # Other fields should remain the same
     assert fresh_new_request.state == state
     assert fresh_new_request.runtime is None
+
+
+async def test_interceptor_can_redirect_to_another_tool() -> None:
+    """Overriding `tool_call["name"]` routes execution to the newly named tool."""
+
+    @tool
+    def subtract(a: int, b: int) -> int:
+        """Subtract two numbers."""
+        return a - b
+
+    async def redirect(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
+    ) -> ToolMessage | Command:
+        return await execute(
+            request.override(tool_call={**request.tool_call, "name": "subtract"})
+        )
+
+    node = ToolNode([add, subtract], awrap_tool_call=redirect)
+    result = await node.ainvoke(
+        [
+            AIMessage(
+                "",
+                tool_calls=[
+                    {"name": "add", "args": {"a": 5, "b": 3}, "id": "1", "type": "tool_call"}
+                ],
+            )
+        ],
+        _create_config_with_runtime(),
+    )
+
+    # `add` would return 8; `subtract` returns 2.
+    assert result[0].content == "2"
