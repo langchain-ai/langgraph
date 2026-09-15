@@ -5,6 +5,7 @@ import concurrent
 import concurrent.futures
 import contextlib
 import queue
+import threading
 import warnings
 import weakref
 from collections import defaultdict, deque
@@ -832,6 +833,11 @@ class Pregel(
             stream_transformers or ()
         )
         self._serde_allowlist: set[tuple[str, ...]] | None = None
+        # in-process retention of top-level UntrackedValue channel values from
+        # Send args, keyed by thread id, so a resumed task receives the same
+        # input it was first scheduled with (see issue #8582). Never persisted.
+        self._runtime_untracked_values: dict[str, dict[str, Any]] = {}
+        self._runtime_untracked_values_lock = threading.Lock()
         if auto_validate:
             self.validate()
 
@@ -2917,6 +2923,8 @@ class Pregel(
                 retry_policy=self.retry_policy,
                 cache_policy=self.cache_policy,
                 has_graph_lifecycle_callbacks=bool(graph_callback_manager.handlers),
+                runtime_untracked_values=self._runtime_untracked_values,
+                runtime_untracked_values_lock=self._runtime_untracked_values_lock,
             ) as loop:
                 emit_graph_lifecycle_events(loop)
                 # create runner
@@ -3371,6 +3379,8 @@ class Pregel(
                 retry_policy=self.retry_policy,
                 cache_policy=self.cache_policy,
                 has_graph_lifecycle_callbacks=bool(graph_callback_manager.handlers),
+                runtime_untracked_values=self._runtime_untracked_values,
+                runtime_untracked_values_lock=self._runtime_untracked_values_lock,
             ) as loop:
                 await aemit_graph_lifecycle_events(loop)
                 # create runner

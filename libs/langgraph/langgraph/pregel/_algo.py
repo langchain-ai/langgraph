@@ -364,6 +364,7 @@ def prepare_next_tasks(
     updated_channels: set[str] | None = None,
     retry_policy: Sequence[RetryPolicy] = (),
     cache_policy: Literal[None] = None,
+    runtime_untracked_values: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, PregelTask]: ...
 
 
@@ -386,6 +387,7 @@ def prepare_next_tasks(
     updated_channels: set[str] | None = None,
     retry_policy: Sequence[RetryPolicy] = (),
     cache_policy: CachePolicy | None = None,
+    runtime_untracked_values: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, PregelExecutableTask]: ...
 
 
@@ -407,6 +409,7 @@ def prepare_next_tasks(
     updated_channels: set[str] | None = None,
     retry_policy: Sequence[RetryPolicy] = (),
     cache_policy: CachePolicy | None = None,
+    runtime_untracked_values: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, PregelTask] | dict[str, PregelExecutableTask]:
     """Prepare the set of tasks that will make up the next Pregel step.
 
@@ -462,6 +465,7 @@ def prepare_next_tasks(
                 input_cache=input_cache,
                 cache_policy=cache_policy,
                 retry_policy=retry_policy,
+                runtime_untracked_values=runtime_untracked_values,
             ):
                 tasks.append(task)
 
@@ -508,6 +512,7 @@ def prepare_next_tasks(
             input_cache=input_cache,
             cache_policy=cache_policy,
             retry_policy=retry_policy,
+            runtime_untracked_values=runtime_untracked_values,
         ):
             tasks.append(task)
     return {t.id: t for t in tasks}
@@ -542,6 +547,7 @@ def prepare_single_task(
     input_cache: dict[INPUT_CACHE_KEY_TYPE, Any] | None = None,
     cache_policy: CachePolicy | None = None,
     retry_policy: Sequence[RetryPolicy] = (),
+    runtime_untracked_values: dict[str, dict[str, Any]] | None = None,
 ) -> None | PregelTask | PregelExecutableTask:
     """Prepares a single task for the next Pregel step, given a task path, which
     uniquely identifies a PUSH or PULL task within the graph."""
@@ -592,6 +598,7 @@ def prepare_single_task(
             retry_policy=retry_policy,
             parent_ns=parent_ns,
             task_id_func=task_id_func,
+            runtime_untracked_values=runtime_untracked_values,
         )
 
     elif task_path[0] == PULL:
@@ -957,6 +964,7 @@ def prepare_push_task_send(
     parent_ns: str,
     task_id_func: _TaskIDFn,
     processes: Mapping[str, PregelNode],
+    runtime_untracked_values: dict[str, dict[str, Any]] | None = None,
 ) -> PregelTask | PregelExecutableTask | None:
     if len(task_path) == 2:
         # SEND tasks, executed in superstep n+1
@@ -973,6 +981,15 @@ def prepare_push_task_send(
                 f"Ignoring invalid packet type {type(packet)} in pending sends"
             )
             return
+        if runtime_untracked_values is not None and any(
+            isinstance(channels.get(k), UntrackedValue) for k in channels
+        ):
+            retained_values = runtime_untracked_values.get(
+                config.get(CONF, {}).get(CONFIG_KEY_THREAD_ID), {}
+            )
+            packet = rehydrate_untracked_values_in_send(
+                packet, channels, retained_values
+            )
 
         if packet.node not in processes:
             logger.warning(f"Ignoring unknown node name {packet.node} in pending sends")
@@ -1439,13 +1456,19 @@ class LazyAtomicCounter:
         return self._counter()
 
 
+_UNTRACKED_VALUE_MARKER = "__langgraph_untracked_value__"
+
+
 def sanitize_untracked_values_in_send(
     packet: Send, channels: Mapping[str, BaseChannel]
 ) -> Send:
-    """Pop any values belonging to UntrackedValue channels in Send.arg for safe checkpointing.
+    """Replace any values belonging to UntrackedValue channels in Send.arg with a stable marker.
 
     Send is often called with state to be passed to the dest node, which may contain
-    UntrackedValues at the top level. Send is not typed and arg may be a nested dict."""
+    UntrackedValues at the top level. Send is not typed and arg may be a nested dict.
+    The marker keeps the key present in the checkpoint (the value is not
+    msgpack-serializable) so the task can be rehydrated with the original value on
+    resume; see `rehydrate_untracked_values_in_send`."""
 
     if not isinstance(packet.arg, dict):
         # Command
@@ -1453,8 +1476,43 @@ def sanitize_untracked_values_in_send(
 
     # top level keys should be the channel names
     sanitized_arg = {
-        k: v
+        k: _UNTRACKED_VALUE_MARKER if isinstance(channels.get(k), UntrackedValue) else v
         for k, v in packet.arg.items()
-        if not isinstance(channels.get(k), UntrackedValue)
     }
     return Send(node=packet.node, arg=sanitized_arg, timeout=packet.timeout)
+
+
+def rehydrate_untracked_values_in_send(
+    packet: Send,
+    channels: Mapping[str, BaseChannel],
+    retained_values: Mapping[str, Any],
+) -> Send:
+    """Restore untracked values in a Send.arg from values retained in-process at write time.
+
+    Replaces the marker left by `sanitize_untracked_values_in_send` with the value that
+    was retained when the Send was persisted, so a resumed task receives the same input
+    it was first scheduled with. Keys without a retained value (e.g. a cold resume from a
+    checkpoint written by another process) are deleted, matching the previous behavior.
+    Nested dicts are not touched, matching the sanitizer's top-level-only scope."""
+
+    if not isinstance(packet.arg, dict):
+        # Command
+        return packet
+    if not any(isinstance(channels.get(k), UntrackedValue) for k in packet.arg):
+        return packet
+    arg = dict(packet.arg)
+    for k in list(arg):
+        if arg[k] == _UNTRACKED_VALUE_MARKER and isinstance(
+            channels.get(k), UntrackedValue
+        ):
+            if (retained := retained_values.get(k, MISSING)) is not MISSING:
+                arg[k] = retained
+            else:
+                # cold resume: no retained value for this channel, degrade to
+                # the pre-fix behavior of dropping the key
+                logger.warning(
+                    f"Dropping untracked value for channel {k} in Send to {packet.node}: "
+                    "no value was retained in-process when the task was scheduled"
+                )
+                del arg[k]
+    return Send(node=packet.node, arg=arg, timeout=packet.timeout)

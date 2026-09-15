@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import binascii
 import concurrent.futures
+import threading
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import (
@@ -294,6 +295,8 @@ class PregelLoop:
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
         has_graph_lifecycle_callbacks: bool = False,
+        runtime_untracked_values: dict[str, dict[str, Any]] | None = None,
+        runtime_untracked_values_lock: threading.Lock | None = None,
     ) -> None:
         self.stream = stream
         self.config = config
@@ -320,6 +323,17 @@ class PregelLoop:
         self.durability = durability
         self._has_graph_lifecycle_callbacks = has_graph_lifecycle_callbacks
         self._graph_lifecycle_events = deque()
+        # in-process retention of top-level UntrackedValue channel values from
+        # Send args, keyed by thread id, so a resumed task receives the same
+        # input it was first scheduled with (see issue #8582). Never persisted.
+        self._runtime_untracked_values = (
+            runtime_untracked_values if runtime_untracked_values is not None else {}
+        )
+        self._runtime_untracked_values_lock = (
+            runtime_untracked_values_lock
+            if runtime_untracked_values_lock is not None
+            else threading.Lock()
+        )
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: PregelScratchpad | None = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
@@ -412,6 +426,32 @@ class PregelLoop:
             return None
         return self._graph_lifecycle_events.popleft()
 
+    def _retain_untracked_values_in_send(self, v: Send) -> Send:
+        """Retain top-level UntrackedValue channel values from a Send arg in-process
+        and return the Send sanitized for checkpointing.
+
+        The retained values are keyed by thread id so a resumed task can restore its
+        original input; they are never written to the checkpoint. Called from
+        `put_writes` (background executor threads) and `_put_checkpoint`, so map
+        access is guarded by a lock.
+        Known limitation: retention is keyed per (thread, channel), so only a single
+        value is kept per channel per thread (last write wins) when two Sends in the
+        same step carry different values for the same UntrackedValue channel."""
+        if not isinstance(v.arg, dict):
+            return sanitize_untracked_values_in_send(v, self.channels)
+        if thread_id := self.config.get(CONF, {}).get(CONFIG_KEY_THREAD_ID):
+            retained = {
+                k: val
+                for k, val in v.arg.items()
+                if isinstance(self.channels.get(k), UntrackedValue)
+            }
+            if retained:
+                with self._runtime_untracked_values_lock:
+                    self._runtime_untracked_values.setdefault(thread_id, {}).update(
+                        retained
+                    )
+        return sanitize_untracked_values_in_send(v, self.channels)
+
     def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""
         if not writes:
@@ -443,8 +483,9 @@ class PregelLoop:
             # we do not persist untracked values in checkpoints
             writes_to_save = [
                 # sanitize UntrackedValues that are nested within Send packets
+                # while retaining the original values in-process for resume
                 (
-                    (c, sanitize_untracked_values_in_send(v, self.channels))
+                    (c, self._retain_untracked_values_in_send(v))
                     if c == TASKS and isinstance(v, Send)
                     else (c, v)
                 )
@@ -626,6 +667,7 @@ class PregelLoop:
             updated_channels=self.updated_channels,
             retry_policy=self.retry_policy,
             cache_policy=self.cache_policy,
+            runtime_untracked_values=self._runtime_untracked_values,
         )
 
         # produce debug output
@@ -870,6 +912,12 @@ class PregelLoop:
                 ),
             )
         )
+
+        if not is_resuming and (thread_id := configurable.get(CONFIG_KEY_THREAD_ID)):
+            # fresh run: drop any values retained from a previous run so stale
+            # in-process untracked values cannot leak across runs
+            with self._runtime_untracked_values_lock:
+                self._runtime_untracked_values.pop(thread_id, None)
 
         # When replaying from a specific checkpoint, drop cached RESUME
         # writes so that interrupt() calls re-fire instead of returning
@@ -1165,7 +1213,7 @@ class PregelLoop:
             isinstance(channel, UntrackedValue) for channel in self.channels.values()
         ):
             sanitized_tasks = [
-                sanitize_untracked_values_in_send(value, self.channels)
+                self._retain_untracked_values_in_send(value)
                 if isinstance(value, Send)
                 else value
                 for value in self.checkpoint["channel_values"][TASKS]
@@ -1490,6 +1538,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
         has_graph_lifecycle_callbacks: bool = False,
+        runtime_untracked_values: dict[str, dict[str, Any]] | None = None,
+        runtime_untracked_values_lock: threading.Lock | None = None,
     ) -> None:
         super().__init__(
             input,
@@ -1512,6 +1562,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             cache_policy=cache_policy,
             durability=durability,
             has_graph_lifecycle_callbacks=has_graph_lifecycle_callbacks,
+            runtime_untracked_values=runtime_untracked_values,
+            runtime_untracked_values_lock=runtime_untracked_values_lock,
         )
         self.stack = ExitStack()
         if checkpointer:
@@ -1743,6 +1795,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
         has_graph_lifecycle_callbacks: bool = False,
+        runtime_untracked_values: dict[str, dict[str, Any]] | None = None,
+        runtime_untracked_values_lock: threading.Lock | None = None,
     ) -> None:
         super().__init__(
             input,
@@ -1765,6 +1819,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             cache_policy=cache_policy,
             durability=durability,
             has_graph_lifecycle_callbacks=has_graph_lifecycle_callbacks,
+            runtime_untracked_values=runtime_untracked_values,
+            runtime_untracked_values_lock=runtime_untracked_values_lock,
         )
         self.stack = AsyncExitStack()
         if checkpointer:

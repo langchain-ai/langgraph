@@ -54,12 +54,13 @@ from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 from typing_extensions import NotRequired, TypedDict
 
-from langgraph._internal._constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL
+from langgraph._internal._constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, TASKS
 from langgraph._internal._queue import AsyncQueue
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
+from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.errors import (
     GraphRecursionError,
     InvalidUpdateError,
@@ -2878,6 +2879,94 @@ async def test_send_dedupe_on_resume(
             parent_config=history[1].config
         )
         assert history[1] == expected_history[2]._replace(parent_config=None)
+
+
+async def test_send_with_untracked_value_resume(
+    async_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    """Test that a failed Send task whose arg contains an UntrackedValue
+    receives the same input when resumed from a checkpoint.
+
+    Regression test for langgraph issue #8582: the UntrackedValue was stripped
+    from the persisted Send arg, so a resumed task could not reconstruct its
+    original input. The value must be retained in-process across the resume
+    without ever being written to the checkpoint.
+
+    Known limitation: retention is keyed by (thread id, channel key), so if two
+    Sends in the same step carry different values for the same UntrackedValue
+    channel, the last write wins and both resumed tasks would receive that value."""
+
+    class RuntimeResource:
+        def __init__(self, name: str):
+            self.name = name
+
+    class State(TypedDict):
+        messages: Annotated[list[str], operator.add]
+        resource: Annotated[RuntimeResource, UntrackedValue]
+
+    attempts = 0
+    seen: list[RuntimeResource] = []
+
+    def setup_node(state: State) -> State:
+        return {"messages": ["setup"], "resource": RuntimeResource("runtime-secret")}
+
+    def send_to_worker(state: State):
+        return [Send("worker", state)]
+
+    def worker(state: State) -> State:
+        nonlocal attempts
+        attempts += 1
+        resource = state.get("resource")
+        assert resource is not None, "resource was lost on resume"
+        seen.append(resource)
+        if attempts == 1:
+            raise ValueError("intentional-worker-failure")
+        return {"messages": [f"used {resource.name}"]}
+
+    def contains_runtime_resource(obj: Any) -> bool:
+        if isinstance(obj, RuntimeResource):
+            return True
+        if isinstance(obj, dict):
+            return any(contains_runtime_resource(v) for v in obj.values())
+        if isinstance(obj, (list, tuple)):
+            return any(contains_runtime_resource(v) for v in obj)
+        return False
+
+    graph = StateGraph(State)
+    graph.add_node("setup", setup_node)
+    graph.add_node("worker", worker)
+    graph.add_edge(START, "setup")
+    graph.add_conditional_edges("setup", send_to_worker)
+
+    app = graph.compile(checkpointer=async_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    with pytest.raises(ValueError, match="intentional-worker-failure"):
+        await app.ainvoke({}, config, durability=durability)
+
+    assert attempts == 1
+    first_seen = seen[0]
+
+    # UntrackedValue must never be persisted: the checkpointed Send arg is
+    # sanitized (the value replaced, never written as-is). Some checkpointer
+    # variants return a legacy v3 checkpoint where sends live in a top-level
+    # `pending_sends` list instead of the TASKS channel, so scan both.
+    checkpoint_tuple = await async_checkpointer.aget_tuple(config)
+    checkpoint = checkpoint_tuple.checkpoint
+    assert "resource" not in checkpoint["channel_values"]
+    assert not contains_runtime_resource(checkpoint["channel_values"].get(TASKS, []))
+    assert not contains_runtime_resource(checkpoint.get("pending_sends", []))
+    for _, channel, write in checkpoint_tuple.pending_writes:
+        assert not contains_runtime_resource(write)
+
+    snapshot = await app.aget_state(config)
+    assert snapshot.next == ("worker",)
+    assert "resource" not in snapshot.values
+
+    # Resuming retries the failed task with the SAME resource instance.
+    result = await app.ainvoke(None, config, durability=durability)
+    assert attempts == 2
+    assert seen[1] is first_seen
+    assert result["messages"] == ["setup", "used runtime-secret"]
 
 
 async def test_send_react_interrupt(async_checkpointer: BaseCheckpointSaver) -> None:
