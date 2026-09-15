@@ -207,6 +207,100 @@ class TestMemorySaver:
         ]
         assert len(search_results_4) == 0
 
+    def test_before_checkpoint_only_cursor_uses_config_context(self) -> None:
+        first_checkpoint = empty_checkpoint()
+        first_checkpoint["id"] = "z-older"
+        first_checkpoint["ts"] = "2026-01-01T00:00:00+00:00"
+        first_config: RunnableConfig = {
+            "configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}
+        }
+        stored_first = self.memory_saver.put(
+            first_config,
+            first_checkpoint,
+            {"step": 0},
+            first_checkpoint["channel_versions"],
+        )
+
+        second_checkpoint = empty_checkpoint()
+        second_checkpoint["id"] = "a-newer"
+        second_checkpoint["ts"] = "2026-01-01T00:00:01+00:00"
+        second_config: RunnableConfig = {
+            "configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}
+        }
+        second_config["configurable"]["checkpoint_id"] = stored_first["configurable"][
+            "checkpoint_id"
+        ]
+        self.memory_saver.put(
+            second_config,
+            second_checkpoint,
+            {"step": 1},
+            second_checkpoint["channel_versions"],
+        )
+
+        before_results = list(
+            self.memory_saver.list(
+                {"configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}},
+                before={"configurable": {"checkpoint_id": "a-newer"}},
+            )
+        )
+        assert [result.checkpoint["id"] for result in before_results] == ["z-older"]
+
+    def test_before_checkpoint_only_cursor_resolves_across_namespaces(self) -> None:
+        parent_checkpoint = empty_checkpoint()
+        parent_checkpoint["id"] = "parent-bound"
+        parent_checkpoint["ts"] = "2026-01-01T00:00:01+00:00"
+        self.memory_saver.put(
+            {"configurable": {"thread_id": "thread-cross-ns", "checkpoint_ns": ""}},
+            parent_checkpoint,
+            {"step": 0},
+            parent_checkpoint["channel_versions"],
+        )
+
+        older_checkpoint = empty_checkpoint()
+        older_checkpoint["id"] = "older-subgraph"
+        older_checkpoint["ts"] = "2026-01-01T00:00:00+00:00"
+        self.memory_saver.put(
+            {
+                "configurable": {
+                    "thread_id": "thread-cross-ns",
+                    "checkpoint_ns": "child",
+                }
+            },
+            older_checkpoint,
+            {"step": 0},
+            older_checkpoint["channel_versions"],
+        )
+
+        newer_checkpoint = empty_checkpoint()
+        newer_checkpoint["id"] = "newer-subgraph"
+        newer_checkpoint["ts"] = "2026-01-01T00:00:02+00:00"
+        self.memory_saver.put(
+            {
+                "configurable": {
+                    "thread_id": "thread-cross-ns",
+                    "checkpoint_ns": "child",
+                }
+            },
+            newer_checkpoint,
+            {"step": 1},
+            newer_checkpoint["channel_versions"],
+        )
+
+        before_results = list(
+            self.memory_saver.list(
+                {
+                    "configurable": {
+                        "thread_id": "thread-cross-ns",
+                        "checkpoint_ns": "child",
+                    }
+                },
+                before={"configurable": {"checkpoint_id": "parent-bound"}},
+            )
+        )
+        assert [result.checkpoint["id"] for result in before_results] == [
+            "older-subgraph"
+        ]
+
 
 async def test_memory_saver() -> None:
     memory_saver = InMemorySaver()
@@ -267,6 +361,75 @@ def test_memory_saver_allowlist_silences_warning(
     assert result is not None
     assert "unregistered type" not in caplog.text.lower()
     assert result.checkpoint["channel_values"]["foo"] == obj
+
+
+def test_memory_saver_latest_uses_checkpoint_timestamp_not_id() -> None:
+    memory_saver = InMemorySaver()
+    thread_id = "thread-non-lex"
+
+    first_checkpoint = empty_checkpoint()
+    first_checkpoint["id"] = "z-older"
+    first_checkpoint["ts"] = "2026-01-01T00:00:00+00:00"
+    first_config: RunnableConfig = {
+        "configurable": {"thread_id": thread_id, "checkpoint_ns": ""}
+    }
+    stored_first = memory_saver.put(first_config, first_checkpoint, {"step": 0}, {})
+
+    second_checkpoint = empty_checkpoint()
+    second_checkpoint["id"] = "a-newer"
+    second_checkpoint["ts"] = "2026-01-01T00:00:01+00:00"
+    second_config: RunnableConfig = {
+        "configurable": {"thread_id": thread_id, "checkpoint_ns": ""}
+    }
+    second_config["configurable"]["checkpoint_id"] = stored_first["configurable"][
+        "checkpoint_id"
+    ]
+    memory_saver.put(second_config, second_checkpoint, {"step": 1}, {})
+
+    latest = memory_saver.get_tuple(
+        {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
+    )
+    assert latest is not None
+    assert latest.checkpoint["id"] == "a-newer"
+
+
+def test_memory_saver_list_before_uses_checkpoint_timestamp_not_id() -> None:
+    memory_saver = InMemorySaver()
+    thread_id = "thread-non-lex-before"
+
+    first_checkpoint = empty_checkpoint()
+    first_checkpoint["id"] = "z-older"
+    first_checkpoint["ts"] = "2026-01-01T00:00:00+00:00"
+    first_config: RunnableConfig = {
+        "configurable": {"thread_id": thread_id, "checkpoint_ns": ""}
+    }
+    stored_first = memory_saver.put(first_config, first_checkpoint, {"step": 0}, {})
+
+    second_checkpoint = empty_checkpoint()
+    second_checkpoint["id"] = "a-newer"
+    second_checkpoint["ts"] = "2026-01-01T00:00:01+00:00"
+    second_config: RunnableConfig = {
+        "configurable": {"thread_id": thread_id, "checkpoint_ns": ""}
+    }
+    second_config["configurable"]["checkpoint_id"] = stored_first["configurable"][
+        "checkpoint_id"
+    ]
+    memory_saver.put(second_config, second_checkpoint, {"step": 1}, {})
+
+    before_results = list(
+        memory_saver.list(
+            {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}},
+            before={
+                "configurable": {
+                    "thread_id": thread_id,
+                    "checkpoint_ns": "",
+                    "checkpoint_id": "a-newer",
+                }
+            },
+        )
+    )
+
+    assert [result.checkpoint["id"] for result in before_results] == ["z-older"]
 
 
 def test_memory_saver_strict_blocks_unregistered(
