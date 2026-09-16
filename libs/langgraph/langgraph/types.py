@@ -12,7 +12,6 @@ from typing import (
     Generic,
     Literal,
     NamedTuple,
-    TypeVar,
     final,
     overload,
 )
@@ -22,7 +21,14 @@ from langchain_core.messages import AnyMessage
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 from pydantic import TypeAdapter
-from typing_extensions import NotRequired, TypeAliasType, TypedDict, Unpack, deprecated
+from typing_extensions import (
+    NotRequired,
+    TypeAliasType,
+    TypedDict,
+    TypeVar,
+    Unpack,
+    deprecated,
+)
 from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._cache import default_cache_key
@@ -38,7 +44,7 @@ from langgraph.warnings import LangGraphDeprecatedSinceV10, LangGraphDeprecatedS
 # when used in standalone type aliases.
 StateT = TypeVar("StateT")
 OutputT = TypeVar("OutputT")
-ResponseT = TypeVar("ResponseT")
+ResponseT = TypeVar("ResponseT", default=Any)
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
@@ -575,7 +581,7 @@ _DEFAULT_INTERRUPT_ID = "placeholder-id"
 
 @final
 @dataclass(init=False, slots=True)
-class Interrupt:
+class Interrupt(Generic[ResponseT]):
     """Information about an interrupt that occurred in a node.
 
     !!! version-added "Added in version 0.2.24"
@@ -872,7 +878,7 @@ def interrupt(value: Any, *, response_schema: dict[str, Any] | None = None) -> A
 
 
 def interrupt(
-    value: Any, *, response_schema: dict[str, Any] | type[Any] | None = None
+    value: Any, *, response_schema: dict[str, Any] | type | None = None
 ) -> Any:
     """Interrupt the graph with a resumable exception from within a node.
 
