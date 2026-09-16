@@ -347,6 +347,23 @@ class ToolCallRequestMismatchError(ValueError):
     """`tool_call["name"]` and `tool` disagree on a `ToolCallRequest`."""
 
 
+def _check_not_redirected_without_tool(
+    request: ToolCallRequest, original_name: str, original_tool: BaseTool | None
+) -> None:
+    """Raise if an interceptor renamed the call but left `tool` as the resolved one."""
+    if (
+        original_tool is not None
+        and request.tool is original_tool
+        and request.tool_call["name"] != original_name
+    ):
+        msg = (
+            f"Interceptor set tool_call name to {request.tool_call['name']!r} but left "
+            f"`tool` as {original_tool.name!r}. Redirecting a call requires setting both; "
+            f"resolve the replacement from `ToolCallRequest.available_tools`."
+        )
+        raise ToolCallRequestMismatchError(msg)
+
+
 class ToolInvocationError(ToolException):
     """An error occurred while invoking a tool due to invalid arguments.
 
@@ -1062,17 +1079,7 @@ class ToolNode(RunnableCallable):
 
         def execute(req: ToolCallRequest) -> ToolMessage | Command:
             """Execute tool with given request. Can be called multiple times."""
-            if (
-                original_tool is not None
-                and req.tool is original_tool
-                and req.tool_call["name"] != original_name
-            ):
-                msg = (
-                    f"Interceptor set tool_call name to {req.tool_call['name']!r} but left "
-                    f"`tool` as {original_tool.name!r}. Redirecting a call requires setting "
-                    f"both; resolve the replacement from `ToolCallRequest.available_tools`."
-                )
-                raise ToolCallRequestMismatchError(msg)
+            _check_not_redirected_without_tool(req, original_name, original_tool)
             return self._execute_tool_sync(req, input_type, config)
 
         # Call wrapper with request and execute callable
@@ -1225,21 +1232,12 @@ class ToolNode(RunnableCallable):
 
         async def execute(req: ToolCallRequest) -> ToolMessage | Command:
             """Execute tool with given request. Can be called multiple times."""
-            if (
-                original_tool is not None
-                and req.tool is original_tool
-                and req.tool_call["name"] != original_name
-            ):
-                msg = (
-                    f"Interceptor set tool_call name to {req.tool_call['name']!r} but left "
-                    f"`tool` as {original_tool.name!r}. Redirecting a call requires setting "
-                    f"both; resolve the replacement from `ToolCallRequest.available_tools`."
-                )
-                raise ToolCallRequestMismatchError(msg)
+            _check_not_redirected_without_tool(req, original_name, original_tool)
             return await self._execute_tool_async(req, input_type, config)
 
         def _sync_execute(req: ToolCallRequest) -> ToolMessage | Command:
             """Sync execute fallback for sync wrapper."""
+            _check_not_redirected_without_tool(req, original_name, original_tool)
             return self._execute_tool_sync(req, input_type, config)
 
         # Call wrapper with request and execute callable

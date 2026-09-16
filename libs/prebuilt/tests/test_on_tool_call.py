@@ -1499,7 +1499,12 @@ async def test_interceptor_can_redirect_to_another_tool() -> None:
             AIMessage(
                 "",
                 tool_calls=[
-                    {"name": "add", "args": {"a": 5, "b": 3}, "id": "1", "type": "tool_call"}
+                    {
+                        "name": "add",
+                        "args": {"a": 5, "b": 3},
+                        "id": "1",
+                        "type": "tool_call",
+                    }
                 ],
             )
         ],
@@ -1517,7 +1522,9 @@ def test_interceptor_tool_call_name_and_tool_must_agree() -> None:
         request: ToolCallRequest,
         execute: Callable[[ToolCallRequest], ToolMessage | Command],
     ) -> ToolMessage | Command:
-        return execute(request.override(tool_call={**request.tool_call, "name": "other"}))
+        return execute(
+            request.override(tool_call={**request.tool_call, "name": "other"})
+        )
 
     @tool
     def other(a: int, b: int) -> int:
@@ -1532,7 +1539,49 @@ def test_interceptor_tool_call_name_and_tool_must_agree() -> None:
                 AIMessage(
                     "",
                     tool_calls=[
-                        {"name": "add", "args": {"a": 1, "b": 2}, "id": "1", "type": "tool_call"}
+                        {
+                            "name": "add",
+                            "args": {"a": 1, "b": 2},
+                            "id": "1",
+                            "type": "tool_call",
+                        }
+                    ],
+                )
+            ],
+            _create_config_with_runtime(),
+        )
+
+
+async def test_sync_interceptor_under_ainvoke_also_validates_redirect() -> None:
+    """The sync-wrapper fallback used by `ainvoke` must validate too, not just `invoke`."""
+
+    def rename_only(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> ToolMessage | Command:
+        return execute(
+            request.override(tool_call={**request.tool_call, "name": "other"})
+        )
+
+    @tool
+    def other(a: int, b: int) -> int:
+        """Another tool."""
+        return 0
+
+    # Only a sync wrapper is configured, so `ainvoke` routes through `_sync_execute`.
+    node = ToolNode([add, other], wrap_tool_call=rename_only)
+    with pytest.raises(ToolCallRequestMismatchError, match="other"):
+        await node.ainvoke(
+            [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {
+                            "name": "add",
+                            "args": {"a": 1, "b": 2},
+                            "id": "1",
+                            "type": "tool_call",
+                        }
                     ],
                 )
             ],
