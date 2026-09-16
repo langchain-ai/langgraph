@@ -13,6 +13,7 @@ from langgraph.types import Command
 
 from langgraph.prebuilt.tool_node import (
     ToolCallRequest,
+    ToolCallRequestMismatchError,
     ToolNode,
 )
 
@@ -1474,7 +1475,7 @@ def test_tool_call_request_is_frozen() -> None:
 
 
 async def test_interceptor_can_redirect_to_another_tool() -> None:
-    """Overriding `tool_call["name"]` routes execution to the newly named tool."""
+    """Redirecting requires setting both `tool_call` and `tool`; routing follows them."""
 
     @tool
     def subtract(a: int, b: int) -> int:
@@ -1485,8 +1486,11 @@ async def test_interceptor_can_redirect_to_another_tool() -> None:
         request: ToolCallRequest,
         execute: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
     ) -> ToolMessage | Command:
+        target = next(t for t in request.available_tools if t.name == "subtract")
         return await execute(
-            request.override(tool_call={**request.tool_call, "name": "subtract"})
+            request.override(
+                tool_call={**request.tool_call, "name": "subtract"}, tool=target
+            )
         )
 
     node = ToolNode([add, subtract], awrap_tool_call=redirect)
@@ -1504,3 +1508,33 @@ async def test_interceptor_can_redirect_to_another_tool() -> None:
 
     # `add` would return 8; `subtract` returns 2.
     assert result[0].content == "2"
+
+
+def test_interceptor_tool_call_name_and_tool_must_agree() -> None:
+    """Renaming `tool_call` without `tool` raises rather than running the wrong tool."""
+
+    def rename_only(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> ToolMessage | Command:
+        return execute(request.override(tool_call={**request.tool_call, "name": "other"}))
+
+    @tool
+    def other(a: int, b: int) -> int:
+        """Another tool."""
+        return 0
+
+    # handle_tool_errors is on by default; the mismatch must not become a ToolMessage
+    node = ToolNode([add, other], wrap_tool_call=rename_only)
+    with pytest.raises(ToolCallRequestMismatchError, match="other"):
+        node.invoke(
+            [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {"name": "add", "args": {"a": 1, "b": 2}, "id": "1", "type": "tool_call"}
+                    ],
+                )
+            ],
+            _create_config_with_runtime(),
+        )

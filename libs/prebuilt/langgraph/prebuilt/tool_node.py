@@ -144,12 +144,16 @@ class ToolCallRequest:
             validation will occur and raise an error for unregistered tools.
         state: Agent state (`dict`, `list`, or `BaseModel`).
         runtime: LangGraph runtime context (optional, `None` if outside graph).
+        available_tools: Client-side tools registered with the `ToolNode`. Provider
+            and built-in tools are not included. Use this to resolve a replacement
+            tool when redirecting a call, and set `tool` to the resolved instance.
     """
 
     tool_call: ToolCall
     tool: BaseTool | None
     state: Any
     runtime: ToolRuntime
+    available_tools: list[BaseTool] = field(default_factory=list)
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Raise deprecation warning when setting attributes directly.
@@ -337,6 +341,10 @@ def msg_content_output(output: Any) -> str | list[dict]:
         return json.dumps(output, ensure_ascii=False)
     except Exception:
         return str(output)
+
+
+class ToolCallRequestMismatchError(ValueError):
+    """`tool_call["name"]` and `tool` disagree on a `ToolCallRequest`."""
 
 
 class ToolInvocationError(ToolException):
@@ -952,6 +960,13 @@ class ToolNode(RunnableCallable):
             msg = f"Tool {call['name']} is not registered with ToolNode"
             raise TypeError(msg)
 
+        if tool.name != call["name"]:
+            msg = (
+                f"ToolCallRequest names tool {call['name']!r} but carries {tool.name!r}. "
+                f"An interceptor redirecting a call must set both `tool_call` and `tool`."
+            )
+            raise ToolCallRequestMismatchError(msg)
+
         # Inject state, store, and runtime right before invocation
         injected_call = self._inject_tool_args(call, request.runtime, tool)
         call_args = {**injected_call, "type": "tool_call"}
@@ -1040,6 +1055,7 @@ class ToolNode(RunnableCallable):
             tool=tool,
             state=tool_runtime.state,
             runtime=tool_runtime,
+            available_tools=list(self.tools_by_name.values()),
         )
 
         config = tool_runtime.config
@@ -1049,18 +1065,15 @@ class ToolNode(RunnableCallable):
             return self._execute_tool_sync(tool_request, input_type, config)
 
         # Define execute callable that can be called multiple times
-        original_name = call["name"]
-
         def execute(req: ToolCallRequest) -> ToolMessage | Command:
             """Execute tool with given request. Can be called multiple times."""
-            if req.tool_call["name"] != original_name:
-                # An interceptor (e.g., HITL) redirected the tool call
-                req = replace(req, tool=self.tools_by_name.get(req.tool_call["name"]))
             return self._execute_tool_sync(req, input_type, config)
 
         # Call wrapper with request and execute callable
         try:
             return self._wrap_tool_call(tool_request, execute)
+        except ToolCallRequestMismatchError:
+            raise
         except Exception as e:
             # Wrapper threw an exception
             if not self._handle_tool_errors:
@@ -1103,6 +1116,13 @@ class ToolNode(RunnableCallable):
             # This should never happen if validation works correctly
             msg = f"Tool {call['name']} is not registered with ToolNode"
             raise TypeError(msg)
+
+        if tool.name != call["name"]:
+            msg = (
+                f"ToolCallRequest names tool {call['name']!r} but carries {tool.name!r}. "
+                f"An interceptor redirecting a call must set both `tool_call` and `tool`."
+            )
+            raise ToolCallRequestMismatchError(msg)
 
         # Inject state, store, and runtime right before invocation
         injected_call = self._inject_tool_args(call, request.runtime, tool)
@@ -1192,6 +1212,7 @@ class ToolNode(RunnableCallable):
             tool=tool,
             state=tool_runtime.state,
             runtime=tool_runtime,
+            available_tools=list(self.tools_by_name.values()),
         )
 
         config = tool_runtime.config
@@ -1201,13 +1222,8 @@ class ToolNode(RunnableCallable):
             return await self._execute_tool_async(tool_request, input_type, config)
 
         # Define async execute callable that can be called multiple times
-        original_name = call["name"]
-
         async def execute(req: ToolCallRequest) -> ToolMessage | Command:
             """Execute tool with given request. Can be called multiple times."""
-            if req.tool_call["name"] != original_name:
-                # An interceptor (e.g., HITL) redirected the tool call
-                req = replace(req, tool=self.tools_by_name.get(req.tool_call["name"]))
             return await self._execute_tool_async(req, input_type, config)
 
         def _sync_execute(req: ToolCallRequest) -> ToolMessage | Command:
@@ -1221,6 +1237,8 @@ class ToolNode(RunnableCallable):
             # None check was performed above already
             self._wrap_tool_call = cast("ToolCallWrapper", self._wrap_tool_call)
             return self._wrap_tool_call(tool_request, _sync_execute)
+        except ToolCallRequestMismatchError:
+            raise
         except Exception as e:
             # Wrapper threw an exception
             if not self._handle_tool_errors:
