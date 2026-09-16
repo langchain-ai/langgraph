@@ -24,6 +24,7 @@ from typing import (
     Protocol,
     TypeGuard,
     cast,
+    get_type_hints,
 )
 
 from langchain_core.runnables.base import (
@@ -173,6 +174,10 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
             "RunnableConfig",
             Optional[RunnableConfig],  # noqa: UP045
             "Optional[RunnableConfig]",
+            "RunnableConfig | None",
+            "None | RunnableConfig",
+            "RunnableConfig|None",
+            "None|RunnableConfig",
             inspect.Parameter.empty,
         ),
         # for now, use config directly, eventually, will pop off of Runtime
@@ -200,6 +205,10 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
         (
             Optional[BaseStore],  # noqa: UP045
             "Optional[BaseStore]",
+            "BaseStore | None",
+            "None | BaseStore",
+            "BaseStore|None",
+            "None|BaseStore",
         ),
         "store",
         None,
@@ -246,6 +255,33 @@ to resolve forward references and optional types formatted like BaseStore | None
 """
 
 VALID_KINDS = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+
+
+def _annotation_accepted(
+    func: Callable[..., Any],
+    param_name: str,
+    annotation: Any,
+    accepted: tuple[Any, ...],
+) -> bool:
+    """Return True if a parameter annotation matches an inject-config accept entry.
+
+    Under PEP 563 (`from __future__ import annotations`) inspect returns the
+    annotation as a string such as `"RunnableConfig | None"`. That spelling is
+    what the config-typing warning recommends, but it was previously missing
+    from the accept list, so injection was silently skipped.
+    """
+    if annotation in accepted:
+        return True
+    if isinstance(annotation, str):
+        collapsed = "".join(annotation.split())
+        for item in accepted:
+            if isinstance(item, str) and "".join(item.split()) == collapsed:
+                return True
+    try:
+        resolved = get_type_hints(func).get(param_name, annotation)
+    except Exception:
+        return False
+    return resolved in accepted
 
 
 class _RunnableWithWriter(Protocol[Input, Output]):
@@ -345,7 +381,9 @@ class RunnableCallable(Runnable):
                 # If parameter is not found or is not a valid kind, skip
                 continue
 
-            if typ != (ANY_TYPE,) and p.annotation not in typ:
+            if typ != (ANY_TYPE,) and not _annotation_accepted(
+                cast(Callable, func or afunc), kw, p.annotation, typ
+            ):
                 # A specific type is required, but the function annotation does
                 # not match the expected type.
 
