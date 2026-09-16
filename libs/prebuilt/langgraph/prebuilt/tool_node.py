@@ -1471,8 +1471,15 @@ class ToolNode(RunnableCallable):
             if isinstance(item, ToolMessage):
                 if item.tool_call_id == expected_id:
                     terminator_count += 1
-            elif isinstance(item, Command) and isinstance(item.update, dict):
-                for msg in item.update.get(self._messages_key, []):
+            elif isinstance(item, Command):
+                update = item.update
+                if isinstance(update, dict):
+                    raw_messages = update.get(self._messages_key, [])
+                elif isinstance(update, list):
+                    raw_messages = update
+                else:
+                    continue
+                for msg in convert_to_messages(raw_messages):
                     if isinstance(msg, ToolMessage) and msg.tool_call_id == expected_id:
                         terminator_count += 1
 

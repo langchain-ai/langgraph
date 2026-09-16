@@ -2422,3 +2422,87 @@ def test_tool_node_list_return_mixed_with_regular_tool() -> None:
     tool_call_ids = {m.tool_call_id for m in all_msgs}
     assert list_tool_id in tool_call_ids
     assert regular_tool_id in tool_call_ids
+
+
+def test_tool_node_list_return_dict_message_terminator() -> None:
+    """Dict-form ToolMessage inside Command.update must count as the terminator (#8924)."""
+    outer_id = "call-1"
+    result = _invoke_returning(
+        [
+            Command(
+                update={
+                    "messages": [
+                        {
+                            "type": "tool",
+                            "content": "done",
+                            "tool_call_id": outer_id,
+                        }
+                    ]
+                }
+            )
+        ],
+        handle_tool_errors=False,
+    )
+    commands = [r for r in result if isinstance(r, Command)]
+    assert len(commands) == 1
+    msgs = commands[0].update["messages"]
+    assert msgs[0]["tool_call_id"] == outer_id
+    assert msgs[0]["content"] == "done"
+
+
+def test_tool_node_list_return_list_form_command_terminator() -> None:
+    """List-form Command.update terminator must be accepted for list input (#8924)."""
+    outer_id = "call-1"
+    node = ToolNode(
+        [
+            _ReturningTool(
+                return_value=[
+                    Command(
+                        update=[ToolMessage(content="done", tool_call_id=outer_id)]
+                    )
+                ]
+            )
+        ],
+        handle_tool_errors=False,
+    )
+    result = node.invoke(
+        [AIMessage("", tool_calls=[_list_tool_call(outer_id)])],
+        config=_create_config_with_runtime(),
+    )
+    commands = [r for r in result if isinstance(r, Command)]
+    assert len(commands) == 1
+    msgs = commands[0].update
+    assert isinstance(msgs[0], ToolMessage)
+    assert msgs[0].tool_call_id == outer_id
+
+
+async def test_tool_node_list_return_dict_message_terminator_async() -> None:
+    """Same dict-message terminator path on ainvoke (#8924)."""
+    outer_id = "call-1"
+    node = ToolNode(
+        [
+            _ReturningTool(
+                return_value=[
+                    Command(
+                        update={
+                            "messages": [
+                                {
+                                    "type": "tool",
+                                    "content": "done",
+                                    "tool_call_id": outer_id,
+                                }
+                            ]
+                        }
+                    )
+                ]
+            )
+        ],
+        handle_tool_errors=False,
+    )
+    result = await node.ainvoke(
+        {"messages": [AIMessage("", tool_calls=[_list_tool_call(outer_id)])]},
+        config=_create_config_with_runtime(),
+    )
+    commands = [r for r in result if isinstance(r, Command)]
+    assert len(commands) == 1
+    assert commands[0].update["messages"][0]["tool_call_id"] == outer_id
