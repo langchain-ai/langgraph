@@ -227,6 +227,14 @@ class TestResolveEnvPath:
         resolved = _resolve_env_path({"env": "custom.env"}, config_path)
         assert resolved == env_file.resolve()
 
+    @pytest.mark.parametrize("env_field", ["../outside.env", "/etc/passwd"])
+    def test_env_path_outside_project_raises(self, tmp_path, env_field):
+        config_path = tmp_path / "langgraph.json"
+        config_path.touch()
+
+        with pytest.raises(click.UsageError, match="resolves outside the project"):
+            _resolve_env_path({"env": env_field}, config_path)
+
     def test_missing_env_file_returns_none(self, tmp_path):
         config_path = tmp_path / "langgraph.json"
         config_path.touch()
