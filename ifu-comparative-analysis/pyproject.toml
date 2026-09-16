@@ -1,0 +1,97 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ifu-comparative-analysis"
+version = "1.0.0"
+description = "Advanced IFU Comparative Analysis System using Claude Sonnet 4.5 and LangGraph 1.0"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "IFU Analysis Team", email = "ifu-analysis@example.com" }
+]
+keywords = ["ifu", "medical-device", "document-comparison", "langgraph", "claude", "ai"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Healthcare Industry",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    # LangGraph and LangChain
+    "langgraph>=1.0.1,<2.0.0",
+    "langgraph-checkpoint>=3.0.0,<4.0.0",
+    "langgraph-checkpoint-sqlite>=3.0.0,<4.0.0",
+    "langchain-core>=0.3.0",
+    "langchain-anthropic>=0.3.0",
+
+    # Anthropic SDK
+    "anthropic>=0.40.0",
+
+    # Document processing
+    "python-docx>=1.1.0",  # Word document generation
+    "pypdf>=5.0.0",        # PDF utilities
+
+    # Data processing
+    "pydantic>=2.7.4",
+    "typing-extensions>=4.12.0",
+
+    # Utilities
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "black>=24.0.0",
+    "ruff>=0.6.0",
+    "mypy>=1.11.0",
+]
+
+postgres = [
+    "langgraph-checkpoint-postgres>=3.0.0,<4.0.0",
+    "psycopg>=3.2.0",
+]
+
+all = [
+    "ifu-comparative-analysis[dev,postgres]",
+]
+
+[project.urls]
+Homepage = "https://github.com/example/ifu-comparative-analysis"
+Documentation = "https://github.com/example/ifu-comparative-analysis/docs"
+Repository = "https://github.com/example/ifu-comparative-analysis"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311', 'py312']
+include = '\.pyi?$'
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
