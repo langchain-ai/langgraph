@@ -191,6 +191,26 @@ def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
     return base
 
 
+def get_max_concurrency(config: RunnableConfig | None) -> int | None:
+    """Return `max_concurrency` from top-level config, falling back to `configurable`.
+
+    `max_concurrency` is a standalone `RunnableConfig` key, same as
+    `recursion_limit`. Published examples previously nested it under
+    `configurable`, where it was silently ignored and `Send` fan-out ran
+    unbounded. Honor the nested copy so that placement actually caps
+    concurrency. A top-level value wins when both are set.
+    """
+    if not config:
+        return None
+    top = config.get("max_concurrency")
+    if top is not None:
+        return cast(int, top)
+    nested = (config.get(CONF) or {}).get("max_concurrency")
+    if nested is not None:
+        return cast(int, nested)
+    return None
+
+
 def patch_config(
     config: RunnableConfig | None,
     *,
@@ -417,6 +437,13 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
             value = configurable.get(key)
             if value:
                 metadata[key] = value
+    # Promote a nested max_concurrency onto the standalone config key so
+    # langchain-core's get_executor_for_config (sync) and Pregel's async
+    # executor both see it. Top-level already set above wins.
+    if empty.get("max_concurrency") is None:
+        nested_max_concurrency = (empty.get(CONF) or {}).get("max_concurrency")
+        if nested_max_concurrency is not None:
+            empty["max_concurrency"] = nested_max_concurrency
     return empty
 
 

@@ -29,6 +29,7 @@ from langgraph._internal._config import (
     _merge_callbacks,
     ensure_config,
     get_callback_manager_for_config,
+    get_max_concurrency,
     merge_configs,
 )
 from langgraph._internal._fields import (
@@ -791,3 +792,39 @@ def test_ensure_config_empty_inputs() -> None:
     assert merged["tags"] == []
     assert merged["configurable"] == {}
     assert merged["callbacks"] is None
+
+
+def test_get_max_concurrency_top_level() -> None:
+    assert get_max_concurrency({"max_concurrency": 4}) == 4
+    assert get_max_concurrency({}) is None
+    assert get_max_concurrency(None) is None
+
+
+def test_get_max_concurrency_nested_in_configurable() -> None:
+    # Documented-but-wrong placement (issue #8920) must still resolve.
+    assert (
+        get_max_concurrency({"configurable": {"max_concurrency": 4, "thread_id": "t"}})
+        == 4
+    )
+
+
+def test_get_max_concurrency_top_level_wins() -> None:
+    assert (
+        get_max_concurrency(
+            {"max_concurrency": 2, "configurable": {"max_concurrency": 99}}
+        )
+        == 2
+    )
+
+
+def test_ensure_config_promotes_nested_max_concurrency() -> None:
+    merged = ensure_config({"configurable": {"max_concurrency": 4, "thread_id": "t"}})
+    assert merged["max_concurrency"] == 4
+    assert merged["configurable"]["thread_id"] == "t"
+
+
+def test_ensure_config_keeps_top_level_max_concurrency() -> None:
+    merged = ensure_config(
+        {"max_concurrency": 2, "configurable": {"max_concurrency": 99}}
+    )
+    assert merged["max_concurrency"] == 2

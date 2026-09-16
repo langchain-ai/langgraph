@@ -1,8 +1,13 @@
+import asyncio
+import operator
+from typing import Annotated, TypedDict
+
 import pytest
 from langchain_core.callbacks import AsyncCallbackManager, BaseCallbackHandler
 
 from langgraph._internal._config import get_async_callback_manager_for_config
-from langgraph.graph import StateGraph
+from langgraph.graph import START, StateGraph
+from langgraph.types import Send
 
 pytestmark = pytest.mark.anyio
 
@@ -114,3 +119,54 @@ async def test_with_config_tags_preserved_on_invoke() -> None:
     await graph.ainvoke({}, {"tags": ["invoke"]})
     assert "bound" in captured, "bound tag was dropped by ensure_config overwrite"
     assert "invoke" in captured, "invoke-time tag not present"
+
+
+async def test_max_concurrency_inside_configurable_caps_fanout() -> None:
+    """Nested max_concurrency must cap Send fan-out (issue #8920).
+
+    Docs previously showed `{"configurable": {"max_concurrency": N}}`. That
+    key is standalone on RunnableConfig; nesting it used to be a silent no-op
+    and the fan-out ran unbounded.
+    """
+    running = 0
+    peak = 0
+
+    class State(TypedDict):
+        out: Annotated[list, operator.add]
+
+    async def work(payload):
+        nonlocal running, peak
+        running += 1
+        peak = max(peak, running)
+        await asyncio.sleep(0.02)
+        running -= 1
+        return {"out": [payload["i"]]}
+
+    builder = StateGraph(State)
+    builder.add_node("start", lambda state: {})
+    builder.add_node("work", work)
+    builder.add_edge(START, "start")
+    builder.add_conditional_edges(
+        "start",
+        lambda state: [Send("work", {"i": i}) for i in range(20)],
+        ["work"],
+    )
+    graph = builder.compile()
+
+    peak = 0
+    await graph.ainvoke({"out": []}, {"max_concurrency": 4})
+    top_level_peak = peak
+
+    peak = 0
+    await graph.ainvoke({"out": []}, {"configurable": {"max_concurrency": 4}})
+    nested_peak = peak
+
+    peak = 0
+    await graph.ainvoke({"out": []}, {})
+    unset_peak = peak
+
+    assert top_level_peak == 4
+    assert nested_peak == 4, (
+        "max_concurrency inside configurable was ignored; fan-out ran unbounded"
+    )
+    assert unset_peak == 20

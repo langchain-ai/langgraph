@@ -17,6 +17,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import get_executor_for_config
 from typing_extensions import ParamSpec
 
+from langgraph._internal._config import get_max_concurrency
 from langgraph._internal._future import CONTEXT_NOT_SUPPORTED, run_coroutine_threadsafe
 from langgraph.errors import GraphBubbleUp
 
@@ -132,7 +133,7 @@ class AsyncBackgroundExecutor(AbstractAsyncContextManager):
         self.tasks: dict[asyncio.Future, tuple[bool, bool]] = {}
         self.sentinel = object()
         self.loop = asyncio.get_running_loop()
-        if max_concurrency := config.get("max_concurrency"):
+        if max_concurrency := get_max_concurrency(config):
             self.semaphore: asyncio.Semaphore | None = asyncio.Semaphore(
                 max_concurrency
             )
