@@ -635,6 +635,59 @@ def test_vector_insert_with_auto_embedding(
     assert "doc3" in doc_order
 
 
+def test_vector_insert_duplicate_text_across_items(
+    fake_embeddings: CharacterEmbeddings, mocker: MockerFixture
+) -> None:
+    """Batched items sharing one indexed text reuse its single embedding (#8822)."""
+    embed_spy = mocker.spy(fake_embeddings, "embed_documents")
+    store = InMemoryStore(
+        index={
+            "dims": fake_embeddings.dims,
+            "embed": fake_embeddings,
+            "fields": ["text"],
+        }
+    )
+
+    store.batch(
+        [
+            PutOp(("test",), "doc-a", {"text": "same text"}),
+            PutOp(("test",), "doc-b", {"text": "same text"}),
+        ]
+    )
+
+    # the duplicate text is still embedded exactly once
+    assert embed_spy.call_count == 1
+    assert store.get(("test",), "doc-a") is not None
+    assert store.get(("test",), "doc-b") is not None
+    results = store.search(("test",), query="same text")
+    assert sorted(item.key for item in results) == ["doc-a", "doc-b"]
+
+
+async def test_async_vector_insert_duplicate_text_across_items(
+    fake_embeddings: CharacterEmbeddings,
+) -> None:
+    """Same deduplication guarantee through the async batch path (#8822)."""
+    store = InMemoryStore(
+        index={
+            "dims": fake_embeddings.dims,
+            "embed": fake_embeddings,
+            "fields": ["text"],
+        }
+    )
+
+    await store.abatch(
+        [
+            PutOp(("test",), "doc-a", {"text": "same text"}),
+            PutOp(("test",), "doc-b", {"text": "same text"}),
+        ]
+    )
+
+    assert await store.aget(("test",), "doc-a") is not None
+    assert await store.aget(("test",), "doc-b") is not None
+    results = await store.asearch(("test",), query="same text")
+    assert sorted(item.key for item in results) == ["doc-a", "doc-b"]
+
+
 async def test_async_vector_insert_with_auto_embedding(
     fake_embeddings: CharacterEmbeddings,
 ) -> None:
