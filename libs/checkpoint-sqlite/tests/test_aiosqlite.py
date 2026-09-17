@@ -188,3 +188,44 @@ class TestAsyncSqliteSaver:
             # (would have been dropped if injection succeeded)
             results = [c async for c in saver.alist(None, limit=None)]
             assert len(results) == 5
+
+    async def test_aput_writes_mixed_batch_retry_replaces_special_channel(
+        self,
+    ) -> None:
+        """On retries with identical task_id, special channels (e.g. __error__)
+        must be replaced with new values even when mixed with ordinary channels,
+        while ordinary channel writes preserve idempotency (ignore duplicates).
+        """
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            config = await saver.aput(
+                {
+                    "configurable": {
+                        "thread_id": "thread-retry-async",
+                        "checkpoint_ns": "",
+                    }
+                },
+                empty_checkpoint(),
+                {},
+                {},
+            )
+            # Initial write batch: special error write + ordinary channel write
+            await saver.aput_writes(
+                config,
+                [("__error__", "old_error"), ("ordinary", "old_ordinary")],
+                task_id="task-1",
+            )
+            # Retry write batch with same task_id: updated error + new ordinary attempt
+            await saver.aput_writes(
+                config,
+                [("__error__", "new_error"), ("ordinary", "new_ordinary")],
+                task_id="task-1",
+            )
+            tuple_ = await saver.aget_tuple(config)
+            assert tuple_ is not None
+            pending_writes = {
+                channel: value for _, channel, value in tuple_.pending_writes
+            }
+            # Special channel updated to new value
+            assert pending_writes["__error__"] == "new_error"
+            # Ordinary channel preserved original value (idempotent)
+            assert pending_writes["ordinary"] == "old_ordinary"

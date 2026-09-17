@@ -575,28 +575,35 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
             task_id: Identifier for the task creating the writes.
             task_path: Path of the task creating the writes.
         """
-        query = (
-            "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-            if all(w[0] in WRITES_IDX_MAP for w in writes)
-            else "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-        )
+        special_writes = []
+        ordinary_writes = []
+        for idx, (channel, value) in enumerate(writes):
+            params = (
+                str(config["configurable"]["thread_id"]),
+                str(config["configurable"]["checkpoint_ns"]),
+                str(config["configurable"]["checkpoint_id"]),
+                task_id,
+                WRITES_IDX_MAP.get(channel, idx),
+                channel,
+                *self.serde.dumps_typed(value),
+            )
+            if channel in WRITES_IDX_MAP:
+                special_writes.append(params)
+            else:
+                ordinary_writes.append(params)
+
         await self.setup()
         async with self.lock, self.conn.cursor() as cur:
-            await cur.executemany(
-                query,
-                [
-                    (
-                        str(config["configurable"]["thread_id"]),
-                        str(config["configurable"]["checkpoint_ns"]),
-                        str(config["configurable"]["checkpoint_id"]),
-                        task_id,
-                        WRITES_IDX_MAP.get(channel, idx),
-                        channel,
-                        *self.serde.dumps_typed(value),
-                    )
-                    for idx, (channel, value) in enumerate(writes)
-                ],
-            )
+            if special_writes:
+                await cur.executemany(
+                    "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    special_writes,
+                )
+            if ordinary_writes:
+                await cur.executemany(
+                    "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    ordinary_writes,
+                )
             await self.conn.commit()
 
     async def adelete_thread(self, thread_id: str) -> None:

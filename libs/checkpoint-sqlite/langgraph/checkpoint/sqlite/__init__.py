@@ -459,27 +459,34 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             task_id: Identifier for the task creating the writes.
             task_path: Path of the task creating the writes.
         """
-        query = (
-            "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-            if all(w[0] in WRITES_IDX_MAP for w in writes)
-            else "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-        )
-        with self.cursor() as cur:
-            cur.executemany(
-                query,
-                [
-                    (
-                        str(config["configurable"]["thread_id"]),
-                        str(config["configurable"]["checkpoint_ns"]),
-                        str(config["configurable"]["checkpoint_id"]),
-                        task_id,
-                        WRITES_IDX_MAP.get(channel, idx),
-                        channel,
-                        *self.serde.dumps_typed(value),
-                    )
-                    for idx, (channel, value) in enumerate(writes)
-                ],
+        special_writes = []
+        ordinary_writes = []
+        for idx, (channel, value) in enumerate(writes):
+            params = (
+                str(config["configurable"]["thread_id"]),
+                str(config["configurable"]["checkpoint_ns"]),
+                str(config["configurable"]["checkpoint_id"]),
+                task_id,
+                WRITES_IDX_MAP.get(channel, idx),
+                channel,
+                *self.serde.dumps_typed(value),
             )
+            if channel in WRITES_IDX_MAP:
+                special_writes.append(params)
+            else:
+                ordinary_writes.append(params)
+
+        with self.cursor() as cur:
+            if special_writes:
+                cur.executemany(
+                    "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    special_writes,
+                )
+            if ordinary_writes:
+                cur.executemany(
+                    "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    ordinary_writes,
+                )
 
     def delete_thread(self, thread_id: str) -> None:
         """Delete all checkpoints and writes associated with a thread ID.

@@ -307,3 +307,37 @@ class TestSqliteSaver:
             # Nested digit-starting key via dotted path
             results = list(saver.list(None, filter={"user.123abc": "ok2"}))
             assert len(results) == 1
+
+    def test_put_writes_mixed_batch_retry_replaces_special_channel(self) -> None:
+        """On retries with identical task_id, special channels (e.g. __error__)
+        must be replaced with new values even when mixed with ordinary channels,
+        while ordinary channel writes preserve idempotency (ignore duplicates).
+        """
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            config = saver.put(
+                {"configurable": {"thread_id": "thread-retry", "checkpoint_ns": ""}},
+                empty_checkpoint(),
+                {},
+                {},
+            )
+            # Initial write batch: special error write + ordinary channel write
+            saver.put_writes(
+                config,
+                [("__error__", "old_error"), ("ordinary", "old_ordinary")],
+                task_id="task-1",
+            )
+            # Retry write batch with same task_id: updated error + new ordinary attempt
+            saver.put_writes(
+                config,
+                [("__error__", "new_error"), ("ordinary", "new_ordinary")],
+                task_id="task-1",
+            )
+            tuple_ = saver.get_tuple(config)
+            assert tuple_ is not None
+            pending_writes = {
+                channel: value for _, channel, value in tuple_.pending_writes
+            }
+            # Special channel updated to new value
+            assert pending_writes["__error__"] == "new_error"
+            # Ordinary channel preserved original value (idempotent)
+            assert pending_writes["ordinary"] == "old_ordinary"
