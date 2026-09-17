@@ -605,15 +605,18 @@ class Interrupt(Generic[ResponseT]):
     id: str
     """The ID of the interrupt. Can be used to resume the interrupt directly."""
 
-    response_schema: dict[str, Any] | None = None
-    """JSON Schema for the value expected when resuming this interrupt, if the graph provided one."""
+    response_schema: type[ResponseT] | dict[str, Any] | None = None
+    """Schema for the value expected when resuming this interrupt, if the graph provided one.
+
+    A surfaced interrupt carries JSON Schema (a `dict`); `type[ResponseT]` records the
+    Python type at construction so `Interrupt[Decision]` is meaningful to type checkers."""
 
     def __init__(
         self,
         value: Any,
         id: str = _DEFAULT_INTERRUPT_ID,
         *,
-        response_schema: dict[str, Any] | None = None,
+        response_schema: type[ResponseT] | dict[str, Any] | None = None,
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         self.value = value
@@ -630,8 +633,12 @@ class Interrupt(Generic[ResponseT]):
 
     @classmethod
     def from_ns(
-        cls, value: Any, ns: str, *, response_schema: dict[str, Any] | None = None
-    ) -> Interrupt:
+        cls,
+        value: Any,
+        ns: str,
+        *,
+        response_schema: type[ResponseT] | dict[str, Any] | None = None,
+    ) -> Interrupt[ResponseT]:
         return cls(
             value=value,
             id=xxh3_128_hexdigest(ns.encode()),
