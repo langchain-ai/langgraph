@@ -208,3 +208,37 @@ def test_interrupt_response_schema_rejects_invalid_resume(
     assert graph.invoke(resume({"approved": False}), config) == {
         "answer": Decision(approved=False)
     }
+
+
+@pytest.mark.parametrize("resume_style", ["null", "id_map"])
+def test_interrupt_response_schema_invalid_resume_after_earlier_interrupt(
+    sync_checkpointer: BaseCheckpointSaver, resume_style: str
+) -> None:
+    class State(TypedDict):
+        answer: Any
+
+    def node(state: State) -> State:
+        first = interrupt("first")
+        second = interrupt("approve?", response_schema=Decision)
+        return {"answer": [first, second]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node", node)
+        .add_edge(START, "node")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = {"configurable": {"thread_id": "1"}}
+    graph.invoke({"answer": None}, config)
+    graph.invoke(Command(resume="ok"), config)
+    [pending] = graph.get_state(config).tasks[0].interrupts
+
+    def resume(value: dict[str, Any]) -> Command:
+        return Command(resume=value if resume_style == "null" else {pending.id: value})
+
+    with pytest.raises(ValidationError, match="approved"):
+        graph.invoke(resume({"approved": "nope"}), config)
+
+    assert graph.invoke(resume({"approved": True}), config) == {
+        "answer": ["ok", Decision(approved=True)]
+    }

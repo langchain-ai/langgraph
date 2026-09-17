@@ -1007,7 +1007,7 @@ def interrupt(
         if idx < len(scratchpad.resume):
             v = scratchpad.resume[idx]
             validated = adapter.validate_python(v) if adapter else v
-            conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
+            conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume[: idx + 1])])
             return validated
     # find current resume value
     v = scratchpad.get_null_resume(True)
