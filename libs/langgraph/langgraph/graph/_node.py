@@ -20,36 +20,41 @@ from langgraph.typing import ContextT, NodeInputT, NodeInputT_contra
 
 
 class _Node(Protocol[NodeInputT_contra]):
-    def __call__(self, state: NodeInputT_contra) -> Any: ...
+    def __call__(self, state: NodeInputT_contra, /) -> Any: ...
 
 
 class _NodeWithConfig(Protocol[NodeInputT_contra]):
-    def __call__(self, state: NodeInputT_contra, config: RunnableConfig) -> Any: ...
+    def __call__(self, state: NodeInputT_contra, /, config: RunnableConfig) -> Any: ...
 
 
 class _NodeWithWriter(Protocol[NodeInputT_contra]):
-    def __call__(self, state: NodeInputT_contra, *, writer: StreamWriter) -> Any: ...
+    def __call__(self, state: NodeInputT_contra, /, *, writer: StreamWriter) -> Any: ...
 
 
 class _NodeWithStore(Protocol[NodeInputT_contra]):
-    def __call__(self, state: NodeInputT_contra, *, store: BaseStore) -> Any: ...
+    def __call__(self, state: NodeInputT_contra, /, *, store: BaseStore) -> Any: ...
 
 
 class _NodeWithWriterStore(Protocol[NodeInputT_contra]):
     def __call__(
-        self, state: NodeInputT_contra, *, writer: StreamWriter, store: BaseStore
+        self, state: NodeInputT_contra, /, *, writer: StreamWriter, store: BaseStore
     ) -> Any: ...
 
 
 class _NodeWithConfigWriter(Protocol[NodeInputT_contra]):
     def __call__(
-        self, state: NodeInputT_contra, *, config: RunnableConfig, writer: StreamWriter
+        self,
+        state: NodeInputT_contra,
+        /,
+        *,
+        config: RunnableConfig,
+        writer: StreamWriter,
     ) -> Any: ...
 
 
 class _NodeWithConfigStore(Protocol[NodeInputT_contra]):
     def __call__(
-        self, state: NodeInputT_contra, *, config: RunnableConfig, store: BaseStore
+        self, state: NodeInputT_contra, /, *, config: RunnableConfig, store: BaseStore
     ) -> Any: ...
 
 
@@ -57,6 +62,7 @@ class _NodeWithConfigWriterStore(Protocol[NodeInputT_contra]):
     def __call__(
         self,
         state: NodeInputT_contra,
+        /,
         *,
         config: RunnableConfig,
         writer: StreamWriter,
@@ -66,7 +72,7 @@ class _NodeWithConfigWriterStore(Protocol[NodeInputT_contra]):
 
 class _NodeWithRuntime(Protocol[NodeInputT_contra, ContextT]):
     def __call__(
-        self, state: NodeInputT_contra, *, runtime: Runtime[ContextT]
+        self, state: NodeInputT_contra, /, *, runtime: Runtime[ContextT]
     ) -> Any: ...
 
 

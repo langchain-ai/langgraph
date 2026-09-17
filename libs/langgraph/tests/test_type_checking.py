@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 from operator import add
 from typing import Annotated, Any
@@ -159,3 +160,48 @@ def test_add_node_with_explicit_input_schema() -> None:
     # because it violates the principles of contravariance
     workflow.add_node("a_narrow", a, input_schema=ANarrow)  # type: ignore[arg-type]
     workflow.add_node("b_narrow", b, input_schema=BNarrow)  # type: ignore[arg-type]
+
+
+def test_node_first_parameter_name_is_not_significant() -> None:
+    """Nodes are called positionally, so the parameter name must not matter.
+
+    Every other case in this file happens to name it ``state``; before the node
+    protocols marked that parameter positional-only, any other name failed to
+    type-check while working perfectly at runtime.
+    """
+
+    class State(TypedDict):
+        info: Annotated[list[str], add]
+
+    def named_state(state: State) -> Any: ...
+
+    def named_data(data: State) -> Any: ...
+
+    def named_with_config(data: State, config: RunnableConfig) -> Any: ...
+
+    workflow = StateGraph(State)
+    workflow.add_node("named_state", named_state)
+    workflow.add_node("named_data", named_data)
+    workflow.add_node("named_with_config", named_with_config)
+
+
+def test_node_accepts_a_callable_typed_factory() -> None:
+    """A Callable alias must satisfy the node protocol.
+
+    ``Callable`` parameters are positional-only, so this only type-checks if the
+    protocol's parameter is positional-only too. Typing a node factory's return
+    value is the natural way to write one.
+    """
+
+    class State(TypedDict):
+        info: Annotated[list[str], add]
+
+    NodeFn = Callable[[State], Any]
+
+    def make_node() -> NodeFn:
+        def node(state: State) -> Any: ...
+
+        return node
+
+    workflow = StateGraph(State)
+    workflow.add_node("from_factory", make_node())
