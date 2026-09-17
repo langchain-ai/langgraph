@@ -98,7 +98,7 @@ RUN mkdir -p /api/langgraph_api /api/langgraph_runtime /api/langgraph_license &&
 touch /api/langgraph_api/__init__.py /api/langgraph_runtime/__init__.py /api/langgraph_license/__init__.py
 RUN PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir --no-deps -e /api
 # -- End of ensuring user deps didn't inadvertently overwrite langgraph-api --
-# -- Removing build deps from the final image ~<:===~~~ --"""
+# -- Removing build deps from the final image ~<:===~~~ --\nRUN rm -rf /api/benchmark"""
     ]
     if to_uninstall:
         for pack in to_uninstall:
@@ -1546,6 +1546,8 @@ def node_config_to_docker(
         f"WORKDIR {build_workdir}",
         "",
         build_step,
+        "",
+        "RUN rm -rf /api/benchmark",
     ]
 
     return os.linesep.join(docker_file_contents), {}
