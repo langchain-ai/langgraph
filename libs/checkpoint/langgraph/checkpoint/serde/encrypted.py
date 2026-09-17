@@ -9,10 +9,23 @@ class EncryptedSerializer(SerializerProtocol):
     """Serializer that encrypts and decrypts data using an encryption protocol."""
 
     def __init__(
-        self, cipher: CipherProtocol, serde: SerializerProtocol = JsonPlusSerializer()
+        self,
+        cipher: CipherProtocol,
+        serde: SerializerProtocol = JsonPlusSerializer(),
+        *,
+        allow_plaintext: bool = False,
     ) -> None:
         self.cipher = cipher
         self.serde = serde
+        # SECURITY: fail-closed by default. When False (the default), any
+        # stored row whose type tag lacks a cipher suffix (i.e. it was never
+        # encrypted) is rejected instead of silently passed through to the
+        # inner deserializer. This prevents an attacker with store-write
+        # access from substituting a forged plaintext row for a genuinely
+        # encrypted one. Only set this to True if you have a deliberate,
+        # understood need to read pre-existing unencrypted data (e.g. a
+        # one-time migration), since it reopens that bypass.
+        self.allow_plaintext = allow_plaintext
 
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
         """Serialize an object to a tuple `(type, bytes)` and encrypt the bytes."""
@@ -27,6 +40,17 @@ class EncryptedSerializer(SerializerProtocol):
         enc_cipher, ciphertext = data
         # unencrypted data
         if "+" not in enc_cipher:
+            if not self.allow_plaintext:
+                # Fail closed: never hand unauthenticated, unencrypted bytes
+                # to the inner deserializer unless explicitly allowed. Raise
+                # before any further processing of `ciphertext` occurs.
+                raise ValueError(
+                    "Refusing to load unencrypted checkpoint data: the stored "
+                    f"type tag {enc_cipher!r} has no cipher suffix, so this "
+                    "row was never encrypted (or was tampered with). Set "
+                    "allow_plaintext=True on EncryptedSerializer only if you "
+                    "intentionally need to read legacy unencrypted data."
+                )
             return self.serde.loads_typed(data)
         # extract cipher name
         typ, ciphername = enc_cipher.split("+", 1)
@@ -37,7 +61,11 @@ class EncryptedSerializer(SerializerProtocol):
 
     @classmethod
     def from_pycryptodome_aes(
-        cls, serde: SerializerProtocol = JsonPlusSerializer(), **kwargs: Any
+        cls,
+        serde: SerializerProtocol = JsonPlusSerializer(),
+        *,
+        allow_plaintext: bool = False,
+        **kwargs: Any,
     ) -> "EncryptedSerializer":
         """Create an `EncryptedSerializer` using AES encryption."""
         try:
@@ -77,4 +105,4 @@ class EncryptedSerializer(SerializerProtocol):
                 cipher = AES.new(key, **kwargs, nonce=nonce)
                 return cipher.decrypt_and_verify(actual_ciphertext, tag)
 
-        return cls(PycryptodomeAesCipher(), serde)
+        return cls(PycryptodomeAesCipher(), serde, allow_plaintext=allow_plaintext)

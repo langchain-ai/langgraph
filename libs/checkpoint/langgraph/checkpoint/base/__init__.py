@@ -734,7 +734,17 @@ def _with_msgpack_allowlist(
             updated_inner = inner.with_msgpack_allowlist(extra_allowlist)
             if updated_inner is inner:
                 return serde
-            return EncryptedSerializer(serde.cipher, updated_inner)
+            # Preserve allow_plaintext across reconstruction: dropping it
+            # here would silently reset the flag to its default, either
+            # reopening the plaintext-substitution bypass (if the default
+            # were permissive) or breaking legitimate legacy plaintext
+            # reads for callers who explicitly opted in (with the current
+            # fail-closed default).
+            return EncryptedSerializer(
+                serde.cipher,
+                updated_inner,
+                allow_plaintext=serde.allow_plaintext,
+            )
     logger.warning(
         "Serializer %s does not support msgpack allowlist. "
         "Strict msgpack deserialization will not be enforced.",

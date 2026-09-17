@@ -19,9 +19,16 @@ from typing import Literal, cast
 
 import ormsgpack
 import pytest
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 
-from langgraph.checkpoint.base import BaseCheckpointSaver, _with_msgpack_allowlist
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
+    CheckpointMetadata,
+    _with_msgpack_allowlist,
+    empty_checkpoint,
+)
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde import _msgpack as _lg_msgpack
 from langgraph.checkpoint.serde.base import CipherProtocol
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
@@ -404,22 +411,149 @@ class TestWithMsgpackAllowlistEncrypted:
 
 
 class TestEncryptedSerializerUnencryptedFallback:
-    """Test that EncryptedSerializer handles unencrypted data correctly."""
+    """Test how EncryptedSerializer handles unencrypted/plaintext data."""
 
-    def test_loads_unencrypted_data(self) -> None:
-        """EncryptedSerializer should handle unencrypted data for backwards compat."""
+    def test_loads_unencrypted_data_rejected_by_default(self) -> None:
+        """Fail-closed default: plaintext rows must be rejected, not passed through.
+
+        This replaces the old `test_loads_unencrypted_data`, which asserted
+        the vulnerable behavior (silent plaintext pass-through) as correct.
+        A stored row whose type tag has no cipher suffix is now treated as
+        untrusted/tampered data and rejected unless the caller has
+        explicitly opted in via `allow_plaintext=True`.
+        """
         plain = JsonPlusSerializer(allowed_msgpack_modules=None)
         encrypted = _make_encrypted_serde(allowed_msgpack_modules=None)
+        assert encrypted.allow_plaintext is False
 
         obj = {"key": "value", "number": 42}
-
-        # Serialize with plain serde
         dumped = plain.dumps_typed(obj)
         assert "+aes" not in dumped[0]
 
-        # Should still deserialize with encrypted serde
+        with pytest.raises(ValueError, match="Refusing to load unencrypted"):
+            encrypted.loads_typed(dumped)
+
+    def test_loads_unencrypted_data_allowed_when_opted_in(self) -> None:
+        """Plaintext pass-through only happens when allow_plaintext=True."""
+        plain = JsonPlusSerializer(allowed_msgpack_modules=None)
+        inner = JsonPlusSerializer(allowed_msgpack_modules=None)
+        encrypted = EncryptedSerializer.from_pycryptodome_aes(
+            serde=inner, key=b"1234567890123456", allow_plaintext=True
+        )
+        assert encrypted.allow_plaintext is True
+
+        obj = {"key": "value", "number": 42}
+        dumped = plain.dumps_typed(obj)
+        assert "+aes" not in dumped[0]
+
         result = encrypted.loads_typed(dumped)
         assert result == obj
+
+
+class TestEncryptedSerializerPlaintextSubstitutionAttack:
+    """Regression test for GH-8938: forged plaintext row substitution.
+
+    Uses the real `InMemorySaver.put()` / `get_tuple()` store-write path
+    (not a hand-built tuple) to write a genuinely encrypted checkpoint, then
+    splices a forged plaintext blob directly into the saver's internal
+    storage in place of the encrypted one -- mirroring exactly what an
+    attacker with store-write access (e.g. direct DB access) could do.
+    """
+
+    def _make_saver_and_config(
+        self, *, allow_plaintext: bool
+    ) -> tuple[InMemorySaver, RunnableConfig]:
+        inner = JsonPlusSerializer(allowed_msgpack_modules=None)
+        encrypted = EncryptedSerializer.from_pycryptodome_aes(
+            serde=inner, key=b"1234567890123456", allow_plaintext=allow_plaintext
+        )
+        saver = InMemorySaver(serde=encrypted)
+        config: RunnableConfig = {
+            "configurable": {"thread_id": "attack-thread", "checkpoint_ns": ""}
+        }
+        return saver, config
+
+    def _write_real_checkpoint(
+        self, saver: InMemorySaver, config: RunnableConfig
+    ) -> RunnableConfig:
+        checkpoint = empty_checkpoint()
+        checkpoint["channel_values"] = {"secret": "top-secret-value"}
+        checkpoint["channel_versions"] = {"secret": "1"}
+        metadata: CheckpointMetadata = {
+            "source": "input",
+            "step": 1,
+            "parents": {},
+        }
+        return saver.put(config, checkpoint, metadata, {"secret": "1"})
+
+    def _forge_plaintext_row(
+        self, saver: InMemorySaver, config: RunnableConfig
+    ) -> None:
+        """Splice a forged, never-encrypted channel-value blob into real storage.
+
+        InMemorySaver does not embed ``channel_values`` in the checkpoint row
+        itself: ``put()`` pops them out and stores each channel value as its
+        own row in ``self.blobs``, keyed by
+        ``(thread_id, checkpoint_ns, channel, version)``. ``get_tuple()``
+        rebuilds ``channel_values`` purely from those blob rows via
+        ``_load_blobs()``, using the ``channel_versions`` recorded on the
+        checkpoint row. So a realistic plaintext-substitution attack against a
+        specific channel value targets the blob row, not the checkpoint row.
+        """
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        version = "1"
+        blob_key = (thread_id, checkpoint_ns, "secret", version)
+
+        real_type, _real_bytes = saver.blobs[blob_key]
+        assert "+aes" in real_type, "sanity check: the real blob must be encrypted"
+
+        # Write it through the *plain* inner serializer -- no cipher suffix,
+        # exactly as an attacker with raw store-write access would craft it.
+        plain_type, plain_bytes = JsonPlusSerializer().dumps_typed(
+            "attacker-injected-value"
+        )
+        assert "+" not in plain_type
+
+        saver.blobs[blob_key] = (plain_type, plain_bytes)
+
+    def test_forged_plaintext_row_rejected_by_default(self) -> None:
+        """By default, a substituted plaintext row must be rejected, not read."""
+        saver, config = self._make_saver_and_config(allow_plaintext=False)
+        written_config = self._write_real_checkpoint(saver, config)
+        self._forge_plaintext_row(saver, written_config)
+
+        with pytest.raises(ValueError, match="Refusing to load unencrypted"):
+            saver.get_tuple(written_config)
+
+    def test_forged_plaintext_row_accepted_only_when_opted_in(self) -> None:
+        """With allow_plaintext=True, the forged row is read (documented opt-in)."""
+        saver, config = self._make_saver_and_config(allow_plaintext=True)
+        written_config = self._write_real_checkpoint(saver, config)
+        self._forge_plaintext_row(saver, written_config)
+
+        result = saver.get_tuple(written_config)
+        assert result is not None
+        assert (
+            result.checkpoint["channel_values"]["secret"] == "attacker-injected-value"
+        )
+
+    def test_with_allowlist_preserves_allow_plaintext_true(self) -> None:
+        """with_allowlist()/_with_msgpack_allowlist must preserve allow_plaintext=True."""
+        saver, _config = self._make_saver_and_config(allow_plaintext=True)
+        updated = saver.with_allowlist([("tests.test_encrypted", "MyPydantic")])
+
+        assert isinstance(updated.serde, EncryptedSerializer)
+        assert updated.serde.allow_plaintext is True
+
+    def test_with_allowlist_preserves_allow_plaintext_false(self) -> None:
+        """with_allowlist()/_with_msgpack_allowlist must not silently flip the
+        fail-closed default to permissive."""
+        saver, _config = self._make_saver_and_config(allow_plaintext=False)
+        updated = saver.with_allowlist([("tests.test_encrypted", "MyPydantic")])
+
+        assert isinstance(updated.serde, EncryptedSerializer)
+        assert updated.serde.allow_plaintext is False
 
 
 def test_with_allowlist_uses_copy_protocol() -> None:
