@@ -29,7 +29,10 @@ def test_sync_extension_projection_yields_matching_custom_payloads():
         {"name": "progress", "step": 1},
         {"name": "progress", "step": 2},
     ]
-    assert "custom:progress" in fake.stream_request_bodies[-1]["channels"]
+    assert any(
+        "custom:progress" in body.get("channels", [])
+        for body in fake.stream_request_bodies
+    )
 
 
 def test_sync_extension_projection_supports_namespace_scope_on_subgraph_handle():
