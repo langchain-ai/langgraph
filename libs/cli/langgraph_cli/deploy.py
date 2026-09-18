@@ -12,6 +12,7 @@ from collections.abc import Callable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import Protocol
 
 import click
 import click.exceptions
@@ -1265,6 +1266,190 @@ def _run_remote_build(
 
 
 # ---------------------------------------------------------------------------
+# Deployment sources
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class DeployContext:
+    client: HostBackendClient
+    spec: BuildSpec
+    verbose: bool
+    name: str | None
+    deployment_id: str | None
+    deployment_type: str
+    secrets: list[dict[str, str]]
+    tracked_packages: list[str] | None
+
+
+@dataclass(frozen=True, slots=True)
+class DeployOutcome:
+    deployment_id: str
+    build_result: BuildResult
+
+
+class DeploymentSource(Protocol):
+    def run(self, ctx: DeployContext) -> DeployOutcome: ...
+
+
+def _resolve_or_create(
+    ctx: DeployContext, *, source: str, not_found_message: str
+) -> tuple[str, int]:
+    deployment_id, needs_creation, step = _resolve_deployment(
+        ctx.client,
+        1,
+        ctx.deployment_id,
+        ctx.name,
+        not_found_message=not_found_message,
+    )
+    if needs_creation:
+        deployment_id, step = _create_deployment(
+            ctx.client,
+            step,
+            name=ctx.name,
+            source=source,
+            source_config={"deployment_type": ctx.deployment_type},
+            source_revision_config={},
+            secrets=ctx.secrets,
+        )
+    if not deployment_id:
+        raise click.ClickException("Failed to determine deployment ID")
+    return deployment_id, step
+
+
+def _ensure_external_docker(client: HostBackendClient, deployment_id: str) -> None:
+    existing = _call_host_backend_with_optional_tenant(
+        client, lambda c: c.get_deployment(deployment_id)
+    )
+    existing_source = existing.get("source") if isinstance(existing, dict) else None
+    if existing_source and existing_source != "external_docker":
+        raise click.UsageError(
+            f"Deployment {deployment_id} uses a different build mode and "
+            f"cannot be updated with --image-uri. To use --image-uri, omit "
+            f"--deployment-id to create a new deployment, or remove "
+            f"--image-uri to continue using the current build mode."
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class InternalDockerSource:
+    prebuilt_image: str | None
+    image_name: str | None
+    tag: str
+
+    def run(self, ctx: DeployContext) -> DeployOutcome:
+        deployment_id, step = _resolve_or_create(
+            ctx,
+            source="internal_docker",
+            not_found_message="No deployment found. Will create after build.",
+        )
+        build_result = _run_local_build(
+            client=ctx.client,
+            deployment_id=deployment_id,
+            step=step,
+            spec=ctx.spec,
+            verbose=ctx.verbose,
+            image_name=self.image_name,
+            prebuilt_image=self.prebuilt_image,
+            name=ctx.name,
+            tag=self.tag,
+            secrets=ctx.secrets,
+            tracked_packages=ctx.tracked_packages,
+        )
+        return DeployOutcome(deployment_id, build_result)
+
+
+@dataclass(frozen=True, slots=True)
+class InternalSourceUpload:
+    def run(self, ctx: DeployContext) -> DeployOutcome:
+        deployment_id, step = _resolve_or_create(
+            ctx,
+            source="internal_source",
+            not_found_message="No deployment found. Will create.",
+        )
+        build_result = _run_remote_build(
+            client=ctx.client,
+            deployment_id=deployment_id,
+            step=step,
+            spec=ctx.spec,
+            verbose=ctx.verbose,
+            secrets=ctx.secrets,
+            tracked_packages=ctx.tracked_packages,
+        )
+        return DeployOutcome(deployment_id, build_result)
+
+
+@dataclass(frozen=True, slots=True)
+class ExternalDockerSource:
+    image_uri: str
+
+    def run(self, ctx: DeployContext) -> DeployOutcome:
+        deployment_id, needs_creation, step = _resolve_deployment(
+            ctx.client,
+            1,
+            ctx.deployment_id,
+            ctx.name,
+            not_found_message="No deployment found. Will create.",
+        )
+        if needs_creation:
+            deployment_id, step = _create_deployment(
+                ctx.client,
+                step,
+                name=ctx.name,
+                source="external_docker",
+                source_config={"deployment_type": ctx.deployment_type},
+                source_revision_config={},
+                secrets=ctx.secrets,
+            )
+        if not deployment_id:
+            raise click.ClickException("Failed to determine deployment ID")
+        if not needs_creation:
+            _ensure_external_docker(ctx.client, deployment_id)
+        build_result = _run_external_deploy(
+            client=ctx.client,
+            deployment_id=deployment_id,
+            step=step,
+            spec=ctx.spec,
+            image_uri=self.image_uri,
+            verbose=ctx.verbose,
+            secrets=ctx.secrets,
+            tracked_packages=ctx.tracked_packages,
+        )
+        return DeployOutcome(deployment_id, build_result)
+
+
+def _select_source(
+    *,
+    image_uri: str | None,
+    image: str | None,
+    image_name: str | None,
+    tag: str,
+    remote_build_flag: bool | None,
+) -> DeploymentSource:
+    if image_uri is not None:
+        if remote_build_flag is True:
+            raise click.UsageError("--image-uri cannot be combined with --remote.")
+        if image:
+            raise click.UsageError("--image-uri cannot be combined with --image.")
+        return ExternalDockerSource(image_uri=image_uri)
+    if image and remote_build_flag is True:
+        raise click.UsageError("--image cannot be combined with --remote builds.")
+    use_remote_build, local_build_error = _resolve_build_mode(
+        remote_build_flag, force_local=image is not None
+    )
+    if not use_remote_build:
+        return InternalDockerSource(
+            prebuilt_image=image, image_name=image_name, tag=tag
+        )
+    if remote_build_flag is None and local_build_error:
+        em = _get_emitter()
+        em.note(f"{local_build_error}\nUsing remote build instead.")
+        if not em.json_mode:
+            click.echo()
+    return InternalSourceUpload()
+
+
+# ---------------------------------------------------------------------------
 # Host backend client factory
 # ---------------------------------------------------------------------------
 
@@ -1685,133 +1870,44 @@ def _deploy_cmd(
 
     secrets = _secrets_from_env(_env_without_deployment_name(env_vars))
 
-    if image_uri and remote_build_flag is True:
-        raise click.UsageError("--image-uri cannot be combined with --remote.")
-    if image_uri and image:
-        raise click.UsageError("--image-uri cannot be combined with --image.")
-
-    use_external_docker = image_uri is not None
-
-    if use_external_docker:
-        use_remote_build = False
-    else:
-        if image and remote_build_flag is True:
-            raise click.UsageError("--image cannot be combined with --remote builds.")
-        use_remote_build, local_build_error = _resolve_build_mode(
-            remote_build_flag, force_local=image is not None
-        )
-        if use_remote_build and remote_build_flag is None and local_build_error:
-            em.note(f"{local_build_error}\nUsing remote build instead.")
-            if not json_output:
-                click.echo()
-
-    # -- 2. Resolve / create deployment --
-    client = _create_host_backend_client(host_url, api_key, env_vars=env_vars)
-    step = 1
-
-    deployment_id, needs_creation, step = _resolve_deployment(
-        client,
-        step,
-        deployment_id,
-        name,
-        not_found_message=(
-            "No deployment found. Will create."
-            if (use_remote_build or use_external_docker)
-            else "No deployment found. Will create after build."
-        ),
+    source = _select_source(
+        image_uri=image_uri,
+        image=image,
+        image_name=image_name,
+        tag=tag,
+        remote_build_flag=remote_build_flag,
     )
 
-    if needs_creation:
-        if use_external_docker:
-            source = "external_docker"
-        elif use_remote_build:
-            source = "internal_source"
-        else:
-            source = "internal_docker"
-        deployment_id, step = _create_deployment(
-            client,
-            step,
-            name=name,
-            source=source,
-            source_config={"deployment_type": deployment_type},
-            source_revision_config={},
-            secrets=secrets,
-        )
-
-    if not deployment_id:
-        raise click.ClickException("Failed to determine deployment ID")
-
-    # Validate that an existing deployment is compatible with --image-uri.
-    # update_deployment_external sends an external_docker revision; applying
-    # it to a deployment created with a different source mode may be rejected
-    # by the backend or silently produce an inconsistent revision.
-    if use_external_docker and not needs_creation:
-        existing = _call_host_backend_with_optional_tenant(
-            client, lambda c: c.get_deployment(deployment_id)
-        )
-        existing_source = existing.get("source") if isinstance(existing, dict) else None
-        if existing_source and existing_source != "external_docker":
-            raise click.UsageError(
-                f"Deployment {deployment_id} uses a different build mode and "
-                f"cannot be updated with --image-uri. To use --image-uri, omit "
-                f"--deployment-id to create a new deployment, or remove "
-                f"--image-uri to continue using the current build mode."
-            )
-
-    # Scan local sources for tracked packages so the new revision carries
-    # the same metadata GitHub-backed deploys produce. Failures must never
-    # block a deploy.
+    client = _create_host_backend_client(host_url, api_key, env_vars=env_vars)
     try:
         tracked_packages = find_tracked_packages(config, config_json) or None
     except Exception as exc:
         em.warn(f"Skipped tracked-package scan: {exc}")
         tracked_packages = None
 
-    spec = BuildSpec(
-        config=config,
-        config_json=config_json,
-        base_image=base_image,
-        api_version=api_version,
-        pull=pull,
-        docker_build_args=docker_build_args,
-        install_command=install_command,
-        build_command=build_command,
-    )
-    if use_external_docker:
-        build_result = _run_external_deploy(
+    outcome = source.run(
+        DeployContext(
             client=client,
-            deployment_id=deployment_id,
-            step=step,
-            spec=spec,
-            image_uri=image_uri,
+            spec=BuildSpec(
+                config=config,
+                config_json=config_json,
+                base_image=base_image,
+                api_version=api_version,
+                pull=pull,
+                docker_build_args=docker_build_args,
+                install_command=install_command,
+                build_command=build_command,
+            ),
             verbose=verbose,
-            secrets=secrets,
-            tracked_packages=tracked_packages,
-        )
-    elif use_remote_build:
-        build_result = _run_remote_build(
-            client=client,
-            deployment_id=deployment_id,
-            step=step,
-            spec=spec,
-            verbose=verbose,
-            secrets=secrets,
-            tracked_packages=tracked_packages,
-        )
-    else:
-        build_result = _run_local_build(
-            client=client,
-            deployment_id=deployment_id,
-            step=step,
-            spec=spec,
-            verbose=verbose,
-            image_name=image_name,
-            prebuilt_image=image,
             name=name,
-            tag=tag,
+            deployment_id=deployment_id,
+            deployment_type=deployment_type,
             secrets=secrets,
             tracked_packages=tracked_packages,
         )
+    )
+    deployment_id = outcome.deployment_id
+    build_result = outcome.build_result
 
     # -- 4. Shared wait + result --
     dep_status_url = _emit_deployment_status_url(

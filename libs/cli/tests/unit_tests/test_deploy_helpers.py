@@ -14,6 +14,9 @@ import pytest
 import langgraph_cli.deploy as deploy_mod
 from langgraph_cli.deploy import (
     DockerBuildCommand,
+    ExternalDockerSource,
+    InternalDockerSource,
+    InternalSourceUpload,
     _call_host_backend_with_optional_tenant,
     _create_host_backend_client,
     _docker_config_for_token,
@@ -22,6 +25,7 @@ from langgraph_cli.deploy import (
     _parse_env_from_config,
     _resolve_env_path,
     _resolve_pushed_image_digest,
+    _select_source,
     _validate_prebuilt_image,
     normalize_image_tag,
     normalize_name,
@@ -596,6 +600,102 @@ class TestDockerBuildCommand:
     )
     def test_for_host_targets_the_deployment_platform(self, machine, verbose, expected):
         assert DockerBuildCommand.for_host(machine, verbose=verbose) == expected
+
+
+class TestSelectSource:
+    @pytest.mark.parametrize(
+        ("flags", "docker_available", "expected"),
+        [
+            pytest.param(
+                {"image_uri": "registry.example.com/app"},
+                True,
+                ExternalDockerSource(image_uri="registry.example.com/app"),
+                id="image_uri_selects_the_external_source",
+            ),
+            pytest.param(
+                {"remote_build_flag": True},
+                True,
+                InternalSourceUpload(),
+                id="remote_flag_selects_the_source_upload",
+            ),
+            pytest.param(
+                {},
+                False,
+                InternalSourceUpload(),
+                id="no_local_docker_falls_back_to_the_source_upload",
+            ),
+            pytest.param(
+                {},
+                True,
+                InternalDockerSource(
+                    prebuilt_image=None, image_name=None, tag="latest"
+                ),
+                id="local_docker_selects_the_internal_docker_source",
+            ),
+            pytest.param(
+                {"image": "app:dev", "tag": "v1"},
+                False,
+                InternalDockerSource(
+                    prebuilt_image="app:dev", image_name=None, tag="v1"
+                ),
+                id="prebuilt_image_forces_the_internal_docker_source",
+            ),
+        ],
+    )
+    def test_flags_select_one_source(
+        self, monkeypatch, mocker, flags, docker_available, expected
+    ):
+        mocker.patch(
+            "langgraph_cli.deploy._get_emitter", return_value=mocker.MagicMock()
+        )
+        monkeypatch.setattr(
+            deploy_mod,
+            "can_build_locally",
+            lambda: (True, None) if docker_available else (False, "Docker is required"),
+        )
+        options = {
+            "image_uri": None,
+            "image": None,
+            "image_name": None,
+            "tag": "latest",
+            "remote_build_flag": None,
+            **flags,
+        }
+
+        assert _select_source(**options) == expected
+
+    @pytest.mark.parametrize(
+        ("flags", "message"),
+        [
+            pytest.param(
+                {"image_uri": "registry.example.com/app", "remote_build_flag": True},
+                "--image-uri cannot be combined with --remote.",
+                id="image_uri_with_remote",
+            ),
+            pytest.param(
+                {"image_uri": "registry.example.com/app", "image": "app:dev"},
+                "--image-uri cannot be combined with --image.",
+                id="image_uri_with_image",
+            ),
+            pytest.param(
+                {"image": "app:dev", "remote_build_flag": True},
+                "--image cannot be combined with --remote builds.",
+                id="image_with_remote",
+            ),
+        ],
+    )
+    def test_conflicting_flags_are_rejected(self, flags, message):
+        options = {
+            "image_uri": None,
+            "image": None,
+            "image_name": None,
+            "tag": "latest",
+            "remote_build_flag": None,
+            **flags,
+        }
+
+        with pytest.raises(click.UsageError, match=message):
+            _select_source(**options)
 
 
 class TestResolvePushedImageDigest:
