@@ -2566,8 +2566,16 @@ class Pregel(
             output_keys = self.stream_channels_asis
         else:
             validate_keys(output_keys, self.channels)
-        interrupt_before = interrupt_before or self.interrupt_before_nodes
-        interrupt_after = interrupt_after or self.interrupt_after_nodes
+        interrupt_before = (
+            interrupt_before
+            if interrupt_before is not None
+            else self.interrupt_before_nodes
+        )
+        interrupt_after = (
+            interrupt_after
+            if interrupt_after is not None
+            else self.interrupt_after_nodes
+        )
         if isinstance(stream_mode, str):
             stream_modes = {stream_mode}
         else:

@@ -1254,8 +1254,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             )
 
         # assign default values
-        interrupt_before = interrupt_before or []
-        interrupt_after = interrupt_after or []
+        interrupt_before = interrupt_before if interrupt_before is not None else []
+        interrupt_after = interrupt_after if interrupt_after is not None else []
 
         # validate the graph
         self.validate(

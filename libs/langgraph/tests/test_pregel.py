@@ -9666,3 +9666,31 @@ async def test_delta_channel_async_write_ordering() -> None:
 
     state = await graph.aget_state(config)
     assert len(state.values["messages"]) == 6  # 3 human + 3 AI
+
+
+def test_interrupt_before_empty_list() -> None:
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.graph import END, START, StateGraph
+    from typing_extensions import TypedDict
+
+    class State(TypedDict):
+        count: int
+
+    def increment(state: State) -> State:
+        return {"count": state["count"] + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("increment", increment)
+    builder.add_edge(START, "increment")
+    builder.add_edge("increment", END)
+    graph = builder.compile(
+        checkpointer=InMemorySaver(),
+        interrupt_before=["increment"],
+    )
+
+    sync_before = graph.invoke(
+        {"count": 0},
+        {"configurable": {"thread_id": "sync-before"}},
+        interrupt_before=[],
+    )
+    assert sync_before["count"] == 1
