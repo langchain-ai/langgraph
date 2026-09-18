@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 import click
@@ -18,6 +18,7 @@ CLOUD_DASHBOARD_HOST = "smith.langchain.com"
 CONTROL_PLANE_PATH = "/api-host"
 LANGSMITH_API_PATHS = ("/api/v1", "/api")
 LOCAL_HOSTNAMES = ("localhost", "127.0.0.1")
+SourceName = Literal["internal_docker", "internal_source", "external_docker"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,7 +157,7 @@ class HostBackendClient:
         self,
         *,
         name: str,
-        source: str,
+        source: SourceName,
         source_config: dict[str, object],
         source_revision_config: dict[str, object],
         secrets: list[dict[str, str]] | None = None,
@@ -202,7 +203,7 @@ class HostBackendClient:
         deployment_id: str,
         image_uri: str,
         *,
-        revision_source: str | None,
+        revision_source: SourceName | None,
         secrets: list[dict[str, str]] | None = None,
         tracked_packages: list[str] | None = None,
     ) -> dict[str, Any]:

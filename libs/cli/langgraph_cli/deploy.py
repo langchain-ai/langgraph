@@ -12,7 +12,6 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from enum import Enum
 from typing import Protocol, TypeVar
 
 import click
@@ -30,6 +29,7 @@ from langgraph_cli.host_backend import (
     ControlPlaneEndpoints,
     HostBackendClient,
     HostBackendError,
+    SourceName,
 )
 from langgraph_cli.image_reference import ImageReference
 from langgraph_cli.progress import Progress
@@ -109,11 +109,7 @@ _HYBRID_LISTENER_GUIDANCE = (
     "then re-run with --deployment-id <id>."
 )
 
-
-class SourceId(str, Enum):
-    INTERNAL_DOCKER = "internal_docker"
-    INTERNAL_SOURCE = "internal_source"
-    EXTERNAL_DOCKER = "external_docker"
+_CUSTOMER_REGISTRY_SOURCE: SourceName = "external_docker"
 
 
 _TERMINAL_STATUSES = frozenset(
@@ -1167,7 +1163,7 @@ def _run_local_build(
         updated = client.update_deployment(
             deployment_id,
             resolved_image,
-            revision_source=SourceId.INTERNAL_DOCKER,
+            revision_source="internal_docker",
             secrets=secrets,
             tracked_packages=tracked_packages,
         )
@@ -1301,7 +1297,7 @@ class DeploymentSource(Protocol):
 
 
 def _resolve_or_create(
-    ctx: DeployContext, *, source: SourceId, not_found_message: str
+    ctx: DeployContext, *, source: SourceName, not_found_message: str
 ) -> tuple[str, int]:
     if isinstance(ctx.selector, ById):
         existing, step = _fetch_deployment(ctx.client, 1, ctx.selector)
@@ -1324,7 +1320,7 @@ def _resolve_or_create(
 
 
 def _ensure_customer_registry_source(existing: ExistingDeployment) -> None:
-    if existing.source != SourceId.EXTERNAL_DOCKER:
+    if existing.source != _CUSTOMER_REGISTRY_SOURCE:
         raise click.UsageError(
             f"Deployment {existing.id} was not created from an external image "
             "and cannot be updated with --push-to. Run without --push-to to keep "
@@ -1342,7 +1338,7 @@ class ManagedRegistrySource:
     def run(self, ctx: DeployContext) -> DeployOutcome:
         deployment_id, step = _resolve_or_create(
             ctx,
-            source=SourceId.INTERNAL_DOCKER,
+            source="internal_docker",
             not_found_message="No deployment found. Will create after build.",
         )
         build_result = _run_local_build(
@@ -1366,7 +1362,7 @@ class RemoteBuildSource:
     def run(self, ctx: DeployContext) -> DeployOutcome:
         deployment_id, step = _resolve_or_create(
             ctx,
-            source=SourceId.INTERNAL_SOURCE,
+            source="internal_source",
             not_found_message="No deployment found. Will create.",
         )
         build_result = _run_remote_build(
@@ -1424,7 +1420,7 @@ class CustomerRegistrySource:
                 ctx.client,
                 step,
                 name=name,
-                source=SourceId.EXTERNAL_DOCKER,
+                source=_CUSTOMER_REGISTRY_SOURCE,
                 source_config={"resource_spec": _OPERATOR_DEFAULT_RESOURCE_SPEC},
                 source_revision_config={"image_uri": image_uri},
                 secrets=ctx.secrets,
