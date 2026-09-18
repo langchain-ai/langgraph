@@ -9599,6 +9599,62 @@ async def test_delta_channel_durability_exit_stores_snapshot() -> None:
     assert [m.content for m in state.values["messages"]] == ["hello", "reply"]
 
 
+def test_empty_interrupt_before_overrides_compile_setting(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        count: int
+
+    def increment(state: State) -> State:
+        return {"count": state["count"] + 1}
+
+    graph = (
+        StateGraph(State)
+        .add_node("increment", increment)
+        .add_edge(START, "increment")
+        .add_edge("increment", END)
+        .compile(
+            checkpointer=sync_checkpointer,
+            interrupt_before=["increment"],
+        )
+    )
+    default_config = {"configurable": {"thread_id": "empty-interrupt-before"}}
+    override_config = {"configurable": {"thread_id": "empty-interrupt-before-override"}}
+
+    assert graph.invoke({"count": 0}, default_config) == {"count": 0}
+    assert graph.invoke({"count": 0}, override_config, interrupt_before=[]) == {
+        "count": 1
+    }
+
+
+def test_empty_interrupt_after_overrides_compile_setting(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        count: int
+
+    def increment(state: State) -> State:
+        return {"count": state["count"] + 1}
+
+    graph = (
+        StateGraph(State)
+        .add_node("increment", increment)
+        .add_edge(START, "increment")
+        .add_edge("increment", END)
+        .compile(
+            checkpointer=sync_checkpointer,
+            interrupt_after=["increment"],
+        )
+    )
+    default_config = {"configurable": {"thread_id": "empty-interrupt-after"}}
+    override_config = {"configurable": {"thread_id": "empty-interrupt-after-override"}}
+
+    assert graph.invoke({"count": 0}, default_config) == {"count": 1}
+    assert graph.invoke({"count": 0}, override_config, interrupt_after=[]) == {
+        "count": 1
+    }
+
+
 async def test_delta_channel_async_write_ordering() -> None:
     """In async mode, DeltaChannel write futures are awaited before the checkpoint
     is committed, so aput_writes always precedes aput for delta-channel

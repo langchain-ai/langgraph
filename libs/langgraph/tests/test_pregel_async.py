@@ -9681,6 +9681,66 @@ async def test_graph_error_handler_does_not_swallow_interrupt_concurrent() -> No
     )
 
 
+async def test_empty_interrupt_before_overrides_compile_setting_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        count: int
+
+    async def increment(state: State) -> State:
+        return {"count": state["count"] + 1}
+
+    graph = (
+        StateGraph(State)
+        .add_node("increment", increment)
+        .add_edge(START, "increment")
+        .add_edge("increment", END)
+        .compile(
+            checkpointer=async_checkpointer,
+            interrupt_before=["increment"],
+        )
+    )
+    default_config = {"configurable": {"thread_id": "empty-interrupt-before-async"}}
+    override_config = {
+        "configurable": {"thread_id": "empty-interrupt-before-override-async"}
+    }
+
+    assert await graph.ainvoke({"count": 0}, default_config) == {"count": 0}
+    assert await graph.ainvoke({"count": 0}, override_config, interrupt_before=[]) == {
+        "count": 1
+    }
+
+
+async def test_empty_interrupt_after_overrides_compile_setting_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        count: int
+
+    async def increment(state: State) -> State:
+        return {"count": state["count"] + 1}
+
+    graph = (
+        StateGraph(State)
+        .add_node("increment", increment)
+        .add_edge(START, "increment")
+        .add_edge("increment", END)
+        .compile(
+            checkpointer=async_checkpointer,
+            interrupt_after=["increment"],
+        )
+    )
+    default_config = {"configurable": {"thread_id": "empty-interrupt-after-async"}}
+    override_config = {
+        "configurable": {"thread_id": "empty-interrupt-after-override-async"}
+    }
+
+    assert await graph.ainvoke({"count": 0}, default_config) == {"count": 1}
+    assert await graph.ainvoke({"count": 0}, override_config, interrupt_after=[]) == {
+        "count": 1
+    }
+
+
 async def test_node_error_handler_handles_subgraph_internal_failure_async() -> None:
     class SubState(TypedDict):
         foo: str
