@@ -543,47 +543,53 @@ class TestCreateHostBackendClientNoInput:
         assert client is not None
 
 
-@pytest.mark.parametrize(
-    "endpoint,host,expected",
-    [
-        (None, None, "https://api.host.langchain.com"),
-        ("https://api.smith.langchain.com/", None, "https://api.host.langchain.com"),
-        ("https://api.langchain.com", None, "https://api.host.langchain.com"),
-        (
-            "https://eu.api.smith.langchain.com",
-            None,
-            "https://eu.api.host.langchain.com",
-        ),
-        (
-            "https://smith.example.com/api/v1",
-            None,
-            "https://smith.example.com/api-host",
-        ),
-        (
-            "https://smith.example.com",
-            "https://api.host.langchain.com",
-            "https://api.host.langchain.com",
-        ),
-        (
-            "https://smith.example.com",
-            "https://custom.host.com",
-            "https://custom.host.com",
-        ),
-    ],
-)
-@pytest.mark.parametrize("from_env", [True, False])
-def test_endpoint_fallback(monkeypatch, endpoint, host, expected, from_env):
-    monkeypatch.delenv("LANGSMITH_ENDPOINT", raising=False)
-    env_vars = {}
-    if endpoint:
-        if from_env:
-            monkeypatch.setenv("LANGSMITH_ENDPOINT", endpoint)
-        else:
-            env_vars["LANGSMITH_ENDPOINT"] = endpoint
-    client = _create_host_backend_client(
-        host_url=host, api_key="key", env_vars=env_vars
-    )
-    assert client.base_url == expected
+class TestCreateHostBackendClientEndpointFallback:
+    def test_langsmith_endpoint_env_var_used_as_fallback(self, monkeypatch):
+        monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test")
+        monkeypatch.setenv("LANGSMITH_ENDPOINT", "https://smith.example.com/api/v1")
+        monkeypatch.delenv("LANGGRAPH_HOST_URL", raising=False)
+        client = _create_host_backend_client(host_url=None, api_key=None, env_vars={})
+        assert client.base_url == "https://smith.example.com/api-host"
+
+    def test_langsmith_endpoint_from_env_vars_dict(self, monkeypatch):
+        monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test")
+        monkeypatch.delenv("LANGSMITH_ENDPOINT", raising=False)
+        client = _create_host_backend_client(
+            host_url=None,
+            api_key=None,
+            env_vars={"LANGSMITH_ENDPOINT": "https://smith.example.com/api/v1"},
+        )
+        assert client.base_url == "https://smith.example.com/api-host"
+
+    def test_cloud_langsmith_endpoint_not_used_as_self_hosted(self, monkeypatch):
+        monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test")
+        monkeypatch.setenv("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com")
+        client = _create_host_backend_client(host_url=None, api_key=None, env_vars={})
+        assert client.base_url == "https://api.host.langchain.com"
+
+    def test_langchain_api_endpoint_not_used_as_self_hosted(self, monkeypatch):
+        monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test")
+        monkeypatch.setenv("LANGSMITH_ENDPOINT", "https://api.langchain.com")
+        client = _create_host_backend_client(host_url=None, api_key=None, env_vars={})
+        assert client.base_url == "https://api.host.langchain.com"
+
+    def test_explicit_host_url_takes_precedence_over_langsmith_endpoint(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test")
+        monkeypatch.setenv("LANGSMITH_ENDPOINT", "https://smith.example.com/api/v1")
+        client = _create_host_backend_client(
+            host_url="https://custom.host.com",
+            api_key=None,
+            env_vars={},
+        )
+        assert client.base_url == "https://custom.host.com"
+
+    def test_no_endpoint_falls_back_to_cloud_default(self, monkeypatch):
+        monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test")
+        monkeypatch.delenv("LANGSMITH_ENDPOINT", raising=False)
+        client = _create_host_backend_client(host_url=None, api_key=None, env_vars={})
+        assert client.base_url == "https://api.host.langchain.com"
 
 
 class TestSmithDashboardBaseUrl:
@@ -641,16 +647,23 @@ class TestSmithDashboardBaseUrl:
             == "https://smith.langchain.com"
         )
 
-    @pytest.mark.parametrize(
-        "url,expected",
-        [
-            ("https://smith.example.com/api-host", "https://smith.example.com"),
-            ("https://smith.example.com/api-host/", "https://smith.example.com"),
-            ("http://localhost:8080/api-host", "http://localhost:8080"),
-        ],
-    )
-    def test_self_hosted(self, url, expected):
-        assert _smith_dashboard_base_url(url) == expected
+    def test_self_hosted_api_host_suffix(self):
+        assert (
+            _smith_dashboard_base_url("https://smith.example.com/api-host")
+            == "https://smith.example.com"
+        )
+
+    def test_self_hosted_api_host_trailing_slash(self):
+        assert (
+            _smith_dashboard_base_url("https://smith.example.com/api-host/")
+            == "https://smith.example.com"
+        )
+
+    def test_self_hosted_localhost_api_host(self):
+        assert (
+            _smith_dashboard_base_url("http://localhost:8080/api-host")
+            == "http://localhost:8080"
+        )
 
 
 class TestResolvePushedImageDigest:

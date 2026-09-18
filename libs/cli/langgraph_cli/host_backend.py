@@ -81,8 +81,6 @@ class HostBackendClient:
         source: str,
         config_path: str | None = None,
         secrets: list[dict[str, str]] | None = None,
-        image_uri: str | None = None,
-        tracked_packages: list[str] | None = None,
     ) -> dict[str, Any]:
         """Create a deployment."""
         payload: dict[str, Any] = {
@@ -91,11 +89,6 @@ class HostBackendClient:
             "source_config": {"deployment_type": deployment_type},
             "source_revision_config": {},
         }
-        if source == "external_docker":
-            payload["source_config"] = {}
-            payload["source_revision_config"] = {"image_uri": image_uri}
-        if tracked_packages:
-            payload["tracked_packages"] = tracked_packages
         if source == "internal_source" and config_path:
             payload["source_revision_config"]["langgraph_config_path"] = config_path
         if secrets is not None:
