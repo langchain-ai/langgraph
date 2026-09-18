@@ -1147,6 +1147,7 @@ class Pregel(
         config: RunnableConfig,
         saved: CheckpointTuple | None,
         recurse: BaseCheckpointSaver | None = None,
+        saver: BaseCheckpointSaver | None = None,
         apply_pending_writes: bool = False,
     ) -> StateSnapshot:
         if not saved:
@@ -1169,7 +1170,9 @@ class Pregel(
         channels, managed = channels_from_checkpoint(
             self.channels,
             saved.checkpoint,
-            saver=self.checkpointer
+            saver=saver
+            if isinstance(saver, BaseCheckpointSaver)
+            else self.checkpointer
             if isinstance(self.checkpointer, BaseCheckpointSaver)
             else None,
             config=saved.config,
@@ -1270,6 +1273,7 @@ class Pregel(
         config: RunnableConfig,
         saved: CheckpointTuple | None,
         recurse: BaseCheckpointSaver | None = None,
+        saver: BaseCheckpointSaver | None = None,
         apply_pending_writes: bool = False,
     ) -> StateSnapshot:
         if not saved:
@@ -1292,7 +1296,9 @@ class Pregel(
         channels, managed = await achannels_from_checkpoint(
             self.channels,
             saved.checkpoint,
-            saver=self.checkpointer
+            saver=saver
+            if isinstance(saver, BaseCheckpointSaver)
+            else self.checkpointer
             if isinstance(self.checkpointer, BaseCheckpointSaver)
             else None,
             config=saved.config,
@@ -1430,6 +1436,9 @@ class Pregel(
             config,
             saved,
             recurse=checkpointer if subgraphs else None,
+            saver=checkpointer
+            if isinstance(checkpointer, BaseCheckpointSaver)
+            else None,
             apply_pending_writes=CONFIG_KEY_CHECKPOINT_ID not in config[CONF],
         )
 
@@ -1474,6 +1483,9 @@ class Pregel(
             config,
             saved,
             recurse=checkpointer if subgraphs else None,
+            saver=checkpointer
+            if isinstance(checkpointer, BaseCheckpointSaver)
+            else None,
             apply_pending_writes=CONFIG_KEY_CHECKPOINT_ID not in config[CONF],
         )
 
@@ -1527,7 +1539,11 @@ class Pregel(
             checkpointer.list(config, before=before, limit=limit, filter=filter)
         ):
             yield self._prepare_state_snapshot(
-                checkpoint_tuple.config, checkpoint_tuple
+                checkpoint_tuple.config,
+                checkpoint_tuple,
+                saver=checkpointer
+                if isinstance(checkpointer, BaseCheckpointSaver)
+                else None,
             )
 
     async def aget_state_history(
@@ -1584,7 +1600,11 @@ class Pregel(
             )
         ]:
             yield await self._aprepare_state_snapshot(
-                checkpoint_tuple.config, checkpoint_tuple
+                checkpoint_tuple.config,
+                checkpoint_tuple,
+                saver=checkpointer
+                if isinstance(checkpointer, BaseCheckpointSaver)
+                else None,
             )
 
     def bulk_update_state(
@@ -1666,9 +1686,8 @@ class Pregel(
             channels, managed = channels_from_checkpoint(
                 self.channels,
                 checkpoint,
-                saver=self.checkpointer
-                if saved is not None
-                and isinstance(self.checkpointer, BaseCheckpointSaver)
+                saver=checkpointer
+                if saved is not None and isinstance(checkpointer, BaseCheckpointSaver)
                 else None,
                 config=saved.config if saved is not None else None,
             )
@@ -2132,9 +2151,8 @@ class Pregel(
             channels, managed = await achannels_from_checkpoint(
                 self.channels,
                 checkpoint,
-                saver=self.checkpointer
-                if saved is not None
-                and isinstance(self.checkpointer, BaseCheckpointSaver)
+                saver=checkpointer
+                if saved is not None and isinstance(checkpointer, BaseCheckpointSaver)
                 else None,
                 config=saved.config if saved is not None else None,
             )
