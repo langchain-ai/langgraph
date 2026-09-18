@@ -3,6 +3,7 @@ from typing import Any
 
 import pytest
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel, ValidationError
 from typing_extensions import TypedDict
 
@@ -11,6 +12,51 @@ from langgraph.types import Command, Durability, Interrupt, interrupt
 from tests.any_str import AnyStr
 
 pytestmark = pytest.mark.anyio
+
+
+def test_empty_interrupts_override_compile_defaults() -> None:
+    class State(TypedDict):
+        count: int
+
+    def increment(state: State) -> State:
+        return {"count": state["count"] + 1}
+
+    before_builder = StateGraph(State)
+    before_builder.add_node("increment", increment)
+    before_builder.add_edge(START, "increment")
+    before_builder.add_edge("increment", END)
+    before_graph = before_builder.compile(
+        checkpointer=InMemorySaver(), interrupt_before=["increment"]
+    )
+
+    after_builder = StateGraph(State)
+    after_builder.add_node("first", increment)
+    after_builder.add_node("second", increment)
+    after_builder.add_edge(START, "first")
+    after_builder.add_edge("first", "second")
+    after_builder.add_edge("second", END)
+    after_graph = after_builder.compile(
+        checkpointer=InMemorySaver(), interrupt_after=["first"]
+    )
+
+    assert before_graph.invoke(
+        {"count": 0},
+        {"configurable": {"thread_id": "before-default"}},
+    ) == {"count": 0}
+    assert before_graph.invoke(
+        {"count": 0},
+        {"configurable": {"thread_id": "before-override"}},
+        interrupt_before=[],
+    ) == {"count": 1}
+    assert after_graph.invoke(
+        {"count": 0},
+        {"configurable": {"thread_id": "after-default"}},
+    ) == {"count": 1}
+    assert after_graph.invoke(
+        {"count": 0},
+        {"configurable": {"thread_id": "after-override"}},
+        interrupt_after=[],
+    ) == {"count": 2}
 
 
 def test_interruption_without_state_updates(
