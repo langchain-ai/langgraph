@@ -1,14 +1,15 @@
 from typing import Any, cast
 
 import pytest
+from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
+
 from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     create_checkpoint,
     empty_checkpoint,
 )
-
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.utils import _metadata_predicate, search_where
 
@@ -47,13 +48,11 @@ class TestSqliteSaver:
         self.metadata_1: CheckpointMetadata = {
             "source": "input",
             "step": 2,
-            "writes": {},
             "score": 1,
         }
         self.metadata_2: CheckpointMetadata = {
             "source": "loop",
             "step": 1,
-            "writes": {"foo": "bar"},
             "score": None,
         }
         self.metadata_3: CheckpointMetadata = {}
@@ -75,6 +74,18 @@ class TestSqliteSaver:
                 "run_id": "my_run_id",
             }
 
+    def test_legacy_writes_metadata_is_not_serialized(self) -> None:
+        metadata: CheckpointMetadata = {
+            "source": "loop",
+            "writes": {"messages": [AIMessage(content="hello")]},
+        }
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            saved_config = saver.put(self.config_1, self.chkpnt_1, metadata, {})
+            checkpoint = saver.get_tuple(saved_config)
+
+        assert checkpoint is not None
+        assert checkpoint.metadata == {"source": "loop"}
+
     def test_search(self) -> None:
         with SqliteSaver.from_conn_string(":memory:") as saver:
             # set up test
@@ -85,10 +96,7 @@ class TestSqliteSaver:
 
             # call method / assertions
             query_1 = {"source": "input"}  # search by 1 key
-            query_2 = {
-                "step": 1,
-                "writes": {"foo": "bar"},
-            }  # search by multiple keys
+            query_2 = {"step": 1}  # search by multiple keys
             query_3: dict[str, Any] = {}  # search by no keys, return all checkpoints
             query_4 = {"source": "update", "step": 1}  # no match
 
@@ -130,8 +138,8 @@ class TestSqliteSaver:
 
     def test_search_where(self) -> None:
         # call method / assertions
-        expected_predicate_1 = "WHERE json_extract(CAST(metadata AS TEXT), '$.source') = ? AND json_extract(CAST(metadata AS TEXT), '$.step') = ? AND json_extract(CAST(metadata AS TEXT), '$.writes') = ? AND json_extract(CAST(metadata AS TEXT), '$.score') = ? AND checkpoint_id < ?"
-        expected_param_values_1 = ["input", 2, "{}", 1, "1"]
+        expected_predicate_1 = "WHERE json_extract(CAST(metadata AS TEXT), '$.source') = ? AND json_extract(CAST(metadata AS TEXT), '$.step') = ? AND json_extract(CAST(metadata AS TEXT), '$.score') = ? AND checkpoint_id < ?"
+        expected_param_values_1 = ["input", 2, 1, "1"]
         assert search_where(
             None, cast(dict[str, Any], self.metadata_1), self.config_1
         ) == (
@@ -144,19 +152,17 @@ class TestSqliteSaver:
         expected_predicate_1 = [
             "json_extract(CAST(metadata AS TEXT), '$.source') = ?",
             "json_extract(CAST(metadata AS TEXT), '$.step') = ?",
-            "json_extract(CAST(metadata AS TEXT), '$.writes') = ?",
             "json_extract(CAST(metadata AS TEXT), '$.score') = ?",
         ]
         expected_predicate_2 = [
             "json_extract(CAST(metadata AS TEXT), '$.source') = ?",
             "json_extract(CAST(metadata AS TEXT), '$.step') = ?",
-            "json_extract(CAST(metadata AS TEXT), '$.writes') = ?",
             "json_extract(CAST(metadata AS TEXT), '$.score') IS ?",
         ]
         expected_predicate_3: list[str] = []
 
-        expected_param_values_1 = ["input", 2, "{}", 1]
-        expected_param_values_2 = ["loop", 1, '{"foo":"bar"}', None]
+        expected_param_values_1 = ["input", 2, 1]
+        expected_param_values_2 = ["loop", 1, None]
         expected_param_values_3: list[Any] = []
 
         assert _metadata_predicate(cast(dict[str, Any], self.metadata_1)) == (

@@ -1,14 +1,15 @@
 from typing import Any
 
 import pytest
+from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
+
 from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     create_checkpoint,
     empty_checkpoint,
 )
-
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 
@@ -45,13 +46,11 @@ class TestAsyncSqliteSaver:
         self.metadata_1: CheckpointMetadata = {
             "source": "input",
             "step": 2,
-            "writes": {},
             "score": 1,
         }
         self.metadata_2: CheckpointMetadata = {
             "source": "loop",
             "step": 1,
-            "writes": {"foo": "bar"},
             "score": None,
         }
         self.metadata_3: CheckpointMetadata = {}
@@ -73,6 +72,18 @@ class TestAsyncSqliteSaver:
                 "run_id": "my_run_id",
             }
 
+    async def test_legacy_writes_metadata_is_not_serialized(self) -> None:
+        metadata: CheckpointMetadata = {
+            "source": "loop",
+            "writes": {"messages": [AIMessage(content="hello")]},
+        }
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            saved_config = await saver.aput(self.config_1, self.chkpnt_1, metadata, {})
+            checkpoint = await saver.aget_tuple(saved_config)
+
+        assert checkpoint is not None
+        assert checkpoint.metadata == {"source": "loop"}
+
     async def test_asearch(self) -> None:
         async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
             await saver.aput(self.config_1, self.chkpnt_1, self.metadata_1, {})
@@ -81,10 +92,7 @@ class TestAsyncSqliteSaver:
 
             # call method / assertions
             query_1 = {"source": "input"}  # search by 1 key
-            query_2 = {
-                "step": 1,
-                "writes": {"foo": "bar"},
-            }  # search by multiple keys
+            query_2 = {"step": 1}  # search by multiple keys
             query_3: dict[str, Any] = {}  # search by no keys, return all checkpoints
             query_4 = {"source": "update", "step": 1}  # no match
 

@@ -10,6 +10,7 @@ from typing import Any, TypeVar, cast
 
 import aiosqlite
 from langchain_core.runnables import RunnableConfig
+
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
@@ -20,10 +21,9 @@ from langgraph.checkpoint.base import (
     DeltaChannelHistory,
     SerializerProtocol,
     get_checkpoint_id,
-    get_checkpoint_metadata,
+    get_serializable_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-
 from langgraph.checkpoint.sqlite._delta import (
     DELTA_STAGE1_SQL,
     build_delta_channels_writes_history,
@@ -532,7 +532,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         type_, serialized_checkpoint = self.serde.dumps_typed(checkpoint)
         serialized_metadata = json.dumps(
-            get_checkpoint_metadata(config, metadata), ensure_ascii=False
+            get_serializable_checkpoint_metadata(config, metadata), ensure_ascii=False
         ).encode("utf-8", "ignore")
         async with (
             self.lock,
