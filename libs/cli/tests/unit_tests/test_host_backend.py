@@ -340,3 +340,198 @@ def test_get_deploy_logs_specific_revision():
     )
     result = c.get_deploy_logs("proj-1", {"limit": 10}, revision_id="rev-2")
     assert result == {"logs": []}
+
+
+def _routing_client(seen: dict) -> HostBackendClient:
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["method"] = req.method
+        seen["url"] = str(req.url)
+        return httpx.Response(200, json={"ok": True})
+
+    c = HostBackendClient("https://api.example.com/prefix", "key")
+    c._client = httpx.Client(
+        base_url="https://api.example.com/prefix",
+        transport=httpx.MockTransport(handler),
+        headers={"X-Api-Key": "key", "Accept": "application/json"},
+        timeout=30,
+    )
+    return c
+
+
+@pytest.mark.parametrize(
+    ("call", "expected_body"),
+    [
+        pytest.param(
+            lambda c: c.create_deployment(
+                name="my-deploy", deployment_type="dev", source="internal_docker"
+            ),
+            {
+                "name": "my-deploy",
+                "source": "internal_docker",
+                "source_config": {"deployment_type": "dev"},
+                "source_revision_config": {},
+            },
+            id="internal_docker_create_omits_secrets_key_when_not_given",
+        ),
+        pytest.param(
+            lambda c: c.create_deployment(
+                name="my-deploy",
+                deployment_type="prod",
+                source="internal_docker",
+                secrets=[{"name": "KEY", "value": "val"}],
+            ),
+            {
+                "name": "my-deploy",
+                "source": "internal_docker",
+                "source_config": {"deployment_type": "prod"},
+                "source_revision_config": {},
+                "secrets": [{"name": "KEY", "value": "val"}],
+            },
+            id="internal_docker_create_forwards_secrets",
+        ),
+        pytest.param(
+            lambda c: c.create_deployment(
+                name="my-deploy",
+                deployment_type="dev",
+                source="internal_source",
+                config_path="apps/agent/langgraph.json",
+            ),
+            {
+                "name": "my-deploy",
+                "source": "internal_source",
+                "source_config": {"deployment_type": "dev"},
+                "source_revision_config": {
+                    "langgraph_config_path": "apps/agent/langgraph.json"
+                },
+            },
+            id="internal_source_create_sends_config_path",
+        ),
+        pytest.param(
+            lambda c: c.update_deployment(
+                "dep-123",
+                "registry.example.com/app@sha256:abc",
+                secrets=[{"name": "KEY", "value": "val"}],
+            ),
+            {
+                "revision_source": "internal_docker",
+                "source_revision_config": {
+                    "image_uri": "registry.example.com/app@sha256:abc"
+                },
+                "secrets": [{"name": "KEY", "value": "val"}],
+            },
+            id="internal_docker_revision_names_its_source",
+        ),
+        pytest.param(
+            lambda c: c.update_deployment_internal_source(
+                "dep-123",
+                source_tarball_path="tarballs/src.tgz",
+                config_path="langgraph.json",
+                secrets=[],
+                install_command="yarn install",
+                build_command="yarn build",
+            ),
+            {
+                "revision_source": "internal_source",
+                "source_revision_config": {
+                    "source_tarball_path": "tarballs/src.tgz",
+                    "langgraph_config_path": "langgraph.json",
+                },
+                "source_config": {
+                    "install_command": "yarn install",
+                    "build_command": "yarn build",
+                },
+                "secrets": [],
+            },
+            id="internal_source_revision_sends_js_build_commands",
+        ),
+        pytest.param(
+            lambda c: c.update_deployment_internal_source(
+                "dep-123",
+                source_tarball_path="tarballs/src.tgz",
+                config_path="langgraph.json",
+            ),
+            {
+                "revision_source": "internal_source",
+                "source_revision_config": {
+                    "source_tarball_path": "tarballs/src.tgz",
+                    "langgraph_config_path": "langgraph.json",
+                },
+            },
+            id="internal_source_revision_omits_source_config_without_commands",
+        ),
+    ],
+)
+def test_request_body_matches_control_plane_contract(call, expected_body):
+    captured: dict = {}
+    call(_capturing_client(captured))
+    assert json.loads(captured["body"]) == expected_body
+
+
+@pytest.mark.parametrize(
+    ("call", "method", "route"),
+    [
+        pytest.param(
+            lambda c: c.create_deployment(
+                name="n", deployment_type="dev", source="internal_docker"
+            ),
+            "POST",
+            "/v2/deployments",
+            id="create_deployment",
+        ),
+        pytest.param(
+            lambda c: c.get_deployment("dep-1"),
+            "GET",
+            "/v2/deployments/dep-1",
+            id="get_deployment",
+        ),
+        pytest.param(
+            lambda c: c.delete_deployment("dep-1"),
+            "DELETE",
+            "/v2/deployments/dep-1",
+            id="delete_deployment",
+        ),
+        pytest.param(
+            lambda c: c.update_deployment("dep-1", "img"),
+            "PATCH",
+            "/v2/deployments/dep-1",
+            id="patch_deployment",
+        ),
+        pytest.param(
+            lambda c: c.request_push_token("dep-1"),
+            "POST",
+            "/v2/deployments/dep-1/push-token",
+            id="push_token",
+        ),
+        pytest.param(
+            lambda c: c.request_upload_url("dep-1"),
+            "POST",
+            "/v2/deployments/dep-1/upload-url",
+            id="upload_url",
+        ),
+        pytest.param(
+            lambda c: c.list_revisions("dep-1", limit=5),
+            "GET",
+            "/v2/deployments/dep-1/revisions?limit=5",
+            id="list_revisions_puts_limit_in_query",
+        ),
+        pytest.param(
+            lambda c: c.get_revision("dep-1", "rev-2"),
+            "GET",
+            "/v2/deployments/dep-1/revisions/rev-2",
+            id="get_revision",
+        ),
+        pytest.param(
+            lambda c: c.get_build_logs("dep-1", "rev-2", {"limit": 10}),
+            "POST",
+            "/v1/projects/dep-1/revisions/rev-2/build_logs",
+            id="build_logs",
+        ),
+    ],
+)
+def test_request_targets_control_plane_route_under_base_url(call, method, route):
+    seen: dict = {}
+    call(_routing_client(seen))
+    assert (seen["method"], seen["url"]) == (
+        method,
+        f"https://api.example.com/prefix{route}",
+    )
