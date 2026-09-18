@@ -2911,6 +2911,12 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple(
 
     # clear the cache
     if with_cache:
+        app.clear_cache([])
+        assert app.invoke({"query": "what is weather in sf"})["query"] == (
+            "analyzed: query: analyzed: query: what is weather in sf"
+        )
+        assert rewrite_query_count == 2
+
         app.clear_cache()
 
         assert app.invoke({"query": "what is weather in sf"}) == {

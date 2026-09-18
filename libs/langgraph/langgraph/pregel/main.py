@@ -4137,7 +4137,7 @@ class Pregel(
         """Clear the cache for the given nodes."""
         if not self.cache:
             raise ValueError("No cache is set for this graph. Cannot clear cache.")
-        nodes = nodes or self.nodes.keys()
+        nodes = self.nodes.keys() if nodes is None else nodes
         # collect namespaces to clear
         namespaces: list[tuple[str, ...]] = []
         for node in nodes:
@@ -4156,7 +4156,7 @@ class Pregel(
         """Asynchronously clear the cache for the given nodes."""
         if not self.cache:
             raise ValueError("No cache is set for this graph. Cannot clear cache.")
-        nodes = nodes or self.nodes.keys()
+        nodes = self.nodes.keys() if nodes is None else nodes
         # collect namespaces to clear
         namespaces: list[tuple[str, ...]] = []
         for node in nodes:
