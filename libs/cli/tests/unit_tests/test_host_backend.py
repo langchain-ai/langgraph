@@ -3,7 +3,11 @@ import json
 import httpx
 import pytest
 
-from langgraph_cli.host_backend import HostBackendClient, HostBackendError
+from langgraph_cli.host_backend import (
+    ControlPlaneEndpoints,
+    HostBackendClient,
+    HostBackendError,
+)
 
 
 @pytest.fixture
@@ -485,3 +489,117 @@ def test_injected_transport_receives_requests_under_the_prefixed_base_url():
         "url": "https://smith.example.com/api-host/v2/deployments/dep-1/revisions?limit=2",
         "api_key": "key",
     }
+
+
+CLOUD = ("https://api.host.langchain.com", "https://smith.langchain.com")
+
+
+@pytest.mark.parametrize(
+    ("host_url", "langsmith_endpoint", "expected"),
+    [
+        pytest.param(None, None, CLOUD, id="nothing_configured_targets_cloud"),
+        pytest.param(
+            None, "https://api.smith.langchain.com", CLOUD, id="cloud_langsmith_api"
+        ),
+        pytest.param(
+            None,
+            "https://api.smith.langchain.com/api/v1",
+            CLOUD,
+            id="cloud_langsmith_api_with_versioned_path",
+        ),
+        pytest.param(
+            None, "https://api.langchain.com", CLOUD, id="cloud_langchain_api_alias"
+        ),
+        pytest.param(
+            None,
+            "https://eu.api.smith.langchain.com",
+            ("https://eu.api.host.langchain.com", "https://eu.smith.langchain.com"),
+            id="eu_cloud_maps_to_eu_control_plane",
+        ),
+        pytest.param(
+            None,
+            "https://dev.api.smith.langchain.com",
+            ("https://dev.api.host.langchain.com", "https://dev.smith.langchain.com"),
+            id="dev_cloud_maps_to_dev_control_plane",
+        ),
+        pytest.param(
+            None,
+            "https://aks.smith.langchain.dev/api",
+            (
+                "https://aks.smith.langchain.dev/api-host",
+                "https://aks.smith.langchain.dev",
+            ),
+            id="self_hosted_api_path_becomes_api_host",
+        ),
+        pytest.param(
+            None,
+            "https://smith.example.com/api/v1",
+            ("https://smith.example.com/api-host", "https://smith.example.com"),
+            id="self_hosted_versioned_api_path_becomes_api_host",
+        ),
+        pytest.param(
+            None,
+            "https://smith.example.com",
+            ("https://smith.example.com/api-host", "https://smith.example.com"),
+            id="self_hosted_origin_gets_api_host_appended",
+        ),
+        pytest.param(
+            None,
+            "https://corp.example.com/langsmith/api/v1",
+            (
+                "https://corp.example.com/langsmith/api-host",
+                "https://corp.example.com/langsmith",
+            ),
+            id="self_hosted_path_prefix_is_kept",
+        ),
+        pytest.param(
+            "https://custom.host.example",
+            "https://aks.smith.langchain.dev/api",
+            ("https://custom.host.example", "https://smith.langchain.com"),
+            id="explicit_host_url_beats_langsmith_endpoint",
+        ),
+        pytest.param(
+            "https://api.host.langchain.com",
+            "https://aks.smith.langchain.dev/api",
+            CLOUD,
+            id="explicit_cloud_host_url_beats_self_hosted_endpoint",
+        ),
+        pytest.param(
+            "https://smith.example.com/api-host/",
+            None,
+            ("https://smith.example.com/api-host", "https://smith.example.com"),
+            id="explicit_api_host_url_derives_dashboard_root",
+        ),
+        pytest.param(
+            "https://corp.example.com/langsmith/api-host",
+            None,
+            (
+                "https://corp.example.com/langsmith/api-host",
+                "https://corp.example.com/langsmith",
+            ),
+            id="explicit_api_host_url_keeps_path_prefix_in_dashboard",
+        ),
+        pytest.param(
+            "http://localhost:8080",
+            None,
+            ("http://localhost:8080", "http://localhost:8080"),
+            id="localhost_dashboard_is_the_same_origin",
+        ),
+        pytest.param(
+            "http://localhost:8080/api-host",
+            None,
+            ("http://localhost:8080/api-host", "http://localhost:8080"),
+            id="localhost_api_host_dashboard_is_the_origin",
+        ),
+        pytest.param(
+            "https://eu.api.host.langchain.com",
+            None,
+            ("https://eu.api.host.langchain.com", "https://eu.smith.langchain.com"),
+            id="regional_control_plane_maps_to_regional_dashboard",
+        ),
+    ],
+)
+def test_control_plane_endpoints_resolve(host_url, langsmith_endpoint, expected):
+    endpoints = ControlPlaneEndpoints.resolve(host_url, langsmith_endpoint)
+
+    assert (endpoints.control_plane_url, endpoints.dashboard_url) == expected

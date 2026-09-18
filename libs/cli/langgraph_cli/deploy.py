@@ -23,7 +23,11 @@ from langgraph_cli.constants import DEFAULT_CONFIG
 from langgraph_cli.dependency_tracking import find_tracked_packages
 from langgraph_cli.docker import build_docker_image, can_build_locally
 from langgraph_cli.exec import Runner, subp_exec
-from langgraph_cli.host_backend import HostBackendClient, HostBackendError
+from langgraph_cli.host_backend import (
+    ControlPlaneEndpoints,
+    HostBackendClient,
+    HostBackendError,
+)
 from langgraph_cli.progress import Progress
 from langgraph_cli.util import warn_non_wolfi_distro
 
@@ -658,45 +662,19 @@ def _create_deployment(
     return created_id, step + 1
 
 
-def _smith_dashboard_base_url(host_url: str | None) -> str:
-    """Derive the LangSmith dashboard base URL from the API host URL."""
-    from urllib.parse import urlparse
-
-    if not host_url:
-        return "https://smith.langchain.com"
-    parsed = urlparse(host_url)
-    hostname = parsed.hostname or ""
-    # Self-hosted: host_url is <scheme>://<host>/api-host — return just the root
-    path = parsed.path.rstrip("/")
-    if path == "/api-host" or path.endswith("/api-host"):
-        return f"{parsed.scheme}://{parsed.netloc}"
-
-    if hostname in ("localhost", "127.0.0.1"):
-        return host_url.rstrip("/")
-
-    api_host_suffix = "api.host.langchain.com"
-    if hostname == api_host_suffix:
-        return "https://smith.langchain.com"
-    if hostname.endswith(f".{api_host_suffix}"):
-        prefix = hostname[: -(len(api_host_suffix) + 1)]
-        return f"https://{prefix}.smith.langchain.com"
-
-    return "https://smith.langchain.com"
-
-
 def _get_deployment_status_url(
-    updated: object, deployment_id: str, host_url: str | None = None
+    updated: object, deployment_id: str, host_url: str
 ) -> str | None:
     """Compute the LangSmith dashboard URL for a deployment, if possible."""
     tenant_id = updated.get("tenant_id") if isinstance(updated, dict) else None
     if not tenant_id:
         return None
-    base = _smith_dashboard_base_url(host_url)
+    base = ControlPlaneEndpoints.from_control_plane_url(host_url).dashboard_url
     return f"{base}/o/{tenant_id}/host/deployments/{deployment_id}"
 
 
 def _emit_deployment_status_url(
-    updated: object, deployment_id: str, host_url: str | None = None
+    updated: object, deployment_id: str, host_url: str
 ) -> str | None:
     """Emit the deployment status URL and return it."""
     url = _get_deployment_status_url(updated, deployment_id, host_url)
@@ -1352,30 +1330,13 @@ def _create_host_backend_client(
     tenant_id = env_vars.get("LANGSMITH_TENANT_ID") or os.environ.get(
         "LANGSMITH_TENANT_ID"
     )
-    # If no explicit host URL was provided, check LANGSMITH_ENDPOINT as a
-    # fallback so self-hosted customers don't need to know about LANGGRAPH_HOST_URL.
-    # Self-hosted control plane always lives at <langsmith_endpoint>/api-host.
-    _cloud_default = "https://api.host.langchain.com"
-    _cloud_endpoints = {
-        "https://api.smith.langchain.com",
-        "https://api.langchain.com",
-    }
-    resolved_host = host_url
-    if not resolved_host or resolved_host == _cloud_default:
-        langsmith_endpoint = env_vars.get("LANGSMITH_ENDPOINT") or os.environ.get(
-            "LANGSMITH_ENDPOINT"
-        )
-        if (
-            langsmith_endpoint
-            and langsmith_endpoint.rstrip("/") not in _cloud_endpoints
-        ):
-            from urllib.parse import urlparse as _urlparse
-
-            _p = _urlparse(langsmith_endpoint)
-            resolved_host = f"{_p.scheme}://{_p.netloc}/api-host"
-        else:
-            resolved_host = _cloud_default
-    return HostBackendClient(resolved_host, resolved_api_key, tenant_id=tenant_id)
+    langsmith_endpoint = env_vars.get("LANGSMITH_ENDPOINT") or os.environ.get(
+        "LANGSMITH_ENDPOINT"
+    )
+    endpoints = ControlPlaneEndpoints.resolve(host_url, langsmith_endpoint)
+    return HostBackendClient(
+        endpoints.control_plane_url, resolved_api_key, tenant_id=tenant_id
+    )
 
 
 def _call_host_backend_with_optional_tenant(
@@ -1418,7 +1379,9 @@ def _call_host_backend_with_optional_tenant(
                 prompted_for_tenant = True
                 continue
             if err.status_code == 403 and "not enabled" in err.message.lower():
-                smith_base = _smith_dashboard_base_url(client.base_url)
+                smith_base = ControlPlaneEndpoints.from_control_plane_url(
+                    client.base_url
+                ).dashboard_url
                 raise HostBackendError(
                     "LangSmith Deployment is not enabled for this organization. "
                     f"Enable it at {smith_base}/host/deployments"
@@ -1454,7 +1417,7 @@ OPT_HOST_DEPLOYMENT_NAME = click.option(
 OPT_HOST_URL = click.option(
     "--host-url",
     envvar="LANGGRAPH_HOST_URL",
-    default="https://api.host.langchain.com",
+    default=None,
     hidden=True,
 )
 
@@ -2146,7 +2109,7 @@ def deploy_logs(
     start_time: str | None,
     end_time: str | None,
     follow: bool,
-    host_url: str,
+    host_url: str | None,
 ):
     env_vars = _parse_env_from_config({}, pathlib.Path.cwd() / DEFAULT_CONFIG)
     client = _create_host_backend_client(host_url, api_key, env_vars=env_vars)

@@ -2,10 +2,83 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 import click
 import httpx
+
+CLOUD_CONTROL_PLANE_URL = "https://api.host.langchain.com"
+CLOUD_DASHBOARD_URL = "https://smith.langchain.com"
+CLOUD_DOMAIN = "langchain.com"
+CLOUD_API_HOST = "api.smith.langchain.com"
+CLOUD_CONTROL_PLANE_HOST = "api.host.langchain.com"
+CLOUD_DASHBOARD_HOST = "smith.langchain.com"
+CONTROL_PLANE_PATH = "/api-host"
+LANGSMITH_API_PATHS = ("/api/v1", "/api")
+LOCAL_HOSTNAMES = ("localhost", "127.0.0.1")
+
+
+@dataclass(frozen=True, slots=True)
+class ControlPlaneEndpoints:
+    control_plane_url: str
+    dashboard_url: str
+
+    @classmethod
+    def resolve(
+        cls, host_url: str | None, langsmith_endpoint: str | None
+    ) -> ControlPlaneEndpoints:
+        if host_url:
+            return cls.from_control_plane_url(host_url)
+        if langsmith_endpoint:
+            return cls.from_langsmith_endpoint(langsmith_endpoint)
+        return cls(CLOUD_CONTROL_PLANE_URL, CLOUD_DASHBOARD_URL)
+
+    @classmethod
+    def from_control_plane_url(cls, url: str) -> ControlPlaneEndpoints:
+        control_plane_url = url.rstrip("/")
+        hostname = urlparse(control_plane_url).hostname or ""
+        if control_plane_url.endswith(CONTROL_PLANE_PATH):
+            return cls(control_plane_url, control_plane_url[: -len(CONTROL_PLANE_PATH)])
+        if hostname in LOCAL_HOSTNAMES:
+            return cls(control_plane_url, control_plane_url)
+        return cls(control_plane_url, _cloud_dashboard_for(hostname))
+
+    @classmethod
+    def from_langsmith_endpoint(cls, endpoint: str) -> ControlPlaneEndpoints:
+        parsed = urlparse(endpoint.rstrip("/"))
+        hostname = parsed.hostname or ""
+        if _is_cloud_host(hostname):
+            return cls.from_control_plane_url(
+                f"https://{_cloud_control_plane_host_for(hostname)}"
+            )
+        root = f"{parsed.scheme}://{parsed.netloc}{_without_api_path(parsed.path)}"
+        return cls(f"{root}{CONTROL_PLANE_PATH}", root)
+
+
+def _is_cloud_host(hostname: str) -> bool:
+    return hostname == CLOUD_DOMAIN or hostname.endswith(f".{CLOUD_DOMAIN}")
+
+
+def _cloud_control_plane_host_for(langsmith_api_host: str) -> str:
+    if langsmith_api_host.endswith(CLOUD_API_HOST):
+        return langsmith_api_host.replace(CLOUD_API_HOST, CLOUD_CONTROL_PLANE_HOST)
+    return CLOUD_CONTROL_PLANE_HOST
+
+
+def _cloud_dashboard_for(control_plane_host: str) -> str:
+    if control_plane_host.endswith(f".{CLOUD_CONTROL_PLANE_HOST}"):
+        region = control_plane_host[: -len(CLOUD_CONTROL_PLANE_HOST) - 1]
+        return f"https://{region}.{CLOUD_DASHBOARD_HOST}"
+    return CLOUD_DASHBOARD_URL
+
+
+def _without_api_path(path: str) -> str:
+    for api_path in LANGSMITH_API_PATHS:
+        if path.endswith(api_path):
+            return path[: -len(api_path)]
+    return path
 
 
 class HostBackendError(click.ClickException):

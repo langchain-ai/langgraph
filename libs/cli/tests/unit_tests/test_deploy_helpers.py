@@ -21,7 +21,6 @@ from langgraph_cli.deploy import (
     _parse_env_from_config,
     _resolve_env_path,
     _resolve_pushed_image_digest,
-    _smith_dashboard_base_url,
     _validate_prebuilt_image,
     normalize_image_tag,
     normalize_name,
@@ -538,127 +537,30 @@ class TestCreateHostBackendClientNoInput:
         assert client is not None
 
 
-class TestCreateHostBackendClientEndpointFallback:
-    def test_langsmith_endpoint_env_var_used_as_fallback(self, monkeypatch):
-        monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test")
-        monkeypatch.setenv("LANGSMITH_ENDPOINT", "https://smith.example.com/api/v1")
-        monkeypatch.delenv("LANGGRAPH_HOST_URL", raising=False)
-        client = _create_host_backend_client(host_url=None, api_key=None, env_vars={})
-        assert client.base_url == "https://smith.example.com/api-host"
-
-    def test_langsmith_endpoint_from_env_vars_dict(self, monkeypatch):
+class TestCreateHostBackendClientEndpoint:
+    def test_langsmith_endpoint_from_project_env_selects_self_hosted_control_plane(
+        self, monkeypatch
+    ):
         monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test")
         monkeypatch.delenv("LANGSMITH_ENDPOINT", raising=False)
+
         client = _create_host_backend_client(
             host_url=None,
             api_key=None,
             env_vars={"LANGSMITH_ENDPOINT": "https://smith.example.com/api/v1"},
         )
+
         assert client.base_url == "https://smith.example.com/api-host"
 
-    def test_cloud_langsmith_endpoint_not_used_as_self_hosted(self, monkeypatch):
-        monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test")
-        monkeypatch.setenv("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com")
-        client = _create_host_backend_client(host_url=None, api_key=None, env_vars={})
-        assert client.base_url == "https://api.host.langchain.com"
-
-    def test_langchain_api_endpoint_not_used_as_self_hosted(self, monkeypatch):
-        monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test")
-        monkeypatch.setenv("LANGSMITH_ENDPOINT", "https://api.langchain.com")
-        client = _create_host_backend_client(host_url=None, api_key=None, env_vars={})
-        assert client.base_url == "https://api.host.langchain.com"
-
-    def test_explicit_host_url_takes_precedence_over_langsmith_endpoint(
-        self, monkeypatch
-    ):
+    def test_explicit_host_url_wins_over_langsmith_endpoint(self, monkeypatch):
         monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test")
         monkeypatch.setenv("LANGSMITH_ENDPOINT", "https://smith.example.com/api/v1")
+
         client = _create_host_backend_client(
-            host_url="https://custom.host.com",
-            api_key=None,
-            env_vars={},
+            host_url="https://custom.host.com", api_key=None, env_vars={}
         )
+
         assert client.base_url == "https://custom.host.com"
-
-    def test_no_endpoint_falls_back_to_cloud_default(self, monkeypatch):
-        monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test")
-        monkeypatch.delenv("LANGSMITH_ENDPOINT", raising=False)
-        client = _create_host_backend_client(host_url=None, api_key=None, env_vars={})
-        assert client.base_url == "https://api.host.langchain.com"
-
-
-class TestSmithDashboardBaseUrl:
-    def test_none_returns_default(self):
-        assert _smith_dashboard_base_url(None) == "https://smith.langchain.com"
-
-    def test_empty_returns_default(self):
-        assert _smith_dashboard_base_url("") == "https://smith.langchain.com"
-
-    def test_prod_host_url(self):
-        assert (
-            _smith_dashboard_base_url("https://api.host.langchain.com")
-            == "https://smith.langchain.com"
-        )
-
-    def test_dev_host_url(self):
-        assert (
-            _smith_dashboard_base_url("https://dev.api.host.langchain.com")
-            == "https://dev.smith.langchain.com"
-        )
-
-    def test_eu_host_url(self):
-        assert (
-            _smith_dashboard_base_url("https://eu.api.host.langchain.com")
-            == "https://eu.smith.langchain.com"
-        )
-
-    def test_staging_host_url(self):
-        assert (
-            _smith_dashboard_base_url("https://staging.api.host.langchain.com")
-            == "https://staging.smith.langchain.com"
-        )
-
-    def test_localhost(self):
-        assert (
-            _smith_dashboard_base_url("http://localhost:8080")
-            == "http://localhost:8080"
-        )
-
-    def test_localhost_trailing_slash(self):
-        assert (
-            _smith_dashboard_base_url("http://localhost:8080/")
-            == "http://localhost:8080"
-        )
-
-    def test_127_0_0_1(self):
-        assert (
-            _smith_dashboard_base_url("http://127.0.0.1:3000")
-            == "http://127.0.0.1:3000"
-        )
-
-    def test_unknown_domain_returns_default(self):
-        assert (
-            _smith_dashboard_base_url("https://custom.example.com")
-            == "https://smith.langchain.com"
-        )
-
-    def test_self_hosted_api_host_suffix(self):
-        assert (
-            _smith_dashboard_base_url("https://smith.example.com/api-host")
-            == "https://smith.example.com"
-        )
-
-    def test_self_hosted_api_host_trailing_slash(self):
-        assert (
-            _smith_dashboard_base_url("https://smith.example.com/api-host/")
-            == "https://smith.example.com"
-        )
-
-    def test_self_hosted_localhost_api_host(self):
-        assert (
-            _smith_dashboard_base_url("http://localhost:8080/api-host")
-            == "http://localhost:8080"
-        )
 
 
 class TestResolvePushedImageDigest:
