@@ -570,6 +570,11 @@ class GraphDef(TypedDict, total=False):
 
     This description is surfaced in the API and can help users understand what the graph does.
     """
+    annotations: dict[str, Any] | None
+    """Optional. Annotations for the graph/assistant.
+
+    This is surfaced in the API (e.g., for MCP tools/list to set readOnlyHint, etc.).
+    """
 
 
 class WebhooksConfig(TypedDict, total=False):

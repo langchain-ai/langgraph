@@ -951,7 +951,7 @@
     },
     "EncryptionConfig": {
       "title": "EncryptionConfig",
-      "description": "Configuration for custom at-rest encryption logic.\n\nAllows you to implement custom encryption for sensitive data stored in the database,\nincluding metadata fields and checkpoint blobs.",
+      "description": "Configuration for custom at-rest encryption logic.\n\n    Allows you to implement custom encryption for sensitive data stored in the database,\n    including metadata fields and checkpoint blobs.",
       "type": "object",
       "properties": {
         "path": {
@@ -965,6 +965,17 @@
       "description": "Definition of a graph with additional metadata.",
       "type": "object",
       "properties": {
+        "annotations": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. Annotations for the graph/assistant.\n\nThis is surfaced in the API (e.g., for MCP tools/list to set readOnlyHint, etc.).\n"
+        },
         "description": {
           "anyOf": [
             {
