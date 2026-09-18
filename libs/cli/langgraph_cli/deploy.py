@@ -91,6 +91,16 @@ _API_KEY_ENV_NAMES = (
 )
 
 _DEPLOYMENT_NAME_ENV = "LANGSMITH_DEPLOYMENT_NAME"
+DEFAULT_IMAGE_TAG = "latest"
+EXTERNAL_DOCKER_SOURCE = "external_docker"
+OPERATOR_DEFAULT_RESOURCE_SPEC: dict[str, object] = {}
+LISTENER_REQUIRED_MARKER = "listener_id' is required"
+HYBRID_LISTENER_GUIDANCE = (
+    "This workspace deploys through a listener in your own cluster, and the "
+    "control plane needs a listener ID to create a deployment. Create the "
+    "deployment once in the LangSmith UI, choosing the listener and namespace, "
+    "then re-run with --deployment-id <id>."
+)
 
 _TERMINAL_STATUSES = frozenset(
     [
@@ -638,6 +648,12 @@ def _resolve_deployment(
     return deployment_id, needs_creation, step + 1
 
 
+@dataclass(frozen=True, slots=True)
+class CreatedDeployment:
+    id: str
+    resource: dict[str, object]
+
+
 def _create_deployment(
     client: HostBackendClient,
     step: int,
@@ -647,8 +663,7 @@ def _create_deployment(
     source_config: dict[str, object],
     source_revision_config: dict[str, object],
     secrets: list[dict[str, str]],
-) -> tuple[str, int]:
-    """Create a deployment and return its ID and next step number."""
+) -> tuple[CreatedDeployment, int]:
     _log_deploy_step(step, f"Creating deployment '{name}'")
     created = client.create_deployment(
         name=name,
@@ -663,7 +678,7 @@ def _create_deployment(
             "POST /v2/deployments succeeded but response missing a valid 'id'"
         )
     _get_emitter().info(f"Deployment ID: {created_id}", deployment_id=created_id)
-    return created_id, step + 1
+    return CreatedDeployment(created_id, created), step + 1
 
 
 def _get_deployment_status_url(
@@ -1123,49 +1138,6 @@ def _run_local_build(
     )
 
 
-def _run_external_deploy(
-    *,
-    client: HostBackendClient,
-    deployment_id: str,
-    step: int,
-    spec: BuildSpec,
-    image_uri: str,
-    verbose: bool,
-    secrets: list[dict[str, str]],
-    tracked_packages: list[str] | None,
-) -> BuildResult:
-    """Build image, push using existing Docker credentials, and update the deployment."""
-    with Runner() as runner:
-        _log_deploy_step(step, f"Building image {image_uri}")
-        _build_image(runner, spec, image_uri, verbose=verbose)
-        step += 1
-
-        _log_deploy_step(step, f"Pushing image {image_uri}")
-        _push_image(runner, image_uri, docker_config_dir=None, verbose=verbose)
-        step += 1
-
-        resolved_image = _resolve_pushed_image_digest(
-            runner, remote_image=image_uri, docker_config_dir=None, verbose=verbose
-        )
-
-        _log_deploy_step(step, f"Updating deployment {deployment_id}")
-        updated = client.update_deployment(
-            deployment_id,
-            resolved_image,
-            revision_source=None,
-            secrets=secrets,
-            tracked_packages=tracked_packages,
-        )
-
-    return BuildResult(
-        updated=updated if isinstance(updated, dict) else {},
-        progress_message="Deploying...",
-        timeout_seconds=300,
-        poll_interval_seconds=1,
-        no_result_message="Deployment updated",
-    )
-
-
 def _run_remote_build(
     *,
     client: HostBackendClient,
@@ -1303,7 +1275,7 @@ def _resolve_or_create(
         not_found_message=not_found_message,
     )
     if needs_creation:
-        deployment_id, step = _create_deployment(
+        created, step = _create_deployment(
             ctx.client,
             step,
             name=ctx.name,
@@ -1312,6 +1284,7 @@ def _resolve_or_create(
             source_revision_config={},
             secrets=ctx.secrets,
         )
+        deployment_id = created.id
     if not deployment_id:
         raise click.ClickException("Failed to determine deployment ID")
     return deployment_id, step
@@ -1322,12 +1295,12 @@ def _ensure_external_docker(client: HostBackendClient, deployment_id: str) -> No
         client, lambda c: c.get_deployment(deployment_id)
     )
     existing_source = existing.get("source") if isinstance(existing, dict) else None
-    if existing_source and existing_source != "external_docker":
+    if existing_source != EXTERNAL_DOCKER_SOURCE:
         raise click.UsageError(
-            f"Deployment {deployment_id} uses a different build mode and "
-            f"cannot be updated with --image-uri. To use --image-uri, omit "
-            f"--deployment-id to create a new deployment, or remove "
-            f"--image-uri to continue using the current build mode."
+            f"Deployment {deployment_id} was not created from an external image "
+            "and cannot be updated with --push-to. Run without --push-to to keep "
+            "its current build mode, or use a different --name to create a new "
+            "deployment."
         )
 
 
@@ -1381,7 +1354,8 @@ class InternalSourceUpload:
 
 @dataclass(frozen=True, slots=True)
 class ExternalDockerSource:
-    image_uri: str
+    reference: ImageReference
+    prebuilt_image: str | None
 
     def run(self, ctx: DeployContext) -> DeployOutcome:
         deployment_id, needs_creation, step = _resolve_deployment(
@@ -1389,49 +1363,109 @@ class ExternalDockerSource:
             1,
             ctx.deployment_id,
             ctx.name,
-            not_found_message="No deployment found. Will create.",
+            not_found_message="No deployment found. Will create after push.",
         )
-        if needs_creation:
-            deployment_id, step = _create_deployment(
-                ctx.client,
-                step,
-                name=ctx.name,
-                source="external_docker",
-                source_config={"deployment_type": ctx.deployment_type},
-                source_revision_config={},
-                secrets=ctx.secrets,
-            )
-        if not deployment_id:
-            raise click.ClickException("Failed to determine deployment ID")
-        if not needs_creation:
+        if deployment_id is not None:
             _ensure_external_docker(ctx.client, deployment_id)
-        build_result = _run_external_deploy(
-            client=ctx.client,
-            deployment_id=deployment_id,
-            step=step,
-            spec=ctx.spec,
-            image_uri=self.image_uri,
-            verbose=ctx.verbose,
+        image_uri, step = self._publish(ctx, step)
+        if deployment_id is None:
+            created, step = self._create(ctx, step, image_uri)
+            return DeployOutcome(
+                created.id, _external_result(created.resource, "Deployment created")
+            )
+        _log_deploy_step(step, f"Updating deployment {deployment_id}")
+        updated = ctx.client.update_deployment(
+            deployment_id,
+            image_uri,
+            revision_source=None,
             secrets=ctx.secrets,
             tracked_packages=ctx.tracked_packages,
         )
-        return DeployOutcome(deployment_id, build_result)
+        return DeployOutcome(
+            deployment_id, _external_result(updated, "Deployment updated")
+        )
+
+    def _publish(self, ctx: DeployContext, step: int) -> tuple[str, int]:
+        image = str(self.reference)
+        with Runner() as runner:
+            if self.prebuilt_image:
+                _log_deploy_step(step, f"Validating image {self.prebuilt_image}")
+                _validate_prebuilt_image(
+                    runner, self.prebuilt_image, verbose=ctx.verbose
+                )
+                runner.run(
+                    subp_exec(
+                        "docker", "tag", self.prebuilt_image, image, verbose=ctx.verbose
+                    )
+                )
+            else:
+                _log_deploy_step(step, f"Building image {image}")
+                _build_image(runner, ctx.spec, image, verbose=ctx.verbose)
+            step += 1
+            _log_deploy_step(step, f"Pushing image {image}")
+            _push_image(runner, image, docker_config_dir=None, verbose=ctx.verbose)
+            step += 1
+            digest = _resolve_pushed_image_digest(
+                runner, remote_image=image, docker_config_dir=None, verbose=ctx.verbose
+            )
+        return digest, step
+
+    def _create(
+        self, ctx: DeployContext, step: int, image_uri: str
+    ) -> tuple[CreatedDeployment, int]:
+        try:
+            return _create_deployment(
+                ctx.client,
+                step,
+                name=ctx.name,
+                source=EXTERNAL_DOCKER_SOURCE,
+                source_config={"resource_spec": OPERATOR_DEFAULT_RESOURCE_SPEC},
+                source_revision_config={"image_uri": image_uri},
+                secrets=ctx.secrets,
+            )
+        except HostBackendError as err:
+            if err.status_code == 400 and LISTENER_REQUIRED_MARKER in err.message:
+                raise click.ClickException(HYBRID_LISTENER_GUIDANCE) from None
+            raise
+
+
+def _external_result(resource: object, no_result_message: str) -> BuildResult:
+    return BuildResult(
+        updated=resource if isinstance(resource, dict) else {},
+        progress_message="Deploying...",
+        timeout_seconds=300,
+        poll_interval_seconds=1,
+        no_result_message=no_result_message,
+    )
+
+
+def _push_reference(push_to: str, tag: str | None) -> ImageReference:
+    if "@" in push_to:
+        raise click.UsageError(
+            "--push-to takes a repository with an optional tag, not a digest."
+        )
+    reference = ImageReference.parse(push_to)
+    if reference.tag is not None and tag is not None:
+        raise click.UsageError(
+            "--push-to already includes a tag; do not combine it with --tag."
+        )
+    if reference.tag is not None:
+        return reference
+    return reference.with_tag(normalize_image_tag(tag or DEFAULT_IMAGE_TAG))
 
 
 def _select_source(
     *,
-    image_uri: str | None,
+    push_to: str | None,
     image: str | None,
     image_name: str | None,
-    tag: str,
+    tag: str | None,
     remote_build_flag: bool | None,
 ) -> DeploymentSource:
-    if image_uri is not None:
+    if push_to is not None:
         if remote_build_flag is True:
-            raise click.UsageError("--image-uri cannot be combined with --remote.")
-        if image:
-            raise click.UsageError("--image-uri cannot be combined with --image.")
-        return ExternalDockerSource(image_uri=image_uri)
+            raise click.UsageError("--push-to cannot be combined with --remote.")
+        return ExternalDockerSource(_push_reference(push_to, tag), prebuilt_image=image)
     if image and remote_build_flag is True:
         raise click.UsageError("--image cannot be combined with --remote builds.")
     use_remote_build, local_build_error = _resolve_build_mode(
@@ -1439,7 +1473,7 @@ def _select_source(
     )
     if not use_remote_build:
         return InternalDockerSource(
-            prebuilt_image=image, image_name=image_name, tag=tag
+            prebuilt_image=image, image_name=image_name, tag=tag or DEFAULT_IMAGE_TAG
         )
     if remote_build_flag is None and local_build_error:
         em = _get_emitter()
@@ -1687,7 +1721,10 @@ def _deploy_base_options(
                 type=click.Choice(["dev", "prod"]),
                 default="dev",
                 show_default=True,
-                help="Deployment type (used when creating a new deployment).",
+                help=(
+                    "Deployment type (used when creating a new deployment). "
+                    "Ignored with --push-to."
+                ),
             ),
             click.option(
                 "--no-wait",
@@ -1701,9 +1738,8 @@ def _deploy_base_options(
             click.option(
                 "--tag",
                 "-t",
-                default="latest",
-                show_default=True,
-                help="Tag to use for the pushed deployment image.",
+                default=None,
+                help="Tag to use for the pushed deployment image. [default: latest]",
             ),
             click.option(
                 "--image",
@@ -1713,13 +1749,13 @@ def _deploy_base_options(
                 ),
             ),
             click.option(
-                "--image-uri",
+                "--push-to",
                 help=(
-                    "Image URI to build, push, and deploy "
-                    "(e.g. 123456789.dkr.ecr.us-east-1.amazonaws.com/repo:tag). "
-                    "Builds the project, pushes using existing Docker credentials, "
-                    "and triggers a deployment revision. "
-                    "Required for self-hosted deployments."
+                    "Push the image to this repository in a registry you manage, "
+                    "then deploy it from there. For self-hosted and hybrid "
+                    "LangSmith. Uses your existing Docker credentials. Builds the "
+                    "project, or retags the local image given with --image. "
+                    "Give the tag here or with --tag (default: latest)."
                 ),
             ),
             click.option(
@@ -1823,8 +1859,8 @@ def _deploy_cmd(
     name: str | None,
     image_name: str | None,
     image: str | None,
-    image_uri: str | None,
-    tag: str,
+    push_to: str | None,
+    tag: str | None,
     base_image: str | None,
     install_command: str | None,
     build_command: str | None,
@@ -1871,7 +1907,7 @@ def _deploy_cmd(
     secrets = _secrets_from_env(_env_without_deployment_name(env_vars))
 
     source = _select_source(
-        image_uri=image_uri,
+        push_to=push_to,
         image=image,
         image_name=image_name,
         tag=tag,

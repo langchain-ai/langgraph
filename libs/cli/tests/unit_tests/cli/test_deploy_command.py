@@ -14,12 +14,20 @@ import langgraph_cli.archive as archive_module
 import langgraph_cli.deploy as deploy_module
 from langgraph_cli.cli import cli
 from langgraph_cli.host_backend import HostBackendClient
+from langgraph_cli.image_reference import ImageReference
 
 CONTROL_PLANE_URL = "https://control-plane.example.com"
 REGISTRY_URL = "https://registry.example.com/team"
 PUSH_TOKEN = "push-token"
 PUSHED_IMAGE = "registry.example.com/team/my-app:latest"
 PUSHED_DIGEST = "registry.example.com/team/my-app@sha256:abc123"
+PUSH_REPOSITORY = "registry.example.com/team/agent"
+EXTERNAL_IMAGE = f"{PUSH_REPOSITORY}:latest"
+EXTERNAL_DIGEST = f"{PUSH_REPOSITORY}@sha256:abc123"
+LISTENER_REQUIRED = (
+    "Source configuration error: 'source_config.listener_id' is required for "
+    "workspace with available listener IDs: ['listener-1']"
+)
 CREATED_ID = "dep-created"
 TRACKED_PACKAGES = ["langgraph:1.0.0"]
 SIGNED_UPLOAD_URL = "https://storage.example.com/signed"
@@ -51,6 +59,7 @@ class ControlPlaneDouble:
     timeline: list[str]
     existing_deployments: list[dict] = field(default_factory=list)
     push_token_status: int = 200
+    create_error: str | None = None
     bodies: dict[str, dict] = field(default_factory=dict)
 
     def handle(self, request: httpx.Request) -> httpx.Response:
@@ -64,7 +73,9 @@ class ControlPlaneDouble:
         if (method, path) == ("GET", "/v2/deployments"):
             return httpx.Response(200, json={"resources": self.existing_deployments})
         if (method, path) == ("POST", "/v2/deployments"):
-            return httpx.Response(201, json={"id": CREATED_ID})
+            if self.create_error is not None:
+                return httpx.Response(400, text=self.create_error)
+            return httpx.Response(201, json={"id": CREATED_ID, "tenant_id": "tenant-1"})
         if path.endswith("/push-token"):
             if self.push_token_status != 200:
                 return httpx.Response(self.push_token_status, text=NOT_A_CLI_DEPLOYMENT)
@@ -154,7 +165,8 @@ class DockerDouble:
         if PLATFORM_FORMAT in args:
             return "linux/amd64\n", None
         if DIGESTS_FORMAT in args:
-            return json.dumps([PUSHED_DIGEST]), None
+            repository = ImageReference.parse(args[-1]).repository
+            return json.dumps([f"{repository}@sha256:abc123"]), None
         return None, None
 
     @staticmethod
@@ -470,3 +482,123 @@ def test_remote_build_creates_an_internal_source_deployment_and_uploads_the_arch
         "tracked_packages": TRACKED_PACKAGES,
     }
     assert "Build triggered" in result.output
+
+
+def _get(deployment_id: str) -> str:
+    return f"GET /v2/deployments/{deployment_id}"
+
+
+def test_push_to_builds_pushes_then_creates_an_external_deployment(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run("--push-to", PUSH_REPOSITORY)
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.timeline == [
+        LIST_DEPLOYMENTS,
+        "docker build",
+        "docker push",
+        "docker inspect-digest",
+        CREATE_DEPLOYMENT,
+    ]
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT] == {
+        "name": "my-app",
+        "source": "external_docker",
+        "source_config": {"resource_spec": {}},
+        "source_revision_config": {"image_uri": EXTERNAL_DIGEST},
+        "secrets": [],
+    }
+    assert "Deployment created" in result.output
+
+
+def test_push_to_builds_directly_with_the_push_reference(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.run("--push-to", PUSH_REPOSITORY)
+
+    assert deploy_project.docker.builds[0]["tag"] == EXTERNAL_IMAGE
+    assert deploy_project.docker.command("push").args == (
+        "docker",
+        "push",
+        EXTERNAL_IMAGE,
+    )
+
+
+def test_push_to_composes_with_the_tag_flag(deploy_project: DeployProject) -> None:
+    deploy_project.run("--push-to", PUSH_REPOSITORY, "--tag", "v1")
+
+    assert deploy_project.docker.command("push").args[-1] == f"{PUSH_REPOSITORY}:v1"
+
+
+def test_push_to_retags_a_prebuilt_image_instead_of_building(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run(
+        "--image", "local/app:dev", "--push-to", PUSH_REPOSITORY
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.docker.builds == []
+    assert deploy_project.docker.verbs() == [
+        "docker inspect-platform",
+        "docker tag",
+        "docker push",
+        "docker inspect-digest",
+    ]
+    assert deploy_project.docker.command("tag").args == (
+        "docker",
+        "tag",
+        "local/app:dev",
+        EXTERNAL_IMAGE,
+    )
+
+
+def test_push_to_updates_an_existing_external_deployment_with_the_new_image(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.existing_deployments = [
+        {"id": "dep-ext", "name": "my-app", "source": "external_docker"}
+    ]
+
+    result = deploy_project.run("--push-to", PUSH_REPOSITORY)
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.timeline == [
+        LIST_DEPLOYMENTS,
+        _get("dep-ext"),
+        "docker build",
+        "docker push",
+        "docker inspect-digest",
+        _patch("dep-ext"),
+    ]
+    assert deploy_project.control_plane.bodies[_patch("dep-ext")] == {
+        "source_revision_config": {"image_uri": EXTERNAL_DIGEST},
+        "secrets": [],
+        "tracked_packages": TRACKED_PACKAGES,
+    }
+
+
+def test_push_to_rejects_a_non_external_deployment_before_any_docker_work(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.existing_deployments = [
+        {"id": "dep-cli", "name": "my-app", "source": "internal_docker"}
+    ]
+
+    result = deploy_project.run("--push-to", PUSH_REPOSITORY)
+
+    assert result.exit_code != 0
+    assert "cannot be updated with --push-to" in result.output
+    assert deploy_project.docker.verbs() == []
+
+
+def test_push_to_explains_the_listener_requirement_of_hybrid_workspaces(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.create_error = LISTENER_REQUIRED
+
+    result = deploy_project.run("--push-to", PUSH_REPOSITORY)
+
+    assert result.exit_code != 0
+    assert "listener" in result.output
+    assert "--deployment-id" in result.output

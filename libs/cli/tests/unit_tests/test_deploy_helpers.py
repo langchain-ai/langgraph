@@ -31,6 +31,7 @@ from langgraph_cli.deploy import (
     normalize_name,
 )
 from langgraph_cli.host_backend import HostBackendClient, HostBackendError
+from langgraph_cli.image_reference import ImageReference
 
 
 class TestDockerConfigForToken:
@@ -603,14 +604,49 @@ class TestDockerBuildCommand:
 
 
 class TestSelectSource:
+    OPTIONS = {
+        "push_to": None,
+        "image": None,
+        "image_name": None,
+        "tag": None,
+        "remote_build_flag": None,
+    }
+    REPOSITORY = "registry.example.com/app"
+
     @pytest.mark.parametrize(
         ("flags", "docker_available", "expected"),
         [
             pytest.param(
-                {"image_uri": "registry.example.com/app"},
+                {"push_to": REPOSITORY},
                 True,
-                ExternalDockerSource(image_uri="registry.example.com/app"),
-                id="image_uri_selects_the_external_source",
+                ExternalDockerSource(
+                    ImageReference(REPOSITORY, "latest"), prebuilt_image=None
+                ),
+                id="push_to_selects_the_external_source_with_the_default_tag",
+            ),
+            pytest.param(
+                {"push_to": f"{REPOSITORY}:v2"},
+                True,
+                ExternalDockerSource(
+                    ImageReference(REPOSITORY, "v2"), prebuilt_image=None
+                ),
+                id="push_to_keeps_a_tag_given_in_the_reference",
+            ),
+            pytest.param(
+                {"push_to": REPOSITORY, "tag": "v3"},
+                True,
+                ExternalDockerSource(
+                    ImageReference(REPOSITORY, "v3"), prebuilt_image=None
+                ),
+                id="tag_flag_composes_with_push_to",
+            ),
+            pytest.param(
+                {"push_to": REPOSITORY, "image": "app:dev"},
+                False,
+                ExternalDockerSource(
+                    ImageReference(REPOSITORY, "latest"), prebuilt_image="app:dev"
+                ),
+                id="prebuilt_image_is_retagged_for_push_to_without_docker_checks",
             ),
             pytest.param(
                 {"remote_build_flag": True},
@@ -653,29 +689,26 @@ class TestSelectSource:
             "can_build_locally",
             lambda: (True, None) if docker_available else (False, "Docker is required"),
         )
-        options = {
-            "image_uri": None,
-            "image": None,
-            "image_name": None,
-            "tag": "latest",
-            "remote_build_flag": None,
-            **flags,
-        }
 
-        assert _select_source(**options) == expected
+        assert _select_source(**{**self.OPTIONS, **flags}) == expected
 
     @pytest.mark.parametrize(
         ("flags", "message"),
         [
             pytest.param(
-                {"image_uri": "registry.example.com/app", "remote_build_flag": True},
-                "--image-uri cannot be combined with --remote.",
-                id="image_uri_with_remote",
+                {"push_to": REPOSITORY, "remote_build_flag": True},
+                "--push-to cannot be combined with --remote.",
+                id="push_to_with_remote",
             ),
             pytest.param(
-                {"image_uri": "registry.example.com/app", "image": "app:dev"},
-                "--image-uri cannot be combined with --image.",
-                id="image_uri_with_image",
+                {"push_to": f"{REPOSITORY}:v1", "tag": "v2"},
+                "already includes a tag",
+                id="push_to_with_a_tag_and_the_tag_flag",
+            ),
+            pytest.param(
+                {"push_to": f"{REPOSITORY}@sha256:abc"},
+                "not a digest",
+                id="push_to_with_a_digest",
             ),
             pytest.param(
                 {"image": "app:dev", "remote_build_flag": True},
@@ -685,17 +718,8 @@ class TestSelectSource:
         ],
     )
     def test_conflicting_flags_are_rejected(self, flags, message):
-        options = {
-            "image_uri": None,
-            "image": None,
-            "image_name": None,
-            "tag": "latest",
-            "remote_build_flag": None,
-            **flags,
-        }
-
         with pytest.raises(click.UsageError, match=message):
-            _select_source(**options)
+            _select_source(**{**self.OPTIONS, **flags})
 
 
 class TestResolvePushedImageDigest:
