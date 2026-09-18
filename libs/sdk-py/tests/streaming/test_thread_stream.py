@@ -311,6 +311,28 @@ async def test_run_start_forwards_config_metadata_and_langsmith_tracing():
     }
 
 
+async def test_run_start_forwards_context():
+    fake = FakeServer()
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={"x": 1}, context={"user_id": "u-1"})
+    params = fake.received_commands[0]["params"]
+    assert params["context"] == {"user_id": "u-1"}
+
+
+async def test_run_start_omits_context_when_not_provided():
+    fake = FakeServer()
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={"x": 1})
+    params = fake.received_commands[0]["params"]
+    assert "context" not in params
+
+
 async def test_run_start_raises_outside_context_manager():
 
     async with httpx.AsyncClient(base_url="http://test") as raw:
@@ -614,6 +636,38 @@ async def test_run_respond_dispatches_input_respond_command():
     assert command["params"]["interrupt_id"] == "i-1"
     assert command["params"]["response"] == "yes"
     assert command["params"]["namespace"] == []
+
+
+async def test_run_respond_forwards_context():
+    fake = FakeServer()
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            thread.interrupts.append(
+                {"interrupt_id": "i-1", "value": None, "namespace": []}
+            )
+            thread.interrupted = True
+            await thread.run.respond("yes", context={"user_id": "u-1"})
+    params = fake.received_commands[-1]["params"]
+    assert params["context"] == {"user_id": "u-1"}
+
+
+async def test_run_respond_omits_context_when_not_provided():
+    fake = FakeServer()
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            thread.interrupts.append(
+                {"interrupt_id": "i-1", "value": None, "namespace": []}
+            )
+            thread.interrupted = True
+            await thread.run.respond("yes")
+    params = fake.received_commands[-1]["params"]
+    assert "context" not in params
 
 
 async def test_run_respond_with_explicit_interrupt_id():
