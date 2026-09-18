@@ -475,6 +475,14 @@ class InMemoryStore(BaseStore):
             namespaces = sorted(namespaces)
         return namespaces[op.offset : op.offset + op.limit]
 
+    def export_bundle(self, namespace: tuple[str, ...]) -> dict:
+        """Export a sealed memory bundle."""
+        return {}
+
+    def import_bundle(self, bundle: dict) -> None:
+        """Import a sealed memory bundle."""
+        pass
+
 
 @functools.lru_cache(maxsize=1)
 def _check_numpy() -> bool:

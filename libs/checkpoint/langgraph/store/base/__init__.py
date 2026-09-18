@@ -1259,6 +1259,14 @@ class BaseStore(ABC):
         )
         return (await self.abatch([op]))[0]
 
+    def export_bundle(self, namespace: tuple[str, ...]) -> dict:
+        """Export a sealed memory bundle."""
+        raise NotImplementedError
+
+    def import_bundle(self, bundle: dict) -> None:
+        """Import a sealed memory bundle."""
+        raise NotImplementedError
+
 
 def _validate_namespace(namespace: tuple[str, ...]) -> None:
     if not namespace:
