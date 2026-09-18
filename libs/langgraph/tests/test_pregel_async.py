@@ -9716,3 +9716,33 @@ async def test_node_error_handler_handles_subgraph_internal_failure_async() -> N
     assert result["foo"] == "handled_async_subgraph"
     assert captured["from_node_name"] == "subgraph_node"
     assert isinstance(captured["from_node_error"], BaseException)
+
+
+async def test_pregel_aclear_cache_empty_list() -> None:
+    from langgraph.cache.memory import AsyncInMemoryCache  # noqa: PLC0415
+
+    from langgraph.graph import END, START, StateGraph  # noqa: PLC0415
+    from langgraph.types import CachePolicy  # noqa: PLC0415
+
+    calls = 0
+
+    async def cached_node(state: dict) -> dict:
+        nonlocal calls
+        calls += 1
+        return {"value": state["value"] + 1}
+
+    builder = StateGraph(dict)
+    builder.add_node("cached_node", cached_node, cache_policy=CachePolicy())
+    builder.add_edge(START, "cached_node")
+    builder.add_edge("cached_node", END)
+    app = builder.compile(cache=AsyncInMemoryCache())
+
+    payload = {"value": 1}
+    await app.ainvoke(payload)
+    await app.ainvoke(payload)
+    assert calls == 1  # The second invocation uses the cache.
+
+    await app.aclear_cache([])
+    await app.ainvoke(payload)
+
+    assert calls == 1
