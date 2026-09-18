@@ -28,6 +28,7 @@ from langgraph_cli.host_backend import (
     HostBackendClient,
     HostBackendError,
 )
+from langgraph_cli.image_reference import ImageReference
 from langgraph_cli.progress import Progress
 from langgraph_cli.util import warn_non_wolfi_distro
 
@@ -889,8 +890,7 @@ def _resolve_pushed_image_digest(
     Falls back to ``remote_image`` with a warning if no matching digest is
     found, rather than failing the deploy.
     """
-    # rsplit preserves ``:port`` in the registry host.
-    repo_no_tag = remote_image.rsplit(":", 1)[0]
+    reference = ImageReference.parse(remote_image)
     args: list[str] = ["docker"]
     if docker_config_dir:
         args += ["--config", docker_config_dir]
@@ -901,7 +901,7 @@ def _resolve_pushed_image_digest(
     except json_mod.JSONDecodeError:
         digests = []
     for d in digests:
-        if isinstance(d, str) and d.startswith(f"{repo_no_tag}@sha256:"):
+        if isinstance(d, str) and reference.matches_digest(d):
             return d
     _get_emitter().warn(
         f"Could not resolve image digest for {remote_image}; "

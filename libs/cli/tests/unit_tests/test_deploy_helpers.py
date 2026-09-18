@@ -611,6 +611,16 @@ class TestResolvePushedImageDigest:
         )
         assert out == "us-central1-docker.pkg.dev/proj/repo@sha256:abc123"
 
+    def test_registry_port_without_tag_still_resolves_the_digest(self):
+        runner = self._runner('["localhost:5000/repo@sha256:abc123"]')
+        out = _resolve_pushed_image_digest(
+            runner,
+            remote_image="localhost:5000/repo",
+            docker_config_dir=None,
+            verbose=False,
+        )
+        assert out == "localhost:5000/repo@sha256:abc123"
+
     def test_empty_repodigests_falls_back_with_warning(self, mocker):
         emitter = mocker.MagicMock()
         mocker.patch("langgraph_cli.deploy._get_emitter", return_value=emitter)
