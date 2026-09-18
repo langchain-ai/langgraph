@@ -9666,3 +9666,33 @@ async def test_delta_channel_async_write_ordering() -> None:
 
     state = await graph.aget_state(config)
     assert len(state.values["messages"]) == 6  # 3 human + 3 AI
+
+
+def test_clear_cache_empty_list() -> None:
+    from langgraph.cache.memory import InMemoryCache  # noqa: PLC0415
+
+    from langgraph.graph import END, START, StateGraph  # noqa: PLC0415
+    from langgraph.types import CachePolicy  # noqa: PLC0415
+
+    calls = 0
+
+    def cached_node(state: dict) -> dict:
+        nonlocal calls
+        calls += 1
+        return {"value": state.get("value", 0) + 1}
+
+    builder = StateGraph(dict)
+    builder.add_node("cached_node", cached_node, cache_policy=CachePolicy())
+    builder.add_edge(START, "cached_node")
+    builder.add_edge("cached_node", END)
+    app = builder.compile(cache=InMemoryCache())
+
+    payload = {"value": 1}
+    app.invoke(payload)
+    app.invoke(payload)
+    assert calls == 1
+
+    app.clear_cache([])
+    app.invoke(payload)
+
+    assert calls == 1
