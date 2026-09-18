@@ -642,3 +642,13 @@ def test_push_to_with_deployment_id_fetches_the_deployment_once(
         "docker inspect-digest",
         _patch("dep-ext"),
     ]
+
+
+def test_invalid_tag_fails_before_any_control_plane_call(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run("--no-remote", "--tag", "not a tag")
+
+    assert result.exit_code != 0
+    assert "Image tag may only contain" in result.output
+    assert deploy_project.timeline == []

@@ -415,7 +415,7 @@ def normalize_image_tag(value: str) -> str:
     Tags may only contain [A-Za-z0-9_.-].  Defaults to "latest" when empty.
     """
     if not value:
-        value = "latest"
+        value = _DEFAULT_IMAGE_TAG
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", value):
         raise click.UsageError(
             "Image tag may only contain characters A-Z, a-z, 0-9, '_', '-', '.'"
@@ -1123,7 +1123,7 @@ def _run_local_build(
         remote_image = str(
             ImageReference(
                 f"{normalized_registry}/{normalize_name(repo_seed)}",
-                normalize_image_tag(tag),
+                tag,
             )
         )
         registry_host = normalized_registry.split("/")[0]
@@ -1507,7 +1507,9 @@ def _select_source(
     )
     if not use_remote_build:
         return ManagedRegistrySource(
-            prebuilt_image=image, image_name=image_name, tag=tag or _DEFAULT_IMAGE_TAG
+            prebuilt_image=image,
+            image_name=image_name,
+            tag=normalize_image_tag(tag or _DEFAULT_IMAGE_TAG),
         )
     if remote_build_flag is None and local_build_error:
         em = _get_emitter()
