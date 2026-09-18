@@ -2154,3 +2154,19 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
         AIMessage("hi-hi-6", id="1"),
     ]
     assert result["foo"] == 2
+
+
+def test_pre_model_hook_empty_llm_input_messages() -> None:
+    model = FakeToolCallingModel(tool_calls=[])
+
+    def pre_model_hook(state: AgentState):
+        return {"llm_input_messages": []}
+
+    agent = create_react_agent(model, [], pre_model_hook=pre_model_hook)
+    result = agent.invoke({"messages": [HumanMessage("SHOULD_NOT_BE_SENT")]})
+    assert result == {
+        "messages": [
+            _AnyIdHumanMessage(content="SHOULD_NOT_BE_SENT"),
+            AIMessage(content="", id="0"),
+        ]
+    }

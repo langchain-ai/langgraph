@@ -635,9 +635,12 @@ def create_react_agent(
 
     def _get_model_input_state(state: StateSchema) -> StateSchema:
         if pre_model_hook is not None:
+            llm_input_messages = _get_state_value(state, "llm_input_messages")
             messages = (
-                _get_state_value(state, "llm_input_messages")
-            ) or _get_state_value(state, "messages")
+                llm_input_messages
+                if llm_input_messages is not None
+                else _get_state_value(state, "messages")
+            )
             error_msg = f"Expected input to call_model to have 'llm_input_messages' or 'messages' key, but got {state}"
         else:
             messages = _get_state_value(state, "messages")
