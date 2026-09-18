@@ -1,11 +1,17 @@
 import asyncio
 import signal
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from contextlib import contextmanager
-from typing import cast
+from typing import Any, Protocol, TypeVar, cast
 
 import click.exceptions
+
+_T = TypeVar("_T")
+
+
+class CommandRunner(Protocol):
+    def run(self, coro: Coroutine[Any, Any, _T]) -> _T: ...
 
 
 @contextmanager

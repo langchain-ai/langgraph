@@ -2,10 +2,85 @@
 
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
+from urllib.parse import urlparse
 
 import click
 import httpx
+
+CLOUD_CONTROL_PLANE_URL = "https://api.host.langchain.com"
+CLOUD_DASHBOARD_URL = "https://smith.langchain.com"
+CLOUD_DOMAIN = "langchain.com"
+CLOUD_API_HOST = "api.smith.langchain.com"
+CLOUD_CONTROL_PLANE_HOST = "api.host.langchain.com"
+CLOUD_DASHBOARD_HOST = "smith.langchain.com"
+CONTROL_PLANE_PATH = "/api-host"
+LANGSMITH_API_PATHS = ("/api/v1", "/api")
+LOCAL_HOSTNAMES = ("localhost", "127.0.0.1")
+SourceName = Literal["internal_docker", "internal_source", "external_docker"]
+
+
+@dataclass(frozen=True, slots=True)
+class ControlPlaneEndpoints:
+    control_plane_url: str
+    dashboard_url: str
+
+    @classmethod
+    def resolve(
+        cls, host_url: str | None, langsmith_endpoint: str | None
+    ) -> ControlPlaneEndpoints:
+        if host_url:
+            return cls.from_control_plane_url(host_url)
+        if langsmith_endpoint:
+            return cls.from_langsmith_endpoint(langsmith_endpoint)
+        return cls(CLOUD_CONTROL_PLANE_URL, CLOUD_DASHBOARD_URL)
+
+    @classmethod
+    def from_control_plane_url(cls, url: str) -> ControlPlaneEndpoints:
+        control_plane_url = url.rstrip("/")
+        hostname = urlparse(control_plane_url).hostname or ""
+        if control_plane_url.endswith(CONTROL_PLANE_PATH):
+            return cls(control_plane_url, control_plane_url[: -len(CONTROL_PLANE_PATH)])
+        if hostname in LOCAL_HOSTNAMES:
+            return cls(control_plane_url, control_plane_url)
+        return cls(control_plane_url, _cloud_dashboard_for(hostname))
+
+    @classmethod
+    def from_langsmith_endpoint(cls, endpoint: str) -> ControlPlaneEndpoints:
+        parsed = urlparse(endpoint.rstrip("/"))
+        hostname = parsed.hostname or ""
+        if _is_cloud_host(hostname):
+            return cls.from_control_plane_url(
+                f"https://{_cloud_control_plane_host_for(hostname)}"
+            )
+        root = f"{parsed.scheme}://{parsed.netloc}{_without_api_path(parsed.path)}"
+        return cls(f"{root}{CONTROL_PLANE_PATH}", root)
+
+
+def _is_cloud_host(hostname: str) -> bool:
+    return hostname == CLOUD_DOMAIN or hostname.endswith(f".{CLOUD_DOMAIN}")
+
+
+def _cloud_control_plane_host_for(langsmith_api_host: str) -> str:
+    if langsmith_api_host.endswith(f".{CLOUD_API_HOST}"):
+        region = langsmith_api_host[: -len(CLOUD_API_HOST)]
+        return f"{region}{CLOUD_CONTROL_PLANE_HOST}"
+    return CLOUD_CONTROL_PLANE_HOST
+
+
+def _cloud_dashboard_for(control_plane_host: str) -> str:
+    if control_plane_host.endswith(f".{CLOUD_CONTROL_PLANE_HOST}"):
+        region = control_plane_host[: -len(CLOUD_CONTROL_PLANE_HOST) - 1]
+        return f"https://{region}.{CLOUD_DASHBOARD_HOST}"
+    return CLOUD_DASHBOARD_URL
+
+
+def _without_api_path(path: str) -> str:
+    for api_path in LANGSMITH_API_PATHS:
+        if path.endswith(api_path):
+            return path[: -len(api_path)]
+    return path
 
 
 class HostBackendError(click.ClickException):
@@ -24,10 +99,11 @@ class HostBackendClient:
         base_url: str,
         api_key: str,
         tenant_id: str | None = None,
+        *,
+        transport: httpx.BaseTransport | None = None,
     ):
         if not base_url:
             raise click.UsageError("Host backend URL is required")
-        transport = httpx.HTTPTransport(retries=3)
         headers: dict[str, str] = {
             "X-Api-Key": api_key,
             "Accept": "application/json",
@@ -38,9 +114,16 @@ class HostBackendClient:
         self._client = httpx.Client(
             base_url=self._base_url,
             headers=headers,
-            transport=transport,
+            transport=transport or httpx.HTTPTransport(retries=3),
             timeout=30,
         )
+
+    @property
+    def base_url(self) -> str:
+        return self._base_url
+
+    def set_tenant(self, tenant_id: str) -> None:
+        self._client.headers["X-Tenant-ID"] = tenant_id
 
     def _request(
         self,
@@ -72,21 +155,19 @@ class HostBackendClient:
 
     def create_deployment(
         self,
+        *,
         name: str,
-        deployment_type: str,
-        source: str,
-        config_path: str | None = None,
+        source: SourceName,
+        source_config: dict[str, object],
+        source_revision_config: dict[str, object],
         secrets: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
-        """Create a deployment."""
         payload: dict[str, Any] = {
             "name": name,
             "source": source,
-            "source_config": {"deployment_type": deployment_type},
-            "source_revision_config": {},
+            "source_config": source_config,
+            "source_revision_config": source_revision_config,
         }
-        if source == "internal_source" and config_path:
-            payload["source_revision_config"]["langgraph_config_path"] = config_path
         if secrets is not None:
             payload["secrets"] = secrets
         return self._request("POST", "/v2/deployments", payload)
@@ -121,22 +202,21 @@ class HostBackendClient:
         self,
         deployment_id: str,
         image_uri: str,
+        *,
+        revision_source: SourceName | None,
         secrets: list[dict[str, str]] | None = None,
         tracked_packages: list[str] | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
-            "revision_source": "internal_docker",
             "source_revision_config": {"image_uri": image_uri},
         }
+        if revision_source is not None:
+            payload["revision_source"] = revision_source
         if tracked_packages:
             payload["tracked_packages"] = tracked_packages
         if secrets is not None:
             payload["secrets"] = secrets
-        return self._request(
-            "PATCH",
-            f"/v2/deployments/{deployment_id}",
-            payload,
-        )
+        return self._request("PATCH", f"/v2/deployments/{deployment_id}", payload)
 
     def update_deployment_internal_source(
         self,
