@@ -259,22 +259,18 @@ class TestEnvWithoutDeploymentName:
 
 class TestCallHostBackendWithOptionalTenant:
     def _make_client(self, handler):
-        c = HostBackendClient("https://api.example.com", "test-key")
-        c._client = httpx.Client(
-            base_url="https://api.example.com",
+        c = HostBackendClient(
+            "https://api.example.com",
+            "test-key",
             transport=httpx.MockTransport(handler),
-            headers={"X-Api-Key": "test-key", "Accept": "application/json"},
-            timeout=30,
         )
         return c
 
     def _make_eu_client(self, handler):
-        c = HostBackendClient("https://eu.api.host.langchain.com", "test-key")
-        c._client = httpx.Client(
-            base_url="https://eu.api.host.langchain.com",
+        c = HostBackendClient(
+            "https://eu.api.host.langchain.com",
+            "test-key",
             transport=httpx.MockTransport(handler),
-            headers={"X-Api-Key": "test-key", "Accept": "application/json"},
-            timeout=30,
         )
         return c
 
@@ -334,7 +330,6 @@ class TestCallHostBackendWithOptionalTenant:
         assert exc_info.value.status_code == 403
         assert "smith.langchain.com" in exc_info.value.message
         assert seen_tenant_ids == [None, "workspace-123"]
-        assert client._client.headers["X-Tenant-ID"] == "workspace-123"
 
     def test_other_403_re_raises_original(self):
         client = self._make_client(

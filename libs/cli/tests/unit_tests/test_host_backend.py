@@ -13,12 +13,8 @@ def mock_transport():
 
 @pytest.fixture
 def client(mock_transport):
-    c = HostBackendClient("https://api.example.com", "test-key")
-    c._client = httpx.Client(
-        base_url="https://api.example.com",
-        transport=mock_transport,
-        headers={"X-Api-Key": "test-key", "Accept": "application/json"},
-        timeout=30,
+    c = HostBackendClient(
+        "https://api.example.com", "test-key", transport=mock_transport
     )
     return c
 
@@ -39,12 +35,8 @@ def test_request_sends_headers():
         assert req.headers["accept"] == "application/json"
         return httpx.Response(200, json={"ok": True})
 
-    c = HostBackendClient("https://api.example.com", "test-key")
-    c._client = httpx.Client(
-        base_url="https://api.example.com",
-        transport=httpx.MockTransport(handler),
-        headers={"X-Api-Key": "test-key", "Accept": "application/json"},
-        timeout=30,
+    c = HostBackendClient(
+        "https://api.example.com", "test-key", transport=httpx.MockTransport(handler)
     )
     result = c._request("GET", "/test")
     assert result == {"ok": True}
@@ -56,12 +48,8 @@ def test_request_sends_json_payload():
         assert req.content == b'{"key":"value"}'
         return httpx.Response(200, json={"created": True})
 
-    c = HostBackendClient("https://api.example.com", "test-key")
-    c._client = httpx.Client(
-        base_url="https://api.example.com",
-        transport=httpx.MockTransport(handler),
-        headers={"X-Api-Key": "test-key", "Accept": "application/json"},
-        timeout=30,
+    c = HostBackendClient(
+        "https://api.example.com", "test-key", transport=httpx.MockTransport(handler)
     )
     result = c._request("POST", "/test", {"key": "value"})
     assert result == {"created": True}
@@ -69,25 +57,13 @@ def test_request_sends_json_payload():
 
 def test_request_empty_body_returns_none():
     transport = httpx.MockTransport(lambda req: httpx.Response(200, content=b""))
-    c = HostBackendClient("https://api.example.com", "test-key")
-    c._client = httpx.Client(
-        base_url="https://api.example.com",
-        transport=transport,
-        headers={"X-Api-Key": "test-key", "Accept": "application/json"},
-        timeout=30,
-    )
+    c = HostBackendClient("https://api.example.com", "test-key", transport=transport)
     assert c._request("DELETE", "/test") is None
 
 
 def test_request_http_error_raises():
     transport = httpx.MockTransport(lambda req: httpx.Response(404, text="not found"))
-    c = HostBackendClient("https://api.example.com", "test-key")
-    c._client = httpx.Client(
-        base_url="https://api.example.com",
-        transport=transport,
-        headers={"X-Api-Key": "test-key", "Accept": "application/json"},
-        timeout=30,
-    )
+    c = HostBackendClient("https://api.example.com", "test-key", transport=transport)
     with pytest.raises(HostBackendError, match="404"):
         c._request("GET", "/missing")
 
@@ -96,13 +72,7 @@ def test_request_invalid_json_raises():
     transport = httpx.MockTransport(
         lambda req: httpx.Response(200, content=b"not json")
     )
-    c = HostBackendClient("https://api.example.com", "test-key")
-    c._client = httpx.Client(
-        base_url="https://api.example.com",
-        transport=transport,
-        headers={"X-Api-Key": "test-key", "Accept": "application/json"},
-        timeout=30,
-    )
+    c = HostBackendClient("https://api.example.com", "test-key", transport=transport)
     with pytest.raises(HostBackendError, match="Failed to decode"):
         c._request("GET", "/bad-json")
 
@@ -111,12 +81,8 @@ def test_request_transport_error_raises():
     def handler(req: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("connection refused")
 
-    c = HostBackendClient("https://api.example.com", "test-key")
-    c._client = httpx.Client(
-        base_url="https://api.example.com",
-        transport=httpx.MockTransport(handler),
-        headers={"X-Api-Key": "test-key", "Accept": "application/json"},
-        timeout=30,
+    c = HostBackendClient(
+        "https://api.example.com", "test-key", transport=httpx.MockTransport(handler)
     )
     with pytest.raises(HostBackendError, match="connection refused"):
         c._request("GET", "/test")
@@ -145,12 +111,8 @@ def test_list_deployments_sends_query_params():
         assert req.url.params["name_contains"] == "my app"
         return httpx.Response(200, json={"ok": True})
 
-    c = HostBackendClient("https://api.example.com", "test-key")
-    c._client = httpx.Client(
-        base_url="https://api.example.com",
-        transport=httpx.MockTransport(handler),
-        headers={"X-Api-Key": "test-key", "Accept": "application/json"},
-        timeout=30,
+    c = HostBackendClient(
+        "https://api.example.com", "test-key", transport=httpx.MockTransport(handler)
     )
     result = c.list_deployments("my app")
     assert result == {"ok": True}
@@ -214,34 +176,13 @@ def test_update_deployment_external_omits_tracked_packages_when_absent():
     assert "revision_source" not in body
 
 
-def test_request_builds_full_url_with_path_prefix():
-    """base_url with a path prefix (/api-host) must not be dropped when paths start with /."""
-
-    def handler(req: httpx.Request) -> httpx.Response:
-        assert str(req.url) == "https://smith.example.com/api-host/v2/deployments"
-        return httpx.Response(200, json={"ok": True})
-
-    c = HostBackendClient("https://smith.example.com/api-host", "key")
-    c._client = httpx.Client(
-        transport=httpx.MockTransport(handler),
-        headers={"X-Api-Key": "key", "Accept": "application/json"},
-        timeout=30,
-    )
-    result = c._request("GET", "/v2/deployments")
-    assert result == {"ok": True}
-
-
 def _capturing_client(captured: dict) -> HostBackendClient:
     def handler(req: httpx.Request) -> httpx.Response:
         captured["body"] = req.read()
         return httpx.Response(200, json={"ok": True})
 
-    c = HostBackendClient("https://api.example.com", "key")
-    c._client = httpx.Client(
-        base_url="https://api.example.com",
-        transport=httpx.MockTransport(handler),
-        headers={"X-Api-Key": "key", "Accept": "application/json"},
-        timeout=30,
+    c = HostBackendClient(
+        "https://api.example.com", "key", transport=httpx.MockTransport(handler)
     )
     return c
 
@@ -315,12 +256,8 @@ def test_get_deploy_logs_all_revisions():
         assert "/revisions/" not in str(req.url)
         return httpx.Response(200, json={"logs": [{"message": "running"}]})
 
-    c = HostBackendClient("https://api.example.com", "key")
-    c._client = httpx.Client(
-        base_url="https://api.example.com",
-        transport=httpx.MockTransport(handler),
-        headers={"X-Api-Key": "key", "Accept": "application/json"},
-        timeout=30,
+    c = HostBackendClient(
+        "https://api.example.com", "key", transport=httpx.MockTransport(handler)
     )
     result = c.get_deploy_logs("proj-1", {"limit": 10})
     assert result == {"logs": [{"message": "running"}]}
@@ -331,12 +268,8 @@ def test_get_deploy_logs_specific_revision():
         assert "/v1/projects/proj-1/revisions/rev-2/deploy_logs" in str(req.url)
         return httpx.Response(200, json={"logs": []})
 
-    c = HostBackendClient("https://api.example.com", "key")
-    c._client = httpx.Client(
-        base_url="https://api.example.com",
-        transport=httpx.MockTransport(handler),
-        headers={"X-Api-Key": "key", "Accept": "application/json"},
-        timeout=30,
+    c = HostBackendClient(
+        "https://api.example.com", "key", transport=httpx.MockTransport(handler)
     )
     result = c.get_deploy_logs("proj-1", {"limit": 10}, revision_id="rev-2")
     assert result == {"logs": []}
@@ -348,12 +281,8 @@ def _routing_client(seen: dict) -> HostBackendClient:
         seen["url"] = str(req.url)
         return httpx.Response(200, json={"ok": True})
 
-    c = HostBackendClient("https://api.example.com/prefix", "key")
-    c._client = httpx.Client(
-        base_url="https://api.example.com/prefix",
-        transport=httpx.MockTransport(handler),
-        headers={"X-Api-Key": "key", "Accept": "application/json"},
-        timeout=30,
+    c = HostBackendClient(
+        "https://api.example.com/prefix", "key", transport=httpx.MockTransport(handler)
     )
     return c
 
@@ -535,3 +464,24 @@ def test_request_targets_control_plane_route_under_base_url(call, method, route)
         method,
         f"https://api.example.com/prefix{route}",
     )
+
+
+def test_injected_transport_receives_requests_under_the_prefixed_base_url():
+    seen: dict = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["url"] = str(req.url)
+        seen["api_key"] = req.headers["x-api-key"]
+        return httpx.Response(200, json={"ok": True})
+
+    c = HostBackendClient(
+        "https://smith.example.com/api-host",
+        "key",
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert c.list_revisions("dep-1", limit=2) == {"ok": True}
+    assert seen == {
+        "url": "https://smith.example.com/api-host/v2/deployments/dep-1/revisions?limit=2",
+        "api_key": "key",
+    }

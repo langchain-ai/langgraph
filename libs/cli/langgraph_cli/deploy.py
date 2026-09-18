@@ -1414,11 +1414,11 @@ def _call_host_backend_with_optional_tenant(
                     "Find your workspace ID in LangSmith under Settings > Workspaces.",
                     fg="yellow",
                 )
-                client._client.headers["X-Tenant-ID"] = click.prompt("Workspace ID")
+                client.set_tenant(click.prompt("Workspace ID"))
                 prompted_for_tenant = True
                 continue
             if err.status_code == 403 and "not enabled" in err.message.lower():
-                smith_base = _smith_dashboard_base_url(client._base_url)
+                smith_base = _smith_dashboard_base_url(client.base_url)
                 raise HostBackendError(
                     "LangSmith Deployment is not enabled for this organization. "
                     f"Enable it at {smith_base}/host/deployments"

@@ -6,94 +6,96 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import click.exceptions
+import httpx
 import pytest
 from click.testing import CliRunner, Result
 
 import langgraph_cli.archive as archive_module
 import langgraph_cli.deploy as deploy_module
 from langgraph_cli.cli import cli
-from langgraph_cli.host_backend import HostBackendError
+from langgraph_cli.host_backend import HostBackendClient
 
 CONTROL_PLANE_URL = "https://control-plane.example.com"
 REGISTRY_URL = "https://registry.example.com/team"
 PUSH_TOKEN = "push-token"
 PUSHED_IMAGE = "registry.example.com/team/my-app:latest"
 PUSHED_DIGEST = "registry.example.com/team/my-app@sha256:abc123"
-CREATED_DEPLOYMENT_ID = "dep-created"
+CREATED_ID = "dep-created"
 TRACKED_PACKAGES = ["langgraph:1.0.0"]
 SIGNED_UPLOAD_URL = "https://storage.example.com/signed"
 ARCHIVE = ("/tmp/src.tgz", 2048, "langgraph.json")
 OBJECT_PATH = "tarballs/src.tgz"
 PLATFORM_FORMAT = "{{.Os}}/{{.Architecture}}"
 DIGESTS_FORMAT = "{{json .RepoDigests}}"
+NOT_A_CLI_DEPLOYMENT = (
+    "push token is only available for 'internal_docker' source deployments"
+)
+LIST_DEPLOYMENTS = "GET /v2/deployments"
+CREATE_DEPLOYMENT = "POST /v2/deployments"
+
+
+def _push_token(deployment_id: str) -> str:
+    return f"POST /v2/deployments/{deployment_id}/push-token"
+
+
+def _upload_url(deployment_id: str) -> str:
+    return f"POST /v2/deployments/{deployment_id}/upload-url"
+
+
+def _patch(deployment_id: str) -> str:
+    return f"PATCH /v2/deployments/{deployment_id}"
 
 
 @dataclass
 class ControlPlaneDouble:
     timeline: list[str]
     existing_deployments: list[dict] = field(default_factory=list)
-    push_token_error: HostBackendError | None = None
-    payloads: dict[str, dict] = field(default_factory=dict)
+    push_token_status: int = 200
+    bodies: dict[str, dict] = field(default_factory=dict)
 
-    def record(self, method: str, **payload: object) -> None:
-        self.timeline.append(method)
-        self.payloads[method] = payload
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        route = f"{request.method} {request.url.path}"
+        self.timeline.append(route)
+        if request.content:
+            self.bodies[route] = json.loads(request.content)
+        return self._respond(request.method, request.url.path)
 
-    def client_class(self) -> type:
-        double = self
+    def _respond(self, method: str, path: str) -> httpx.Response:
+        if (method, path) == ("GET", "/v2/deployments"):
+            return httpx.Response(200, json={"resources": self.existing_deployments})
+        if (method, path) == ("POST", "/v2/deployments"):
+            return httpx.Response(201, json={"id": CREATED_ID})
+        if path.endswith("/push-token"):
+            if self.push_token_status != 200:
+                return httpx.Response(self.push_token_status, text=NOT_A_CLI_DEPLOYMENT)
+            return httpx.Response(
+                200, json={"token": PUSH_TOKEN, "registry_url": REGISTRY_URL}
+            )
+        if path.endswith("/upload-url"):
+            return httpx.Response(
+                200, json={"upload_url": SIGNED_UPLOAD_URL, "object_path": OBJECT_PATH}
+            )
+        if method == "PATCH":
+            return httpx.Response(200, json={"tenant_id": "tenant-1"})
+        if method == "GET":
+            deployment_id = path.rsplit("/", 1)[-1]
+            return httpx.Response(
+                200,
+                json=next(
+                    d for d in self.existing_deployments if d["id"] == deployment_id
+                ),
+            )
+        raise AssertionError(f"unexpected control plane call: {method} {path}")
 
-        class FakeHostBackendClient:
-            def __init__(
-                self, host_url: str, api_key: str, tenant_id: str | None = None
-            ) -> None:
-                self.base_url = host_url
+    def client_factory(self) -> Callable[..., HostBackendClient]:
+        transport = httpx.MockTransport(self.handle)
 
-            def list_deployments(self, name_contains: str = "") -> dict:
-                double.record("list_deployments", name_contains=name_contains)
-                return {"resources": double.existing_deployments}
+        def make(
+            host_url: str, api_key: str, tenant_id: str | None = None
+        ) -> HostBackendClient:
+            return HostBackendClient(host_url, api_key, tenant_id, transport=transport)
 
-            def get_deployment(self, deployment_id: str) -> dict:
-                double.record("get_deployment", deployment_id=deployment_id)
-                return next(
-                    d for d in double.existing_deployments if d["id"] == deployment_id
-                )
-
-            def create_deployment(self, **payload: object) -> dict:
-                double.record("create_deployment", **payload)
-                return {"id": CREATED_DEPLOYMENT_ID}
-
-            def request_push_token(self, deployment_id: str) -> dict:
-                double.record("request_push_token", deployment_id=deployment_id)
-                if double.push_token_error is not None:
-                    raise double.push_token_error
-                return {"token": PUSH_TOKEN, "registry_url": REGISTRY_URL}
-
-            def update_deployment(
-                self, deployment_id: str, image_uri: str, **payload: object
-            ) -> dict:
-                double.record(
-                    "update_deployment",
-                    deployment_id=deployment_id,
-                    image_uri=image_uri,
-                    **payload,
-                )
-                return {"tenant_id": "tenant-1"}
-
-            def request_upload_url(self, deployment_id: str) -> dict:
-                double.record("request_upload_url", deployment_id=deployment_id)
-                return {"upload_url": SIGNED_UPLOAD_URL, "object_path": OBJECT_PATH}
-
-            def update_deployment_internal_source(
-                self, deployment_id: str, **payload: object
-            ) -> dict:
-                double.record(
-                    "update_deployment_internal_source",
-                    deployment_id=deployment_id,
-                    **payload,
-                )
-                return {"tenant_id": "tenant-1"}
-
-        return FakeHostBackendClient
+        return make
 
 
 @dataclass
@@ -136,7 +138,7 @@ class DockerDouble:
         self.builds.append(
             {
                 "tag": tag,
-                "docker_command": docker_command,
+                "docker_command": tuple(docker_command or ("docker", "build")),
                 "extra_flags": tuple(extra_flags),
             }
         )
@@ -225,7 +227,7 @@ def deploy_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DeployPro
     monkeypatch.setattr(deploy_module, "_no_input", False)
     monkeypatch.setattr(deploy_module, "_emitter", None)
     monkeypatch.setattr(
-        deploy_module, "HostBackendClient", control_plane.client_class()
+        deploy_module, "HostBackendClient", control_plane.client_factory()
     )
     monkeypatch.setattr(deploy_module, "build_docker_image", docker.build_docker_image)
     monkeypatch.setattr(deploy_module, "subp_exec", docker.subp_exec)
@@ -249,15 +251,15 @@ def test_first_local_deploy_creates_then_builds_pushes_and_updates_in_order(
 
     assert result.exit_code == 0, result.output
     assert deploy_project.timeline == [
-        "list_deployments",
-        "create_deployment",
+        LIST_DEPLOYMENTS,
+        CREATE_DEPLOYMENT,
         "docker build",
-        "request_push_token",
+        _push_token(CREATED_ID),
         "docker login",
         "docker tag",
         "docker push",
         "docker inspect-digest",
-        "update_deployment",
+        _patch(CREATED_ID),
     ]
     assert "Deployment updated" in result.output
 
@@ -267,11 +269,11 @@ def test_first_local_deploy_creates_an_internal_docker_deployment(
 ) -> None:
     deploy_project.run("--no-remote")
 
-    assert deploy_project.control_plane.payloads["create_deployment"] == {
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT] == {
         "name": "my-app",
-        "deployment_type": "dev",
         "source": "internal_docker",
-        "config_path": None,
+        "source_config": {"deployment_type": "dev"},
+        "source_revision_config": {},
         "secrets": [],
     }
 
@@ -285,14 +287,19 @@ def test_first_local_deploy_creates_an_internal_docker_deployment(
             ("--platform", "linux/amd64", "--load", "--progress=quiet"),
             id="apple_silicon_cross_builds_for_linux_amd64",
         ),
-        pytest.param("x86_64", None, (), id="amd64_host_uses_plain_docker_build"),
+        pytest.param(
+            "x86_64",
+            ("docker", "build"),
+            (),
+            id="amd64_host_uses_plain_docker_build",
+        ),
     ],
 )
 def test_local_build_targets_linux_amd64(
     deploy_project: DeployProject,
     monkeypatch: pytest.MonkeyPatch,
     machine: str,
-    expected_command: tuple[str, ...] | None,
+    expected_command: tuple[str, ...],
     expected_flags: tuple[str, ...],
 ) -> None:
     monkeypatch.setattr(deploy_module.platform, "machine", lambda: machine)
@@ -344,9 +351,9 @@ def test_local_deploy_records_the_pushed_digest_and_tracked_packages(
 ) -> None:
     deploy_project.run("--no-remote")
 
-    assert deploy_project.control_plane.payloads["update_deployment"] == {
-        "deployment_id": CREATED_DEPLOYMENT_ID,
-        "image_uri": PUSHED_DIGEST,
+    assert deploy_project.control_plane.bodies[_patch(CREATED_ID)] == {
+        "revision_source": "internal_docker",
+        "source_revision_config": {"image_uri": PUSHED_DIGEST},
         "secrets": [],
         "tracked_packages": TRACKED_PACKAGES,
     }
@@ -402,7 +409,7 @@ def test_three_failed_pushes_abort_before_the_deployment_is_updated(
     result = deploy_project.run("--no-remote")
 
     assert result.exit_code != 0
-    assert "update_deployment" not in deploy_project.timeline
+    assert _patch(CREATED_ID) not in deploy_project.timeline
 
 
 def test_existing_deployment_matched_by_exact_name_is_updated_not_created(
@@ -415,11 +422,8 @@ def test_existing_deployment_matched_by_exact_name_is_updated_not_created(
 
     deploy_project.run("--no-remote")
 
-    assert "create_deployment" not in deploy_project.timeline
-    assert (
-        deploy_project.control_plane.payloads["update_deployment"]["deployment_id"]
-        == "dep-existing"
-    )
+    assert CREATE_DEPLOYMENT not in deploy_project.timeline
+    assert _patch("dep-existing") in deploy_project.timeline
 
 
 def test_deployment_not_created_by_the_cli_gets_an_actionable_error(
@@ -428,10 +432,7 @@ def test_deployment_not_created_by_the_cli_gets_an_actionable_error(
     deploy_project.control_plane.existing_deployments = [
         {"id": "dep-ui", "name": "my-app"}
     ]
-    deploy_project.control_plane.push_token_error = HostBackendError(
-        "push token is only available for 'internal_docker' source deployments",
-        status_code=400,
-    )
+    deploy_project.control_plane.push_token_status = 400
 
     result = deploy_project.run("--no-remote")
 
@@ -447,26 +448,25 @@ def test_remote_build_creates_an_internal_source_deployment_and_uploads_the_arch
 
     assert result.exit_code == 0, result.output
     assert deploy_project.timeline == [
-        "list_deployments",
-        "create_deployment",
+        LIST_DEPLOYMENTS,
+        CREATE_DEPLOYMENT,
         "create_archive",
-        "request_upload_url",
+        _upload_url(CREATED_ID),
         "upload_archive",
-        "update_deployment_internal_source",
+        _patch(CREATED_ID),
     ]
-    assert deploy_project.control_plane.payloads["create_deployment"]["source"] == (
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source"] == (
         "internal_source"
     )
     assert deploy_project.uploads == [(SIGNED_UPLOAD_URL, ARCHIVE[0], ARCHIVE[1])]
-    assert deploy_project.control_plane.payloads[
-        "update_deployment_internal_source"
-    ] == {
-        "deployment_id": CREATED_DEPLOYMENT_ID,
-        "source_tarball_path": OBJECT_PATH,
-        "config_path": ARCHIVE[2],
+    assert deploy_project.control_plane.bodies[_patch(CREATED_ID)] == {
+        "revision_source": "internal_source",
+        "source_revision_config": {
+            "source_tarball_path": OBJECT_PATH,
+            "langgraph_config_path": ARCHIVE[2],
+        },
+        "source_config": {"install_command": "yarn install"},
         "secrets": [],
-        "install_command": "yarn install",
-        "build_command": None,
         "tracked_packages": TRACKED_PACKAGES,
     }
     assert "Build triggered" in result.output

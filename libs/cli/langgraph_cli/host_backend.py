@@ -24,10 +24,11 @@ class HostBackendClient:
         base_url: str,
         api_key: str,
         tenant_id: str | None = None,
+        *,
+        transport: httpx.BaseTransport | None = None,
     ):
         if not base_url:
             raise click.UsageError("Host backend URL is required")
-        transport = httpx.HTTPTransport(retries=3)
         headers: dict[str, str] = {
             "X-Api-Key": api_key,
             "Accept": "application/json",
@@ -36,14 +37,18 @@ class HostBackendClient:
             headers["X-Tenant-ID"] = tenant_id
         self._base_url = base_url.rstrip("/")
         self._client = httpx.Client(
+            base_url=self._base_url,
             headers=headers,
-            transport=transport,
+            transport=transport or httpx.HTTPTransport(retries=3),
             timeout=30,
         )
 
     @property
     def base_url(self) -> str:
         return self._base_url
+
+    def set_tenant(self, tenant_id: str) -> None:
+        self._client.headers["X-Tenant-ID"] = tenant_id
 
     def _request(
         self,
@@ -53,8 +58,7 @@ class HostBackendClient:
         params: dict[str, Any] | None = None,
     ) -> Any:
         try:
-            full_url = self._base_url + path
-            resp = self._client.request(method, full_url, json=payload, params=params)
+            resp = self._client.request(method, path, json=payload, params=params)
             resp.raise_for_status()
         except httpx.HTTPStatusError as err:
             detail = err.response.text or str(err.response.status_code)
