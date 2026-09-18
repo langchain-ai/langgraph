@@ -585,7 +585,6 @@ def test_push_to_updates_an_existing_external_deployment_with_the_new_image(
     assert result.exit_code == 0, result.output
     assert deploy_project.timeline == [
         LIST_DEPLOYMENTS,
-        _get("dep-ext"),
         "docker build",
         "docker push",
         "docker inspect-digest",
@@ -622,3 +621,24 @@ def test_push_to_explains_the_listener_requirement_of_hybrid_workspaces(
     assert result.exit_code != 0
     assert "listener" in result.output
     assert "--deployment-id" in result.output
+
+
+def test_push_to_with_deployment_id_fetches_the_deployment_once(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.existing_deployments = [
+        {"id": "dep-ext", "name": "another-name", "source": "external_docker"}
+    ]
+
+    result = deploy_project.run(
+        "--deployment-id", "dep-ext", "--push-to", PUSH_REPOSITORY
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.timeline == [
+        _get("dep-ext"),
+        "docker build",
+        "docker push",
+        "docker inspect-digest",
+        _patch("dep-ext"),
+    ]

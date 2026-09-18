@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Protocol
+from typing import Protocol, TypeVar
 
 import click
 import click.exceptions
@@ -92,6 +92,8 @@ _API_KEY_ENV_NAMES = (
     "LANGCHAIN_API_KEY",
 )
 
+_T = TypeVar("_T")
+
 _DEPLOYMENT_NAME_ENV = "LANGSMITH_DEPLOYMENT_NAME"
 _DEFAULT_IMAGE_TAG = "latest"
 _DEPLOYMENT_PLATFORM = "linux/amd64"
@@ -142,6 +144,25 @@ class BuildResult:
     on_poll: Callable[[str, str, Callable[[str], None]], None] | None = None
     on_interrupt: Callable[[str], None] | None = None
     show_build_logs_on_failure: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ById:
+    deployment_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class ByName:
+    name: str
+
+
+DeploymentSelector = ById | ByName
+
+
+@dataclass(frozen=True, slots=True)
+class ExistingDeployment:
+    id: str
+    source: str | None
 
 
 # ---------------------------------------------------------------------------
@@ -315,12 +336,14 @@ def _get_emitter() -> _Emitter:
 # ---------------------------------------------------------------------------
 
 
-def validate_deployment_selector(deployment_id: str | None, name: str | None) -> None:
-    """Ensure either deployment_id or name is provided."""
+def deployment_selector(
+    deployment_id: str | None, name: str | None
+) -> DeploymentSelector:
     if deployment_id:
-        return
-    if not name:
-        raise click.UsageError("Either --deployment-id or --name is required.")
+        return ById(deployment_id)
+    if name:
+        return ByName(name)
+    raise click.UsageError("Either --deployment-id or --name is required.")
 
 
 def validate_deploy_commands(
@@ -346,19 +369,25 @@ def validate_deploy_commands(
 # ---------------------------------------------------------------------------
 
 
-def find_deployment_id_by_name(
-    client: HostBackendClient, name: str | None
-) -> str | None:
-    """Return deployment ID for an exact name match, or None if not found."""
-    if not name:
+def _source_of(resource: object) -> str | None:
+    if not isinstance(resource, dict):
         return None
-    existing = client.list_deployments(name_contains=name)
-    if isinstance(existing, dict):
-        for dep in existing.get("resources", []):
-            if isinstance(dep, dict) and dep.get("name") == name:
-                found_id = dep.get("id")
-                if found_id:
-                    return str(found_id)
+    source = resource.get("source")
+    return source if isinstance(source, str) else None
+
+
+def find_deployment_by_name(
+    client: HostBackendClient, name: str
+) -> ExistingDeployment | None:
+    listed = client.list_deployments(name_contains=name)
+    resources = listed.get("resources", []) if isinstance(listed, dict) else []
+    for resource in resources:
+        if (
+            isinstance(resource, dict)
+            and resource.get("name") == name
+            and resource.get("id")
+        ):
+            return ExistingDeployment(str(resource["id"]), _source_of(resource))
     return None
 
 
@@ -630,35 +659,33 @@ def _log_deploy_step(step: int, message: str, **extra: object) -> None:
     _get_emitter().step(step, message, **extra)
 
 
-def _resolve_deployment(
+def _fetch_deployment(
+    client: HostBackendClient, step: int, selector: ById
+) -> tuple[ExistingDeployment, int]:
+    _log_deploy_step(step, f"Using deployment {selector.deployment_id}")
+    resource = _call_host_backend_with_optional_tenant(
+        client, lambda c: c.get_deployment(selector.deployment_id)
+    )
+    return ExistingDeployment(selector.deployment_id, _source_of(resource)), step + 1
+
+
+def _find_deployment(
     client: HostBackendClient,
     step: int,
-    deployment_id: str | None,
-    name: str | None,
+    selector: ByName,
     *,
     not_found_message: str,
-) -> tuple[str | None, bool, int]:
-    """Resolve an existing deployment by ID or exact name match."""
-    needs_creation = False
-    if deployment_id:
-        _log_deploy_step(step, f"Using deployment {deployment_id}")
-        _call_host_backend_with_optional_tenant(
-            client, lambda c: c.get_deployment(deployment_id)
-        )
-        return deployment_id, needs_creation, step + 1
-
-    _log_deploy_step(step, f"Looking up deployment '{name}'")
-    found_id = _call_host_backend_with_optional_tenant(
-        client, lambda c: find_deployment_id_by_name(c, name)
+) -> tuple[ExistingDeployment | None, int]:
+    _log_deploy_step(step, f"Looking up deployment '{selector.name}'")
+    found = _call_host_backend_with_optional_tenant(
+        client, lambda c: find_deployment_by_name(c, selector.name)
     )
     em = _get_emitter()
-    if found_id:
-        deployment_id = str(found_id)
-        em.info(f"Found existing deployment (ID: {deployment_id})")
-    else:
-        needs_creation = True
+    if found is None:
         em.warn(not_found_message)
-    return deployment_id, needs_creation, step + 1
+    else:
+        em.info(f"Found existing deployment (ID: {found.id})")
+    return found, step + 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -1257,8 +1284,7 @@ class DeployContext:
     client: HostBackendClient
     spec: BuildSpec
     verbose: bool
-    name: str | None
-    deployment_id: str | None
+    selector: DeploymentSelector
     deployment_type: str
     secrets: list[dict[str, str]]
     tracked_packages: list[str] | None
@@ -1275,39 +1301,32 @@ class DeploymentSource(Protocol):
 
 
 def _resolve_or_create(
-    ctx: DeployContext, *, source: str, not_found_message: str
+    ctx: DeployContext, *, source: SourceId, not_found_message: str
 ) -> tuple[str, int]:
-    deployment_id, needs_creation, step = _resolve_deployment(
+    if isinstance(ctx.selector, ById):
+        existing, step = _fetch_deployment(ctx.client, 1, ctx.selector)
+        return existing.id, step
+    found, step = _find_deployment(
+        ctx.client, 1, ctx.selector, not_found_message=not_found_message
+    )
+    if found is not None:
+        return found.id, step
+    created, step = _create_deployment(
         ctx.client,
-        1,
-        ctx.deployment_id,
-        ctx.name,
-        not_found_message=not_found_message,
+        step,
+        name=ctx.selector.name,
+        source=source,
+        source_config={"deployment_type": ctx.deployment_type},
+        source_revision_config={},
+        secrets=ctx.secrets,
     )
-    if needs_creation:
-        created, step = _create_deployment(
-            ctx.client,
-            step,
-            name=ctx.name,
-            source=source,
-            source_config={"deployment_type": ctx.deployment_type},
-            source_revision_config={},
-            secrets=ctx.secrets,
-        )
-        deployment_id = created.id
-    if not deployment_id:
-        raise click.ClickException("Failed to determine deployment ID")
-    return deployment_id, step
+    return created.id, step
 
 
-def _ensure_external_docker(client: HostBackendClient, deployment_id: str) -> None:
-    existing = _call_host_backend_with_optional_tenant(
-        client, lambda c: c.get_deployment(deployment_id)
-    )
-    existing_source = existing.get("source") if isinstance(existing, dict) else None
-    if existing_source != SourceId.EXTERNAL_DOCKER:
+def _ensure_customer_registry_source(existing: ExistingDeployment) -> None:
+    if existing.source != SourceId.EXTERNAL_DOCKER:
         raise click.UsageError(
-            f"Deployment {deployment_id} was not created from an external image "
+            f"Deployment {existing.id} was not created from an external image "
             "and cannot be updated with --push-to. Run without --push-to to keep "
             "its current build mode, or use a different --name to create a new "
             "deployment."
@@ -1334,7 +1353,7 @@ class ManagedRegistrySource:
             verbose=ctx.verbose,
             image_name=self.image_name,
             prebuilt_image=self.prebuilt_image,
-            name=ctx.name,
+            name=ctx.selector.name if isinstance(ctx.selector, ByName) else None,
             tag=self.tag,
             secrets=ctx.secrets,
             tracked_packages=ctx.tracked_packages,
@@ -1368,32 +1387,54 @@ class CustomerRegistrySource:
     prebuilt_image: str | None
 
     def run(self, ctx: DeployContext) -> DeployOutcome:
-        deployment_id, _, step = _resolve_deployment(
+        if isinstance(ctx.selector, ById):
+            existing, step = _fetch_deployment(ctx.client, 1, ctx.selector)
+            return self._update(ctx, existing, step)
+        found, step = _find_deployment(
             ctx.client,
             1,
-            ctx.deployment_id,
-            ctx.name,
+            ctx.selector,
             not_found_message="No deployment found. Will create after push.",
         )
-        if deployment_id is not None:
-            _ensure_external_docker(ctx.client, deployment_id)
+        if found is not None:
+            return self._update(ctx, found, step)
+        return self._create(ctx, ctx.selector.name, step)
+
+    def _update(
+        self, ctx: DeployContext, existing: ExistingDeployment, step: int
+    ) -> DeployOutcome:
+        _ensure_customer_registry_source(existing)
         image_uri, step = self._publish(ctx, step)
-        if deployment_id is None:
-            created, step = self._create(ctx, step, image_uri)
-            return DeployOutcome(
-                created.id,
-                _image_revision_result(created.resource, "Deployment created"),
-            )
-        _log_deploy_step(step, f"Updating deployment {deployment_id}")
+        _log_deploy_step(step, f"Updating deployment {existing.id}")
         updated = ctx.client.update_deployment(
-            deployment_id,
+            existing.id,
             image_uri,
             revision_source=None,
             secrets=ctx.secrets,
             tracked_packages=ctx.tracked_packages,
         )
         return DeployOutcome(
-            deployment_id, _image_revision_result(updated, "Deployment updated")
+            existing.id, _image_revision_result(updated, "Deployment updated")
+        )
+
+    def _create(self, ctx: DeployContext, name: str, step: int) -> DeployOutcome:
+        image_uri, step = self._publish(ctx, step)
+        try:
+            created, _ = _create_deployment(
+                ctx.client,
+                step,
+                name=name,
+                source=SourceId.EXTERNAL_DOCKER,
+                source_config={"resource_spec": _OPERATOR_DEFAULT_RESOURCE_SPEC},
+                source_revision_config={"image_uri": image_uri},
+                secrets=ctx.secrets,
+            )
+        except HostBackendError as err:
+            if err.status_code == 400 and _LISTENER_REQUIRED_MARKER in err.message:
+                raise click.ClickException(_HYBRID_LISTENER_GUIDANCE) from None
+            raise
+        return DeployOutcome(
+            created.id, _image_revision_result(created.resource, "Deployment created")
         )
 
     def _publish(self, ctx: DeployContext, step: int) -> tuple[str, int]:
@@ -1420,24 +1461,6 @@ class CustomerRegistrySource:
                 runner, remote_image=image, docker_config_dir=None, verbose=ctx.verbose
             )
         return digest, step
-
-    def _create(
-        self, ctx: DeployContext, step: int, image_uri: str
-    ) -> tuple[CreatedDeployment, int]:
-        try:
-            return _create_deployment(
-                ctx.client,
-                step,
-                name=ctx.name,
-                source=SourceId.EXTERNAL_DOCKER,
-                source_config={"resource_spec": _OPERATOR_DEFAULT_RESOURCE_SPEC},
-                source_revision_config={"image_uri": image_uri},
-                secrets=ctx.secrets,
-            )
-        except HostBackendError as err:
-            if err.status_code == 400 and _LISTENER_REQUIRED_MARKER in err.message:
-                raise click.ClickException(_HYBRID_LISTENER_GUIDANCE) from None
-            raise
 
 
 def _require_local_docker() -> None:
@@ -1542,8 +1565,8 @@ def _create_host_backend_client(
 
 def _call_host_backend_with_optional_tenant(
     client: HostBackendClient,
-    operation: Callable[[HostBackendClient], object],
-) -> object:
+    operation: Callable[[HostBackendClient], _T],
+) -> _T:
     """Run *operation*, prompting for a workspace ID on org-scoped 403s.
 
     On success the original *client* is returned as-is.  If the user is
@@ -1945,8 +1968,7 @@ def _deploy_cmd(
                 build_command=build_command,
             ),
             verbose=verbose,
-            name=name,
-            deployment_id=deployment_id,
+            selector=deployment_selector(deployment_id, name),
             deployment_type=deployment_type,
             secrets=secrets,
             tracked_packages=tracked_packages,
@@ -2217,16 +2239,17 @@ def deploy_logs(
     client = _create_host_backend_client(host_url, api_key, env_vars=env_vars)
     if not deployment_id and not name:
         name = env_vars.get(_DEPLOYMENT_NAME_ENV)
-    validate_deployment_selector(deployment_id, name)
-    if deployment_id:
-        dep_id = deployment_id
+    selector = deployment_selector(deployment_id, name)
+    if isinstance(selector, ById):
+        dep_id = selector.deployment_id
     else:
+        name_to_find = selector.name
         found = _call_host_backend_with_optional_tenant(
-            client, lambda c: find_deployment_id_by_name(c, name)
+            client, lambda c: find_deployment_by_name(c, name_to_find)
         )
-        if not found:
-            raise click.ClickException(f"Deployment '{name}' not found.")
-        dep_id = str(found)
+        if found is None:
+            raise click.ClickException(f"Deployment '{name_to_find}' not found.")
+        dep_id = found.id
 
     if log_type == "build" and not revision_id:
         revisions_resp = client.list_revisions(dep_id, limit=1)
