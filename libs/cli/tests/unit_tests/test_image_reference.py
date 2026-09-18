@@ -64,3 +64,8 @@ def test_matches_digest_only_for_the_same_repository(repo_digest, expected):
     assert ImageReference("localhost:5000/app", "v1").matches_digest(repo_digest) is (
         expected
     )
+
+
+def test_parse_rejects_a_digest_reference():
+    with pytest.raises(ValueError, match="digest"):
+        ImageReference.parse("registry.example.com/app@sha256:abc")

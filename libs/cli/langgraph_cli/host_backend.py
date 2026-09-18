@@ -62,7 +62,7 @@ def _is_cloud_host(hostname: str) -> bool:
 
 
 def _cloud_control_plane_host_for(langsmith_api_host: str) -> str:
-    if langsmith_api_host.endswith(CLOUD_API_HOST):
+    if langsmith_api_host.endswith(f".{CLOUD_API_HOST}"):
         region = langsmith_api_host[: -len(CLOUD_API_HOST)]
         return f"{region}{CLOUD_CONTROL_PLANE_HOST}"
     return CLOUD_CONTROL_PLANE_HOST

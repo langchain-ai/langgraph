@@ -692,6 +692,14 @@ class TestSelectSource:
 
         assert _select_source(**{**self.OPTIONS, **flags}) == expected
 
+    def test_push_to_build_requires_local_docker(self, monkeypatch):
+        monkeypatch.setattr(
+            deploy_mod, "can_build_locally", lambda: (False, "Docker is required")
+        )
+
+        with pytest.raises(click.UsageError, match="Docker is required"):
+            _select_source(**{**self.OPTIONS, "push_to": self.REPOSITORY})
+
     @pytest.mark.parametrize(
         ("flags", "message"),
         [
@@ -717,7 +725,9 @@ class TestSelectSource:
             ),
         ],
     )
-    def test_conflicting_flags_are_rejected(self, flags, message):
+    def test_conflicting_flags_are_rejected(self, monkeypatch, flags, message):
+        monkeypatch.setattr(deploy_mod, "can_build_locally", lambda: (True, None))
+
         with pytest.raises(click.UsageError, match=message):
             _select_source(**{**self.OPTIONS, **flags})
 

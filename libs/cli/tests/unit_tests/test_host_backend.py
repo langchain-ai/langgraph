@@ -495,6 +495,12 @@ CLOUD = ("https://api.host.langchain.com", "https://smith.langchain.com")
         ),
         pytest.param(
             None,
+            "https://xapi.smith.langchain.com",
+            CLOUD,
+            id="lookalike_cloud_host_is_not_rewritten_into_a_control_plane",
+        ),
+        pytest.param(
+            None,
             "https://eu.api.smith.langchain.com",
             ("https://eu.api.host.langchain.com", "https://eu.smith.langchain.com"),
             id="eu_cloud_maps_to_eu_control_plane",

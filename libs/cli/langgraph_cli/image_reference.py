@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 DIGEST_SEPARATOR = "@sha256:"
+DIGEST_MARKER = "@"
 TAG_SEPARATOR = ":"
 PATH_SEPARATOR = "/"
 
@@ -14,6 +15,8 @@ class ImageReference:
 
     @classmethod
     def parse(cls, reference: str) -> ImageReference:
+        if DIGEST_MARKER in reference:
+            raise ValueError(f"{reference!r} carries a digest and cannot be tagged")
         path_start = reference.rfind(PATH_SEPARATOR) + 1
         name, separator, tag = reference[path_start:].partition(TAG_SEPARATOR)
         if not separator:

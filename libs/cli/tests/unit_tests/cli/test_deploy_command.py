@@ -514,8 +514,9 @@ def test_push_to_builds_pushes_then_creates_an_external_deployment(
 def test_push_to_builds_directly_with_the_push_reference(
     deploy_project: DeployProject,
 ) -> None:
-    deploy_project.run("--push-to", PUSH_REPOSITORY)
+    result = deploy_project.run("--push-to", PUSH_REPOSITORY)
 
+    assert result.exit_code == 0, result.output
     assert deploy_project.docker.builds[0]["tag"] == EXTERNAL_IMAGE
     assert deploy_project.docker.command("push").args == (
         "docker",
@@ -525,9 +526,28 @@ def test_push_to_builds_directly_with_the_push_reference(
 
 
 def test_push_to_composes_with_the_tag_flag(deploy_project: DeployProject) -> None:
-    deploy_project.run("--push-to", PUSH_REPOSITORY, "--tag", "v1")
+    result = deploy_project.run("--push-to", PUSH_REPOSITORY, "--tag", "v1")
 
+    assert result.exit_code == 0, result.output
     assert deploy_project.docker.command("push").args[-1] == f"{PUSH_REPOSITORY}:v1"
+
+
+def test_push_to_with_a_failing_push_creates_no_deployment(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.docker.failing_pushes = 3
+
+    result = deploy_project.run("--push-to", PUSH_REPOSITORY)
+
+    assert result.exit_code != 0
+    assert CREATE_DEPLOYMENT not in deploy_project.timeline
+
+
+def test_verbose_never_echoes_the_push_token(deploy_project: DeployProject) -> None:
+    result = deploy_project.run("--no-remote", "--verbose")
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.docker.command("login").kwargs["verbose"] is False
 
 
 def test_push_to_retags_a_prebuilt_image_instead_of_building(

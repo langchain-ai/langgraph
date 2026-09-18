@@ -1117,7 +1117,7 @@ def _run_local_build(
                     "--password-stdin",
                     registry_host,
                     input=token_input,
-                    verbose=verbose,
+                    verbose=False,
                 )
             )
             step += 1
@@ -1440,12 +1440,19 @@ class CustomerRegistrySource:
             raise
 
 
+def _require_local_docker() -> None:
+    supported, error = can_build_locally()
+    if not supported:
+        raise click.UsageError(error or "Unable to build locally.")
+
+
 def _push_reference(push_to: str, tag: str | None) -> ImageReference:
-    if "@" in push_to:
+    try:
+        reference = ImageReference.parse(push_to)
+    except ValueError:
         raise click.UsageError(
             "--push-to takes a repository with an optional tag, not a digest."
-        )
-    reference = ImageReference.parse(push_to)
+        ) from None
     if reference.tag is not None and tag is not None:
         raise click.UsageError(
             "--push-to already includes a tag; do not combine it with --tag."
@@ -1466,9 +1473,10 @@ def _select_source(
     if push_to is not None:
         if remote_build_flag is True:
             raise click.UsageError("--push-to cannot be combined with --remote.")
-        return CustomerRegistrySource(
-            _push_reference(push_to, tag), prebuilt_image=image
-        )
+        reference = _push_reference(push_to, tag)
+        if image is None:
+            _require_local_docker()
+        return CustomerRegistrySource(reference, prebuilt_image=image)
     if image and remote_build_flag is True:
         raise click.UsageError("--image cannot be combined with --remote builds.")
     use_remote_build, local_build_error = _resolve_build_mode(
