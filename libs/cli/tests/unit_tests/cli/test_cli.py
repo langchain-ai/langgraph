@@ -6,8 +6,10 @@ import tempfile
 import textwrap
 from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import click
+import pytest
 from click.testing import CliRunner
 
 import langgraph_cli.deploy as deploy_module
@@ -1356,47 +1358,89 @@ def test_prepare_args_and_stdin_distributed_mode() -> None:
     assert "executor_entrypoint.sh" in actual_stdin
 
 
-def test_deploy_image_uri_rejects_incompatible_source(monkeypatch, tmp_path) -> None:
-    """--image-uri raises UsageError when applied to a non-external_docker deployment."""
-    # --no-input sets the module-level _no_input global; ensure it's restored.
+@pytest.mark.parametrize(
+    "source,image",
+    [
+        (None, None),
+        (None, "local:latest"),
+        ("external_docker", None),
+        ("external_docker", "local:latest"),
+        ("internal_docker", None),
+    ],
+)
+def test_deploy_push_to(monkeypatch, tmp_path, source, image):
     monkeypatch.setattr(deploy_module, "_no_input", False)
-
+    monkeypatch.setattr(deploy_module, "_emitter", None)
     config = tmp_path / "langgraph.json"
     config.write_text('{"graphs": {"agent": "agent.py:graph"}, "dependencies": ["."]}')
-
-    class FakeClient:
-        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
-            self.base_url = host_url
-
-        def get_deployment(self, deployment_id: str):
-            return {
-                "id": deployment_id,
-                "name": "test-deploy",
-                "source": "internal_docker",
-                "tenant_id": "tenant-1",
-            }
-
-    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
-
-    runner = CliRunner()
-    result = runner.invoke(
-        cli,
-        [
-            "deploy",
-            "--api-key",
-            "test-key",
-            "--host-url",
-            "https://api.example.com",
-            "--deployment-id",
-            "dep-123",
-            "--image-uri",
-            "registry.example.com/app:latest",
-            "--config",
-            str(config),
-            "--no-input",
-        ],
+    events = []
+    client = MagicMock(base_url="https://smith.example.com/api-host")
+    client.get_deployment.return_value = {"id": "dep-123", "source": source}
+    client.list_deployments.return_value = {"deployments": []}
+    client.create_deployment.side_effect = lambda **kw: (
+        events.append(("create", kw)) or {"id": "dep-123"}
     )
-
-    assert result.exit_code != 0
-    assert "different build mode" in result.output
-    assert "cannot be updated with --image-uri" in result.output
+    client.update_deployment_external.side_effect = lambda *a, **kw: (
+        events.append(("update", a)) or {}
+    )
+    monkeypatch.setattr(deploy_module, "HostBackendClient", lambda *a, **kw: client)
+    monkeypatch.setattr(
+        deploy_module,
+        "_build_image_tagged",
+        lambda *a, **kw: events.append(("build", a[6])),
+    )
+    monkeypatch.setattr(
+        deploy_module,
+        "_validate_prebuilt_image",
+        lambda *a, **kw: events.append(("validate", a[1])),
+    )
+    monkeypatch.setattr(deploy_module, "subp_exec", lambda *a, **kw: a)
+    runner = MagicMock()
+    runner.__enter__.return_value = runner
+    runner.run.side_effect = lambda args: events.append(args)
+    monkeypatch.setattr(deploy_module, "Runner", lambda: runner)
+    digest = "registry.example.com/app@sha256:abc123"
+    monkeypatch.setattr(
+        deploy_module,
+        "_resolve_pushed_image_digest",
+        lambda *a, **kw: events.append(("digest",)) or digest,
+    )
+    args = [
+        "deploy",
+        "--api-key",
+        "key",
+        "--push-to",
+        "registry.example.com/app:latest",
+        "--config",
+        str(config),
+        "--no-input",
+        "--no-wait",
+    ]
+    args += ["--deployment-id", "dep-123"] if source else ["--name", "app"]
+    if image:
+        args += ["--image", image]
+    result = CliRunner().invoke(cli, args)
+    if source == "internal_docker":
+        assert result.exit_code != 0
+        assert "cannot be updated with --push-to" in result.output
+        assert events == []
+        return
+    assert result.exit_code == 0, result.output
+    destination = "registry.example.com/app:latest"
+    expected = (
+        [("validate", image), ("docker", "tag", image, destination)]
+        if image
+        else [("build", destination)]
+    )
+    assert events[: len(expected) + 2] == expected + [
+        ("docker", "push", destination),
+        ("digest",),
+    ]
+    if source:
+        assert events[-1] == ("update", ("dep-123", digest))
+        client.create_deployment.assert_not_called()
+    else:
+        assert events[-1][0] == "create"
+        assert events[-1][1]["image_uri"] == digest
+        assert events[-1][1]["source"] == "external_docker"
+        client.update_deployment_external.assert_not_called()

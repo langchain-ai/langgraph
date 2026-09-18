@@ -178,45 +178,32 @@ def test_update_deployment_no_secrets(client):
     assert result == {"ok": True}
 
 
-def test_update_deployment_external():
+@pytest.mark.parametrize("create", [True, False])
+def test_external_deployment_payload(create):
     captured: dict = {}
     c = _capturing_client(captured)
-    result = c.update_deployment_external(
-        "dep-123", "registry.example.com/app@sha256:abc123"
-    )
-    assert result == {"ok": True}
+    image = "registry.example.com/app@sha256:abc123"
+    kwargs = {
+        "secrets": [{"name": "KEY", "value": "value"}],
+        "tracked_packages": ["google-adk:1.0.0"],
+    }
+    if create:
+        c.create_deployment("app", "dev", "external_docker", image_uri=image, **kwargs)
+    else:
+        c.update_deployment_external("dep-123", image, **kwargs)
     body = json.loads(captured["body"])
-    assert "revision_source" not in body
-    assert body["source_revision_config"]["image_uri"] == (
-        "registry.example.com/app@sha256:abc123"
-    )
-
-
-def test_update_deployment_external_forwards_tracked_packages():
-    captured: dict = {}
-    c = _capturing_client(captured)
-    c.update_deployment_external(
-        "dep-123",
-        "registry.example.com/app:latest",
-        tracked_packages=["google-adk:1.0.0"],
-    )
-    body = json.loads(captured["body"])
-    assert body["tracked_packages"] == ["google-adk:1.0.0"]
-    assert "revision_source" not in body
-
-
-def test_update_deployment_external_omits_tracked_packages_when_absent():
-    captured: dict = {}
-    c = _capturing_client(captured)
-    c.update_deployment_external("dep-123", "registry.example.com/app:latest")
-    body = json.loads(captured["body"])
-    assert "tracked_packages" not in body
-    assert "revision_source" not in body
+    assert body == {
+        **(
+            {"name": "app", "source": "external_docker", "source_config": {}}
+            if create
+            else {}
+        ),
+        "source_revision_config": {"image_uri": image},
+        **kwargs,
+    }
 
 
 def test_request_builds_full_url_with_path_prefix():
-    """base_url with a path prefix (/api-host) must not be dropped when paths start with /."""
-
     def handler(req: httpx.Request) -> httpx.Response:
         assert str(req.url) == "https://smith.example.com/api-host/v2/deployments"
         return httpx.Response(200, json={"ok": True})
