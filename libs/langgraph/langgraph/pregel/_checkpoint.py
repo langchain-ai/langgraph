@@ -80,12 +80,20 @@ def get_updated_channels_from_tasks(
 
 def get_delta_channels_from_all_channels(
     channels: Mapping[str, BaseChannel],
+    *,
+    include_unavailable: bool = False,
 ) -> set[str]:
-    """DeltaChannels to snapshot on the first update_state of a fresh thread."""
+    """Every available DeltaChannel.
+
+    The set to snapshot whenever no ancestor walk can reconstruct these
+    channels: the first update_state of a fresh thread (no ancestors at all),
+    and the first checkpoint of a fork (whose base also holds the writes of the
+    branch the fork abandons).
+    """
     return {
         k
         for k, ch in channels.items()
-        if isinstance(ch, DeltaChannel) and ch.is_available()
+        if isinstance(ch, DeltaChannel) and (include_unavailable or ch.is_available())
     }
 
 
@@ -122,15 +130,27 @@ def create_checkpoint_plan_for_update_state_api(
     parents: dict[str, Any],
     saved_metadata: Mapping[str, Any] | None,
     is_fresh_thread: bool,
+    is_fork: bool,
 ) -> tuple[set[str], dict[str, Any]]:
-    """Return ``(channels_to_snapshot, metadata)`` for an update_state head."""
+    """Return ``(channels_to_snapshot, metadata)`` for an update_state head.
+
+    ``is_fork`` (the update was addressed at an explicit checkpoint) forces a
+    full snapshot for the same reason ``is_fresh_thread`` does: the ancestor
+    walk cannot reconstruct this head. The base a fork branches off keeps the
+    pending writes of the branch being abandoned, and nothing records which
+    child consumed which write, so the walk would replay them here too.
+    Snapshotting terminates the walk at this checkpoint. Every delta channel
+    snapshots, so no counters carry over.
+    """
     metadata: dict[str, Any] = {
         "source": "update",
         "step": step,
         "parents": parents,
     }
-    if is_fresh_thread:
-        return get_delta_channels_from_all_channels(channels), metadata
+    if is_fresh_thread or is_fork:
+        return get_delta_channels_from_all_channels(
+            channels, include_unavailable=is_fork
+        ), metadata
 
     new_counters = create_metadata_for_update_state_api(
         channels,
@@ -144,6 +164,43 @@ def create_checkpoint_plan_for_update_state_api(
     if non_zero:
         metadata["counters_since_delta_snapshot"] = non_zero
     return channels_to_snapshot, metadata
+
+
+def create_fork_checkpoint(
+    checkpoint: Checkpoint,
+    channels: Mapping[str, BaseChannel],
+    step: int,
+    *,
+    is_fork: bool,
+    get_next_version: GetNextVersion,
+) -> Checkpoint:
+    """``create_checkpoint`` for an update_state path that bypasses the plan.
+
+    The ``as_node`` INPUT and END paths write the fork's first checkpoint and
+    return before ``create_checkpoint_plan_for_update_state_api`` runs. Left
+    without a snapshot that checkpoint does not seal the fork, and the next
+    superstep reconstructs its delta channels by walking through the shared
+    base, picking up the abandoned branch's writes and then baking them into
+    whatever it snapshots. Sealing has to happen on the fork's *first*
+    checkpoint, which is this one.
+
+    ``get_next_version`` is required for the same reason exit mode needs it:
+    these paths apply writes to the input channel, not to the delta channel,
+    so nothing bumps the delta channel's version and ``put`` would drop the
+    blob as not-a-new-version. Callers must derive ``new_versions`` from the
+    returned checkpoint rather than the one they passed in.
+    """
+    if not is_fork:
+        return create_checkpoint(checkpoint, channels, step)
+    return create_checkpoint(
+        checkpoint,
+        channels,
+        step,
+        get_next_version=get_next_version,
+        channels_to_snapshot=get_delta_channels_from_all_channels(
+            channels, include_unavailable=True
+        ),
+    )
 
 
 def create_checkpoint(
@@ -174,14 +231,27 @@ def create_checkpoint(
         values = {}
         channel_versions = dict(checkpoint["channel_versions"])
         for k in channels:
-            if k not in channel_versions:
-                continue
             ch = channels[k]
+            if k not in channel_versions:
+                # Nothing was ever written to this channel on this branch, so
+                # it has no version and `put` would drop any blob stored for
+                # it. A *forced* snapshot still has to land: it is the only
+                # thing that stops the ancestor walk running past this
+                # checkpoint into a fork base that holds another branch's
+                # writes. Mint a first version so the blob survives.
+                if k in channels_to_snapshot and get_next_version is not None:
+                    channel_versions[k] = get_next_version(None, None)
+                    values[k] = _DeltaSnapshot(
+                        ch.get() if ch.is_available() else ch.typ()
+                    )
+                continue
             if k in channels_to_snapshot:
                 # Callers force a full snapshot blob here: exit mode when a
-                # delta channel reaches its snapshot cadence, and update_state
-                # on a fresh thread (no ancestor to replay writes from). The
-                # manual version-bump below only applies to the exit-mode case.
+                # delta channel reaches its snapshot cadence, update_state on
+                # a fresh thread (no ancestor to replay writes from), and a
+                # fork (whose base also holds the abandoned branch's writes).
+                # The manual version-bump below only applies to the exit-mode
+                # case.
                 #
                 # In exit mode, the snapshot decision is deferred to exit
                 # time (intermediate steps have do_checkpoint=False). The
