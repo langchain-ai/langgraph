@@ -109,8 +109,32 @@ def search_where(
         param_values.extend(metadata_values)
 
     # construct predicate for `before`
-    if before is not None:
-        wheres.append("checkpoint_id < ?")
-        param_values.append(get_checkpoint_id(before))
+    if before is not None and (before_checkpoint_id := get_checkpoint_id(before)):
+        before_configurable = before["configurable"]
+        config_configurable = config["configurable"] if config is not None else {}
+        before_thread_id = before_configurable.get(
+            "thread_id", config_configurable.get("thread_id")
+        )
+        if before_thread_id is None:
+            return ("WHERE " + " AND ".join(wheres) if wheres else "", param_values)
+        before_rowid_query = (
+            "SELECT rowid FROM checkpoints "
+            "WHERE thread_id = ? AND checkpoint_id = ? "
+            "ORDER BY rowid DESC LIMIT 1"
+        )
+        wheres.append(
+            """(
+                ({before_rowid_query}) IS NULL
+                OR rowid < ({before_rowid_query})
+            )""".replace("{before_rowid_query}", before_rowid_query)
+        )
+        param_values.extend(
+            [
+                before_thread_id,
+                before_checkpoint_id,
+                before_thread_id,
+                before_checkpoint_id,
+            ]
+        )
 
     return ("WHERE " + " AND ".join(wheres) if wheres else "", param_values)
