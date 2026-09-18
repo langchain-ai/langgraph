@@ -22,7 +22,7 @@ from langgraph_cli.analytics import log_command
 from langgraph_cli.constants import DEFAULT_CONFIG
 from langgraph_cli.dependency_tracking import find_tracked_packages
 from langgraph_cli.docker import build_docker_image, can_build_locally
-from langgraph_cli.exec import Runner, subp_exec
+from langgraph_cli.exec import CommandRunner, Runner, subp_exec
 from langgraph_cli.host_backend import (
     ControlPlaneEndpoints,
     HostBackendClient,
@@ -371,7 +371,9 @@ def normalize_image_tag(value: str) -> str:
     return value
 
 
-def _validate_prebuilt_image(runner, image: str, *, verbose: bool) -> None:
+def _validate_prebuilt_image(
+    runner: CommandRunner, image: str, *, verbose: bool
+) -> None:
     """Ensure a prebuilt image exists locally for linux/amd64."""
     try:
         stdout, _ = runner.run(
@@ -877,7 +879,7 @@ def _upload_to_gcs(signed_url: str, file_path: str, file_size: int) -> None:
 
 
 def _resolve_pushed_image_digest(
-    runner,
+    runner: CommandRunner,
     *,
     remote_image: str,
     docker_config_dir: str | None,
@@ -891,11 +893,18 @@ def _resolve_pushed_image_digest(
     found, rather than failing the deploy.
     """
     reference = ImageReference.parse(remote_image)
-    args: list[str] = ["docker"]
-    if docker_config_dir:
-        args += ["--config", docker_config_dir]
-    args += ["image", "inspect", "--format", "{{json .RepoDigests}}", remote_image]
-    stdout, _ = runner.run(subp_exec(*args, collect=True, verbose=verbose))
+    stdout, _ = runner.run(
+        subp_exec(
+            *_docker(docker_config_dir),
+            "image",
+            "inspect",
+            "--format",
+            "{{json .RepoDigests}}",
+            remote_image,
+            collect=True,
+            verbose=verbose,
+        )
+    )
     try:
         digests = json_mod.loads(stdout or "[]") or []
     except json_mod.JSONDecodeError:
@@ -910,56 +919,89 @@ def _resolve_pushed_image_digest(
     return remote_image
 
 
-def _build_image_tagged(
-    runner,
-    config: pathlib.Path,
-    config_json: dict,
-    base_image: str | None,
-    api_version: str | None,
-    pull: bool,
-    tag: str,
-    docker_build_args: Sequence[str],
-    install_command: str | None,
-    build_command: str | None,
+DEPLOYMENT_PLATFORM = "linux/amd64"
+NATIVE_AMD64_MACHINE = "x86_64"
+PUSH_ATTEMPTS = 3
+LOCAL_BUILD_TAG_PREFIX = "langgraph-deploy-tmp"
+
+
+@dataclass(frozen=True, slots=True)
+class BuildSpec:
+    config: pathlib.Path
+    config_json: dict
+    base_image: str | None
+    api_version: str | None
+    pull: bool
+    docker_build_args: Sequence[str]
+    install_command: str | None
+    build_command: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class DockerBuildCommand:
+    command: tuple[str, ...]
+    flags: tuple[str, ...]
+
+    @classmethod
+    def for_host(cls, machine: str, *, verbose: bool) -> "DockerBuildCommand":
+        if machine == NATIVE_AMD64_MACHINE:
+            return cls(("docker", "build"), ())
+        flags: tuple[str, ...] = ("--platform", DEPLOYMENT_PLATFORM, "--load")
+        if not verbose:
+            flags += ("--progress=quiet",)
+        return cls(("docker", "buildx", "build"), flags)
+
+
+def _docker(docker_config_dir: str | None) -> tuple[str, ...]:
+    if docker_config_dir is None:
+        return ("docker",)
+    return ("docker", "--config", docker_config_dir)
+
+
+def _build_image(
+    runner: CommandRunner, spec: BuildSpec, tag: str, *, verbose: bool
+) -> None:
+    build = DockerBuildCommand.for_host(platform.machine(), verbose=verbose)
+    with Progress(message="Building...", elapsed=not verbose):
+        build_docker_image(
+            runner,
+            lambda _msg: None,
+            spec.config,
+            spec.config_json,
+            spec.base_image,
+            spec.api_version,
+            spec.pull,
+            tag,
+            spec.docker_build_args,
+            spec.install_command,
+            spec.build_command,
+            docker_command=build.command,
+            extra_flags=build.flags,
+            verbose=verbose,
+        )
+
+
+def _push_image(
+    runner: CommandRunner,
+    image: str,
+    *,
+    docker_config_dir: str | None,
     verbose: bool,
 ) -> None:
-    """Build a Docker image to *tag*, using buildx on non-x86_64 hosts to target linux/amd64."""
-    if platform.machine() != "x86_64":
-        build_flags: list[str] = ["--platform", "linux/amd64", "--load"]
-        if not verbose:
-            build_flags.append("--progress=quiet")
-        with Progress(message="Building...", elapsed=not verbose):
-            build_docker_image(
-                runner,
-                lambda _msg: None,
-                config,
-                config_json,
-                base_image,
-                api_version,
-                pull,
-                tag,
-                docker_build_args,
-                install_command,
-                build_command,
-                docker_command=("docker", "buildx", "build"),
-                extra_flags=build_flags,
-                verbose=verbose,
-            )
-    else:
-        with Progress(message="Building...", elapsed=not verbose):
-            build_docker_image(
-                runner,
-                lambda _msg: None,
-                config,
-                config_json,
-                base_image,
-                api_version,
-                pull,
-                tag,
-                docker_build_args,
-                install_command,
-                build_command,
-                verbose=verbose,
+    for attempt in range(1, PUSH_ATTEMPTS + 1):
+        try:
+            with Progress(message="Pushing...", elapsed=not verbose):
+                runner.run(
+                    subp_exec(
+                        *_docker(docker_config_dir), "push", image, verbose=verbose
+                    )
+                )
+            return
+        except click.exceptions.Exit:
+            if attempt == PUSH_ATTEMPTS:
+                raise
+            _get_emitter().warn(
+                f"   Push failed, retrying (attempt {attempt + 1} of {PUSH_ATTEMPTS})..."
             )
 
 
@@ -968,24 +1010,17 @@ def _run_local_build(
     client: HostBackendClient,
     deployment_id: str,
     step: int,
-    config: pathlib.Path,
-    config_json: dict,
+    spec: BuildSpec,
     verbose: bool,
-    pull: bool,
-    api_version: str | None,
-    base_image: str | None,
     image_name: str | None,
     prebuilt_image: str | None,
     name: str | None,
     tag: str,
-    install_command: str | None,
-    build_command: str | None,
-    docker_build_args: Sequence[str],
     secrets: list[dict[str, str]],
     tracked_packages: list[str] | None,
 ) -> BuildResult:
     """Build locally with Docker, push to registry, update deployment."""
-    local_tag = f"langgraph-deploy-tmp:{int(time.time())}"
+    local_tag = f"{LOCAL_BUILD_TAG_PREFIX}:{int(time.time())}"
     image_to_push = prebuilt_image or local_tag
 
     with Runner() as runner:
@@ -995,22 +1030,9 @@ def _run_local_build(
             click.secho("   Image is available for linux/amd64", fg="green")
         else:
             _log_deploy_step(step, "Building image")
-            _build_image_tagged(
-                runner,
-                config,
-                config_json,
-                base_image,
-                api_version,
-                pull,
-                local_tag,
-                docker_build_args,
-                install_command,
-                build_command,
-                verbose=verbose,
-            )
+            _build_image(runner, spec, local_tag, verbose=verbose)
         step += 1
 
-        # -- Step: Get push token and authenticate --
         _log_deploy_step(step, "Requesting push token")
         try:
             push_data = client.request_push_token(deployment_id)
@@ -1038,15 +1060,15 @@ def _run_local_build(
         normalized_registry = registry_url.rstrip("/")
         if "://" in normalized_registry:
             normalized_registry = normalized_registry.split("//", 1)[1]
-        repo_seed = image_name or name or config.parent.name
-        repo_name = normalize_name(repo_seed)
-        tag_value = normalize_image_tag(tag)
-        remote_image = f"{normalized_registry}/{repo_name}:{tag_value}"
-
+        repo_seed = image_name or name or spec.config.parent.name
+        remote_image = str(
+            ImageReference(
+                f"{normalized_registry}/{normalize_name(repo_seed)}",
+                normalize_image_tag(tag),
+            )
+        )
         registry_host = normalized_registry.split("/")[0]
 
-        # Use a clean Docker config with only the push token so that
-        # system credential helpers (e.g. gcloud) don't interfere.
         with _docker_config_for_token(registry_host, deployment_token) as cfg:
             _log_deploy_step(step, f"Logging into {registry_host}")
             token_input = (
@@ -1056,9 +1078,7 @@ def _run_local_build(
             )
             runner.run(
                 subp_exec(
-                    "docker",
-                    "--config",
-                    cfg,
+                    *_docker(cfg),
                     "login",
                     "-u",
                     "oauth2accesstoken",
@@ -1070,39 +1090,11 @@ def _run_local_build(
             )
             step += 1
 
-            # -- Step: Tag and push --
             _log_deploy_step(step, f"Pushing image {remote_image}")
             runner.run(
-                subp_exec(
-                    "docker",
-                    "tag",
-                    image_to_push,
-                    remote_image,
-                    verbose=verbose,
-                )
+                subp_exec("docker", "tag", image_to_push, remote_image, verbose=verbose)
             )
-            max_push_retries = 3
-            for attempt in range(max_push_retries):
-                try:
-                    with Progress(message="Pushing...", elapsed=not verbose):
-                        runner.run(
-                            subp_exec(
-                                "docker",
-                                "--config",
-                                cfg,
-                                "push",
-                                remote_image,
-                                verbose=verbose,
-                            )
-                        )
-                    break
-                except click.exceptions.Exit:
-                    if attempt < max_push_retries - 1:
-                        _get_emitter().warn(
-                            f"   Push failed, retrying (attempt {attempt + 2} of {max_push_retries})..."
-                        )
-                    else:
-                        raise
+            _push_image(runner, remote_image, docker_config_dir=cfg, verbose=verbose)
         step += 1
 
         resolved_image = _resolve_pushed_image_digest(
@@ -1112,7 +1104,6 @@ def _run_local_build(
             verbose=verbose,
         )
 
-        # -- Step: Update deployment --
         _log_deploy_step(step, f"Updating deployment {deployment_id}")
         updated = client.update_deployment(
             deployment_id,
@@ -1135,47 +1126,24 @@ def _run_external_deploy(
     client: HostBackendClient,
     deployment_id: str,
     step: int,
-    config: pathlib.Path,
-    config_json: dict,
+    spec: BuildSpec,
     image_uri: str,
     verbose: bool,
-    pull: bool,
-    api_version: str | None,
-    base_image: str | None,
-    install_command: str | None,
-    build_command: str | None,
-    docker_build_args: Sequence[str],
     secrets: list[dict[str, str]],
     tracked_packages: list[str] | None,
-) -> "BuildResult":
+) -> BuildResult:
     """Build image, push using existing Docker credentials, and update the deployment."""
     with Runner() as runner:
         _log_deploy_step(step, f"Building image {image_uri}")
-        _build_image_tagged(
-            runner,
-            config,
-            config_json,
-            base_image,
-            api_version,
-            pull,
-            image_uri,
-            docker_build_args,
-            install_command,
-            build_command,
-            verbose=verbose,
-        )
+        _build_image(runner, spec, image_uri, verbose=verbose)
         step += 1
 
         _log_deploy_step(step, f"Pushing image {image_uri}")
-        with Progress(message="Pushing...", elapsed=not verbose):
-            runner.run(subp_exec("docker", "push", image_uri, verbose=verbose))
+        _push_image(runner, image_uri, docker_config_dir=None, verbose=verbose)
         step += 1
 
         resolved_image = _resolve_pushed_image_digest(
-            runner,
-            remote_image=image_uri,
-            docker_config_dir=None,
-            verbose=verbose,
+            runner, remote_image=image_uri, docker_config_dir=None, verbose=verbose
         )
 
         _log_deploy_step(step, f"Updating deployment {deployment_id}")
@@ -1200,11 +1168,8 @@ def _run_remote_build(
     client: HostBackendClient,
     deployment_id: str,
     step: int,
-    config: pathlib.Path,
-    config_json: dict,
+    spec: BuildSpec,
     verbose: bool,
-    install_command: str | None,
-    build_command: str | None,
     secrets: list[dict[str, str]],
     tracked_packages: list[str] | None,
 ) -> BuildResult:
@@ -1213,7 +1178,11 @@ def _run_remote_build(
 
     em = _get_emitter()
     _log_deploy_step(step, "Creating source archive")
-    with create_archive(config, config_json) as (archive_path, file_size, config_rel):
+    with create_archive(spec.config, spec.config_json) as (
+        archive_path,
+        file_size,
+        config_rel,
+    ):
         em.info(f"Archive created ({file_size / _BYTES_PER_MIB:.1f} MB)")
         step += 1
 
@@ -1235,8 +1204,8 @@ def _run_remote_build(
         source_tarball_path=object_path,
         config_path=config_rel,
         secrets=secrets,
-        install_command=install_command,
-        build_command=build_command,
+        install_command=spec.install_command,
+        build_command=spec.build_command,
         tracked_packages=tracked_packages,
     )
 
@@ -1795,22 +1764,24 @@ def _deploy_cmd(
         em.warn(f"Skipped tracked-package scan: {exc}")
         tracked_packages = None
 
-    # -- 3. Build (divergent path) --
+    spec = BuildSpec(
+        config=config,
+        config_json=config_json,
+        base_image=base_image,
+        api_version=api_version,
+        pull=pull,
+        docker_build_args=docker_build_args,
+        install_command=install_command,
+        build_command=build_command,
+    )
     if use_external_docker:
         build_result = _run_external_deploy(
             client=client,
             deployment_id=deployment_id,
             step=step,
-            config=config,
-            config_json=config_json,
+            spec=spec,
             image_uri=image_uri,
             verbose=verbose,
-            pull=pull,
-            api_version=api_version,
-            base_image=base_image,
-            install_command=install_command,
-            build_command=build_command,
-            docker_build_args=docker_build_args,
             secrets=secrets,
             tracked_packages=tracked_packages,
         )
@@ -1819,11 +1790,8 @@ def _deploy_cmd(
             client=client,
             deployment_id=deployment_id,
             step=step,
-            config=config,
-            config_json=config_json,
+            spec=spec,
             verbose=verbose,
-            install_command=install_command,
-            build_command=build_command,
             secrets=secrets,
             tracked_packages=tracked_packages,
         )
@@ -1832,19 +1800,12 @@ def _deploy_cmd(
             client=client,
             deployment_id=deployment_id,
             step=step,
-            config=config,
-            config_json=config_json,
+            spec=spec,
             verbose=verbose,
-            pull=pull,
-            api_version=api_version,
-            base_image=base_image,
             image_name=image_name,
             prebuilt_image=image,
             name=name,
             tag=tag,
-            install_command=install_command,
-            build_command=build_command,
-            docker_build_args=docker_build_args,
             secrets=secrets,
             tracked_packages=tracked_packages,
         )

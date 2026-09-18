@@ -13,6 +13,7 @@ import pytest
 
 import langgraph_cli.deploy as deploy_mod
 from langgraph_cli.deploy import (
+    DockerBuildCommand,
     _call_host_backend_with_optional_tenant,
     _create_host_backend_client,
     _docker_config_for_token,
@@ -561,6 +562,40 @@ class TestCreateHostBackendClientEndpoint:
         )
 
         assert client.base_url == "https://custom.host.com"
+
+
+class TestDockerBuildCommand:
+    @pytest.mark.parametrize(
+        ("machine", "verbose", "expected"),
+        [
+            pytest.param(
+                "x86_64",
+                False,
+                DockerBuildCommand(("docker", "build"), ()),
+                id="amd64_host_builds_natively",
+            ),
+            pytest.param(
+                "arm64",
+                False,
+                DockerBuildCommand(
+                    ("docker", "buildx", "build"),
+                    ("--platform", "linux/amd64", "--load", "--progress=quiet"),
+                ),
+                id="other_hosts_cross_build_quietly",
+            ),
+            pytest.param(
+                "arm64",
+                True,
+                DockerBuildCommand(
+                    ("docker", "buildx", "build"),
+                    ("--platform", "linux/amd64", "--load"),
+                ),
+                id="verbose_cross_build_keeps_progress_output",
+            ),
+        ],
+    )
+    def test_for_host_targets_the_deployment_platform(self, machine, verbose, expected):
+        assert DockerBuildCommand.for_host(machine, verbose=verbose) == expected
 
 
 class TestResolvePushedImageDigest:
