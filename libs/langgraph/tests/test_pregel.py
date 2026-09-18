@@ -2921,6 +2921,43 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple(
         assert rewrite_query_count == 4
 
 
+def test_clear_cache_empty_nodes_selection(cache: BaseCache) -> None:
+    calls = 0
+
+    class State(TypedDict):
+        value: int
+
+    def cached_node(state: State) -> dict:
+        nonlocal calls
+        calls += 1
+        return {"value": state["value"] + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("cached_node", cached_node, cache_policy=CachePolicy())
+    builder.add_edge(START, "cached_node")
+    builder.add_edge("cached_node", END)
+    app = builder.compile(cache=cache)
+
+    app.invoke({"value": 1})
+    app.invoke({"value": 1})
+    assert calls == 1
+
+    # an explicitly empty node sequence is a no-op, not "clear everything"
+    app.clear_cache([])
+    app.invoke({"value": 1})
+    assert calls == 1
+
+    # clearing a named node evicts its entry
+    app.clear_cache(["cached_node"])
+    app.invoke({"value": 1})
+    assert calls == 2
+
+    # the default (no argument) clears every node
+    app.clear_cache()
+    app.invoke({"value": 1})
+    assert calls == 3
+
+
 def test_callable_in_conditional_edges_with_no_path_map() -> None:
     class State(TypedDict, total=False):
         query: str

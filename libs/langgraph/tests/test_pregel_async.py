@@ -4764,6 +4764,43 @@ async def test_in_one_fan_out_state_graph_waiting_edge_multiple(
         assert rewrite_query_count == 4
 
 
+async def test_aclear_cache_empty_nodes_selection(cache: BaseCache) -> None:
+    calls = 0
+
+    class State(TypedDict):
+        value: int
+
+    def cached_node(state: State) -> dict:
+        nonlocal calls
+        calls += 1
+        return {"value": state["value"] + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("cached_node", cached_node, cache_policy=CachePolicy())
+    builder.add_edge(START, "cached_node")
+    builder.add_edge("cached_node", END)
+    app = builder.compile(cache=cache)
+
+    await app.ainvoke({"value": 1})
+    await app.ainvoke({"value": 1})
+    assert calls == 1
+
+    # an explicitly empty node sequence is a no-op, not "clear everything"
+    await app.aclear_cache([])
+    await app.ainvoke({"value": 1})
+    assert calls == 1
+
+    # clearing a named node evicts its entry
+    await app.aclear_cache(["cached_node"])
+    await app.ainvoke({"value": 1})
+    assert calls == 2
+
+    # the default (no argument) clears every node
+    await app.aclear_cache()
+    await app.ainvoke({"value": 1})
+    assert calls == 3
+
+
 async def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
     def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
