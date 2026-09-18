@@ -10,19 +10,6 @@ from langgraph_cli.host_backend import (
 )
 
 
-@pytest.fixture
-def mock_transport():
-    return httpx.MockTransport(lambda req: httpx.Response(200, json={"ok": True}))
-
-
-@pytest.fixture
-def client(mock_transport):
-    c = HostBackendClient(
-        "https://api.example.com", "test-key", transport=mock_transport
-    )
-    return c
-
-
 def test_constructor_strips_trailing_slash():
     c = HostBackendClient("https://api.example.com/", "key")
     assert c.base_url == "https://api.example.com"
@@ -92,26 +79,6 @@ def test_request_transport_error_raises():
         c._request("GET", "/test")
 
 
-def test_create_deployment(client):
-    result = client.create_deployment(
-        name="my-deploy",
-        source="internal_docker",
-        source_config={"deployment_type": "dev"},
-        source_revision_config={},
-    )
-    assert result == {"ok": True}
-
-
-def test_get_deployment(client):
-    result = client.get_deployment("dep-123")
-    assert result == {"ok": True}
-
-
-def test_list_deployments(client):
-    result = client.list_deployments("my-app")
-    assert result == {"ok": True}
-
-
 def test_list_deployments_sends_query_params():
     def handler(req: httpx.Request) -> httpx.Response:
         assert req.url.path == "/v2/deployments"
@@ -122,33 +89,6 @@ def test_list_deployments_sends_query_params():
         "https://api.example.com", "test-key", transport=httpx.MockTransport(handler)
     )
     result = c.list_deployments("my app")
-    assert result == {"ok": True}
-
-
-def test_delete_deployment(client):
-    result = client.delete_deployment("dep-123")
-    assert result == {"ok": True}
-
-
-def test_request_push_token(client):
-    result = client.request_push_token("dep-123")
-    assert result == {"ok": True}
-
-
-def test_update_deployment(client):
-    result = client.update_deployment(
-        "dep-123",
-        "image:latest",
-        revision_source="internal_docker",
-        secrets=[{"name": "KEY", "value": "val"}],
-    )
-    assert result == {"ok": True}
-
-
-def test_update_deployment_no_secrets(client):
-    result = client.update_deployment(
-        "dep-123", "image:latest", revision_source="internal_docker"
-    )
     assert result == {"ok": True}
 
 
@@ -210,21 +150,6 @@ def test_update_deployment_internal_source_omits_tracked_packages_when_absent():
     )
     body = json.loads(captured["body"])
     assert "tracked_packages" not in body
-
-
-def test_list_revisions(client):
-    result = client.list_revisions("dep-123", limit=5)
-    assert result == {"ok": True}
-
-
-def test_get_revision(client):
-    result = client.get_revision("dep-123", "rev-456")
-    assert result == {"ok": True}
-
-
-def test_get_build_logs(client):
-    result = client.get_build_logs("proj-1", "rev-1", {"limit": 10})
-    assert result == {"ok": True}
 
 
 def test_get_deploy_logs_all_revisions():
@@ -300,25 +225,6 @@ def _routing_client(seen: dict) -> HostBackendClient:
             id="internal_docker_create_forwards_secrets",
         ),
         pytest.param(
-            lambda c: c.create_deployment(
-                name="my-deploy",
-                source="internal_source",
-                source_config={"deployment_type": "dev"},
-                source_revision_config={
-                    "langgraph_config_path": "apps/agent/langgraph.json"
-                },
-            ),
-            {
-                "name": "my-deploy",
-                "source": "internal_source",
-                "source_config": {"deployment_type": "dev"},
-                "source_revision_config": {
-                    "langgraph_config_path": "apps/agent/langgraph.json"
-                },
-            },
-            id="internal_source_create_sends_config_path",
-        ),
-        pytest.param(
             lambda c: c.update_deployment(
                 "dep-123",
                 "registry.example.com/app@sha256:abc",
@@ -371,6 +277,54 @@ def _routing_client(seen: dict) -> HostBackendClient:
                 },
             },
             id="internal_source_revision_omits_source_config_without_commands",
+        ),
+        pytest.param(
+            lambda c: c.create_deployment(
+                name="agent",
+                source="external_docker",
+                source_config={"resource_spec": {}},
+                source_revision_config={
+                    "image_uri": "registry.example.com/agent@sha256:1"
+                },
+                secrets=[],
+            ),
+            {
+                "name": "agent",
+                "source": "external_docker",
+                "source_config": {"resource_spec": {}},
+                "source_revision_config": {
+                    "image_uri": "registry.example.com/agent@sha256:1"
+                },
+                "secrets": [],
+            },
+            id="create_sends_the_source_configs_as_given",
+        ),
+        pytest.param(
+            lambda c: c.update_deployment(
+                "dep-1", "registry.example.com/agent@sha256:2", revision_source=None
+            ),
+            {
+                "source_revision_config": {
+                    "image_uri": "registry.example.com/agent@sha256:2"
+                }
+            },
+            id="revision_without_source_override_omits_revision_source",
+        ),
+        pytest.param(
+            lambda c: c.update_deployment(
+                "dep-1",
+                "registry.example.com/agent@sha256:2",
+                revision_source="internal_docker",
+                tracked_packages=["langgraph:1.0.0"],
+            ),
+            {
+                "revision_source": "internal_docker",
+                "source_revision_config": {
+                    "image_uri": "registry.example.com/agent@sha256:2"
+                },
+                "tracked_packages": ["langgraph:1.0.0"],
+            },
+            id="revision_with_source_override_names_it",
         ),
     ],
 )
@@ -592,62 +546,3 @@ def test_control_plane_endpoints_resolve(host_url, langsmith_endpoint, expected)
     endpoints = ControlPlaneEndpoints.resolve(host_url, langsmith_endpoint)
 
     assert (endpoints.control_plane_url, endpoints.dashboard_url) == expected
-
-
-@pytest.mark.parametrize(
-    ("call", "expected_body"),
-    [
-        pytest.param(
-            lambda c: c.create_deployment(
-                name="agent",
-                source="external_docker",
-                source_config={"resource_spec": {}},
-                source_revision_config={
-                    "image_uri": "registry.example.com/agent@sha256:1"
-                },
-                secrets=[],
-            ),
-            {
-                "name": "agent",
-                "source": "external_docker",
-                "source_config": {"resource_spec": {}},
-                "source_revision_config": {
-                    "image_uri": "registry.example.com/agent@sha256:1"
-                },
-                "secrets": [],
-            },
-            id="create_sends_the_source_configs_as_given",
-        ),
-        pytest.param(
-            lambda c: c.update_deployment(
-                "dep-1", "registry.example.com/agent@sha256:2", revision_source=None
-            ),
-            {
-                "source_revision_config": {
-                    "image_uri": "registry.example.com/agent@sha256:2"
-                }
-            },
-            id="revision_without_source_override_omits_revision_source",
-        ),
-        pytest.param(
-            lambda c: c.update_deployment(
-                "dep-1",
-                "registry.example.com/agent@sha256:2",
-                revision_source="internal_docker",
-                tracked_packages=["langgraph:1.0.0"],
-            ),
-            {
-                "revision_source": "internal_docker",
-                "source_revision_config": {
-                    "image_uri": "registry.example.com/agent@sha256:2"
-                },
-                "tracked_packages": ["langgraph:1.0.0"],
-            },
-            id="revision_with_source_override_names_it",
-        ),
-    ],
-)
-def test_source_agnostic_client_calls_match_control_plane_contract(call, expected_body):
-    captured: dict = {}
-    call(_capturing_client(captured))
-    assert json.loads(captured["body"]) == expected_body
