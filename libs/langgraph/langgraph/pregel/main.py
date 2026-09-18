@@ -47,6 +47,7 @@ from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
+    CheckpointMetadata,
     CheckpointTuple,
 )
 from langgraph.store.base import BaseStore
@@ -110,7 +111,7 @@ from langgraph.callbacks import (
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
 from langgraph.config import get_config
-from langgraph.constants import END
+from langgraph.constants import END, START
 from langgraph.errors import (
     ErrorCode,
     GraphDrained,
@@ -145,6 +146,14 @@ from langgraph.pregel._loop import (
 from langgraph.pregel._messages import (
     StreamMessagesHandler,
     StreamMessagesHandlerV2,
+)
+from langgraph.pregel._queue import (
+    CHECKPOINT_META_QUEUE_CONSUMED,
+    alist_pending,
+    create_queue_item,
+    list_pending,
+    queue_config,
+    queue_item_versions,
 )
 from langgraph.pregel._read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel._retry import RetryPolicy
@@ -182,6 +191,7 @@ from langgraph.types import (
     Durability,
     GraphOutput,
     Interrupt,
+    QueuedUpdate,
     Send,
     StateSnapshot,
     StateUpdate,
@@ -1426,11 +1436,16 @@ class Pregel(
             config[CONF][CONFIG_KEY_THREAD_ID] = str(thread_id)
 
         saved = checkpointer.get_tuple(config)
-        return self._prepare_state_snapshot(
+        snapshot = self._prepare_state_snapshot(
             config,
             saved,
             recurse=checkpointer if subgraphs else None,
             apply_pending_writes=CONFIG_KEY_CHECKPOINT_ID not in config[CONF],
+        )
+        if CONFIG_KEY_CHECKPOINT_ID in config[CONF]:
+            return snapshot
+        return snapshot._replace(
+            queued=self._queued_updates(list_pending(checkpointer, config), saved)
         )
 
     async def aget_state(
@@ -1470,11 +1485,18 @@ class Pregel(
             config[CONF][CONFIG_KEY_THREAD_ID] = str(thread_id)
 
         saved = await checkpointer.aget_tuple(config)
-        return await self._aprepare_state_snapshot(
+        snapshot = await self._aprepare_state_snapshot(
             config,
             saved,
             recurse=checkpointer if subgraphs else None,
             apply_pending_writes=CONFIG_KEY_CHECKPOINT_ID not in config[CONF],
+        )
+        if CONFIG_KEY_CHECKPOINT_ID in config[CONF]:
+            return snapshot
+        return snapshot._replace(
+            queued=self._queued_updates(
+                await alist_pending(checkpointer, config), saved
+            )
         )
 
     def get_state_history(
@@ -2512,6 +2534,154 @@ class Pregel(
             current_config = await aperform_superstep(current_config, superstep)
         return current_config
 
+    def _queued_updates(
+        self, items: Sequence[Any], saved: CheckpointTuple | None
+    ) -> tuple[QueuedUpdate, ...]:
+        """Pending queued updates, minus those the head checkpoint already
+        records as consumed (applied, acknowledgement not yet durable)."""
+        consumed = set(
+            (saved.metadata or {}).get(CHECKPOINT_META_QUEUE_CONSUMED) or ()
+            if saved
+            else ()
+        )
+        return tuple(
+            QueuedUpdate(item.id, item.values, item.steer, item.accepted_at)
+            for item in items
+            if item.id not in consumed
+        )
+
+    def _prepare_queue_item(
+        self,
+        config: RunnableConfig,
+        values: dict[str, Any] | Any,
+        steer: str | None,
+    ) -> tuple[RunnableConfig, Checkpoint, CheckpointMetadata]:
+        """Validate a queued update and build its checkpoint. Applies the
+        update to fresh channels so what the reducers reject fails here,
+        synchronously, rather than inside the run that consumes it."""
+        if steer is not None:
+            if steer in (START, END) or steer not in self.nodes:
+                raise ValueError(f"Node {steer!r} not found")
+        writes = list(Command(update=values)._update_as_tuples())
+        if not writes:
+            raise InvalidUpdateError("queue_state requires a non-empty update")
+        for chan, _ in writes:
+            if not isinstance(self.channels.get(chan), BaseChannel):
+                raise InvalidUpdateError(f"Unknown channel {chan!r}")
+        channels, _ = channels_from_checkpoint(self.channels, empty_checkpoint())
+        try:
+            apply_writes(
+                empty_checkpoint(),
+                channels,
+                [PregelTaskWrites((), INPUT, writes, [])],
+                None,
+                {},
+            )
+        except InvalidUpdateError:
+            raise
+        except Exception as exc:
+            raise InvalidUpdateError(
+                f"Queued update rejected by a channel: {exc!r}"
+            ) from exc
+        config = merge_configs(self.config, config) if self.config else config
+        if self.checkpointer is True:
+            ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+            config = merge_configs(
+                config, {CONF: {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}}
+            )
+        thread_id = config[CONF][CONFIG_KEY_THREAD_ID]
+        if not isinstance(thread_id, str):
+            config[CONF][CONFIG_KEY_THREAD_ID] = str(thread_id)
+        checkpoint, metadata = create_queue_item(values, steer)
+        return queue_config(config), checkpoint, metadata
+
+    def queue_state(
+        self,
+        config: RunnableConfig,
+        values: dict[str, Any] | Any,
+        *,
+        steer: str | None = None,
+    ) -> str:
+        """Queue a state update for the thread's run to apply at a superstep
+        boundary. Safe to call whether or not a run is in flight.
+
+        The update is durable when this returns and is applied exactly once,
+        through the reducers, by the run that reaches the boundary it names:
+        with `steer`, the next boundary at which that node is about to run,
+        or the end of the run if that comes first; without, the boundary at
+        which the run would otherwise finish, after which the graph continues
+        from `START` on the updated state. A run that resumes an interrupt
+        does not consume the queue on entry, and an idle thread consumes
+        nothing until its next run completes a step. Pending updates are
+        visible as `StateSnapshot.queued`.
+
+        A subgraph is addressed with a `checkpoint_ns` in the config, as with
+        `update_state`; `steer` then names one of its nodes.
+
+        Args:
+            config: The config of the thread, or of a subgraph within it.
+            values: The state update, in the shapes `update_state` accepts.
+            steer: The node the update is for, or `None` for the end of the run.
+
+        Returns:
+            The id of the queued update.
+        """
+        checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
+            CONFIG_KEY_CHECKPOINTER, self.checkpointer
+        )
+        if isinstance(checkpointer, BaseCheckpointSaver):
+            checkpointer = self._apply_checkpointer_allowlist(checkpointer)
+        if not checkpointer:
+            raise ValueError("No checkpointer set")
+        if (
+            checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
+            recast = recast_checkpoint_ns(checkpoint_ns)
+            for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
+                return pregel.queue_state(
+                    patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
+                    values,
+                    steer=steer,
+                )
+            else:
+                raise ValueError(f"Subgraph {recast} not found")
+        qconfig, checkpoint, metadata = self._prepare_queue_item(config, values, steer)
+        checkpointer.put(qconfig, checkpoint, metadata, queue_item_versions(checkpoint))
+        return checkpoint["id"]
+
+    async def aqueue_state(
+        self,
+        config: RunnableConfig,
+        values: dict[str, Any] | Any,
+        *,
+        steer: str | None = None,
+    ) -> str:
+        """Asynchronously queue a state update. See `queue_state`."""
+        checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
+            CONFIG_KEY_CHECKPOINTER, self.checkpointer
+        )
+        if isinstance(checkpointer, BaseCheckpointSaver):
+            checkpointer = self._apply_checkpointer_allowlist(checkpointer)
+        if not checkpointer:
+            raise ValueError("No checkpointer set")
+        if (
+            checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
+            recast = recast_checkpoint_ns(checkpoint_ns)
+            async for _, pregel in self.aget_subgraphs(namespace=recast, recurse=True):
+                return await pregel.aqueue_state(
+                    patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
+                    values,
+                    steer=steer,
+                )
+            else:
+                raise ValueError(f"Subgraph {recast} not found")
+        qconfig, checkpoint, metadata = self._prepare_queue_item(config, values, steer)
+        await checkpointer.aput(
+            qconfig, checkpoint, metadata, queue_item_versions(checkpoint)
+        )
+        return checkpoint["id"]
+
     def update_state(
         self,
         config: RunnableConfig,
@@ -2986,6 +3156,8 @@ class Pregel(
                     # wait for checkpoint
                     if durability_ == "sync":
                         loop._put_checkpoint_fut.result()
+                    # apply queued state updates this boundary takes
+                    loop.consume_queue()
             emit_graph_lifecycle_events(loop)
             # emit output
             yield from _output(
@@ -3460,6 +3632,8 @@ class Pregel(
                         # wait for checkpoint
                         if durability_ == "sync":
                             await cast(asyncio.Future, loop._put_checkpoint_fut)
+                        # apply queued state updates this boundary takes
+                        await loop.aconsume_queue()
                 finally:
                     # ensure waiter doesn't remain pending on cancel/shutdown
                     if _cleanup_waiter is not None:
