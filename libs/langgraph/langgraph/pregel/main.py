@@ -1642,6 +1642,16 @@ class Pregel(
         ) -> RunnableConfig:
             # get last checkpoint
             config = ensure_config(self.config, input_config)
+            # update_state runs node writers and conditional-edge routers outside
+            # the invoke/stream path, where CONFIG_KEY_RUNTIME is normally set.
+            # Inject a minimal runtime so runtime-injected params (e.g. `store`)
+            # resolve here too.
+            runtime = Runtime(store=self.store)
+            config.setdefault(CONF, {})[CONFIG_KEY_RUNTIME] = runtime
+
+            def _rt_cfg(base: RunnableConfig) -> RunnableConfig:
+                return patch_configurable(base, {CONFIG_KEY_RUNTIME: runtime})
+
             saved = checkpointer.get_tuple(config)
             if saved is not None:
                 self._migrate_checkpoint(saved.checkpoint)
@@ -1689,7 +1699,7 @@ class Pregel(
                         self.nodes,
                         channels,
                         managed,
-                        saved.config,
+                        _rt_cfg(saved.config),
                         step + 1,
                         step + 3,
                         for_execution=True,
@@ -1697,7 +1707,7 @@ class Pregel(
                         checkpointer=checkpointer,
                         manager=None,
                     )
-                    # apply null writes
+                # apply null writes
                     if null_writes := [
                         w[1:]
                         for w in saved.pending_writes or []
@@ -1833,7 +1843,7 @@ class Pregel(
                         self.nodes,
                         channels,
                         managed,
-                        next_config,
+                        _rt_cfg(next_config),
                         step + 2,
                         step + 4,
                         for_execution=True,
@@ -1890,7 +1900,7 @@ class Pregel(
                     self.nodes,
                     channels,
                     managed,
-                    saved.config,
+                    _rt_cfg(saved.config),
                     step + 1,
                     step + 3,
                     for_execution=True,
@@ -2108,6 +2118,16 @@ class Pregel(
         ) -> RunnableConfig:
             # get last checkpoint
             config = ensure_config(self.config, input_config)
+            # update_state runs node writers and conditional-edge routers outside
+            # the invoke/stream path, where CONFIG_KEY_RUNTIME is normally set.
+            # Inject a minimal runtime so runtime-injected params (e.g. `store`)
+            # resolve here too.
+            runtime = Runtime(store=self.store)
+            config.setdefault(CONF, {})[CONFIG_KEY_RUNTIME] = runtime
+
+            def _rt_cfg(base: RunnableConfig) -> RunnableConfig:
+                return patch_configurable(base, {CONFIG_KEY_RUNTIME: runtime})
+
             saved = await checkpointer.aget_tuple(config)
             if saved is not None:
                 self._migrate_checkpoint(saved.checkpoint)
@@ -2153,7 +2173,7 @@ class Pregel(
                         self.nodes,
                         channels,
                         managed,
-                        saved.config,
+                        _rt_cfg(saved.config),
                         step + 1,
                         step + 3,
                         for_execution=True,
@@ -2161,7 +2181,7 @@ class Pregel(
                         checkpointer=checkpointer,
                         manager=None,
                     )
-                    # apply null writes
+                # apply null writes
                     if null_writes := [
                         w[1:]
                         for w in saved.pending_writes or []
@@ -2296,7 +2316,7 @@ class Pregel(
                         self.nodes,
                         channels,
                         managed,
-                        next_config,
+                        _rt_cfg(next_config),
                         step + 2,
                         step + 4,
                         for_execution=True,
@@ -2354,7 +2374,7 @@ class Pregel(
                     self.nodes,
                     channels,
                     managed,
-                    saved.config,
+                    _rt_cfg(saved.config),
                     step + 1,
                     step + 3,
                     for_execution=True,
