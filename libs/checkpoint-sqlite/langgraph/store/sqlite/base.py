@@ -543,8 +543,6 @@ class BaseSqliteStore:
                         FROM store s
                         JOIN store_vectors sv ON s.prefix = sv.prefix AND s.key = sv.key
                         {prefix_filter_str}
-                            ORDER BY score DESC 
-                        LIMIT ?
                     ),
                     ranked AS (
                         SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, score,
@@ -562,7 +560,6 @@ class BaseSqliteStore:
                     _PLACEHOLDER,  # Vector placeholder
                     *ns_args,
                     *filter_params,
-                    op.limit * 2,  # Expanded limit for better results
                     op.limit,
                     op.offset,
                 ]

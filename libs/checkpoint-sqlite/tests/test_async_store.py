@@ -745,3 +745,28 @@ async def test_async_namespace_segment_boundary(store: AsyncSqliteStore) -> None
     assert set(await store.alist_namespaces(suffix=["alice"], limit=100)) == {
         ("uid", "users", "alice"),
     }
+
+
+async def test_vector_search_truncation_before_deduplication() -> None:
+    """Test that pagination offset is correctly applied after deduplication (Issue #8977)."""
+    from langgraph.store.sqlite import AsyncSqliteStore  # noqa: PLC0415
+
+    def embed(texts: list[str]) -> list[list[float]]:
+        return [[1.0, 0.0 if t == "query" else float(t)] for t in texts]
+
+    async with AsyncSqliteStore.from_conn_string(
+        ":memory:", index={"dims": 2, "embed": embed}
+    ) as store:
+        for i in range(7):
+            await store.aput(("docs",), f"doc{i}", {"text": str(i)}, index=["text"])
+
+        all_results = [
+            r.key for r in await store.asearch(("docs",), query="query", limit=10)
+        ]
+        assert len(all_results) == 7
+
+        paginated_results = [
+            r.key
+            for r in await store.asearch(("docs",), query="query", limit=2, offset=4)
+        ]
+        assert paginated_results == ["doc4", "doc5"]
