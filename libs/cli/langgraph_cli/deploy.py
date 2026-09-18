@@ -642,18 +642,18 @@ def _create_deployment(
     step: int,
     *,
     name: str,
-    deployment_type: str,
     source: str,
-    config_rel: str | None = None,
-    secrets: list[dict[str, str]] | None = None,
+    source_config: dict[str, object],
+    source_revision_config: dict[str, object],
+    secrets: list[dict[str, str]],
 ) -> tuple[str, int]:
     """Create a deployment and return its ID and next step number."""
     _log_deploy_step(step, f"Creating deployment '{name}'")
     created = client.create_deployment(
         name=name,
-        deployment_type=deployment_type,
         source=source,
-        config_path=config_rel,
+        source_config=source_config,
+        source_revision_config=source_revision_config,
         secrets=secrets,
     )
     created_id = created.get("id") if isinstance(created, dict) else None
@@ -1108,6 +1108,7 @@ def _run_local_build(
         updated = client.update_deployment(
             deployment_id,
             resolved_image,
+            revision_source="internal_docker",
             secrets=secrets,
             tracked_packages=tracked_packages,
         )
@@ -1147,9 +1148,10 @@ def _run_external_deploy(
         )
 
         _log_deploy_step(step, f"Updating deployment {deployment_id}")
-        updated = client.update_deployment_external(
+        updated = client.update_deployment(
             deployment_id,
             resolved_image,
+            revision_source=None,
             secrets=secrets,
             tracked_packages=tracked_packages,
         )
@@ -1730,8 +1732,9 @@ def _deploy_cmd(
             client,
             step,
             name=name,
-            deployment_type=deployment_type,
             source=source,
+            source_config={"deployment_type": deployment_type},
+            source_revision_config={},
             secrets=secrets,
         )
 

@@ -94,7 +94,10 @@ def test_request_transport_error_raises():
 
 def test_create_deployment(client):
     result = client.create_deployment(
-        name="my-deploy", deployment_type="dev", source="internal_docker"
+        name="my-deploy",
+        source="internal_docker",
+        source_config={"deployment_type": "dev"},
+        source_revision_config={},
     )
     assert result == {"ok": True}
 
@@ -134,50 +137,19 @@ def test_request_push_token(client):
 
 def test_update_deployment(client):
     result = client.update_deployment(
-        "dep-123", "image:latest", secrets=[{"name": "KEY", "value": "val"}]
+        "dep-123",
+        "image:latest",
+        revision_source="internal_docker",
+        secrets=[{"name": "KEY", "value": "val"}],
     )
     assert result == {"ok": True}
 
 
 def test_update_deployment_no_secrets(client):
-    result = client.update_deployment("dep-123", "image:latest")
-    assert result == {"ok": True}
-
-
-def test_update_deployment_external():
-    captured: dict = {}
-    c = _capturing_client(captured)
-    result = c.update_deployment_external(
-        "dep-123", "registry.example.com/app@sha256:abc123"
+    result = client.update_deployment(
+        "dep-123", "image:latest", revision_source="internal_docker"
     )
     assert result == {"ok": True}
-    body = json.loads(captured["body"])
-    assert "revision_source" not in body
-    assert body["source_revision_config"]["image_uri"] == (
-        "registry.example.com/app@sha256:abc123"
-    )
-
-
-def test_update_deployment_external_forwards_tracked_packages():
-    captured: dict = {}
-    c = _capturing_client(captured)
-    c.update_deployment_external(
-        "dep-123",
-        "registry.example.com/app:latest",
-        tracked_packages=["google-adk:1.0.0"],
-    )
-    body = json.loads(captured["body"])
-    assert body["tracked_packages"] == ["google-adk:1.0.0"]
-    assert "revision_source" not in body
-
-
-def test_update_deployment_external_omits_tracked_packages_when_absent():
-    captured: dict = {}
-    c = _capturing_client(captured)
-    c.update_deployment_external("dep-123", "registry.example.com/app:latest")
-    body = json.loads(captured["body"])
-    assert "tracked_packages" not in body
-    assert "revision_source" not in body
 
 
 def _capturing_client(captured: dict) -> HostBackendClient:
@@ -197,6 +169,7 @@ def test_update_deployment_forwards_tracked_packages():
     c.update_deployment(
         "dep-123",
         "image:latest",
+        revision_source="internal_docker",
         tracked_packages=["google-adk:1.0.0"],
     )
     body = json.loads(captured["body"])
@@ -207,7 +180,7 @@ def test_update_deployment_forwards_tracked_packages():
 def test_update_deployment_omits_tracked_packages_when_absent():
     captured: dict = {}
     c = _capturing_client(captured)
-    c.update_deployment("dep-123", "image:latest")
+    c.update_deployment("dep-123", "image:latest", revision_source="internal_docker")
     body = json.loads(captured["body"])
     assert "tracked_packages" not in body
 
@@ -296,7 +269,10 @@ def _routing_client(seen: dict) -> HostBackendClient:
     [
         pytest.param(
             lambda c: c.create_deployment(
-                name="my-deploy", deployment_type="dev", source="internal_docker"
+                name="my-deploy",
+                source="internal_docker",
+                source_config={"deployment_type": "dev"},
+                source_revision_config={},
             ),
             {
                 "name": "my-deploy",
@@ -309,8 +285,9 @@ def _routing_client(seen: dict) -> HostBackendClient:
         pytest.param(
             lambda c: c.create_deployment(
                 name="my-deploy",
-                deployment_type="prod",
                 source="internal_docker",
+                source_config={"deployment_type": "prod"},
+                source_revision_config={},
                 secrets=[{"name": "KEY", "value": "val"}],
             ),
             {
@@ -325,9 +302,11 @@ def _routing_client(seen: dict) -> HostBackendClient:
         pytest.param(
             lambda c: c.create_deployment(
                 name="my-deploy",
-                deployment_type="dev",
                 source="internal_source",
-                config_path="apps/agent/langgraph.json",
+                source_config={"deployment_type": "dev"},
+                source_revision_config={
+                    "langgraph_config_path": "apps/agent/langgraph.json"
+                },
             ),
             {
                 "name": "my-deploy",
@@ -343,6 +322,7 @@ def _routing_client(seen: dict) -> HostBackendClient:
             lambda c: c.update_deployment(
                 "dep-123",
                 "registry.example.com/app@sha256:abc",
+                revision_source="internal_docker",
                 secrets=[{"name": "KEY", "value": "val"}],
             ),
             {
@@ -405,7 +385,10 @@ def test_request_body_matches_control_plane_contract(call, expected_body):
     [
         pytest.param(
             lambda c: c.create_deployment(
-                name="n", deployment_type="dev", source="internal_docker"
+                name="n",
+                source="internal_docker",
+                source_config={"deployment_type": "dev"},
+                source_revision_config={},
             ),
             "POST",
             "/v2/deployments",
@@ -424,7 +407,7 @@ def test_request_body_matches_control_plane_contract(call, expected_body):
             id="delete_deployment",
         ),
         pytest.param(
-            lambda c: c.update_deployment("dep-1", "img"),
+            lambda c: c.update_deployment("dep-1", "img", revision_source=None),
             "PATCH",
             "/v2/deployments/dep-1",
             id="patch_deployment",
@@ -603,3 +586,62 @@ def test_control_plane_endpoints_resolve(host_url, langsmith_endpoint, expected)
     endpoints = ControlPlaneEndpoints.resolve(host_url, langsmith_endpoint)
 
     assert (endpoints.control_plane_url, endpoints.dashboard_url) == expected
+
+
+@pytest.mark.parametrize(
+    ("call", "expected_body"),
+    [
+        pytest.param(
+            lambda c: c.create_deployment(
+                name="agent",
+                source="external_docker",
+                source_config={"resource_spec": {}},
+                source_revision_config={
+                    "image_uri": "registry.example.com/agent@sha256:1"
+                },
+                secrets=[],
+            ),
+            {
+                "name": "agent",
+                "source": "external_docker",
+                "source_config": {"resource_spec": {}},
+                "source_revision_config": {
+                    "image_uri": "registry.example.com/agent@sha256:1"
+                },
+                "secrets": [],
+            },
+            id="create_sends_the_source_configs_as_given",
+        ),
+        pytest.param(
+            lambda c: c.update_deployment(
+                "dep-1", "registry.example.com/agent@sha256:2", revision_source=None
+            ),
+            {
+                "source_revision_config": {
+                    "image_uri": "registry.example.com/agent@sha256:2"
+                }
+            },
+            id="revision_without_source_override_omits_revision_source",
+        ),
+        pytest.param(
+            lambda c: c.update_deployment(
+                "dep-1",
+                "registry.example.com/agent@sha256:2",
+                revision_source="internal_docker",
+                tracked_packages=["langgraph:1.0.0"],
+            ),
+            {
+                "revision_source": "internal_docker",
+                "source_revision_config": {
+                    "image_uri": "registry.example.com/agent@sha256:2"
+                },
+                "tracked_packages": ["langgraph:1.0.0"],
+            },
+            id="revision_with_source_override_names_it",
+        ),
+    ],
+)
+def test_source_agnostic_client_calls_match_control_plane_contract(call, expected_body):
+    captured: dict = {}
+    call(_capturing_client(captured))
+    assert json.loads(captured["body"]) == expected_body

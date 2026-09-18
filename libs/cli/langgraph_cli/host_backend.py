@@ -153,21 +153,19 @@ class HostBackendClient:
 
     def create_deployment(
         self,
+        *,
         name: str,
-        deployment_type: str,
         source: str,
-        config_path: str | None = None,
+        source_config: dict[str, Any],
+        source_revision_config: dict[str, Any],
         secrets: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
-        """Create a deployment."""
         payload: dict[str, Any] = {
             "name": name,
             "source": source,
-            "source_config": {"deployment_type": deployment_type},
-            "source_revision_config": {},
+            "source_config": source_config,
+            "source_revision_config": source_revision_config,
         }
-        if source == "internal_source" and config_path:
-            payload["source_revision_config"]["langgraph_config_path"] = config_path
         if secrets is not None:
             payload["secrets"] = secrets
         return self._request("POST", "/v2/deployments", payload)
@@ -202,43 +200,21 @@ class HostBackendClient:
         self,
         deployment_id: str,
         image_uri: str,
+        *,
+        revision_source: str | None,
         secrets: list[dict[str, str]] | None = None,
         tracked_packages: list[str] | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
-            "revision_source": "internal_docker",
             "source_revision_config": {"image_uri": image_uri},
         }
+        if revision_source is not None:
+            payload["revision_source"] = revision_source
         if tracked_packages:
             payload["tracked_packages"] = tracked_packages
         if secrets is not None:
             payload["secrets"] = secrets
-        return self._request(
-            "PATCH",
-            f"/v2/deployments/{deployment_id}",
-            payload,
-        )
-
-    def update_deployment_external(
-        self,
-        deployment_id: str,
-        image_uri: str,
-        secrets: list[dict[str, str]] | None = None,
-        tracked_packages: list[str] | None = None,
-    ) -> dict[str, Any]:
-        """Update a deployment with a pre-built external image."""
-        payload: dict[str, Any] = {
-            "source_revision_config": {"image_uri": image_uri},
-        }
-        if tracked_packages:
-            payload["tracked_packages"] = tracked_packages
-        if secrets is not None:
-            payload["secrets"] = secrets
-        return self._request(
-            "PATCH",
-            f"/v2/deployments/{deployment_id}",
-            payload,
-        )
+        return self._request("PATCH", f"/v2/deployments/{deployment_id}", payload)
 
     def update_deployment_internal_source(
         self,
