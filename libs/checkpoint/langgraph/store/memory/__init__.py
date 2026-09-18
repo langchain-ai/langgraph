@@ -106,7 +106,7 @@ import concurrent.futures as cf
 import functools
 import logging
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 from importlib import util
 from typing import Any
@@ -244,7 +244,7 @@ class InMemoryStore(BaseStore):
                 return True
 
             return all(
-                _compare_values(item.value.get(key), filter_value)
+                _compare_values(_resolve_filter_key(item.value, key), filter_value)
                 for key, filter_value in op.filter.items()
             )
 
@@ -548,6 +548,25 @@ def _does_match(match_condition: MatchCondition, key: tuple[str, ...]) -> bool:
         raise ValueError(f"Unsupported match type: {match_type}")
 
 
+def _resolve_filter_key(value: dict[str, Any], key: str) -> Any:
+    """Look up a filter `key` against `value`, resolving dotted nested paths.
+
+    A key of `"a.b"` resolves to `value["a"]["b"]` when that path exists, which
+    mirrors how `SqliteStore` resolves dotted keys via SQLite's `json_extract`.
+
+    When the dotted path does not resolve, the key is looked up literally. This
+    keeps top-level keys that genuinely contain a dot (for example
+    `{"user.name": "x"}`) matchable, as they were before dotted paths were
+    supported.
+    """
+    current: Any = value
+    for part in key.split("."):
+        if not isinstance(current, Mapping) or part not in current:
+            return value.get(key)
+        current = current[part]
+    return current
+
+
 def _compare_values(item_value: Any, filter_value: Any) -> bool:
     """Compare values in a JSONB-like way, handling nested objects."""
     if isinstance(filter_value, dict):
@@ -559,7 +578,8 @@ def _compare_values(item_value: Any, filter_value: Any) -> bool:
         if not isinstance(item_value, dict):
             return False
         return all(
-            _compare_values(item_value.get(k), v) for k, v in filter_value.items()
+            _compare_values(_resolve_filter_key(item_value, k), v)
+            for k, v in filter_value.items()
         )
     elif isinstance(filter_value, (list, tuple)):
         return (
