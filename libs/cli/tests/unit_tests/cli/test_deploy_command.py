@@ -54,6 +54,10 @@ def _patch(deployment_id: str) -> str:
     return f"PATCH /v2/deployments/{deployment_id}"
 
 
+def _get(deployment_id: str) -> str:
+    return f"GET /v2/deployments/{deployment_id}"
+
+
 @dataclass
 class ControlPlaneDouble:
     timeline: list[str]
@@ -482,10 +486,6 @@ def test_remote_build_creates_an_internal_source_deployment_and_uploads_the_arch
         "tracked_packages": TRACKED_PACKAGES,
     }
     assert "Build triggered" in result.output
-
-
-def _get(deployment_id: str) -> str:
-    return f"GET /v2/deployments/{deployment_id}"
 
 
 def test_push_to_builds_pushes_then_creates_an_external_deployment(

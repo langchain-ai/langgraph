@@ -13,10 +13,10 @@ import pytest
 
 import langgraph_cli.deploy as deploy_mod
 from langgraph_cli.deploy import (
+    CustomerRegistrySource,
     DockerBuildCommand,
-    ExternalDockerSource,
-    InternalDockerSource,
-    InternalSourceUpload,
+    ManagedRegistrySource,
+    RemoteBuildSource,
     _call_host_backend_with_optional_tenant,
     _create_host_backend_client,
     _docker_config_for_token,
@@ -619,7 +619,7 @@ class TestSelectSource:
             pytest.param(
                 {"push_to": REPOSITORY},
                 True,
-                ExternalDockerSource(
+                CustomerRegistrySource(
                     ImageReference(REPOSITORY, "latest"), prebuilt_image=None
                 ),
                 id="push_to_selects_the_external_source_with_the_default_tag",
@@ -627,7 +627,7 @@ class TestSelectSource:
             pytest.param(
                 {"push_to": f"{REPOSITORY}:v2"},
                 True,
-                ExternalDockerSource(
+                CustomerRegistrySource(
                     ImageReference(REPOSITORY, "v2"), prebuilt_image=None
                 ),
                 id="push_to_keeps_a_tag_given_in_the_reference",
@@ -635,7 +635,7 @@ class TestSelectSource:
             pytest.param(
                 {"push_to": REPOSITORY, "tag": "v3"},
                 True,
-                ExternalDockerSource(
+                CustomerRegistrySource(
                     ImageReference(REPOSITORY, "v3"), prebuilt_image=None
                 ),
                 id="tag_flag_composes_with_push_to",
@@ -643,7 +643,7 @@ class TestSelectSource:
             pytest.param(
                 {"push_to": REPOSITORY, "image": "app:dev"},
                 False,
-                ExternalDockerSource(
+                CustomerRegistrySource(
                     ImageReference(REPOSITORY, "latest"), prebuilt_image="app:dev"
                 ),
                 id="prebuilt_image_is_retagged_for_push_to_without_docker_checks",
@@ -651,19 +651,19 @@ class TestSelectSource:
             pytest.param(
                 {"remote_build_flag": True},
                 True,
-                InternalSourceUpload(),
+                RemoteBuildSource(),
                 id="remote_flag_selects_the_source_upload",
             ),
             pytest.param(
                 {},
                 False,
-                InternalSourceUpload(),
+                RemoteBuildSource(),
                 id="no_local_docker_falls_back_to_the_source_upload",
             ),
             pytest.param(
                 {},
                 True,
-                InternalDockerSource(
+                ManagedRegistrySource(
                     prebuilt_image=None, image_name=None, tag="latest"
                 ),
                 id="local_docker_selects_the_internal_docker_source",
@@ -671,7 +671,7 @@ class TestSelectSource:
             pytest.param(
                 {"image": "app:dev", "tag": "v1"},
                 False,
-                InternalDockerSource(
+                ManagedRegistrySource(
                     prebuilt_image="app:dev", image_name=None, tag="v1"
                 ),
                 id="prebuilt_image_forces_the_internal_docker_source",

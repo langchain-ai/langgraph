@@ -63,7 +63,8 @@ def _is_cloud_host(hostname: str) -> bool:
 
 def _cloud_control_plane_host_for(langsmith_api_host: str) -> str:
     if langsmith_api_host.endswith(CLOUD_API_HOST):
-        return langsmith_api_host.replace(CLOUD_API_HOST, CLOUD_CONTROL_PLANE_HOST)
+        region = langsmith_api_host[: -len(CLOUD_API_HOST)]
+        return f"{region}{CLOUD_CONTROL_PLANE_HOST}"
     return CLOUD_CONTROL_PLANE_HOST
 
 
@@ -156,8 +157,8 @@ class HostBackendClient:
         *,
         name: str,
         source: str,
-        source_config: dict[str, Any],
-        source_revision_config: dict[str, Any],
+        source_config: dict[str, object],
+        source_revision_config: dict[str, object],
         secrets: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
