@@ -478,7 +478,10 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
         )
     elif isinstance(obj, SendProtocol):
         args: tuple[Any, ...] = (obj.node, obj.arg)
-        if (timeout := getattr(obj, "timeout", None)) is not None:
+        timeout = getattr(obj, "timeout", None)
+        if (key := getattr(obj, "key", None)) is not None:
+            args = (obj.node, obj.arg, timeout, key)
+        elif timeout is not None:
             args = (obj.node, obj.arg, timeout)
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_POS_ARGS,
@@ -540,7 +543,9 @@ def _send_from_args(args: Sequence[Any]) -> Any:
 
     if len(args) == 2:
         return Send(*args)
-    return Send(args[0], args[1], timeout=args[2])
+    if len(args) == 3:
+        return Send(args[0], args[1], timeout=args[2])
+    return Send(args[0], args[1], timeout=args[2], key=args[3])
 
 
 def _create_msgpack_ext_hook(
