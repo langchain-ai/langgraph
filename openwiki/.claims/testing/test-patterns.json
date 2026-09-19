@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:e2e957b607edfe83f480f350f0e065de6ecd894def450f90eb12352f08ba78dd",
+  "claims": [
+    {
+      "id": "claim_976ec084cff5424796744fa4d77012b8",
+      "statement": "LangGraph tests use pytest with pytest-asyncio for async support via the pytestmark = pytest.mark.anyio module-level decorator and an anyio_backend fixture returning 'asyncio', enabling async def test_* functions without per-function decorators.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/conftest.py#L42-L44",
+          "version": "repo-lines-v1:sha256:57c02e8fdc5955024aea4a7de3034858ae934baa3be237849a4fe3eb17a47e4f:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjNmMzY2YjliZDlhOGQwZjM0MGEyYmMwYmUxZTIyZWVhMjA1NjhkZDc4YTQ1MjgxYjcyMWIzMGYyMmQwODdmMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWZjY2JkMjg3YTM1MWY4N2U2MzEzZGI4NDk5ZWIyNDc0MWU2ZWQ0OWM5MjNlOTQ1NWJlOTZkNGY1NDcyZmVlMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDI1OTU1NjVjZjk3YjMxYzBiOTAyZWViYzFkOGZmNDMzNjBlNGU1NTFjN2NiOTA1ZTQzYzZkNmI0OGMxY2YyOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjNiZjY4OTFlZDE4NmM3YTE5OTkxYzQ3OWZhYWZmODM0M2Q2ZGI2YzgzNzE2YTYwZjRjNmE5NjRiYmViYjkwNCJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/tests/test_pregel.py#L99-L99",
+          "version": "repo-lines-v1:sha256:d5afaefa53929479f0cd4290958d0622d4eda0eea8c13e7b04cfaff8b41278a5:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDVhZmFlZmE1MzkyOTQ3OWYwY2Q0MjkwOTU4ZDA2MjJkNGVkYTBlZWE4YzEzZTdiMDRjZmFmZjhiNDEyNzhhNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDVhZmFlZmE1MzkyOTQ3OWYwY2Q0MjkwOTU4ZDA2MjJkNGVkYTBlZWE4YzEzZTdiMDRjZmFmZjhiNDEyNzhhNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmQxZDI1NjU1ZGRkNWJkYTYxMTkzNGQ4OGM5ZDQxY2IzNjE5ZjgzMWUwOWUyMTliYmEyNTI3ZGVlZDY4MmI1OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTVjMWM0NjJlMmEzOWQ3NDc1OWY1ZTFiMTI2Zjc2ODNhMmI3MzAxMThlMThmNTEyMmIwOGNlZGVlYjY1MGUyMyJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/tests/test_pregel_async.py#L101-L101",
+          "version": "repo-lines-v1:sha256:d5afaefa53929479f0cd4290958d0622d4eda0eea8c13e7b04cfaff8b41278a5:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDVhZmFlZmE1MzkyOTQ3OWYwY2Q0MjkwOTU4ZDA2MjJkNGVkYTBlZWE4YzEzZTdiMDRjZmFmZjhiNDEyNzhhNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDVhZmFlZmE1MzkyOTQ3OWYwY2Q0MjkwOTU4ZDA2MjJkNGVkYTBlZWE4YzEzZTdiMDRjZmFmZjhiNDEyNzhhNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTVjMWM0NjJlMmEzOWQ3NDc1OWY1ZTFiMTI2Zjc2ODNhMmI3MzAxMThlMThmNTEyMmIwOGNlZGVlYjY1MGUyMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODcxMjFkMzU1Nzk0OGM0OTQ1M2YwZTYxODdlY2ZhMTFiNjI3MzVkZjIwMzZlZTUzMDdmZTE0M2E0ZTkzM2JhNCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_e72f5b7fd99142c0a522d3e5ad45fc91",
+      "statement": "conftest_checkpointer.py provides parameterized fixtures (sync_checkpointer, async_checkpointer) that test graphs across multiple backend implementations (memory, SQLite, PostgreSQL) in parallel, with helper functions like _checkpointer_memory() for context-managed creation and _apply_strict_msgpack() for serialization validation.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/conftest.py#L144-L170",
+          "version": "repo-lines-v1:sha256:a2a9995c99c283ade405ff8916d8b32a5c278b012522a7d109ddb6ecc4548c72:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM5MDU1MDdlZTJkYTY5MzU1NGNlNDQyNzU5NTI0YmU2ODdkYmE0MTMyOGFmZWQ4MDY2YTc1OWY1NDllY2JmZWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNlNjYwN2IxYTljZmNkODhiYjc1NjRiYWRmMTg3ZjkwMWM0MDUxOTZkNzQ2ZDYwNDliY2YwZjg4YjBhMmU4MTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNiYmVmNzNlZGYzODA4MDZlYWMxMTJmNDY3N2VjMTUyMjFhNTE3MTc5MTUxNGEwYWRhZTQ3MGE2NWYzZGQyYmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY3ZjUwNWZlOGUyMThiNGYxZDU5Mjg2ZTI2OGM4NmM1ODUwMDk5NjZlM2I1ZWI1ZWFkZWNhMDE5ZGIyNjU0MjcifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/tests/conftest_checkpointer.py#L30-L98",
+          "version": "repo-lines-v1:sha256:aa54b1bc9a2275bbc59424a6be6174e0a4c3bb43707d4f6a8e122ca40ef0efab:eyJzZWxlY3RlZExpbmVDb3VudCI6NjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY1ZjliN2I5ODY5Njg4NWFjNjcyZGQ5NGVmZjFlYWRlZTMyZWZiMWVjMDFiMTZhZTRiZWM5M2UwNjRiYjY4ZDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE5OGIwNjNkOWI0N2U2NTM3OTYyNTU3MmNjZTE5NzY2OWQ1NzY3ZTEyYzE4YmUwNzU2NTJiOGNkOTgxY2U4ZDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjEwMzAxZTdjMThiZjQwOWU3MDdiNTU3OWE2N2ZiNTRjY2QzNTYyNGFiMDc5ODUwMjczMjhmOWIxODg1MzAzODUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_dd4b7647ac2841a7919ffb70a51b3055",
+      "statement": "FakeChatModel (tests/fake_chat.py) provides deterministic, seeded LLM responses by cycling through a pre-configured list of messages, eliminating non-determinism from real API calls and enabling reproducible test output.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/fake_chat.py#L14-L42",
+          "version": "repo-lines-v1:sha256:4ebcc8b67f136e131ecd375eda236b6eccc9fbfc86c9d8ca702933ee6d38ef1e:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZlNjYyMDU0ZmVlYzdmZWI0NTEyYmMzNGIyOWI4MTc4OTM5MDFhYmY4OWQ0Y2UxNGZmNzM3ZWQwYWQ5MWJjMmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYxZjgyZjEzNTdkNmYzN2E4MWMxMGNiMDEyN2IyMDM2MTNhOTEyOWE2ODM1MTlkZWRlMWViMzRmZGNjYTU0MWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBlNjA2YmE3OWZkMzE4OGEzNDgxNDIxMmJlZDk5ZWE2YWQxNzc0ZWY0YTMxYTMyNWNkM2E5N2E4Yjk0M2RhNTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjcwMGY3Y2UzNzEwYTczMmI5NjU4ZGMwNGIyYTI3M2YxNWYxM2FkOGU0Y2JkZGExMzRhYmQyZjY2ZTYzMzEwZDkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f27526c5e496493d966b95e77a3165fb",
+      "statement": "The deterministic_uuids fixture mocks uuid.uuid4 to return a predictable sequence of UUIDs, enabling snapshot tests and reproducible test output where UUID order matters.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/conftest.py#L47-L52",
+          "version": "repo-lines-v1:sha256:dae61e8676875baea67204aa2a54ee4c99d6b4d1713900cb543b1ae9845393e2:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2ZiNjE1NWRjZWM1MGUwNDQ3NjJmYTYyZTZhZTY2NjE0NWYwM2ZiMTQ0Y2UwYjAzZGJkZjQ4NjJiNDI1Y2FjZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjE1ZDM5NjBjNmY1NDc2MmJkZjI1ZWZkYzY0ZmJhOTUzNTA1MTAwMTQ5MWIyMTNmZDc3OWMyZmFmNTM2MzRhMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzBjNzBiNTRkNDA3MmZjNjNiYzYxYjUxOGY5OWRkMGNjNDYyZDhmNGVhYzZlOTYyZGRhMmYwZjg0ZmYxYmY1OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzg0ODM1M2JmY2FlYmRlMDE4MmRhNDk4ZDczNzFlMTg3ZDE5OTc1OTk2NmY1ZmZjMTBlMTY4ZGQ1ZDAzMTQwYiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_428cf17e7be54334a250650625c853da",
+      "statement": "MemorySaverAssertImmutable (tests/memory_assert.py) verifies that checkpoints are not mutated after being saved by comparing copies before and after put(), catching race conditions and concurrent mutation bugs.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/memory_assert.py#L52-L92",
+          "version": "repo-lines-v1:sha256:53f759073995970121042972a06d0a7b09fcad273bd6f09b24075de99f8597af:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMwYmVkN2Q5Y2E0NGU4MmEwMGI4NTkwZWE1NWI1MTU3M2I2MTRiOGYwYmEzZGI5YTlhM2Y2N2VkMTQ4NDUxZGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA5ZGIyNzM0NmVjOTJmNTQ5N2M0ZWRlMDMxNGQ5ODhlOGE1NGU2Mjc2MTFmNWRjOWFmZjZjMDYzOGQzZWU2YjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhOGY3ZTRjNGE0MWI5ZGUyNmFjZTZjOWI2NGU1ZmJmNGViNDJkNmI2NDIyMThmNzM5MTRhNDU0MTMzYzJiODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI4YTQ0YzhjMDZmODA4OGQwZTAxMGM0MzQ0MzQwNWUxNTU2NWMyMWM1NzgyZmUwNjRmYWJjN2M3MDQwZmVjODkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3f99a0ec3cfa4f66b4085c74ee3668c6",
+      "statement": "Stateful graph tests use a checkpointer with a thread_id config, invoke the graph, then call get_state(config) to retrieve the saved checkpoint and verify state persistence, versions_seen, and next nodes to execute.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/test_interruption.py#L11-L50",
+          "version": "repo-lines-v1:sha256:2d6d4a14bc0d53084bc6b81c0bca3f4ca61b9b52d0ce72b1981f775ce8157927:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyNjEwYTg5ZmY5ZjU1NjI3M2Y3YjRkMDQ4NmJiMWFlNjQ4NzM0NzU4YWYyNjEyOTQ4ZGQ3NzI5MjIzYjFjNWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4MDJkNTE1NjUxMTNjZTAyNzg0MTI5MGEzMTcxNWJlZDAwMWYxNjM0Y2NlN2Q3YzViNTZkNjkzZTMyZjVkYjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjllZDk3MGZhY2NjZmM3ZWVjOGUxZjNlYzllN2M0MjJjOGEwYzZlNmVkOGI5MjExOTU3YThlNjE3MjU5MzM4ZGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRlMWYwMTQ3NzRkMWM5NzUyNjBhMDNjYmRkNWFmYjk3MmI3YWQ1YzUxODJmYzczNDgwNzliODVjNGRkNmJkMTgifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/tests/test_large_cases.py#L67-L119",
+          "version": "repo-lines-v1:sha256:09ab24f1a0a04f22d486d4ac63b47581fd962bf93565ecf9a231257e3880610f:eyJzZWxlY3RlZExpbmVDb3VudCI6NTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc5NmZhYjdhZjBhZTQxNjk0NWRlNGQyOTIyNTEyZWVkMmNmOWQ2MDQ0YjQzMGY0NmMxNjhlZTc1YTZkODUxMjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwZTZkYmRmZTE2MzRjMTdmYTM0YmZhZDBlMTdkODU3NGViNjNhOWEzN2RlMzVjZDM4Zjg4N2RmZWI4ZWZlMjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE5OGIwNjNkOWI0N2U2NTM3OTYyNTU3MmNjZTE5NzY2OWQ1NzY3ZTEyYzE4YmUwNzU2NTJiOGNkOTgxY2U4ZDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdlNjI4NWZiNDdhNTliMDgzOTc3ZTU3MzJjMTI2Y2M1YjFlY2FiYzVjOWMyYzgxYTgxOGNkMjE0NDMzM2MzYWMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_23b68bf8ee364487809a503066a7abf6",
+      "statement": "Channels can be tested in isolation by creating instances via from_checkpoint(MISSING) or from_checkpoint(saved_state), calling update([values]) to simulate writes, invoking get() to read, and checkpoint() to serialize state for resumption.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/test_channels.py#L33-L92",
+          "version": "repo-lines-v1:sha256:995d9dc59d9eeee9f423f1b51780bba608ce4e111cc6c94f74eff1a5b6e34e94:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3NWE0YTAyYTMzOGI3NWU2MTU2ZDMyOGEyOWFiZWRmNGFjNDFkOWY3Nzg3OGQ2ZGM2YTY0M2IxZWYxZTA5NjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA4MjY3NmM4ODhjMWE0ZDlmYTc3MmZjZGMzMDJmNzczYmM3MjkwZWViZmY5ZGEzNmEzOWY0NGMzMjExOTgzODUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE4NDFlYjZhZjAwZWJkY2I1YWRhZTQ3MGQyZThjOWY4MGFhMzIxNzU5MWZkNjA4YWIwNzljNGJhNzNkNTk2MTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_14714363e87742c9a53aa7318f269782",
+      "statement": "Node functions are tested directly by calling them with mock state dictionaries, verifying return values, and using mocker.Mock to isolate external dependencies without building full graphs.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/test_large_cases.py#L67-L86",
+          "version": "repo-lines-v1:sha256:5011d08470f2f9fe573b0c58e1f844c914e4f8bddd302302eb5f9c898c7c3b7e:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc5NmZhYjdhZjBhZTQxNjk0NWRlNGQyOTIyNTEyZWVkMmNmOWQ2MDQ0YjQzMGY0NmMxNjhlZTc1YTZkODUxMjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwYzFmMTg4ZjE0MmVkN2E4MjQ2ODBiMjA3MTcyYzU1MTliYzYxNGE0OGZkYTdjZjE2N2VkYjhkZGY3OTk1NmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE5OGIwNjNkOWI0N2U2NTM3OTYyNTU3MmNjZTE5NzY2OWQ1NzY3ZTEyYzE4YmUwNzU2NTJiOGNkOTgxY2U4ZDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMwMGZiYTkwYTVjNDc2ZTY0NjE0ZTU0ZDdjMjYwZTZiNjgwZTJmMzE2Njg2ZGI3ZDdmOGMyZGRmMDM3MzIyYjQifQ"
+        },
+        {
+          "resource": "repo://libs/langgraph/tests/test_state.py#L64-L100",
+          "version": "repo-lines-v1:sha256:d0f851e450428999bebe9ede80295733df8b0fb9439e06a7ff52144ccd5acdc2:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyNTU0Y2VkNzQ3YzA3MmNkMzUwZWVmZDUyNmE0OGM3MTk1MWYyNDFlZGMxMmZjZDY3YWU3MzdhYTUxZjhiNTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM3MTE0YmY5NjQxMjk0OTM5ZWY0NjI3YWUxNDhkOGIzN2NlMzEzYTY4ZjY2ZDgxNDNhNmIyZWNjY2VkZmM0NTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFkNzQxMGQ2YzAzOTFiYzJlZjFkODFkZWE1MWY0ZDA2OTM5YjlmMTJmYmMwYjg1YWUwZmNhODk3MjBjODE4YWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkzNjJhNzBmM2ZmYWVmMmZmZGViOGY4ODdmYmJiN2I3N2EwNjkxNzdmYTkyM2JlMDBhYWVmOTdiZjY5MzZhMmUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_fa61e390c7874b4c966db5954616a77d",
+      "statement": "Async graphs with parallel nodes are tested by measuring elapsed time to verify concurrent execution (should complete in ~delay, not 2*delay) and by using asyncio.sleep() to simulate slow operations.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/test_pregel_async.py#L1-L40",
+          "version": "repo-lines-v1:sha256:ede14e3178c4583b6cb0811feb85f8c33947550f53ec94253df9953e32138b65:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAzNGM5Y2RkNDJmOGQ4OGMwNDQyNTM3M2E3MzM2MjA5ZjZiMmEyZGNlYmVjMzJiNGQ0MDU5M2Y5MGJlMmJiMjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRhZmJlYmQ4N2Y4MGM1ZTcxMGI0ODM2NWQwMWRiMDQ0ODMyMzVjYmVjNDI5MDk4NTA3NTEyZjcyNzg5YWIwZWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFhY2RlZmE5YTA1MmVmZTNjOWU3YmM4YmVkMDcyZjVjMWNkMGJhMDQxYmM2MWMyZDU2YTc3MDllZGFkODc0ODMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a5a86ab970e049f0b4f019f9fa579554",
+      "statement": "Streaming output is tested using graph.stream(input, stream_mode=<mode>) with modes including 'values' (full state after each node), 'updates' (incremental changes only), and 'events' (structured v3 events with on_node_start, on_node_end, etc.).",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/test_stream_events_v3.py#L76-L114",
+          "version": "repo-lines-v1:sha256:7407652b46a64aff1639bd05ea82267400c8b861cba2272a7a5fbc99a35d6123:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBhNjFjZjE1MDI3MzIyOWRjMmE5ZDhjMjU2NzdlNjAxYzY4MGFlYzk0MWE2NDkyNGNmNjk5YWU5NWNmZWRkMTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM1N2MzOTMyNmViNTE0ZDQzNjJjZGVhYWRjZTE0YzQ5ZmYwYjMwYWFmZWFkMWFmN2JiNTQ1ZmNhM2FlZmI0YTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY5OTZmZmJhNzJlZDI5ZDcwMzkxZjZmMmJlZmIxZDhmMDdhZTkyYWRiYTg5ZDgxMWQ3OGY3OWQ2YzRmNGVlNjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJlOTQ2OThmNTI0YWRiZWYzY2YwYTJmMTZmMWJmM2UzMjBkZWRmMWE4YTkxODhkNWEzZGYwNDg4MzQyMTliMWEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_366439dc0e3f42eaa43153d8167ee6d2",
+      "statement": "Retry policies are tested by creating nodes that fail on early invocations (tracked by a counter) and rely on automatic retry; assertion on the counter confirms the node was retried the expected number of times before success.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/test_retry.py#L89-L120",
+          "version": "repo-lines-v1:sha256:16a3e191b06fc91901a737090159486621447d53e2439521173b88103131c7f1:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiOTY2N2RiMzZlMjcxYWQyZWIwZGIyMjQ2MTkyNjZjMjdlNTViNDVjNzA1YzA3NTgwYjhlYTNkZGQzZDQ0NWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdhOGNjYTg4NzIyYWJjNTNiNDZiNDAxZjhhMDkyMzhiMTIwZjU3MjAyYjQwNzcyYWViMTZkOTRkYTVmYzMyZjEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE5OGIwNjNkOWI0N2U2NTM3OTYyNTU3MmNjZTE5NzY2OWQ1NzY3ZTEyYzE4YmUwNzU2NTJiOGNkOTgxY2U4ZDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2MmY5Mzg0OGNmYTA5MDFmMmIzZGI2M2U1YzVhN2U0ZTNiOWMyZDU0NmE3N2JmOTJiMDAzN2M4ODJkNDJmOTYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_5b2ed6815578483582ef5dcaa2f22d78",
+      "statement": "Interrupts are tested by invoking a graph with interrupt() calls in nodes, verifying '__interrupt__' appears in the result with a list of Interrupt objects, then invoking again with None to resume execution across the interrupt boundary.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/test_interruption.py#L1-L92",
+          "version": "repo-lines-v1:sha256:bb640a54e04757bebf9d5366f20da41bd4f4bc5b555232de9da81c1ba00b8fd9:eyJzZWxlY3RlZExpbmVDb3VudCI6OTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3NWE4MzAyYzYyMTkwNzQ2Y2Q4ZmMyMjljNjE4NmYxMWZiNTMxNDIxOGIyMGQxYjc0MjkyMDMwMWE0OTViNzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4MDJkNTE1NjUxMTNjZTAyNzg0MTI5MGEzMTcxNWJlZDAwMWYxNjM0Y2NlN2Q3YzViNTZkNjkzZTMyZjVkYjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_724b46e756f0461bb2a25d2e99118f49",
+      "statement": "The durability fixture parameterizes tests across 'sync', 'async', and 'exit' durability modes, allowing each test to verify checkpoint timing and persistence semantics across different save strategies.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/conftest.py#L55-L57",
+          "version": "repo-lines-v1:sha256:7148b05c818824d1bda2814763bdd39f801967aeeb3b0db43470c2a22eaee527:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGZmMzRkNmVjYjViMzc1ZWEzZDgyZDE3MTY5NjIwYzQ4NjNmNTYxNzc2Njc4N2Y1Y2Y4NjE4NWRhNmI4NjcyMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjAzNjMzODliMGQ0NmMzMjZhZGEzZDRlZDM5ZmE0OGE4ODg0ZDFlMTY2ZDVlNzFmZGE4MjUzYWY2ODJjYTk4NCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTQyZjg0N2E1YzdjMTc0MzNmNzJkYmE0NGVjMWY2MGI1ZTkzZjk2MTI2NGI2N2RhMzU5MGJlNDgxNjQ2MmRjNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTQ5YTcxNmIwY2RlZmZhZTAwMGRiMzYyNTExNTYxMzU0YTg5YzNiZTU3Zjk1ZGU2MDdiNzI0NDY3YWJlMGI0MiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_3a94db2f341e4383870a0a43eb6cbd87",
+      "statement": "Stateless subgraphs compiled without a checkpointer inherit the parent's checkpointer only for interrupt support but reset state on each invocation; this pattern allows agents to be invoked from tool calls without retaining history.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/test_subgraph_persistence.py#L27-L82",
+          "version": "repo-lines-v1:sha256:ea87a6a83216098b7e905bd616379b47691a10f867ac3e69d238107e7b106905:eyJzZWxlY3RlZExpbmVDb3VudCI6NTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ0ZmU1Mjk4ZjNkNzBjMGFiMTYzOGI1ODQ2OWIwM2RjZTRhMTYyNjdlN2E3NzYyNzViMTY0NWU4NzdlNDQyZTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI3ZmU4NjY0ZWI5N2EwMDBhMmRlYjAxOWNmZTBmNTgyZjljODc3Y2Y0MTQzZjg2MjU2NjJhNDFlM2M1Mjg3MTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFiODE1YTBmM2RkZDkzYmYyODJkMjMwZGEzNGMwY2M0MTJlYWEyMmMzZmE5M2U0Y2M2OGM1NWEyYzI4NTM4OTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk2NWFhNTIyYzYxMDdmN2Y2ZmIwNDE4ZGU4ZjUyZDIxMGUzMDQwZTZmNGVmNDQ0ODZlYWRhNGQwZmMxYmJhZTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_dd48f16b8fa5417fb0e09774d6b5c68e",
+      "statement": "Syrupy is used for snapshot testing complex state structures; snapshots are stored in __snapshots__ directories and updated via pytest --snapshot-update, enabling regression detection for nested data.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/test_large_cases.py#L33-L33",
+          "version": "repo-lines-v1:sha256:dd08d802b79dc30b3cb5b9d1a6553c83b5dc7ab03756f446b34d754d55e0cec4:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZGQwOGQ4MDJiNzlkYzMwYjNjYjViOWQxYTY1NTNjODNiNWRjN2FiMDM3NTZmNDQ2YjM0ZDc1NGQ1NWUwY2VjNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZGQwOGQ4MDJiNzlkYzMwYjNjYjViOWQxYTY1NTNjODNiNWRjN2FiMDM3NTZmNDQ2YjM0ZDc1NGQ1NWUwY2VjNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2FhZGQzMGQwYTU1MmU5OTVkMDY5OWM4OGM3MzFlZTYwMWJiMDIwODgxN2I4YmIyZWY5OWI1ODJhYThhY2M5ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDk4YzdjODQ3ZjBkYjQ3ODE0YTFmNTY5ZDViMDUyNTc4NmVjNjQyMzQ0ODRiMjZlZGNlYTQyNDJkOWQwN2VmNiJ9"
+        },
+        {
+          "resource": "repo://libs/langgraph/tests/test_pregel.py#L54-L54",
+          "version": "repo-lines-v1:sha256:dd08d802b79dc30b3cb5b9d1a6553c83b5dc7ab03756f446b34d754d55e0cec4:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZGQwOGQ4MDJiNzlkYzMwYjNjYjViOWQxYTY1NTNjODNiNWRjN2FiMDM3NTZmNDQ2YjM0ZDc1NGQ1NWUwY2VjNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZGQwOGQ4MDJiNzlkYzMwYjNjYjViOWQxYTY1NTNjODNiNWRjN2FiMDM3NTZmNDQ2YjM0ZDc1NGQ1NWUwY2VjNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDFjZjEwMjc0ZGQ4NTA4NGE3MmEyNDY1MmM1Y2NmYTM3YjhkNDEyOWI5NzQ1MGNhN2ZkZjNhNDEzOWMxMGRlOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDFmMmEyYTI2YzMyODk1NWVjYzgwNWQ3MzYyYzlhNGQ3ZDk1NjVmZjgwOTdiY2I3MDg5ZGRhODE4ZjI1MWNmYiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_8722ce2021144b53b1f38debcf8cc668",
+      "statement": "Conditional edges are tested by defining a router function that returns a node name based on state, then invoking the graph with different inputs to exercise each branch and verify the correct node executes.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/test_pregel.py#L178-L194",
+          "version": "repo-lines-v1:sha256:29e555aa78b235549d51e4953ff10720a7720bdeaaa5199b1b2b3679ef81a82f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU1YTNlYzRlNDAyNDQwYTY1N2VhNDk0ZWViNWU3YmM1N2Y2NmZjMDdkYjlmZmFjYTM1ZGE2ZGUwNzhhNzU2N2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcwMGFhODUyMjZiYTFhODZkOWUzMzk0MThjMTZmMWZhN2Q4MjJmNGJiMDhjNGY5ZjRkYjQ0YWY1N2Y0N2RmMmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYxNTZhOWNmMDgwOThlNGMyZjRmNTQ4MTA4YmEwZjgxODlmYjI4MzliYjhhNzI0MWE4M2ZiMTNjMDkzMjJjNjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImViYTRhODFhNmQ2NDg2MzJjZmVhMzk0NDJiZjE1NmFkMDczZDc4YWFjNGU2ODlhOGY2YjFmOWJlYjE4YzI1ZjkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_23331fdc47d5400faa2f533c660d7f40",
+      "statement": "Send-based dynamic routing is tested by having a node return a list of Send objects with target node names and custom inputs, then verifying fan-out execution and correct result accumulation.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/test_pregel.py#L140-L160",
+          "version": "repo-lines-v1:sha256:4e6901a2fb7994fc0b141eb5891e0fb04c563f82a71daee605e1fa954b14e88a:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY1Yzg1NWQyNzRlOThhNWJiZWNhZjMyYmZjN2JmM2ZlNTUyNDgzMjM2ZDMzNWQxNjY1M2Y2ZDkzMjI2YzcxZDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY4MjMxZWEzNzVlZDcwN2ZhZDQzYzg1ZTVjOWU2OGQzMzUzNTc3OWFkYTZmMjQ2ZWZmMGJmYWVkNmZmMGQwOTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY0NmM5NTEyMTIyMmM3Yzc3MmI0ODA0YWY3NjIyNTQ4MWE2YTc0MjAzY2Q3YjM2MjBiNDkxN2FkODE3ZWUwNTYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_640fa07c27a24e79a83efaab767c4812",
+      "statement": "MessagesState tests verify that messages accumulate via the add_messages reducer across multiple invocations, with message IDs preserved and order maintained.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/test_channels.py#L139-L160",
+          "version": "repo-lines-v1:sha256:476c515433307da94fae7dfab893a12a96edc7e994dd4b7dfd24c9eff4dfd03f:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJmNzAwOGYxYzg0NzMwYjUzZjZlZjAyZTc3NDg2NjUwYjI0MDY2ZjRkNjE0MjNmZDAxMzNhZDgzN2M1OTQ2MmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE5ZWE4OGJkNDhjNTM5NjJjMWQ2NGFiMjg4NGE4MmMwY2U0Y2FiOTUzMDQ5MWJiZmQ3ZWZkYTkxMDFiNDA4MDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA4MjY3NmM4ODhjMWE0ZDlmYTc3MmZjZGMzMDJmNzczYmM3MjkwZWViZmY5ZGEzNmEzOWY0NGMzMjExOTgzODUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNhY2I4YjNiNWVhNDQzOGIxMTI2ODYyOWJlNGYyMjllNDhhNzdiZWQ3M2U5MjE0NDlhM2M2OTUxYTNmMjJmYmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_983b8b51fa6241b5993d8c1d9318a210",
+      "statement": "Performance tests measure graph execution time using perf_counter(), invoke graphs in loops (typically 100+ iterations), and assert elapsed time is below a reasonable threshold to catch regressions.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/test_large_cases.py#L1-L65",
+          "version": "repo-lines-v1:sha256:6ca6bd138d7eabc17864f1e08129a4cc83ef5a5e8a22d4a0be680ed71b5a212c:eyJzZWxlY3RlZExpbmVDb3VudCI6NjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2MWE5MTEyYTI5MThlMmFiYTAzZTE5YTJmMjIxYTAyN2FiNGI2ZjllOTQ2YTZjMzk4MTRmNTRlMThlMDdkZmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlhM2Y5MzI3ZGRhNGJjNjUzNWMwOTI0OWM4NGYzNDUwYzM0ODMzMmMwZjg4NmU3NmUxMTkxMWI0NTRlNDc1MTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6c373dc31c884616bcc820450105590e",
+      "statement": "Checkpoint history is inspected using get_state_history(config) which yields CheckpointTuple objects in chronological order, allowing tests to verify the number of supersteps, state evolution, and metadata across execution.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/tests/test_interruption.py#L37-L50",
+          "version": "repo-lines-v1:sha256:631aaf47a9f24fa3105e00bbf6aa908e71b88fdd25b549d4906a29f3a9e3ebbd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhmZjNhOThlMDczNmE1NzMxZjQ1NzRhYjc2ZGRjMGJjZmQwMzc1Nzk5NDVkZWZiMWEyNjRlYTVjNzY3Njk5ZGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4MDJkNTE1NjUxMTNjZTAyNzg0MTI5MGEzMTcxNWJlZDAwMWYxNjM0Y2NlN2Q3YzViNTZkNjkzZTMyZjVkYjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdhNzMwNTVmZTIyNTRmZDczZWY5MzZmN2ExYjhiMmQ4MmMwYTQ3MDNiZmRhYjdiYmQwMTk1N2QzYWQyZDlmZWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRlMWYwMTQ3NzRkMWM5NzUyNjBhMDNjYmRkNWFmYjk3MmI3YWQ1YzUxODJmYzczNDgwNzliODVjNGRkNmJkMTgifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-03T15:19:56.419Z"
+  }
+}

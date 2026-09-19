@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:0b95628c9ae7404571c0332d5d59de26218db8bec8d873ea3ef27b7d50156b7a",
+  "claims": [
+    {
+      "id": "claim_2d9d6b1f0e754715a841a7646c65710f",
+      "statement": "The LangGraph monorepo contains eight interdependent libraries: checkpoint (base interfaces for persistence), checkpoint-postgres, checkpoint-sqlite (Postgres and SQLite checkpoint implementations), langgraph (core orchestration framework), prebuilt (high-level agent APIs), cli (command-line tooling), sdk-py (Python API client), and sdk-js (JavaScript/TypeScript API client).",
+      "evidence": [
+        {
+          "resource": "repo://AGENTS.md#L27-L40",
+          "version": "repo-lines-v1:sha256:697eeb2c3ed078be2830da24dad2ad73486c11b70d743af70c12f6017a998a0e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE0OWEwOTQ2MWM1MzMyMThiNjY3ZTEzNDA5NDViMDdhY2VhMmE1ODA0MWI0ZGU3YzZjN2JlMDcyYWQxYmIwMmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMzMmQyYmU5ZDBmMjAxZTlkNjljNzk2ZjIwMjhkNDJjNzM0MDdiMjI0NTA1MThkNzY4MDE0NGU4ZWQzZjc2OGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE5OWVkMDQ1YjM0MWE1MjFhODkzMGNkMGRjNGQ0ODliZjg4NTY0MjMxYTJlZjA1OGJmMGQ0NTgyY2JkNDAzOWQifQ"
+        },
+        {
+          "resource": "repo://README.md#L1-L30",
+          "version": "repo-lines-v1:sha256:2941ba8aef46106998bdea52dd5069f508e5252984dd015063d3e0fdd55c7a24:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVjOTk2NjBkYWMyZGNmN2E2MGNhMDIyZWUwNjM2MDU3ZjJiZmU1NTE0Yjg1YmJkZDQ2M2U0ZTMzZGI3NDdlNGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgwN2M4ZWE2MjAzNWY3YzJlOWViM2VhNzY5YjRiYjc5MTY1YjU5ZDIzZWMyY2FjZTg5ODE2MzVjOWZhNjE5N2MiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIxNjg1Mjk5Y2M3ZjY0NzliNDQ0MjRiNTg2YjgzN2VlN2E4NjJiNmFjM2I0NjI3MjUzMTYyYjlhZGIwMjVkNTAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e71d1a2923e74efd99d91f1c94fce8d6",
+      "statement": "The checkpoint library has no upstream dependencies and serves as the base interface. langgraph depends on checkpoint; prebuilt depends on langgraph; cli and sdk-py depend on langgraph; sdk-js is standalone. This forms a dependency tree where changes to checkpoint affect all dependent libraries.",
+      "evidence": [
+        {
+          "resource": "repo://AGENTS.md#L41-L61",
+          "version": "repo-lines-v1:sha256:b296775afb738dd19adcce854360345e144817dd556bfb7fe9b4f50d494a91b8:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQwZmY1MmI4ODVjZTA1YjM4NTlkYjMzZTcxMThjM2E2YWE2MDU2MjkwYTI0NzNiMTliZTRhNzM1ZjI2MDQxMTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3YzA2YzU2MWQ1YzMyNzM0MzY4NTI2OGE0NmIzMzkxZjM5OThlZWU4OTBkMmJlNTFmMGQyMWNjNGE1M2FlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQzOGRlMDQwNDJkNzAxZGU1YzhkOTBjMzFmMTA4Y2VhYjU4YzQxMTZkMDVjNjRjNDkyZTgyNGFiMTMyZmZhZjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZkNGU3NmRmZjE2ZWRlODAwMWRiNDVjMWY1ZjQ3NWQwMmJmYjIwOTMwMDJkOTg1YWJlODc3YWIyNjVlZWQyZDcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ecc3238a17734776aa9ced45f6b65d85",
+      "statement": "StateGraph is the primary builder API for LangGraph applications. It accepts a typed state schema (TypedDict, dataclass, or Pydantic model) and provides methods to register nodes, edges, policies, and conditional routing before compilation into an executable CompiledStateGraph.",
+      "evidence": [
+        {
+          "resource": "repo://libs/langgraph/langgraph/graph/state.py#L131-L200",
+          "version": "repo-lines-v1:sha256:31172d348916bf83bd4f2e0ea5753e3b00ca2e8e42bb6e144253754266d650a9:eyJzZWxlY3RlZExpbmVDb3VudCI6NzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhNDFiYzkwYzRlOGM3OGQ2NzRhOTgwNGRiYjJiMTQ2Y2UxZDRmYTUwOGUzNDMyZTY1NzAxNTFkZmE3NmZhN2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2YTcxNTI1NzJlZTg0ZjEwOTA2Yzc0YjlmMmE5MjQzNGRkYWIwZTNjNDI4MTNiMDRlNTk3ZWZjZWM5NTFiMjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjExZTMzMmU1OGNhOWJhODE1Y2Y0MGZiYjljNjNmMTE3YTA5YWJmMDZkZTA1MmY0ZmE4ZDFjNDc1MmFmNzhjMTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAxYzBmZGU2YWFhZDhmNWNkMWZiMWZjOWMyNGQ4MGRmNDI4MGM2ZmU0ZjhlN2FhNjFlOTRhNjZiNzA1N2UxM2QifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_22dd1b33c103436eb501a36e06306817",
+      "statement": "The prebuilt library provides high-level agent patterns including create_react_agent (a ReAct-style agent factory), ToolNode (executor for tool calls), and agent inbox schemas for rapid agent development.",
+      "evidence": [
+        {
+          "resource": "repo://libs/prebuilt/README.md#L18-L60",
+          "version": "repo-lines-v1:sha256:e9aee17e077cd040063316b7b52396a831b340e1480950c5e4720e221a08e8da:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY0ZDY2Zjk4OWU0Zjk2MDEyZmY5ODg1MGU2OGZmNjI4YWI4YWM2ODBkYjkxNWUzZTI3Y2QyZTdhZjM3MWMwZmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMwYjQ1MWFmZTFhMmNlMDE1YTM4ZTcwYWEwMGFkNDYxYjY2ZjNhZTEwNWFkYTgxMGI1MjRjMTExMDdlYTU4Y2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc4ODQ1OGNjY2UzNGRjZDVkNzk2ZTBkMTE5Yjk5MDk2OTIxZjIyM2RmODdiMTdiODdlMjJhMmI3MWE4ZWVhYjMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_049cc96225ce4e8097214f0ea8599263",
+      "statement": "Checkpointers implement the BaseCheckpointSaver interface and persist graph state at each superstep, enabling durable execution (resumption from failure), human-in-the-loop interrupts, and time-travel replay. Checkpoint implementations exist for in-memory, PostgreSQL, and SQLite backends.",
+      "evidence": [
+        {
+          "resource": "repo://libs/checkpoint/README.md#L17-L73",
+          "version": "repo-lines-v1:sha256:0cb7328b7a9999f1a340a1e79fe6f39f4f659b3cfd059705a46cba014ce037f1:eyJzZWxlY3RlZExpbmVDb3VudCI6NTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1OWU2YjM5ZmQ1YzA1YjkzYjgyNTUyNjExM2FkNDUzOGU4NTU1MThlOTc0YTVjYzk2ODhjOTA0OWQ4MmZkNjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNmZWQ5MjhmMTgzYWNmZmNmNDEyNDNmODNiMmM2ZDU0NGJkMDFiYWRlZTllZmVlZjVmNGNmZDFmMjkxZDVlMTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE0ZTJhMTE1MmQzNzc2NDA0MzdmNGVlYjE0ZDYxYjhkYzg0ZjY0NzRjZWZlODgzYjk5MTkxODVlZDg5YjIxMDUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_08bbc9c288ee496da2f72a1ed5fa72c8",
+      "statement": "The LangGraph CLI provides langgraph new (project scaffolding), langgraph dev (local development with hot-reload), langgraph build (Docker image creation), and langgraph up/deploy (production deployment) commands.",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/README.md#L17-L78",
+          "version": "repo-lines-v1:sha256:c6735fc99901812b89874a4d3037f5844f6a61c485bd283940d112954ee746e5:eyJzZWxlY3RlZExpbmVDb3VudCI6NjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1OWU2YjM5ZmQ1YzA1YjkzYjgyNTUyNjExM2FkNDUzOGU4NTU1MThlOTc0YTVjYzk2ODhjOTA0OWQ4MmZkNjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3YzA2YzU2MWQ1YzMyNzM0MzY4NTI2OGE0NmIzMzkxZjM5OThlZWU4OTBkMmJlNTFmMGQyMWNjNGE1M2FlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVjMzI0MjlkYTRiZDhkNDUzNzAzMzBhOTMxOTM2MmFkMjczNzU0OWExZWIxN2NkYjExNTBlMzBjY2QxYTJiZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRiZTU5YzE1MmI0YTJiNjAzOGY0ZmQ3Yjc4OTNhY2RhZDk5NzU0MjVkYjZhN2ZmOWFlMjQ1MmMwNDdkMmNjMjUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7087f7e0a26c41ee8e3a4bd2b8f0b4b8",
+      "statement": "The Python and JavaScript SDKs (langgraph-sdk, langgraph-sdk-js) provide API clients for interacting with a running LangGraph server, enabling remote execution and state management from application code.",
+      "evidence": [
+        {
+          "resource": "repo://libs/sdk-py/README.md#L17-L50",
+          "version": "repo-lines-v1:sha256:c85ca69546970f0d310e474ad704fca39727878e2bc8ba8964367c31156f0573:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1OWU2YjM5ZmQ1YzA1YjkzYjgyNTUyNjExM2FkNDUzOGU4NTU1MThlOTc0YTVjYzk2ODhjOTA0OWQ4MmZkNjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3YzA2YzU2MWQ1YzMyNzM0MzY4NTI2OGE0NmIzMzkxZjM5OThlZWU4OTBkMmJlNTFmMGQyMWNjNGE1M2FlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM3NmQzODE0ZGQ1M2Q3MDQyZmE3NjkxY2U4NmY4Zjc2ZmJiZTdkNjMwNTY3YmVjNmIyMzRmY2NkNjRjMjAyYzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY2ZGFiZjUyM2VjZWZmZTViZjFiYjU5ZWVmNDMzMjRhYWNkYWViOTRiMTZkY2UyMmVkNzExY2FmMzE0MDE3OTEifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-03T15:19:56.419Z"
+  }
+}

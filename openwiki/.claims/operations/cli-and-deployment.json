@@ -1,0 +1,194 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:29eca5b03cde03166872f4cd3ff7173f416f88aa3dbe0f83d902710ce425c8f6",
+  "claims": [
+    {
+      "id": "claim_3337206976714887ab80dd660e9cad8d",
+      "statement": "The LangGraph CLI provides five main commands: `langgraph new` for project scaffolding, `langgraph dev` for in-process development with hot reload, `langgraph build` for Docker image creation, `langgraph up` for Docker Compose deployment with managed Postgres and Redis services, and `langgraph deploy` for remote deployment to LangSmith.",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/langgraph_cli/cli.py#L230-L240",
+          "version": "repo-lines-v1:sha256:443ec4ef8fca9c24e8b0a9c7b80a0bb76962564086277672884b629c3dd588ac:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBlNDNkZWI2MWUzMzUyZGNjMWFiYzgxNTMzODg0MGVkNzNkZDAxMDA2MmZjMTNjODhhMGE4YmViMzgwMzY4ZDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhMGMyMWFlYzI4ZTY2MjBmZWMyMjQ1ODllOWEwMjQ2OTllZjNiZThlZmNhZGRhYTE2YjQzNTNiZWFiMmU1NWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc1MTk1MDgxZGJlZTk3OTNmNDRhZjNlOWVjNDgzOWRhNzdjMTVjY2E4NDUzYTI5YTdkNDQyNTM0N2IxNGE0MzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjViODY4OGYwOTg2MGYwMDY2MTI4MzhlNDhkZTgzMDk5MzI2ZGRhZGEwZWY5Yjg3NzliOTg2NTVjYWI4ZDc5NGEifQ"
+        },
+        {
+          "resource": "repo://libs/cli/langgraph_cli/cli.py#L276-L295",
+          "version": "repo-lines-v1:sha256:b38679b6778f57ac0315dc139fcb09b19fe9d512fc685590b1ec213f90909f53:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhmYWNkZTY2YzgzMmNlNGNhYTY1MDYyNjhlOWVkY2RlN2U1MmI1YTk1MTliNTY4YmEwZTgxNzQ2ZjIzYmYyZjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgxMzNkNzkyMTA0M2FkZTk3YWI3OWNkN2NhYmJjNGI4ODliN2QxYjgyODA2NjliYmU4M2E0NzQxZGJjYTBkYzEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYzZjlmYzY5N2QwZjQ1ZWI5NmFmOWFlZjMzNzQyYzA2M2UyNmE4MDMwNzQ2NzllY2UyOTRjODRmOWRhNjZiYzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhjMTYwNzQxMzU4MWU3NWE1YzA1N2QzZWVhZWUxNWQxZmMyMmIzMTc5NDAwM2I3ZWYxZjU5Yjg1YmJlYWJlMzcifQ"
+        },
+        {
+          "resource": "repo://libs/cli/langgraph_cli/cli.py#L380-L430",
+          "version": "repo-lines-v1:sha256:6787be814f6b32eb8914a4bfa5bc93b67f924f40e20ff554da3931bc0c84b681:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU1OWI4ZmMyNTEzM2MyMzRhN2Q5OTY5NGQwMGRiOGNhZTQwYzc1MGE4YWNjZDQyYzRmOWFiNDE4NjEzNjJhMGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc4OTc4OWIwYjJlOTEzYzc0M2NkZjA1MGI0NGNkYTI3ODdhOGJlYjYwOWUwMjBkZDc3ZTY4Y2U1NzY3NzMzYWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA4MjY3NmM4ODhjMWE0ZDlmYTc3MmZjZGMzMDJmNzczYmM3MjkwZWViZmY5ZGEzNmEzOWY0NGMzMjExOTgzODUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZlMTRlYjYyNDQ1YTNiMTliNTExZTM1ZjY4MzkzNGI2YWI3OGNmYTA2NjZhZTQwZDljOTY0NzBmMTRiMTgzMjgifQ"
+        },
+        {
+          "resource": "repo://libs/cli/langgraph_cli/deploy.py#L1-L30",
+          "version": "repo-lines-v1:sha256:c3f1f2a61a9a173855fe1ce957de41c42ff7565e505c4474dd3a43327314042f:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImViYzUzMmI3NDkxZjU5MTYzMjhlM2IyMzU2NWQwZDNiZWE5ODNmOTQ3MWE2MGJhNjdhNTZkYmFlMmNhMTJhZTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhMGMyMWFlYzI4ZTY2MjBmZWMyMjQ1ODllOWEwMjQ2OTllZjNiZThlZmNhZGRhYTE2YjQzNTNiZWFiMmU1NWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU0MTc5MzhhOWJhYmRhMjgzYWRjNzU4Zjc4YTVkZjFhNzViZGQxZjEzY2EzZTFjZDAyOWNkNjNmNDYxMDQzYzYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a9b8a5df014c47269db1f30d18dce09f",
+      "statement": "`langgraph dev` runs the LangGraph API server in-process using the `langgraph_api` package, with automatic hot-reload on file changes (unless --no-reload specified), optional remote debugging via --debug-port, and browser auto-open (unless --no-browser specified).",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/langgraph_cli/cli.py#L758-L862",
+          "version": "repo-lines-v1:sha256:e7e3a073c4d643ce5cfb664b6711d92c3df1a394b9a9c878cd44c3214cf421f8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTA1LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJhYzFlYmRhMWQ0ZWExZGM4ZDljYTlkMWZlYmUyNWVhNjk2MjYzZTNiNjNlNzhkMzQ3MDY1YjNhMTI4ZmFlODAxIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzMGMxZjE4OGYxNDJlZDdhODI0NjgwYjIwNzE3MmM1NTE5YmM2MTRhNDhmZGE3Y2YxNjdlZGI4ZGRmNzk5NTZjIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlOWE1NzEwODZjNjY2NWFjZmQ1OTA2YTZlZmE0NzVmZTg2NDg0MDM1NWIzZDU4Nzg5Y2I2N2VlN2QyYjdjMzQ5IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJjYWMzOWQ1NWIxYzQwOWFlZTdjMzE4YWU4ZmVlNGYxMjllZTgzNTllYjI3MzY1NzViZWJiODA3MTdhNTM5NjlkIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_cc1e4cecb6b54cec88b5d4ba0f79ea35",
+      "statement": "`langgraph build` generates a Dockerfile from the config, optionally pulls the latest base image, and runs `docker build` to create a tagged image, with support for multi-platform builds via --platform (requires Docker Buildx) and custom install/build commands.",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/langgraph_cli/cli.py#L412-L465",
+          "version": "repo-lines-v1:sha256:69574e171377b0728e8484b250a5b679b48acded49245af7d121c7f7859417db:eyJzZWxlY3RlZExpbmVDb3VudCI6NTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFjMWViZGExZDRlYTFkYzhkOWNhOWQxZmViZTI1ZWE2OTYyNjNlM2I2M2U3OGQzNDcwNjViM2ExMjhmYWU4MDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhlNzcwZjk2MjI2Yzk0ZTgzMTQzMjM2ZDViMDU3ZDY4ODk1ODc3NjhiM2YyOGNhNGIxMjQ3YWE4NzY2YmRmYWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMzZWJlYWU1YWY3NTFjZWNlOWZmNjUwMmQ1MDg4NmU5ZmRlZDlkNjA5NzRmMzNlM2ZhZjI5YTVkY2Q4YmQyNWQifQ"
+        },
+        {
+          "resource": "repo://libs/cli/langgraph_cli/docker.py#L333-L380",
+          "version": "repo-lines-v1:sha256:9891a3a9db6d21c4c58eb593ce783c304cac62a9d37005a543abae93ba95411c:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAwOWRhZmRlZGI0Zjg3NjgzMGMzODY3OWEzYmY0OThmNDgwMTY2MDY2NzZmNDY0ODNmOTM3MjQ4ZmQ5OTAxNWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhhZDk2NjQzYmViYTJlMzM1ZGQyNzUwMTM1MGIyYWJhN2E4OWNlODE5MWNhOWM4Y2U3MDRlY2MzNTBmYjI1ZDUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjczNTk4N2MyMTRhZTRjNTlkODQwNmRiYjFhOThkYTViMDM1MzkzN2JjYmExYmI3OWFhNzljMzcxYmM3OGNhOGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdkMDlhZTlkOTkzNmQ3ZDFjZDk4NmQxNDQ2ZmY2OTI5NjA4MzQ2OWFkNGMwMjVmMmQ4YmY0NzRhOTIyNDI0ZTMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8ab6bc1139eb4ac89bca92255b0f4eea",
+      "statement": "`langgraph up` launches a Docker Compose stack with default services: PostgreSQL 16 with pgvector (langgraph-postgres on port 5433), Redis 6 (langgraph-redis), and LangGraph API server bound to --port (default 8123), all with health checks; optionally includes a debugger UI when --debugger-port is specified.",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/langgraph_cli/cli.py#L278-L372",
+          "version": "repo-lines-v1:sha256:9b74a000954cc5c6419948c19b088d4bb8e0605a1e67d8e1c2d079bfc934bc94:eyJzZWxlY3RlZExpbmVDb3VudCI6OTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU0ZDk0M2ViY2Q0ZmM1YTYzNDIwZDRhNmMwZDEwNDZlODc1MDZlODA0NzM3NDFiZmViYzQ2ZDM0YmY2MjgzODgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5MDlhNTNhNjE4ZDAyOGUxZDMwMDBjMGE3YWJjZWVjYmU1ZmIzN2Y0ZTUxMWVmZTQ2NjQzZmFkNmU2Njg3MmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM2M2I4ODgzZGQ2OGJhM2E2OTZhZmJjYTI3NDY1OTdlMDJkNDI1ZWVlOTNhMWY1MzViYTJkNjhkNzkwMmU1MzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNhYzM5ZDU1YjFjNDA5YWVlN2MzMThhZThmZWU0ZjEyOWVlODM1OWViMjczNjU3NWJlYmI4MDcxN2E1Mzk2OWQifQ"
+        },
+        {
+          "resource": "repo://libs/cli/langgraph_cli/docker.py#L190-L301",
+          "version": "repo-lines-v1:sha256:c81a279740c8d5c0805ac2038fe7c45907875994df33bef283d62949d4fb5e1a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEyLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIyMDEzZmIxNmU3MzljYzVlOWI5ZTlkZjAyZjc1MjIzOTY1NGM2MmNjMzQ3YjM2ZTNlZDI2NzQ2NzkwYjBjM2UzIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0NTRhYjAyOGZiY2VjNTA2NWNlNDdlZWM3ZTdlNTEzMDFmZjBhZmYzYTNhZmJhN2NmYmEzNWRhNTc3ZWI1M2VlIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI3MTJlZmU3Y2JiNjY2MzRlOGVkYWVhMmYxYzczYjc0ZjExOGJiYzFmYmJkNWIyNWY5NjMxYzE2YmZiOWU3ZThiIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI1NjVhYWJjMmMyZDQ3ZWVhYThiMGM4ZmYyYTI5YTA0OTI3ZTc2OWJhMWQ4MTAzMzcyNWNjOWQ1YzIwNzVhYmRhIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_9596da609d2c4fb4b0edf4a3bab63c06",
+      "statement": "langgraph.json declares graph definitions (path:object references or @entrypoint decorated functions), dependencies (PyPI or local paths), environment variables (file or dict), Python/Node version, store/checkpointer/auth/http/webhooks/ui configuration, and container build options (python_version, dockerfile_lines, keep_pkg_tools).",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/langgraph_cli/schemas.py#L620-L774",
+          "version": "repo-lines-v1:sha256:3ab82859f8e9c2c41dd526b9710806c2857bc39fe8c24b95fb6a9c1a675edf54:eyJzZWxlY3RlZExpbmVDb3VudCI6MTU1LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIyYzYyZDBhZDdlYWU4YmEzOTU2NjdjZDI5MTE2MDBiNDI3ZTdhYzhjNmU4NjBmMjM5OGMyNjQ2ODk5ZDAwZTBjIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIwMWJhNDcxOWM4MGI2ZmU5MTFiMDkxYTdjMDUxMjRiNjRlZWVjZTk2NGUwOWMwNThlZjhmOTgwNWRhY2E1NDZiIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIzNDMzOGU2YjU4MmJhMDYxNzJjZDk4MDVjYWUwNzMzOGRkYzk0MDE4YjBlMGYwYzZiNzA3ZDlkZWUxNTBhNjU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJjN2IzNTcyZTE2YzUyNWM2MWM5NzMzMmY0Yzk4ZmQ4MmMyYTk3NmMwNWQ5YTYxNzgxYjBkODM1NDc5ZWJlY2MzIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_1797cb7bbe674957bdf76649a7c44e56",
+      "statement": "Graphs are discovered via explicit `path/to/file.py:object_name` references in config or automatically via `@entrypoint()` decorator; the CLI adds config dependencies to sys.path, imports the module, retrieves the named object (Pregel/StateGraph or async context manager), and registers it as an assistant.",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/langgraph_cli/cli.py#L828-L862",
+          "version": "repo-lines-v1:sha256:9c82e2b8510393b5bd0bf4bf1c689b284a2a4cd7c19f8fc517a9b3fd8713db5c:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFiNWQzZjg1MTllODQxZjU3MTcxZjI1NjM1OGU4ZWViY2QzYjE2MzNhNjcyMTIxYzk1MTQ2ZjI4YjliYjlhZGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwYzFmMTg4ZjE0MmVkN2E4MjQ2ODBiMjA3MTcyYzU1MTliYzYxNGE0OGZkYTdjZjE2N2VkYjhkZGY3OTk1NmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI0MTY1OGE4ZDA1MjRlZTM1Nzg0MDkzMTlhMmVhZDNmMjRjODQ0MDBjNWIwZjc5ZWQ1MmVjZDE0NWRiMTQzMzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNhYzM5ZDU1YjFjNDA5YWVlN2MzMThhZThmZWU0ZjEyOWVlODM1OWViMjczNjU3NWJlYmI4MDcxN2E1Mzk2OWQifQ"
+        },
+        {
+          "resource": "repo://libs/cli/langgraph_cli/schemas.py#L697-L715",
+          "version": "repo-lines-v1:sha256:d492a551a5f42da1915237cb93df668ca45af9c31fc0f109a3a472e42ac357cb:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE5ZGU3NWExYzJjNzgxOGRhMTc0YzliNTg3YjMxNzgxNjFiNjQzNmQ2ZDE4MmRmOWZhNzUzOTA4MjVlZjEyMTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2YTcxNTI1NzJlZTg0ZjEwOTA2Yzc0YjlmMmE5MjQzNGRkYWIwZTNjNDI4MTNiMDRlNTk3ZWZjZWM5NTFiMjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ4ZmNhYjZkMTdjNmZkZjI0YWM2MDIzMTUwMTQ2NWRmZTJjMWJhMGQzZDlhNTMyY2I3NzY4ODI5MTUxNTc0NmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIzZWY2N2YxZGUyZTQ5NWIzYjdjYjY3NTZlYWMxZWY0NzExYTdmYTJiZWE2ZjU0Y2ZmZTZhYzk2ZDcwNDEwZTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_75b96f56bc8b460cb7fbf9ea13fc8d0d",
+      "statement": "All Docker Compose services (Postgres, Redis, API) have health checks: Postgres uses `pg_isready`, Redis uses `redis-cli ping`, API uses `python /api/healthcheck.py` (Docker >= 25.0); the LangGraph API depends_on Postgres and Redis with service_healthy condition.",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/langgraph_cli/docker.py#L222-L293",
+          "version": "repo-lines-v1:sha256:01ee7d0647cdb7f98880d1f54e4b7f59ed5d77ad58a9151af8eb6947e5e5d7e0:eyJzZWxlY3RlZExpbmVDb3VudCI6NzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ2YzdmYzgyMDkxODdkYzczMjY3MGM0NDIwNWJlMDZkMjZlZjc2MjcwNTdhNzg1MDJjOGViMWMzYTZhZjZjODIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2YjA0NDkxNDY5NzIyZTgzNjNhOTRlNDA0NDUzOGUwMTNhMmEyMTdlMzZiMWU1NjhiYTYwYWNiN2I0YzhmMmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVkZTA3MzA1MWY0MmQxMDgwODliNmIxNThlMzVkMmUxNGEzMDg3N2Q4NzhhYWViN2FkMWY0OTdjYWNmMWFmZmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFiMDk1ZGRmZTBmOTRhMDQ0NTY5ZjI0MzhmM2UwZDY4NzRjMTc3NGQ4YWU2MzMxYTJiMzg5MzBjZjQwODkxOWIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_0a20d54c1f6746d7a0441c7377266a76",
+      "statement": "Environment variables are loaded from (in priority order): system environment, .env file (if env path specified in config), and config env dict; required variables include LANGSMITH_API_KEY (dev) or LANGGRAPH_CLOUD_LICENSE_KEY (production), and auto-set POSTGRES_URI/REDIS_URI in Docker Compose.",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/langgraph_cli/cli.py#L838-L862",
+          "version": "repo-lines-v1:sha256:154ce410348e1d5a3db4c29a1bb0b0e982c58f3c1f957301d4c0d327df9904cd:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkxOGMzOGEzMjRlYWE4OGM2OGYzMjdlMTUzMTZmNzcxYzc3ZDVmMjg3ODEzNDYxOTY4NTIzMjNkYmQ4OGE2MDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwYzFmMTg4ZjE0MmVkN2E4MjQ2ODBiMjA3MTcyYzU1MTliYzYxNGE0OGZkYTdjZjE2N2VkYjhkZGY3OTk1NmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBiN2JjYTBhMGY2ZmRjNzMyYzA5OTVjYzcxMzVmMTY3ZTU3OTRkNjgwMjI0ZDc1Y2U4YjRkZTQ5MmExNDQzMmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNhYzM5ZDU1YjFjNDA5YWVlN2MzMThhZThmZWU0ZjEyOWVlODM1OWViMjczNjU3NWJlYmI4MDcxN2E1Mzk2OWQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4aee264338934b7cb3fa255046e4ec84",
+      "statement": "`langgraph dockerfile` generates a Dockerfile and optional .dockerignore, docker-compose.yml, and .env template; supports --add-docker-compose to emit a complete deployment setup suitable for custom CI/CD or container registries.",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/langgraph_cli/cli.py#L527-L656",
+          "version": "repo-lines-v1:sha256:2e61e941bd2eee5b696a94726dc0e4ebc1d7c78b35d188eb968f493ef1ecef06:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJlNTliOGZjMjUxMzNjMjM0YTdkOTk2OTRkMDBkYjhjYWU0MGM3NTBhOGFjY2Q0MmM0ZjlhYjQxODYxMzYyYTBhIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIwMWJhNDcxOWM4MGI2ZmU5MTFiMDkxYTdjMDUxMjRiNjRlZWVjZTk2NGUwOWMwNThlZjhmOTgwNWRhY2E1NDZiIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIzOGFlNjBhMDlhNzg0YjQ3ZWEwODUzMTZiZmY5MmM2ODAxMWRkNjcwZDg5ZjI4ZGFmNWRhOWJiNmFlNDFiYzQyIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIxOGRiNThiNjhjMTcxZGRhNzUxMjg4ZDFlODQ5MzAxZDBhZDNjNGM1ODdlYjlhY2E2YmNjOGE3YmFiNmY3ZmRmIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_469bcc1753f840b9915fa067e0d3e19e",
+      "statement": "`langgraph dev --debug-port PORT --wait-for-client` enables remote debugging by listening on the specified port for a debugger client (requires debugpy); `langgraph up --debugger-port PORT` launches a LangGraph Debugger container that serves a web UI to inspect runs and graph state.",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/langgraph_cli/cli.py#L696-L762",
+          "version": "repo-lines-v1:sha256:2c9c0b027e0334f7d4d02ebf0e7bf782661fb7905ef9702e8627a662d7044304:eyJzZWxlY3RlZExpbmVDb3VudCI6NjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUzZGI3NmRlNjZmN2NjMzUxOTdmMTVhZDI3MjRkN2RkY2Q2NTZkZDU4OWZkYjE1YWFmYzg5OWYzYWJmOGRiZmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzMmY5NjI1YmU5M2UyODlmMWVhMzU2MTAxMWFhMmExMDVjNWEyOGMxNjVlZTg2NDhiZGI5N2VlY2ViMTdjYjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYxOWUwMDVjYWZmNGVlY2U2OWUzYjgzZWU2MjE3MDdhNTFlN2YwMGFkMjRjZmNmMmYwNzkwYmU0ZDcyYWU0ZmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY1ZTM0NGE0NWYxNmRjMTdmNDAwNzgyNGFmNTE0ZTI1NDdkM2NlYTczYmQyOGJkODdiMTRjYjQ0YzNlN2I1NGIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_96990bbf7f2e4e3ca7a7cd26761885b7",
+      "statement": "Two engine runtime modes are supported: 'combined_queue_worker' (default, single container with queue and workers), and 'distributed' (separate orchestrator and executor containers for horizontal scaling); configured via --engine-runtime-mode in up/build/dockerfile commands.",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/langgraph_cli/cli.py#L172-L177",
+          "version": "repo-lines-v1:sha256:75c2f99c436b395f4754fed205c0f5859a22293f2e38bae4ad6dc7024389e7bf:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjRhMzFlYTQ2OWNhYWMxZmUxOWFlMjM5NTE5OTQ3NmJmMzQ1NjU0MzUxMjc2NGYxNDMwZThhZTUwY2I2ZTYyNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmFmYmEwNTI3YzM5NTNjNGI2ZTBlNWI1NzM5YmE4MzYxMmY4MDUzYmNkYzk0NjY3MzAxOTNjZDFkNTkwYjQwOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMWI4MGQ3NGNjMzJmY2RiMDJmYzE4Njc0OTkwMDk1YThjZGYxNzhhNmQxMmQ3YWI2ZjdiMjQ1Y2RkZTMwODg1NiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2FjMzlkNTViMWM0MDlhZWU3YzMxOGFlOGZlZTRmMTI5ZWU4MzU5ZWIyNzM2NTc1YmViYjgwNzE3YTUzOTY5ZCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_e0b8f7f0557742088aff3a88c0ab15d6",
+      "statement": "The build command supports multi-platform image creation via --platform (e.g., linux/amd64,linux/arm64), which requires Docker Buildx; images are cross-compiled and pushed to the registry with the same tag when --push is specified.",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/langgraph_cli/docker.py#L52-L97",
+          "version": "repo-lines-v1:sha256:9b42e1a6430b1b7b4fe5dfef6fc9cdd49a716eda5f6d3613eccb4547fbcb7242:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNmNTk3NmM3NzI0MGVkY2FmODllYTIzNDllMzk2ZmY4MmJlZjc0NmY3OTc3Njg5OTIzYWE5MGEyYjU3NjViNjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAzMDVlMWUwNWU0N2FhZTZkYjRjYTRmZWFjMGYzMjhhODEyMTk0ZTc4YmM0M2I3NjFmYTM5OWFiZDJlN2ExYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhjYzRhN2QxY2M3OTZhYmEzZTQ2NzIzMzI3ZjUxN2U5ZjgxMTk4MmQyNTBmMDcwMjk4NmU0YjU3NjRhZDk1ODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY1OTc4OGJlYTkzNGI3ZDc0ZGJhMGU2NjIyOTlmNjk4NTczODI0ZDNkZjdiYWIzNTkwMTIxZDg5ODRkOWFjNDQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b04cb036f4884d028adde17174b46d4a",
+      "statement": "Custom build/install commands (--install-command, --build-command) are validated to prevent shell injection by rejecting certain characters and patterns (pipes, semicolons, backticks, dollar signs, background execution).",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/langgraph_cli/config.py#L72-L78",
+          "version": "repo-lines-v1:sha256:2da9d7926420094d56bf87bffcca72c6a7d19fbd527d684881e13b778da68b29:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDdhZGZiOTFkNDQ0YTU1NTRjNGUxY2IzN2ZhMTllYWZjNWJkZmJjMWJiOWRkNDZmNmY5MmVjZmU0NGE1NmJiNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTViYzQ3MTFlY2NhMDQ1MGFmYzgzMjc3OWE4ODY3NmE3YzY5NjBmYTNkYTVhZjQxMGVlMDJkMWUwMTUxNTkxYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDlmOTMwODNjMTk3MTIxYjk4MjcwMGJhOGFmYWJkMTcyMmNmMWQzZTc0MDQ1MDllODBlZmEyNzI0N2Y2MmYwNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjAzMzJmZDgyYjZhMzM5Y2NiY2E2ZDYxNzFlMDllODE1OTJhNzg1YTdmN2FiYjdmNGQ3YTc0NjBjY2U5YWQ1YiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_62ffecda190d4746bbd2a486717a9c9f",
+      "statement": "The CLI detects Docker capabilities at runtime: checks Docker version, determines if compose is a plugin or standalone, and sets healthcheck_start_interval flag (true for Docker >= 25.0) to enable optimized health probes.",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/langgraph_cli/docker.py#L100-L142",
+          "version": "repo-lines-v1:sha256:0c25c820429d5c2bb7ded7d973b237c632fb5303302fc72c736dd4f3754453da:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiYmY1OGE4N2QzNmNjYzI5ZDE0ZTRmNTY2YTllMzllYmE0MTNmZTE1NGZiM2M3ZjMyNGUwZTJiMmE0ODAxNDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwYzFmMTg4ZjE0MmVkN2E4MjQ2ODBiMjA3MTcyYzU1MTliYzYxNGE0OGZkYTdjZjE2N2VkYjhkZGY3OTk1NmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU2MmYxM2JkNDQxNzRjMmZhMTcxMmY1NWNhMzQ0YWRhNzE5Mjg4YjdhOWU5ODRlMGYwMDRjZTA3OGYwYjE4NGQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2YTQ2ODA3ZGRhNjQ0NjA2NWNhNDZmNzdjYTQ1ZmUzNGQ5MzE5MTgwNzNiZWFkNTFjYjk4ZjE0ZmJmYTFmZDAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_87560030f18344c5824891fef444b501",
+      "statement": "`langgraph deploy` supports Git-based deployments via --git-url, --git-branch, and --git-commit flags; it reads config and graphs from the repository and triggers LangSmith build/deployment pipeline.",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/langgraph_cli/deploy.py#L1-L100",
+          "version": "repo-lines-v1:sha256:420689544301ce393aad95542a46219954c9922b8aac4732de301a1ce58569b6:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJlYmM1MzJiNzQ5MWY1OTE2MzI4ZTNiMjM1NjVkMGQzYmVhOTgzZjk0NzFhNjBiYTY3YTU2ZGJhZTJjYTEyYWU1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJhY2U0YzA2MTVlYzZjOWMzYTMxMzY3OGJhNmFiY2MwZjViMmQ5YWJkNjYzMDgwMDcyYTkxNGZiNThhZDQ1ZmVlIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIwODI2NzZjODg4YzFhNGQ5ZmE3NzJmY2RjMzAyZjc3M2JjNzI5MGVlYmZmOWRhMzZhMzlmNDRjMzIxMTk4Mzg1In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_c7f654860b0843c4983bc8591902e044",
+      "statement": "`langgraph new` downloads project templates from GitHub (Deep Agent, Simple Agent, New LangGraph Project), extracts them to the specified path, and supports both Python and JavaScript templates via interactive prompts.",
+      "evidence": [
+        {
+          "resource": "repo://libs/cli/langgraph_cli/templates.py#L10-L40",
+          "version": "repo-lines-v1:sha256:7e8b59248b08a64b5b1f18724f268db4e1b9cd8c204a17dbcc235538b04d0c5b:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE1NGM5ZTBmMDE3NjA2MTkwMTNhOGQ0NjhjMTFhY2YxMmNhM2ExNWM0NzBiYTU0YWIxYmNjMjc1ZWRlNTM1NTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZmJhMDUyN2MzOTUzYzRiNmUwZTViNTczOWJhODM2MTJmODA1M2JjZGM5NDY2NzMwMTkzY2QxZDU5MGI0MDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU5NmM4OGMzN2Y2YzA2MjM2ZWJiZTVlZDMwYWNkNGI2NGVkN2QwNzhlY2RmMjc5OGNhNGU1MzAyZTliODAwOWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJkZjk3MGU5M2FjYWQyNDE2ZjljMjRjMWE2YTliOTM4YTgxMTA3NjU0YjMxZGIyZmM5ZDhkMjExYzAyNGQ5MmQifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-03T15:19:56.419Z"
+  }
+}
