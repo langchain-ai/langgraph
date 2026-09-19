@@ -212,18 +212,27 @@ def test_should_retry_default_retry_on():
     assert _should_retry_on(policy, http_error_4xx) is False
 
     # Should retry on requests.HTTPError with 5xx status code
-    response_req_5xx = Mock()
+    response_req_5xx = requests.Response()
     response_req_5xx.status_code = 502
-    req_error_5xx = requests.HTTPError("bad gateway")
-    req_error_5xx.response = response_req_5xx
+    req_error_5xx = requests.HTTPError("bad gateway", response=response_req_5xx)
     assert _should_retry_on(policy, req_error_5xx) is True
 
     # Should not retry on requests.HTTPError with 4xx status code
-    response_req_4xx = Mock()
-    response_req_4xx.status_code = 400
-    req_error_4xx = requests.HTTPError("bad request")
-    req_error_4xx.response = response_req_4xx
-    assert _should_retry_on(policy, req_error_4xx) is False
+    response_req_400 = requests.Response()
+    response_req_400.status_code = 400
+    req_error_400 = requests.HTTPError("bad request", response=response_req_400)
+    assert _should_retry_on(policy, req_error_400) is False
+
+    response_req_404 = requests.Response()
+    response_req_404.status_code = 404
+    req_error_404 = requests.HTTPError("not found", response=response_req_404)
+    assert _should_retry_on(policy, req_error_404) is False
+
+    # Verify raise_for_status() creates a non-retryable 4xx HTTPError
+    try:
+        response_req_404.raise_for_status()
+    except requests.HTTPError as raised_404:
+        assert _should_retry_on(policy, raised_404) is False
 
     # Should retry on requests.HTTPError with no response
     req_error_no_resp = requests.HTTPError("connection error")
