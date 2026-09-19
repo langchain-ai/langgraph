@@ -1375,10 +1375,14 @@ class SqliteStore(BaseSqliteStore, BaseStore):
 
         # Setup similarity functions if they don't exist
         if embedding_requests and self.embeddings:
-            # Generate embeddings for search queries
-            embeddings = self.embeddings.embed_documents(
-                [query for _, query in embedding_requests]
-            )
+            # Embed search queries with embed_query: the Embeddings contract
+            # allows distinct query/document strategies, and embedding the
+            # queries with the document method can produce the wrong query
+            # vector (#9007). There is no batch-query method, so this is one
+            # call per search query.
+            embeddings = [
+                self.embeddings.embed_query(query) for _, query in embedding_requests
+            ]
 
             # Replace placeholders with actual embeddings
             for (embed_req_idx, _), embedding in zip(

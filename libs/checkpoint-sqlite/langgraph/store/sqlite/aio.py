@@ -522,8 +522,16 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
 
         # Setup dot_product function if it doesn't exist
         if embedding_requests and self.embeddings:
-            vectors = await self.embeddings.aembed_documents(
-                [query for _, query in embedding_requests]
+            # Embed search queries with aembed_query: the Embeddings contract
+            # allows distinct query/document strategies, and embedding the
+            # queries with the document method can produce the wrong query
+            # vector (#9007). There is no batch-query method, so gather one
+            # call per search query.
+            vectors = await asyncio.gather(
+                *(
+                    self.embeddings.aembed_query(query)
+                    for _, query in embedding_requests
+                )
             )
 
             for (embed_req_idx, _), embedding in zip(

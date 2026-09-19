@@ -1435,3 +1435,39 @@ def test_list_namespaces_metacharacter_labels(store: SqliteStore) -> None:
         assert set(store.list_namespaces(prefix=[label, "child"], limit=100)) == {
             (label, "child"),
         }
+
+
+class SeparateQueryEmbeddings(Embeddings):
+    """Query and document embeddings intentionally diverge (#9007)."""
+
+    def __init__(self) -> None:
+        self.dims = 2
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [[1.0, 0.0] if t == "alpha" else [0.0, 1.0] for t in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        # queries always point at "alpha", regardless of their wording
+        return [1.0, 0.0]
+
+
+@pytest.mark.parametrize("conn_type", ["memory", "file"])
+def test_search_queries_use_embed_query(conn_type: str) -> None:
+    """Search must embed the query with embed_query (#9007).
+
+    The Embeddings contract allows query/document strategies to differ, so
+    embedding the query with the document method can rank the wrong
+    documents first.
+    """
+    embeddings = SeparateQueryEmbeddings()
+    with create_vector_store(
+        embeddings, text_fields=["text"], conn_type=conn_type
+    ) as store:
+        store.put(("docs",), "alpha", {"text": "alpha"})
+        store.put(("docs",), "beta", {"text": "beta"})
+
+        results = store.search(("docs",), query="find alpha", limit=2)
+        assert [(item.key, round(item.score, 3)) for item in results] == [
+            ("alpha", 1.0),
+            ("beta", 0.0),
+        ]

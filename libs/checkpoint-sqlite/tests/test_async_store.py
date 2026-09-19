@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from typing import cast
 
 import pytest
+from langchain_core.embeddings import Embeddings
 from langgraph.store.base import (
     GetOp,
     Item,
@@ -745,3 +746,39 @@ async def test_async_namespace_segment_boundary(store: AsyncSqliteStore) -> None
     assert set(await store.alist_namespaces(suffix=["alice"], limit=100)) == {
         ("uid", "users", "alice"),
     }
+
+
+class SeparateQueryAsyncEmbeddings(Embeddings):
+    """Sync document embeddings and async query embeddings that diverge (#9007)."""
+
+    def __init__(self) -> None:
+        self.dims = 2
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [[1.0, 0.0] if t == "alpha" else [0.0, 1.0] for t in texts]
+
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
+        return self.embed_documents(texts)
+
+    def embed_query(self, text: str) -> list[float]:
+        return [1.0, 0.0]
+
+    async def aembed_query(self, text: str) -> list[float]:
+        # queries always point at "alpha", regardless of their wording
+        return [1.0, 0.0]
+
+
+async def test_asearch_queries_use_aembed_query(conn_string: str) -> None:
+    """Async search must embed the query with aembed_query (#9007)."""
+    embeddings = SeparateQueryAsyncEmbeddings()
+    async with create_vector_store(
+        embeddings, text_fields=["text"], conn_string=conn_string
+    ) as store:
+        await store.aput(("docs",), "alpha", {"text": "alpha"})
+        await store.aput(("docs",), "beta", {"text": "beta"})
+
+        results = await store.asearch(("docs",), query="find alpha", limit=2)
+        assert [(item.key, round(item.score, 3)) for item in results] == [
+            ("alpha", 1.0),
+            ("beta", 0.0),
+        ]
