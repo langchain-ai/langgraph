@@ -152,6 +152,9 @@ class TaskPayload(TypedDict):
     """Input data passed to the task."""
     triggers: list[str]
     """List of triggers that caused this task to be executed (e.g. channel writes)."""
+    key: NotRequired[str]
+    """Key of the `Send(key=...)` that pushed this task, when it has one. A
+    subgraph invoked inside the task runs under the namespace `<node>|:key`."""
     metadata: NotRequired[dict[str, Any]]
     """Framework-resolved metadata associated with the task.
 

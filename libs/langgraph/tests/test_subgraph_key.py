@@ -1,11 +1,10 @@
 """Tests for keyed subgraph instances.
 
-A subgraph invocation can be keyed in two ways:
-
-- explicitly, with `configurable["subgraph_key"]` on the invoke config;
-- through `Send(node, arg, key=...)`: the pushed task's id derives from the
-  key, duplicate keys in one step are rejected, and subgraphs invoked inside
-  the task inherit the key.
+A subgraph invocation is keyed through `Send(node, arg, key=...)`: the pushed
+task's id derives from the key, duplicate keys in one step are rejected, and
+subgraphs invoked inside the task inherit the key. The key travels on the
+task's config under an internal key; the tests that set it directly exercise
+that transport.
 
 A keyed subgraph runs under `<parent frames without task ids>|:key` whatever
 its `checkpointer=` mode: distinct keys never share state, and a later
@@ -15,6 +14,7 @@ invocation with the same key continues the same history.
 from __future__ import annotations
 
 import asyncio
+import binascii
 import time
 from uuid import uuid4
 
@@ -28,9 +28,11 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.prebuilt import ToolNode, ToolRuntime
 from typing_extensions import TypedDict
 
+from langgraph._internal._constants import CONFIG_KEY_SUBGRAPH_KEY, NS_END, PUSH
 from langgraph.errors import InvalidUpdateError
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.pregel import Pregel
+from langgraph.pregel._algo import _xxhash_str
 from langgraph.types import Command, Send, interrupt
 
 pytestmark = pytest.mark.anyio
@@ -48,7 +50,7 @@ def keyed(key: str, config: RunnableConfig | None = None) -> RunnableConfig:
     base = dict(config or {})
     return {
         **base,
-        "configurable": {**base.get("configurable", {}), "subgraph_key": key},
+        "configurable": {**base.get("configurable", {}), CONFIG_KEY_SUBGRAPH_KEY: key},
     }
 
 
@@ -552,11 +554,71 @@ def test_send_key_gives_position_independent_task_ids(
             {"messages": [ai(*((("record", {"name": n}, f"id_{n}")) for n in order))]},
             config,
         )
-        tasks = graph.get_state_history(config)
-        step0 = next(s for s in tasks if s.metadata.get("step") == 0)
-        ids = {t.name: t.id for t in step0.tasks}
-        assert set(ids) == {"tools"} or len(step0.tasks) == 2
+        # a keyed task's id is a function of the step's checkpoint, the node
+        # and the key, never of the Send's position in the step
+        step0 = next(
+            s for s in graph.get_state_history(config) if s.metadata.get("step") == 0
+        )
+        checkpoint_id = step0.config["configurable"]["checkpoint_id"]
+        for name in order:
+            assert seen[name] == _xxhash_str(
+                binascii.unhexlify(checkpoint_id.replace("-", "")),
+                "tools",
+                str(step0.metadata["step"] + 1),
+                "tools",
+                PUSH,
+                f"{NS_END}{name}",
+            )
     assert set(seen) == {"x", "y"}
+
+
+def test_stream_events_v3_surfaces_keyed_instances(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Lifecycle events name a keyed instance's graph and key and close it on
+    its parent task's result; `run.subgraphs` yields a handle for it."""
+    child = (
+        StateGraph(MessagesState)
+        .add_node("reply", lambda s: {"messages": [AIMessage(content="hi")]})
+        .add_edge(START, "reply")
+        .compile()
+    )
+
+    def fan_out(state: MessagesState) -> list[Send]:
+        return [
+            Send("child", {"messages": [HumanMessage(content=k)]}, key=k)
+            for k in ("a", "b")
+        ]
+
+    parent = (
+        StateGraph(MessagesState)
+        .add_node("child", child)
+        .add_conditional_edges(START, fan_out, ["child"])
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = {"configurable": {"thread_id": str(uuid4())}}
+    run = parent.stream_events(
+        {"messages": [HumanMessage(content="go")]}, config, version="v3"
+    )
+    handles = []
+    payloads = []
+    for name, item in run.interleave("subgraphs", "lifecycle"):
+        if name == "subgraphs":
+            handles.append((item.path, item.graph_name, item.trigger_call_id))
+        else:
+            payloads.append(item)
+
+    instances = {("child", ":a"), ("child", ":b")}
+    started = {tuple(p["namespace"]): p for p in payloads if p["event"] == "started"}
+    assert set(started) == instances
+    for ns, p in started.items():
+        assert p["graph_name"] == "child"
+        assert p["subgraph_key"] == ns[1][1:]
+        assert p["trigger_call_id"]
+    completed = {tuple(p["namespace"]) for p in payloads if p["event"] == "completed"}
+    assert completed == instances
+    assert {path for path, _, _ in handles} == instances
+    assert all(name == "child" and trigger for _, name, trigger in handles)
 
 
 def test_send_duplicate_keys_rejected(sync_checkpointer: BaseCheckpointSaver) -> None:
@@ -578,6 +640,14 @@ def test_send_duplicate_keys_rejected(sync_checkpointer: BaseCheckpointSaver) ->
             config,
         )
     assert ran == []
+    # the step failed before its checkpoint was written. As with any invalid
+    # write, reading the state replays the bad step and raises too; editing
+    # the state moves the thread past it and the run continues.
+    with pytest.raises(InvalidUpdateError, match="Duplicate Send key 'ask'"):
+        graph.get_state(config)
+    graph.update_state(config, {"messages": [ai()]}, as_node=START)
+    assert graph.invoke(None, config)["messages"][-1].tool_calls == []
+    assert graph.get_state(config).next == ()
     # a single call per step is fine, and a stable key gives a stable memory
     expert = make_agent("expert")
 

@@ -16,6 +16,7 @@ from langgraph._internal._config import filter_to_user_tags, patch_checkpoint_ma
 from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_SUBGRAPH_KEY,
     ERROR,
     INTERRUPT,
     NS_END,
@@ -58,6 +59,9 @@ def map_debug_tasks(tasks: Iterable[PregelExecutableTask]) -> Iterator[TaskPaylo
         # under `tags`, mirroring the messages stream handler. (The comprehension
         # also yields a fresh dict, so mutating `md` doesn't touch task.config.)
         if task.config is not None:
+            key = task.config.get(CONF, {}).get(CONFIG_KEY_SUBGRAPH_KEY)
+            if key is not None:
+                payload["key"] = key
             md = {
                 k: v
                 for k, v in (task.config.get("metadata") or {}).items()

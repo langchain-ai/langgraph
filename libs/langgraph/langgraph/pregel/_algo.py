@@ -313,6 +313,22 @@ def apply_writes(
                     f"Task {task.name} with path {task.path} wrote to unknown channel {chan}, ignoring it."
                 )
 
+    # Refuse two keyed Sends for one node with the same key in one step: they
+    # would derive the same task id, so one would silently be dropped (or, if
+    # they invoke a subgraph, two runs would share one memory). Checked here,
+    # where the Sends land in the tasks channel, so the step fails before its
+    # checkpoint is written and `update_state` can move the thread past it.
+    if TASKS in pending_writes_by_channel:
+        seen_keys: set[tuple[str, str]] = set()
+        for packet in pending_writes_by_channel[TASKS]:
+            if isinstance(packet, Send) and packet.key is not None:
+                if (packet.node, packet.key) in seen_keys:
+                    raise InvalidUpdateError(
+                        f"Duplicate Send key {packet.key!r} for node "
+                        f"{packet.node!r} in the same step"
+                    )
+                seen_keys.add((packet.node, packet.key))
+
     # Apply writes to channels
     updated_channels: set[str] = set()
     for chan, vals in pending_writes_by_channel.items():
@@ -442,20 +458,7 @@ def prepare_next_tasks(
     # Consume pending tasks
     tasks_channel = cast(Topic[Send] | None, channels.get(TASKS))
     if tasks_channel and tasks_channel.is_available():
-        seen_keys: set[tuple[str, str]] = set()
         for idx, packet in enumerate(tasks_channel.get()):
-            if for_execution and isinstance(packet, Send) and packet.key is not None:
-                # Keyed packets derive their task id from the key, so two of
-                # them for one node in one step would be one task. Refuse the
-                # step instead of silently dropping one (or, if they invoke a
-                # subgraph, running one memory concurrently). This runs
-                # wherever tasks are prepared, so it holds across processes.
-                if (packet.node, packet.key) in seen_keys:
-                    raise InvalidUpdateError(
-                        f"Duplicate Send key {packet.key!r} for node "
-                        f"{packet.node!r} in the same step"
-                    )
-                seen_keys.add((packet.node, packet.key))
             if task := prepare_single_task(
                 (PUSH, idx),
                 None,
@@ -1010,7 +1013,8 @@ def prepare_push_task_send(
             str(step),
             packet.node,
             PUSH,
-            send_key if send_key is not None else str(idx),
+            # a keyed id is prefixed so a key can never collide with a position
+            f"{NS_END}{send_key}" if send_key is not None else str(idx),
         )
     else:
         logger.warning(f"Ignoring invalid PUSH task path {task_path}")
