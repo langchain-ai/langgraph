@@ -418,6 +418,21 @@ def _make_remote_graph() -> RemoteGraph:
     return rg
 
 
+@pytest.mark.asyncio
+async def test_remote_graph_loads_api_key_from_environment_when_omitted(monkeypatch):
+    monkeypatch.setenv("LANGGRAPH_API_KEY", "test-key-from-env")
+
+    rg = RemoteGraph("agent", url="http://localhost:8123")
+
+    assert rg.client is not None
+    assert rg.client.http.client.headers["x-api-key"] == "test-key-from-env"
+    assert rg.sync_client is not None
+    assert rg.sync_client.http.client.headers["x-api-key"] == "test-key-from-env"
+
+    await rg.client.aclose()
+    rg.sync_client.close()
+
+
 def test_reject_v3_unsupported_passes_when_all_clear():
     rg = _make_remote_graph()
     rg._reject_v3_unsupported(

@@ -23,6 +23,7 @@ from langchain_core.runnables.graph import (
     Node as DrawableNode,
 )
 from langgraph.checkpoint.base import CheckpointMetadata
+from langgraph_sdk._shared.utilities import NOT_PROVIDED
 from langgraph_sdk.client import (
     LangGraphClient,
     SyncLangGraphClient,
@@ -135,7 +136,7 @@ class RemoteGraph(PregelProtocol):
         /,
         *,
         url: str | None = None,
-        api_key: str | None = None,
+        api_key: str | None = NOT_PROVIDED,
         headers: dict[str, str] | None = None,
         client: LangGraphClient | None = None,
         sync_client: SyncLangGraphClient | None = None,
