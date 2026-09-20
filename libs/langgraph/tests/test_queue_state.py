@@ -16,7 +16,12 @@ from typing_extensions import TypedDict
 from langgraph.constants import END, START
 from langgraph.errors import InvalidUpdateError
 from langgraph.graph import StateGraph
-from langgraph.pregel._queue import QUEUE_NS, list_pending, queue_config
+from langgraph.pregel._queue import (
+    CHECKPOINT_META_QUEUE_CONSUMED,
+    QUEUE_NS,
+    list_pending,
+    queue_config,
+)
 from langgraph.types import Command, Durability, QueuedUpdate, interrupt
 
 pytestmark = pytest.mark.anyio
@@ -109,7 +114,7 @@ def test_queue_on_idle_thread_is_visible_and_applied_by_next_run(
     assert list_pending(sync_checkpointer, config) == []
     # recorded by the checkpoint that carried it
     assert any(
-        item_id in (s.metadata or {}).get("queue_consumed", ())
+        item_id in (s.metadata or {}).get(CHECKPOINT_META_QUEUE_CONSUMED, ())
         for s in graph.get_state_history(config)
     )
 
@@ -289,7 +294,7 @@ def test_stale_item_is_acked_not_reapplied(
     item_id = graph.queue_state(config, {"log": ["steer"]}, steer="d")
     graph.invoke({"log": ["in"]}, config)
     head = graph.get_state(config)
-    assert head.metadata["queue_consumed"] == [item_id]
+    assert head.metadata[CHECKPOINT_META_QUEUE_CONSUMED] == [item_id]
 
     # undo the ack, as if the process had died before it landed
     qconfig = queue_config(config)
@@ -354,8 +359,8 @@ def test_subgraph_is_addressed_by_namespace(
 
     thread, result = run_in_thread(parent.invoke, {"log": ["in"]}, config)
     assert gate.entered.wait(10)
-    # the child's namespace, as get_state(subgraphs=True) reports it, once
-    # the child's first checkpoint write has landed
+    # the child's namespace, as get_state(subgraphs=True) reports it, whether
+    # or not the child's first checkpoint has been written yet
     for _ in range(100):
         sub = parent.get_state(config, subgraphs=True).tasks[0].state
         if sub is not None:

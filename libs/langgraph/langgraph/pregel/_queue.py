@@ -18,7 +18,7 @@ import asyncio
 import concurrent.futures
 from collections.abc import Sequence
 from datetime import datetime, timezone
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -46,8 +46,23 @@ QUEUE_META_ACCEPTED_AT = "accepted_at"
 QUEUE_META_ERROR = "error"
 # key in a regular checkpoint's metadata listing the ids of the queued items
 # applied since the previous checkpoint, so a resumed loop can tell an item
-# that was applied but not yet acknowledged from one that is still pending
-CHECKPOINT_META_QUEUE_CONSUMED = "queue_consumed"
+# that was applied but not yet acknowledged from one that is still pending.
+# Double-underscored so that `get_checkpoint_metadata` never copies a key of
+# the same name from a caller's config metadata into a checkpoint.
+CHECKPOINT_META_QUEUE_CONSUMED = "__queue_consumed"
+
+
+class QueueItemMetadata(CheckpointMetadata, total=False):
+    """Metadata of a queued-update checkpoint.
+
+    Internal: these keys only mean something in a queue namespace, so they are
+    typed here rather than on `CheckpointMetadata`.
+    """
+
+    steer: str | None
+    consumed: bool
+    accepted_at: str
+    error: str
 
 
 class QueueApplyError(Exception):
@@ -105,19 +120,19 @@ def queue_item_versions(checkpoint: Checkpoint) -> dict[str, str]:
 
 def create_queue_item(
     values: Any, steer: str | None
-) -> tuple[Checkpoint, CheckpointMetadata]:
+) -> tuple[Checkpoint, QueueItemMetadata]:
     checkpoint = empty_checkpoint()
     checkpoint["channel_values"] = {QUEUED: values}
     # savers key channel blobs by (channel, version), not by checkpoint id, so
     # the version must be unique per item: its own id is
     checkpoint["channel_versions"] = {QUEUED: checkpoint["id"]}
-    metadata: CheckpointMetadata = {
+    metadata: QueueItemMetadata = {
         "source": "queue",
         "step": -1,
         "parents": {},
-        QUEUE_META_STEER: steer,  # type: ignore[typeddict-unknown-key]
-        QUEUE_META_CONSUMED: False,  # type: ignore[typeddict-unknown-key]
-        QUEUE_META_ACCEPTED_AT: datetime.now(timezone.utc).isoformat(),  # type: ignore[typeddict-unknown-key]
+        "steer": steer,
+        "consumed": False,
+        "accepted_at": datetime.now(timezone.utc).isoformat(),
     }
     return checkpoint, metadata
 
@@ -159,11 +174,11 @@ async def alist_pending(
     return items
 
 
-def _ack_metadata(item: QueueItem, error: str | None) -> CheckpointMetadata:
-    metadata = {**item.metadata, QUEUE_META_CONSUMED: True}
+def _ack_metadata(item: QueueItem, error: str | None) -> QueueItemMetadata:
+    metadata = cast(QueueItemMetadata, {**item.metadata, "consumed": True})
     if error is not None:
-        metadata[QUEUE_META_ERROR] = error
-    return metadata  # type: ignore[return-value]
+        metadata["error"] = error
+    return metadata
 
 
 def ack(

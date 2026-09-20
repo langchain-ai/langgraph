@@ -1316,9 +1316,9 @@ class PregelLoop:
         # record the queued updates applied since the previous checkpoint, so a
         # loop resumed from this checkpoint acks them instead of re-applying
         if do_checkpoint and self._queue_consumed:
-            self.checkpoint_metadata[CHECKPOINT_META_QUEUE_CONSUMED] = [  # type: ignore[typeddict-unknown-key]
-                item.id for item in self._queue_consumed
-            ]
+            cast("dict[str, Any]", self.checkpoint_metadata)[
+                CHECKPOINT_META_QUEUE_CONSUMED
+            ] = [item.id for item in self._queue_consumed]
         # create new checkpoint
         channels_to_snapshot = (
             delta_channels_to_snapshot(self.channels, new_counters)

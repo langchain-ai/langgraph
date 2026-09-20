@@ -72,6 +72,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_DURABILITY,
     CONFIG_KEY_NODE_FINISHED,
+    CONFIG_KEY_QUEUE_DISPATCHED,
     CONFIG_KEY_READ,
     CONFIG_KEY_RUNNER_SUBMIT,
     CONFIG_KEY_RUNTIME,
@@ -2605,18 +2606,31 @@ class Pregel(
         """Queue a state update for the thread's run to apply at a superstep
         boundary. Safe to call whether or not a run is in flight.
 
-        The update is durable when this returns and is applied exactly once,
-        through the reducers, by the run that reaches the boundary it names:
-        with `steer`, the next boundary at which that node is about to run,
-        or the end of the run if that comes first; without, the boundary at
-        which the run would otherwise finish, after which the graph continues
-        from `START` on the updated state. A run that resumes an interrupt
-        does not consume the queue on entry, and an idle thread consumes
-        nothing until its next run completes a step. Pending updates are
-        visible as `StateSnapshot.queued`.
+        The update is durable when this returns and is applied exactly once
+        per run, through the reducers, by the run that reaches the boundary
+        it names: with `steer`, the next boundary at which that node is about
+        to run, or the end of the run if that comes first; without, the
+        boundary at which the run would otherwise finish, after which the
+        graph continues from `START` on the updated state. Exactly-once
+        relies on the engine's assumption that a thread has at most one run
+        in flight, which LangGraph Platform enforces. A run that resumes an
+        interrupt does not consume the queue on entry, and an idle thread
+        consumes nothing until its next run completes a step. Pending updates
+        are visible as `StateSnapshot.queued`.
 
         A subgraph is addressed with a `checkpoint_ns` in the config, as with
         `update_state`; `steer` then names one of its nodes.
+
+        Storage and cost: each queued update is a checkpoint in a namespace
+        ending in `__queue__`, next to the graph's own namespace. It is hidden
+        from `get_state_history`, included in a checkpointer listing that
+        names no namespace, and copied or deleted along with the thread. A
+        saver that implements `prune(strategy="keep_latest")` must keep every
+        checkpoint in such a namespace, since each is a pending update. A run
+        with a checkpointer polls its queue whether or not this method is ever
+        called: under `durability="sync"` once per superstep, in parallel with
+        the checkpoint write; under `"async"` one read in flight at a time,
+        never waited for; under `"exit"` once at entry and once at the end.
 
         Args:
             config: The config of the thread, or of a subgraph within it.
@@ -2635,11 +2649,17 @@ class Pregel(
             raise ValueError("No checkpointer set")
         if (
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
-        ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
+        ) and not config[CONF].get(CONFIG_KEY_QUEUE_DISPATCHED):
             recast = recast_checkpoint_ns(checkpoint_ns)
             for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
                 return pregel.queue_state(
-                    patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
+                    patch_configurable(
+                        config,
+                        {
+                            CONFIG_KEY_CHECKPOINTER: checkpointer,
+                            CONFIG_KEY_QUEUE_DISPATCHED: True,
+                        },
+                    ),
                     values,
                     steer=steer,
                 )
@@ -2666,11 +2686,17 @@ class Pregel(
             raise ValueError("No checkpointer set")
         if (
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
-        ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
+        ) and not config[CONF].get(CONFIG_KEY_QUEUE_DISPATCHED):
             recast = recast_checkpoint_ns(checkpoint_ns)
             async for _, pregel in self.aget_subgraphs(namespace=recast, recurse=True):
                 return await pregel.aqueue_state(
-                    patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
+                    patch_configurable(
+                        config,
+                        {
+                            CONFIG_KEY_CHECKPOINTER: checkpointer,
+                            CONFIG_KEY_QUEUE_DISPATCHED: True,
+                        },
+                    ),
                     values,
                     steer=steer,
                 )
