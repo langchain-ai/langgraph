@@ -80,13 +80,14 @@ class SSEDecoder:
         self._event = ""
         self._data = bytearray()
         self._last_event_id = ""
+        self._has_event_id = False
         self._retry: int | None = None
 
     @property
     def last_event_id(self) -> str | None:
         """Return the last event identifier that was seen."""
 
-        return self._last_event_id or None
+        return self._last_event_id if self._has_event_id else None
 
     def decode(self, line: bytes) -> StreamPart | None:
         # See: https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation
@@ -129,6 +130,7 @@ class SSEDecoder:
             if b"\0" in value:
                 pass
             else:
+                self._has_event_id = True
                 self._last_event_id = value.decode()
         elif fieldname == b"retry":
             with contextlib.suppress(TypeError, ValueError):

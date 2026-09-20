@@ -220,6 +220,62 @@ def test_sync_http_client_stream_recovers_after_disconnect():
     ]
 
 
+def test_sync_http_client_stream_omits_cleared_last_event_id_on_reconnect():
+    reconnect_path = "/reconnect"
+    first_chunks = [
+        b"id: 1\n",
+        b"event: values\n",
+        b'data: {"step": 1}\n\n',
+        b"id:\n",
+        b"event: values\n",
+        b'data: {"step": 2}\n\n',
+    ]
+    second_chunks = [b"event: end\n", b"data: null\n\n"]
+    call_count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            assert "last-event-id" not in {
+                k.lower(): v for k, v in request.headers.items()
+            }
+            return httpx.Response(
+                200,
+                headers={
+                    "Content-Type": "text/event-stream",
+                    "Location": reconnect_path,
+                },
+                stream=ListByteStream(
+                    first_chunks,
+                    httpx.RemoteProtocolError("incomplete chunked read"),
+                ),
+            )
+        if call_count == 2:
+            assert request.url.path == reconnect_path
+            assert "last-event-id" not in {
+                k.lower(): v for k, v in request.headers.items()
+            }
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/event-stream"},
+                stream=ListByteStream(second_chunks),
+            )
+        raise AssertionError("unexpected request")
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport, base_url="https://example.com") as client:
+        http_client = SyncHttpClient(client)
+        parts = list(http_client.stream("/stream", "GET"))
+
+    assert call_count == 2
+    assert parts == [
+        StreamPart(event="values", data={"step": 1}, id="1"),
+        StreamPart(event="values", data={"step": 2}, id=""),
+        StreamPart(event="end", data=None, id=None),
+    ]
+
+
 @pytest.mark.asyncio
 async def test_http_client_stream_recovers_after_disconnect():
     reconnect_path = "/reconnect"
@@ -289,6 +345,65 @@ async def test_http_client_stream_recovers_after_disconnect():
         StreamPart(event="values", data={"step": 1}, id="1"),
         StreamPart(event="values", data={"step": 2}, id="2"),
         StreamPart(event="end", data=None, id="2"),  # ty: ignore[invalid-argument-type]
+    ]
+
+
+@pytest.mark.asyncio
+async def test_http_client_stream_omits_cleared_last_event_id_on_reconnect():
+    reconnect_path = "/reconnect"
+    first_chunks = [
+        b"id: 1\n",
+        b"event: values\n",
+        b'data: {"step": 1}\n\n',
+        b"id:\n",
+        b"event: values\n",
+        b'data: {"step": 2}\n\n',
+    ]
+    second_chunks = [b"event: end\n", b"data: null\n\n"]
+    call_count = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            assert "last-event-id" not in {
+                k.lower(): v for k, v in request.headers.items()
+            }
+            return httpx.Response(
+                200,
+                headers={
+                    "Content-Type": "text/event-stream",
+                    "Location": reconnect_path,
+                },
+                stream=AsyncListByteStream(
+                    first_chunks,
+                    httpx.RemoteProtocolError("incomplete chunked read"),
+                ),
+            )
+        if call_count == 2:
+            assert request.url.path == reconnect_path
+            assert "last-event-id" not in {
+                k.lower(): v for k, v in request.headers.items()
+            }
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/event-stream"},
+                stream=AsyncListByteStream(second_chunks),
+            )
+        raise AssertionError("unexpected request")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="https://example.com"
+    ) as client:
+        http_client = HttpClient(client)
+        parts = [part async for part in http_client.stream("/stream", "GET")]
+
+    assert call_count == 2
+    assert parts == [
+        StreamPart(event="values", data={"step": 1}, id="1"),
+        StreamPart(event="values", data={"step": 2}, id=""),
+        StreamPart(event="end", data=None, id=None),
     ]
 
 
