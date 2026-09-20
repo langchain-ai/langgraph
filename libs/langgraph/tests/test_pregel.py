@@ -5127,6 +5127,59 @@ def test_command_pydantic_dataclass() -> None:
         assert graph.invoke(State(foo="")) == {"foo": "foobar"}
 
 
+def test_command_update_with_inherited_field() -> None:
+    """`Command(update=...)` should apply an overridden inherited field once.
+
+    See https://github.com/langchain-ai/langgraph/issues/9005.
+    """
+
+    @dataclass
+    class BaseDataclassState:
+        count: Annotated[int, operator.add] = 0
+
+    @dataclass
+    class DataclassState(BaseDataclassState):
+        count: Annotated[int, operator.add] = 0
+
+    class BasePydanticState(BaseModel):
+        count: Annotated[int, operator.add] = 0
+
+    class PydanticState(BasePydanticState):
+        count: Annotated[int, operator.add] = 0
+
+    for State in (DataclassState, PydanticState):
+        for use_command in (False, True):
+
+            def node(_state):
+                update = State(count=2)
+                return Command(update=update) if use_command else update
+
+            graph = (
+                StateGraph(State)
+                .add_node("node", node)
+                .add_edge(START, "node")
+                .compile()
+            )
+            assert graph.invoke(State(count=1)) == {"count": 3}
+
+    # With a non-reducer channel, a single overridden-field update must not
+    # raise InvalidUpdateError (the pre-fix Command path applied it twice).
+    @dataclass
+    class DataclassStateNoReducer(BaseDataclassState):
+        count: int = 0
+
+    def node(_state):
+        return Command(update=DataclassStateNoReducer(count=2))
+
+    graph = (
+        StateGraph(DataclassStateNoReducer)
+        .add_node("node", node)
+        .add_edge(START, "node")
+        .compile()
+    )
+    assert graph.invoke(DataclassStateNoReducer(count=1)) == {"count": 2}
+
+
 def test_command_with_static_breakpoints(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
