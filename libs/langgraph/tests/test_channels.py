@@ -107,6 +107,31 @@ def test_binop() -> None:
     assert channel.get() == 10
 
 
+def test_binop_first_write_overwrite_is_unwrapped() -> None:
+    """A leading Overwrite on an empty channel must store its payload, not the wrapper."""
+    channel = BinaryOperatorAggregate(dict | None, lambda existing, new: new)
+    channel.key = "test_binop_first_write_overwrite_is_unwrapped"
+    assert channel.update([Overwrite({"goal": "ship"})]) is True
+    assert channel.get() == {"goal": "ship"}
+
+
+def test_binop_first_write_overwrite_skips_later_plain_values() -> None:
+    """After a leading Overwrite on an empty channel, later plain values in the
+    same update are skipped, matching the already-seeded-channel behavior."""
+    channel = BinaryOperatorAggregate(dict | None, lambda existing, new: new)
+    channel.key = "test_binop_first_write_overwrite_skips_later_plain_values"
+    assert channel.update([Overwrite({"goal": "ship"}), {"extra": True}]) is True
+    assert channel.get() == {"goal": "ship"}
+
+
+def test_binop_first_write_two_overwrites_raises() -> None:
+    """Two Overwrite values in one update raise, empty channel or not."""
+    channel = BinaryOperatorAggregate(dict | None, lambda existing, new: new)
+    channel.key = "test_binop_first_write_two_overwrites_raises"
+    with pytest.raises(InvalidUpdateError):
+        channel.update([Overwrite({"a": 1}), Overwrite({"b": 2})])
+
+
 def test_untracked_value() -> None:
     channel = UntrackedValue(dict).from_checkpoint(MISSING)
     assert channel.ValueType is dict
