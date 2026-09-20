@@ -253,6 +253,7 @@ class HttpClient:
 
                 # parse SSE
                 decoder = SSEDecoder()
+                end_seen = False
                 try:
                     async for line in aiter_lines_raw(res):
                         sse = decoder.decode(line=cast("bytes", line).rstrip(b"\n"))
@@ -260,6 +261,8 @@ class HttpClient:
                             if decoder.last_event_id is not None:
                                 last_event_id = decoder.last_event_id
                             if sse.event or sse.data is not None:
+                                if sse.event == "end":
+                                    end_seen = True
                                 yield sse
                 except httpx.HTTPError:
                     # httpx.TransportError inherits from HTTPError, so transient
@@ -276,7 +279,15 @@ class HttpClient:
                             # return an empty placeholder when there is no pending
                             # message. Skip these no-op events so the stream doesn't
                             # emit a trailing blank item after reconnects.
+                            if sse.event == "end":
+                                end_seen = True
                             yield sse
+                    if reconnect_path is not None and not end_seen:
+                        # The server closed the connection cleanly before
+                        # sending the terminal `end` event. Treat it like a
+                        # dropped connection and resume from the advertised
+                        # Location instead of returning a truncated stream.
+                        retry = True
             if retry:
                 reconnect_attempts += 1
                 if reconnect_attempts > max_reconnect_attempts:

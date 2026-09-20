@@ -292,6 +292,135 @@ async def test_http_client_stream_recovers_after_disconnect():
     ]
 
 
+def test_sync_http_client_stream_recovers_after_clean_eof():
+    """A clean EOF before the terminal `end` event resumes from Location.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/9016:
+    unlike a transport error, a clean EOF took the `else` branch and returned
+    a truncated stream without reconnecting.
+    """
+    reconnect_path = "/reconnect"
+    first_chunks = [
+        b"id: 1\n",
+        b"event: values\n",
+        b'data: {"step": 1}\n\n',
+    ]
+    second_chunks = [
+        b"id: 2\n",
+        b"event: values\n",
+        b'data: {"step": 2}\n\n',
+        b"event: end\n",
+        b"data: null\n\n",
+    ]
+    call_count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            assert request.method == "POST"
+            assert request.url.path == "/stream"
+            return httpx.Response(
+                200,
+                headers={
+                    "Content-Type": "text/event-stream",
+                    "Location": reconnect_path,
+                },
+                # no exception: the server closes the connection cleanly
+                # before sending the terminal `end` event
+                stream=ListByteStream(first_chunks),
+            )
+        if call_count == 2:
+            assert request.method == "GET"
+            assert request.url.path == reconnect_path
+            assert request.headers["Last-Event-ID"] == "1"
+            assert request.read() == b""
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/event-stream"},
+                stream=ListByteStream(second_chunks),
+            )
+        raise AssertionError("unexpected request")
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport, base_url="https://example.com") as client:
+        http_client = SyncHttpClient(client)
+        parts = list(http_client.stream("/stream", "POST", json={"payload": "value"}))
+
+    assert call_count == 2
+    assert parts == [
+        StreamPart(event="values", data={"step": 1}, id="1"),
+        StreamPart(event="values", data={"step": 2}, id="2"),
+        StreamPart(event="end", data=None, id="2"),  # ty: ignore[invalid-argument-type]
+    ]
+
+
+@pytest.mark.asyncio
+async def test_http_client_stream_recovers_after_clean_eof():
+    """Async twin of test_sync_http_client_stream_recovers_after_clean_eof."""
+    reconnect_path = "/reconnect"
+    first_chunks = [
+        b"id: 1\n",
+        b"event: values\n",
+        b'data: {"step": 1}\n\n',
+    ]
+    second_chunks = [
+        b"id: 2\n",
+        b"event: values\n",
+        b'data: {"step": 2}\n\n',
+        b"event: end\n",
+        b"data: null\n\n",
+    ]
+    call_count = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            assert request.method == "POST"
+            assert request.url.path == "/stream"
+            return httpx.Response(
+                200,
+                headers={
+                    "Content-Type": "text/event-stream",
+                    "Location": reconnect_path,
+                },
+                # no exception: the server closes the connection cleanly
+                # before sending the terminal `end` event
+                stream=AsyncListByteStream(first_chunks),
+            )
+        if call_count == 2:
+            assert request.method == "GET"
+            assert request.url.path == reconnect_path
+            assert request.headers["Last-Event-ID"] == "1"
+            assert await request.aread() == b""
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/event-stream"},
+                stream=AsyncListByteStream(second_chunks),
+            )
+        raise AssertionError("unexpected request")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="https://example.com"
+    ) as client:
+        http_client = HttpClient(client)
+        parts = [
+            part
+            async for part in http_client.stream(
+                "/stream", "POST", json={"payload": "value"}
+            )
+        ]
+
+    assert call_count == 2
+    assert parts == [
+        StreamPart(event="values", data={"step": 1}, id="1"),
+        StreamPart(event="values", data={"step": 2}, id="2"),
+        StreamPart(event="end", data=None, id="2"),  # ty: ignore[invalid-argument-type]
+    ]
+
+
 # --- _sse_to_v2_dict conversion ---
 
 
