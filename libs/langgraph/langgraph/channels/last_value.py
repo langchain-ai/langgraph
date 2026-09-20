@@ -7,6 +7,7 @@ from typing_extensions import Self
 
 from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
+from langgraph.channels.binop import _get_overwrite
 from langgraph.errors import (
     EmptyChannelError,
     ErrorCode,
@@ -63,7 +64,11 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
             )
             raise InvalidUpdateError(msg)
 
-        self.value = values[-1]
+        is_overwrite, overwrite_value = _get_overwrite(values[-1])
+        # An Overwrite write (update_state replace) stores its payload, matching
+        # the already-seeded behavior of BinaryOperatorAggregate and DeltaChannel,
+        # instead of persisting the wrapper into the checkpointed state.
+        self.value = overwrite_value if is_overwrite else values[-1]
         return True
 
     def get(self) -> Value:
@@ -124,7 +129,9 @@ class LastValueAfterFinish(
             return False
 
         self.finished = False
-        self.value = values[-1]
+        is_overwrite, overwrite_value = _get_overwrite(values[-1])
+        # Same Overwrite unwrapping as LastValue.update above.
+        self.value = overwrite_value if is_overwrite else values[-1]
         return True
 
     def consume(self) -> bool:

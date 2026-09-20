@@ -13,7 +13,7 @@ from langgraph._internal._constants import OVERWRITE
 from langgraph._internal._typing import MISSING
 from langgraph.channels.binop import BinaryOperatorAggregate, _get_overwrite
 from langgraph.channels.delta import DeltaChannel
-from langgraph.channels.last_value import LastValue
+from langgraph.channels.last_value import LastValue, LastValueAfterFinish
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
@@ -105,6 +105,30 @@ def test_binop() -> None:
     checkpoint = channel.checkpoint()
     channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(checkpoint)
     assert channel.get() == 10
+
+
+def test_last_value_update_with_overwrite_is_unwrapped() -> None:
+    """An Overwrite write (update_state replace) must store its payload, not the wrapper."""
+    channel = LastValue(dict)
+    channel.key = "test_last_value_update_with_overwrite_is_unwrapped"
+    assert channel.update([Overwrite({"goal": "ship"})]) is True
+    assert channel.get() == {"goal": "ship"}
+
+
+def test_last_value_after_finish_update_with_overwrite_is_unwrapped() -> None:
+    """An Overwrite write must store its payload, not the wrapper (after-finish flavor)."""
+    channel = LastValueAfterFinish(dict)
+    channel.key = "test_last_value_after_finish_update_with_overwrite_is_unwrapped"
+    assert channel.update([Overwrite({"goal": "ship"})]) is True
+    assert channel.checkpoint() == ({"goal": "ship"}, False)
+
+
+def test_untracked_value_update_with_overwrite_is_unwrapped() -> None:
+    """An Overwrite write must store its payload, not the wrapper (untracked flavor)."""
+    channel = UntrackedValue(dict)
+    channel.key = "test_untracked_value_update_with_overwrite_is_unwrapped"
+    assert channel.update([Overwrite({"goal": "ship"})]) is True
+    assert channel.get() == {"goal": "ship"}
 
 
 def test_untracked_value() -> None:
