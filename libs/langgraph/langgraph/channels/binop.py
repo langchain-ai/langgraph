@@ -124,7 +124,12 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
         if not values:
             return False
         if self.value is MISSING:
-            self.value = values[0]
+            # First write seeds the channel. If it is wrapped in an Overwrite
+            # (e.g. a Command with update=Overwrite(...)), unwrap it here so the
+            # channel stores the payload, not the wrapper — mirroring how the
+            # later-writes branch below handles overwrites.
+            is_overwrite, overwrite_value = _get_overwrite(values[0])
+            self.value = overwrite_value if is_overwrite else values[0]
             values = values[1:]
         seen_overwrite: bool = False
         for value in values:

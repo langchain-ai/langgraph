@@ -107,6 +107,26 @@ def test_binop() -> None:
     assert channel.get() == 10
 
 
+def test_binop_seed_overwrite_unwraps() -> None:
+    """https://github.com/langchain-ai/langgraph/issues/9017
+
+    When an `Overwrite` is the first write to an empty BinaryOperatorAggregate
+    channel, the channel must store the payload, not the wrapper object.
+    """
+    channel = BinaryOperatorAggregate(dict | None, lambda existing, new: new).from_checkpoint(
+        MISSING
+    )
+
+    channel.update([Overwrite({"goal": "ship"})])
+    value = channel.get()
+    assert isinstance(value, dict)
+    assert value == {"goal": "ship"}
+
+    # a subsequent overwrite on a non-empty channel behaves as before
+    channel.update([Overwrite({"goal": "launch"})])
+    assert channel.get() == {"goal": "launch"}
+
+
 def test_untracked_value() -> None:
     channel = UntrackedValue(dict).from_checkpoint(MISSING)
     assert channel.ValueType is dict
