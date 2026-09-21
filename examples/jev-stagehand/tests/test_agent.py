@@ -1,4 +1,4 @@
-from agent import _questions, _target_ids
+from agent import MAX_TARGETS, _questions, _target_ids
 
 
 def observation(tree: str, selectors: dict[str, str]):
@@ -27,6 +27,13 @@ def test_target_ids_support_frame_scoped_ids() -> None:
     )
 
     assert _target_ids(page) == ["0-12", "2-7"]
+
+
+def test_target_ids_respect_typesafe_choice_limit() -> None:
+    selectors = {str(index): f"/html/body/button[{index}]" for index in range(MAX_TARGETS + 1)}
+    tree = "\n".join(f"[{index}] button: Option {index}" for index in range(MAX_TARGETS + 1))
+
+    assert _target_ids(observation(tree, selectors)) == [str(index) for index in range(MAX_TARGETS)]
 
 
 def test_questions_fan_out_operation_and_targets() -> None:
