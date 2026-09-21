@@ -291,25 +291,7 @@ def get_text_at_path(obj: Any, path: str | list[str]) -> list[str]:
             for field in fields:
                 nested_tokens = tokenize_path(field)
                 if nested_tokens:
-                    current_obj: dict | None = obj
-                    for nested_token in nested_tokens:
-                        if (
-                            isinstance(current_obj, dict)
-                            and nested_token in current_obj
-                        ):
-                            current_obj = current_obj[nested_token]
-                        else:
-                            current_obj = None
-                            break
-                    if current_obj is not None:
-                        if isinstance(current_obj, (str, int, float, bool)):
-                            results.append(str(current_obj))
-                        elif isinstance(current_obj, (list, dict)):
-                            results.append(
-                                json.dumps(
-                                    current_obj, sort_keys=True, ensure_ascii=False
-                                )
-                            )
+                    results.extend(_extract_from_obj(obj, nested_tokens, 0))
 
         # Handle wildcard
         elif token == "*":
