@@ -13,7 +13,7 @@ from langgraph._internal._constants import OVERWRITE
 from langgraph._internal._typing import MISSING
 from langgraph.channels.binop import BinaryOperatorAggregate, _get_overwrite
 from langgraph.channels.delta import DeltaChannel
-from langgraph.channels.last_value import LastValue
+from langgraph.channels.last_value import LastValue, LastValueAfterFinish
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
@@ -223,6 +223,49 @@ def test_overwrite_non_matching_dict_not_recognised() -> None:
 
     assert _get_overwrite({"value": ["b"]}) == (False, None)
     assert _get_overwrite({"type": "human", "value": "hi"}) == (False, None)
+
+
+def test_single_value_channels_unwrap_overwrite() -> None:
+    """A replace-style update_state (an `Overwrite` write) on a plain
+    (non-annotated) state key must persist the payload, not the wrapper.
+
+    `LastValue`, `LastValueAfterFinish`, and `UntrackedValue` assigned
+    `values[-1]` verbatim, so an `Overwrite` value was checkpointed as-is and
+    surfaced by `get_state()`; `BinaryOperatorAggregate` and `DeltaChannel`
+    already unwrap. These channels now mirror that behaviour."""
+
+    # LastValue
+    ch = LastValue(dict)
+    ch.key = "x"
+    ch.update([Overwrite({"a": 1})])
+    assert ch.get() == {"a": 1}
+    # plain values unaffected
+    ch2 = LastValue(dict)
+    ch2.key = "x"
+    ch2.update([{"b": 2}])
+    assert ch2.get() == {"b": 2}
+
+    # LastValueAfterFinish
+    ch3 = LastValueAfterFinish(dict)
+    ch3.key = "x"
+    ch3.update([Overwrite({"c": 3})])
+    ch3.finish()
+    assert ch3.get() == {"c": 3}
+    ch4 = LastValueAfterFinish(dict)
+    ch4.key = "x"
+    ch4.update([{"d": 4}])
+    ch4.finish()
+    assert ch4.get() == {"d": 4}
+
+    # UntrackedValue
+    ch5 = UntrackedValue(dict)
+    ch5.key = "x"
+    ch5.update([Overwrite({"e": 5})])
+    assert ch5.get() == {"e": 5}
+    ch6 = UntrackedValue(dict)
+    ch6.key = "x"
+    ch6.update([{"f": 6}])
+    assert ch6.get() == {"f": 6}
 
 
 def test_delta_channel_remove_message_and_replay() -> None:
