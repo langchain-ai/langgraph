@@ -15,7 +15,6 @@ from langgraph_sdk.client import get_client, get_sync_client
 from langgraph_sdk.schema import StreamPart
 from pydantic import BaseModel
 from typing_extensions import TypedDict
-
 from langgraph.errors import GraphInterrupt
 from langgraph.graph import END, START, MessagesState, StateGraph, add_messages
 from langgraph.pregel import Pregel
@@ -377,6 +376,39 @@ async def test_aget_state_history():
         interrupts=(),
     )
 
+
+def test_get_state_history_limit_zero():
+    mock_sync_client = MagicMock()
+    mock_sync_client.threads.get_history.return_value = []
+
+    remote_pregel = RemoteGraph(
+        "test_graph_id",
+        sync_client=mock_sync_client,
+    )
+
+    config = {"configurable": {"thread_id": "thread1"}}
+
+    list(remote_pregel.get_state_history(config, limit=0))
+
+    assert mock_sync_client.threads.get_history.call_args.kwargs["limit"] == 0
+
+
+@pytest.mark.anyio
+async def test_aget_state_history_limit_zero():
+    mock_async_client = AsyncMock()
+    mock_async_client.threads.get_history.return_value = []
+
+    remote_pregel = RemoteGraph(
+        "test_graph_id",
+        client=mock_async_client,
+    )
+
+    config = {"configurable": {"thread_id": "thread1"}}
+
+    async for _ in remote_pregel.aget_state_history(config, limit=0):
+        pass
+
+        assert mock_async_client.threads.get_history.call_args.kwargs["limit"] == 0
 
 def test_update_state():
     # set up test
