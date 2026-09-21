@@ -46,7 +46,7 @@ def test_questions_fan_out_operation_and_targets() -> None:
 
     assert set(questions) == {"operation", "click_target", "type_text_target"}
     assert "STOP_SIDE_EFFECT" in questions["operation"].criteria
-    assert questions["click_target"].criteria == page["selectors"]
+    assert questions["click_target"].criteria == {"submit": None, "query": None}
 
 
 def test_questions_hide_targeted_operations_without_targets() -> None:
