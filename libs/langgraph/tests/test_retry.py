@@ -172,6 +172,22 @@ def test_checkpoint_ns_for_parent_command() -> None:
     )
 
 
+def _requests_http_error(status_code: int) -> requests.HTTPError:
+    """Build a real `requests.HTTPError` via `raise_for_status()`.
+
+    `requests.Response` is falsy for status >= 400 (`bool(response)` is `.ok`).
+    Tests must not attach a truthy `Mock()` here; that hid the `default_retry_on` bug.
+    """
+    response = requests.Response()
+    response.status_code = status_code
+    response.url = "http://example.com"
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        return exc
+    raise AssertionError(f"status {status_code} did not raise HTTPError")
+
+
 def test_should_retry_default_retry_on():
     """Test the default retry_on function."""
 
@@ -211,19 +227,44 @@ def test_should_retry_default_retry_on():
     )
     assert _should_retry_on(policy, http_error_4xx) is False
 
+    # Transient client errors (timeout / rate limit) are retryable for both clients
+    response_httpx_429 = Mock()
+    response_httpx_429.status_code = 429
+    assert (
+        _should_retry_on(
+            policy,
+            httpx.HTTPStatusError(
+                "too many requests", request=Mock(), response=response_httpx_429
+            ),
+        )
+        is True
+    )
+    response_httpx_408 = Mock()
+    response_httpx_408.status_code = 408
+    assert (
+        _should_retry_on(
+            policy,
+            httpx.HTTPStatusError(
+                "request timeout", request=Mock(), response=response_httpx_408
+            ),
+        )
+        is True
+    )
+
     # Should retry on requests.HTTPError with 5xx status code
-    response_req_5xx = Mock()
-    response_req_5xx.status_code = 502
-    req_error_5xx = requests.HTTPError("bad gateway")
-    req_error_5xx.response = response_req_5xx
+    req_error_5xx = _requests_http_error(502)
+    assert bool(req_error_5xx.response) is False
     assert _should_retry_on(policy, req_error_5xx) is True
 
     # Should not retry on requests.HTTPError with 4xx status code
-    response_req_4xx = Mock()
-    response_req_4xx.status_code = 400
-    req_error_4xx = requests.HTTPError("bad request")
-    req_error_4xx.response = response_req_4xx
+    req_error_4xx = _requests_http_error(400)
+    assert bool(req_error_4xx.response) is False
     assert _should_retry_on(policy, req_error_4xx) is False
+    assert _should_retry_on(policy, _requests_http_error(404)) is False
+
+    # 408 / 429 remain retryable (they were retried today via the falsy-response path)
+    assert _should_retry_on(policy, _requests_http_error(408)) is True
+    assert _should_retry_on(policy, _requests_http_error(429)) is True
 
     # Should retry on requests.HTTPError with no response
     req_error_no_resp = requests.HTTPError("connection error")
@@ -303,6 +344,77 @@ def test_graph_with_single_retry_policy():
     # Verify the sleep intervals
     call_args_list = [args[0][0] for args in mock_sleep.call_args_list]
     assert call_args_list == [0.01, 0.02]
+
+
+def test_graph_default_retry_on_does_not_retry_requests_4xx():
+    """A real requests 404 is a permanent client error and must not be retried."""
+
+    class State(TypedDict):
+        x: int
+
+    attempts = 0
+
+    def node(state: State):
+        nonlocal attempts
+        attempts += 1
+        raise _requests_http_error(404)
+
+    graph = (
+        StateGraph(State)
+        .add_node(
+            "node",
+            node,
+            retry_policy=RetryPolicy(
+                initial_interval=0.01,
+                max_interval=0.01,
+                jitter=False,
+                max_attempts=3,
+            ),
+        )
+        .add_edge(START, "node")
+        .compile()
+    )
+
+    with pytest.raises(requests.HTTPError):
+        graph.invoke({"x": 1})
+    assert attempts == 1
+
+
+def test_graph_default_retry_on_retries_requests_5xx():
+    """A real requests 503 is a server error and must still be retried."""
+
+    class State(TypedDict):
+        x: int
+
+    attempts = 0
+
+    def node(state: State):
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise _requests_http_error(503)
+        return {"x": 1}
+
+    graph = (
+        StateGraph(State)
+        .add_node(
+            "node",
+            node,
+            retry_policy=RetryPolicy(
+                initial_interval=0.01,
+                max_interval=0.01,
+                jitter=False,
+                max_attempts=3,
+            ),
+        )
+        .add_edge(START, "node")
+        .compile()
+    )
+
+    with patch("time.sleep"):
+        result = graph.invoke({"x": 0})
+    assert attempts == 3
+    assert result["x"] == 1
 
 
 def test_runtime_execution_info_defaults_without_retry():
