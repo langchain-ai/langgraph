@@ -14,16 +14,20 @@ class EncryptedSerializer(SerializerProtocol):
         self.cipher = cipher
         self.serde = serde
 
-    def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
+    def dumps_typed(
+        self, obj: Any, *, aad: bytes | None = None
+    ) -> tuple[str, bytes]:
         """Serialize an object to a tuple `(type, bytes)` and encrypt the bytes."""
         # serialize data
         typ, data = self.serde.dumps_typed(obj)
         # encrypt data
-        ciphername, ciphertext = self.cipher.encrypt(data)
+        ciphername, ciphertext = self.cipher.encrypt(data, aad)
         # add cipher name to type
         return f"{typ}+{ciphername}", ciphertext
 
-    def loads_typed(self, data: tuple[str, bytes]) -> Any:
+    def loads_typed(
+        self, data: tuple[str, bytes], *, aad: bytes | None = None
+    ) -> Any:
         enc_cipher, ciphertext = data
         # unencrypted data
         if "+" not in enc_cipher:
@@ -31,7 +35,7 @@ class EncryptedSerializer(SerializerProtocol):
         # extract cipher name
         typ, ciphername = enc_cipher.split("+", 1)
         # decrypt data
-        decrypted_data = self.cipher.decrypt(ciphername, ciphertext)
+        decrypted_data = self.cipher.decrypt(ciphername, ciphertext, aad)
         # deserialize data
         return self.serde.loads_typed((typ, decrypted_data))
 
@@ -63,18 +67,26 @@ class EncryptedSerializer(SerializerProtocol):
             kwargs["mode"] = AES.MODE_EAX
 
         class PycryptodomeAesCipher(CipherProtocol):
-            def encrypt(self, plaintext: bytes) -> tuple[str, bytes]:
+            def encrypt(
+                self, plaintext: bytes, aad: bytes | None = None
+            ) -> tuple[str, bytes]:
                 cipher = AES.new(key, **kwargs)
+                if aad is not None:
+                    cipher.update(aad)
                 ciphertext, tag = cipher.encrypt_and_digest(plaintext)
                 return "aes", cipher.nonce + tag + ciphertext
 
-            def decrypt(self, ciphername: str, ciphertext: bytes) -> bytes:
+            def decrypt(
+                self, ciphername: str, ciphertext: bytes, aad: bytes | None = None
+            ) -> bytes:
                 assert ciphername == "aes", f"Unsupported cipher: {ciphername}"
                 nonce = ciphertext[:16]
                 tag = ciphertext[16:32]
                 actual_ciphertext = ciphertext[32:]
 
                 cipher = AES.new(key, **kwargs, nonce=nonce)
+                if aad is not None:
+                    cipher.update(aad)
                 return cipher.decrypt_and_verify(actual_ciphertext, tag)
 
         return cls(PycryptodomeAesCipher(), serde)

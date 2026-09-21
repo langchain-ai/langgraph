@@ -55,10 +55,14 @@ class CipherProtocol(Protocol):
     - `decrypt`: Decrypt ciphertext.
     """
 
-    def encrypt(self, plaintext: bytes) -> tuple[str, bytes]:
-        """Encrypt plaintext. Returns a tuple `(cipher name, ciphertext)`."""
+    def encrypt(
+        self, plaintext: bytes, aad: bytes | None = None
+    ) -> tuple[str, bytes]:
+        """Encrypt plaintext with optional associated data."""
         ...
 
-    def decrypt(self, ciphername: str, ciphertext: bytes) -> bytes:
-        """Decrypt ciphertext. Returns the plaintext."""
+    def decrypt(
+        self, ciphername: str, ciphertext: bytes, aad: bytes | None = None
+    ) -> bytes:
+        """Decrypt ciphertext and verify optional associated data."""
         ...

@@ -14,6 +14,8 @@ from langgraph.checkpoint.base import (
     create_checkpoint,
     empty_checkpoint,
 )
+from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import TASKS
 from psycopg import Connection
 from psycopg.rows import dict_row
@@ -257,7 +259,6 @@ def test_search(saver_name: str, test_data) -> None:
             search_results_5[1].config["configurable"]["checkpoint_ns"],
         } == {"", "inner"}
 
-
 @pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
 def test_null_chars(saver_name: str, test_data) -> None:
     with _saver(saver_name) as saver:
@@ -273,6 +274,89 @@ def test_null_chars(saver_name: str, test_data) -> None:
             == "abc"
         )
 
+
+def test_encrypted_blob_replay_across_threads() -> None:
+    serde = EncryptedSerializer.from_pycryptodome_aes(
+        serde=JsonPlusSerializer(),
+        key=b"1234567890123456",
+    )
+
+    with _base_saver() as saver:
+        saver.serde = serde
+
+        config_1 = {
+            "configurable": {
+                "thread_id": "thread-a",
+                "checkpoint_ns": "",
+            }
+        }
+        config_2 = {
+            "configurable": {
+                "thread_id": "thread-b",
+                "checkpoint_ns": "",
+            }
+        }
+
+        checkpoint_1 = empty_checkpoint()
+        checkpoint_1["channel_values"] = {"channel": ["value-a"]}
+        checkpoint_1["channel_versions"] = {"channel": "1"}
+        checkpoint_1["id"] = "checkpoint-a"
+
+        checkpoint_2 = empty_checkpoint()
+        checkpoint_2["channel_values"] = {"channel": ["value-b"]}
+        checkpoint_2["channel_versions"] = {"channel": "1"}
+        checkpoint_2["id"] = "checkpoint-b"
+        saver.put(
+            config_1,
+            checkpoint_1,
+            {},
+            {"channel": "1"},
+        )
+        saved_config_2 = saver.put(
+            config_2,
+            checkpoint_2,
+            {},
+            {"channel": "1"},
+        )
+
+        with saver._cursor() as cur:
+            cur.execute(
+                """
+                SELECT thread_id, channel, version, blob
+                FROM checkpoint_blobs
+                WHERE thread_id IN (%s, %s)
+                  AND channel = %s
+                ORDER BY thread_id
+                """,
+                ("thread-a", "thread-b", "channel"),
+            )
+            rows = cur.fetchall()
+
+            assert len(rows) == 2
+
+            blob_a = rows[0]["blob"]
+            row_b = rows[1]
+
+            cur.execute(
+                """
+                UPDATE checkpoint_blobs
+                SET blob = %s
+                WHERE thread_id = %s
+                  AND checkpoint_ns = %s
+                  AND channel = %s
+                  AND version = %s
+                """,
+                (
+                    blob_a,
+                    row_b["thread_id"],
+                    "",
+                    row_b["channel"],
+                    row_b["version"],
+                ),
+            )
+
+        with pytest.raises(ValueError):
+            saver.get_tuple(saved_config_2)
 
 def test_nonnull_migrations() -> None:
     _leading_comment_remover = re.compile(r"^/\*.*?\*/")

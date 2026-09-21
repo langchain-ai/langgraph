@@ -12,7 +12,13 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
+    _dump_typed_with_aad,
+    _load_typed_with_aad,
     get_serializable_checkpoint_metadata,
+)
+from langgraph.checkpoint.serde.aad import (
+    build_shallow_blob_aad,
+    build_write_aad,
 )
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.types import TASKS
@@ -104,7 +110,16 @@ select
             and cw.checkpoint_id = (checkpoint->>'id')
     ) as pending_writes,
     (
-        select array_agg(array[cw.type::bytea, cw.blob] order by cw.task_path, cw.task_id, cw.idx)
+        select array_agg(
+            array[
+                cw.task_id::text::bytea,
+                cw.idx::text::bytea,
+                cw.channel::bytea,
+                cw.type::bytea,
+                cw.blob
+            ]
+            order by cw.task_path, cw.task_id, cw.idx
+        )
         from checkpoint_writes cw
         where cw.thread_id = checkpoints.thread_id
             and cw.checkpoint_ns = checkpoints.checkpoint_ns
@@ -160,10 +175,46 @@ def _dump_blobs(
             thread_id,
             checkpoint_ns,
             k,
-            *(serde.dumps_typed(values[k]) if k in values else ("empty", None)),
+            *(
+                _dump_typed_with_aad(
+                    serde,
+                    values[k],
+                    build_shallow_blob_aad(
+                        thread_id,
+                        checkpoint_ns,
+                        k,
+                    ),
+                )
+                if k in values
+                else ("empty", None)
+            ),
         )
         for k in versions
     ]
+
+
+def _load_shallow_blobs(
+    serde: SerializerProtocol,
+    thread_id: str,
+    checkpoint_ns: str,
+    blob_values: list[tuple[bytes, bytes, bytes]],
+) -> dict[str, Any]:
+    if not blob_values:
+        return {}
+
+    return {
+        channel.decode(): _load_typed_with_aad(
+            serde,
+            (type_tag.decode(), blob),
+            build_shallow_blob_aad(
+                thread_id,
+                checkpoint_ns,
+                channel.decode(),
+            ),
+        )
+        for channel, type_tag, blob in blob_values
+        if type_tag.decode() != "empty"
+    }
 
 
 class ShallowPostgresSaver(BasePostgresSaver):
@@ -281,10 +332,26 @@ class ShallowPostgresSaver(BasePostgresSaver):
             for value in cur:
                 checkpoint: Checkpoint = {
                     **value["checkpoint"],
-                    "channel_values": self._load_blobs(value["channel_values"]),
+                    "channel_values": _load_shallow_blobs(
+                                            self.serde,
+                                            value["thread_id"],
+                                            value["checkpoint_ns"],
+                                            value["channel_values"],
+                                        ),
                     "pending_sends": [
-                        self.serde.loads_typed((t.decode(), v))
-                        for t, v in value["pending_sends"]
+                        _load_typed_with_aad(
+                            self.serde,
+                            (type_tag.decode(), blob),
+                            build_write_aad(
+                                value["thread_id"],
+                                value["checkpoint_ns"],
+                                value["checkpoint"]["id"],
+                                task_id.decode(),
+                                int(idx.decode()),
+                                channel.decode(),
+                            ),
+                        )
+                        for task_id, idx, channel, type_tag, blob in value["pending_sends"]
                     ]
                     if value["pending_sends"]
                     else [],
@@ -299,7 +366,12 @@ class ShallowPostgresSaver(BasePostgresSaver):
                     },
                     checkpoint=checkpoint,
                     metadata=value["metadata"],
-                    pending_writes=self._load_writes(value["pending_writes"]),
+                    pending_writes=self._load_writes(
+                        value["thread_id"],
+                        value["checkpoint_ns"],
+                        value["checkpoint"]["id"],
+                        value["pending_writes"],
+                    ),
                 )
 
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
@@ -350,10 +422,26 @@ class ShallowPostgresSaver(BasePostgresSaver):
             for value in cur:
                 checkpoint: Checkpoint = {
                     **value["checkpoint"],
-                    "channel_values": self._load_blobs(value["channel_values"]),
+                    "channel_values": _load_shallow_blobs(
+                                        self.serde,
+                                        value["thread_id"],
+                                        value["checkpoint_ns"],
+                                        value["channel_values"],
+                                    ),
                     "pending_sends": [
-                        self.serde.loads_typed((t.decode(), v))
-                        for t, v in value["pending_sends"]
+                        _load_typed_with_aad(
+                            self.serde,
+                            (type_tag.decode(), blob),
+                            build_write_aad(
+                                value["thread_id"],
+                                value["checkpoint_ns"],
+                                value["checkpoint"]["id"],
+                                task_id.decode(),
+                                int(idx.decode()),
+                                channel.decode(),
+                            ),
+                        )
+                        for task_id, idx, channel, type_tag, blob in value["pending_sends"]
                     ]
                     if value["pending_sends"]
                     else [],
@@ -368,7 +456,12 @@ class ShallowPostgresSaver(BasePostgresSaver):
                     },
                     checkpoint=checkpoint,
                     metadata=value["metadata"],
-                    pending_writes=self._load_writes(value["pending_writes"]),
+                    pending_writes=self._load_writes(
+                        thread_id,
+                        checkpoint_ns,
+                        checkpoint["id"],
+                        value["pending_writes"],
+                    ),
                 )
 
     def put(
@@ -647,10 +740,26 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
             async for value in cur:
                 checkpoint: Checkpoint = {
                     **value["checkpoint"],
-                    "channel_values": self._load_blobs(value["channel_values"]),
+                    "channel_values": _load_shallow_blobs(
+                                        self.serde,
+                                        value["thread_id"],
+                                        value["checkpoint_ns"],
+                                        value["channel_values"],
+                                    ),
                     "pending_sends": [
-                        self.serde.loads_typed((t.decode(), v))
-                        for t, v in value["pending_sends"]
+                        _load_typed_with_aad(
+                            self.serde,
+                            (type_tag.decode(), blob),
+                            build_write_aad(
+                                value["thread_id"],
+                                value["checkpoint_ns"],
+                                value["checkpoint"]["id"],
+                                task_id.decode(),
+                                int(idx.decode()),
+                                channel.decode(),
+                            ),
+                        )
+                        for task_id, idx, channel, type_tag, blob in value["pending_sends"]
                     ]
                     if value["pending_sends"]
                     else [],
@@ -666,7 +775,11 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                     checkpoint=checkpoint,
                     metadata=value["metadata"],
                     pending_writes=await asyncio.to_thread(
-                        self._load_writes, value["pending_writes"]
+                        self._load_writes,
+                        value["thread_id"],
+                        value["checkpoint_ns"],
+                        value["checkpoint"]["id"],
+                        value["pending_writes"],
                     ),
                 )
 
@@ -697,10 +810,26 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
             async for value in cur:
                 checkpoint: Checkpoint = {
                     **value["checkpoint"],
-                    "channel_values": self._load_blobs(value["channel_values"]),
+                    "channel_values": _load_shallow_blobs(
+                        self.serde,
+                        value["thread_id"],
+                        value["checkpoint_ns"],
+                        value["channel_values"],
+                    ),
                     "pending_sends": [
-                        self.serde.loads_typed((t.decode(), v))
-                        for t, v in value["pending_sends"]
+                        _load_typed_with_aad(
+                            self.serde,
+                            (type_tag.decode(), blob),
+                            build_write_aad(
+                                value["thread_id"],
+                                value["checkpoint_ns"],
+                                value["checkpoint"]["id"],
+                                task_id.decode(),
+                                int(idx.decode()),
+                                channel.decode(),
+                            ),
+                        )
+                        for task_id, idx, channel, type_tag, blob in value["pending_sends"]
                     ]
                     if value["pending_sends"]
                     else [],
@@ -716,7 +845,11 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                     checkpoint=checkpoint,
                     metadata=value["metadata"],
                     pending_writes=await asyncio.to_thread(
-                        self._load_writes, value["pending_writes"]
+                        self._load_writes,
+                        thread_id,
+                        checkpoint_ns,
+                        checkpoint["id"],
+                        value["pending_writes"],
                     ),
                 )
 

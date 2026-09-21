@@ -23,6 +23,13 @@ from pydantic import BaseModel
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, _with_msgpack_allowlist
 from langgraph.checkpoint.serde import _msgpack as _lg_msgpack
+from langgraph.checkpoint.serde.aad import (
+    build_aad,
+    build_blob_aad,
+    build_checkpoint_aad,
+    build_metadata_aad,
+    build_write_aad,
+)
 from langgraph.checkpoint.serde.base import CipherProtocol
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.serde.jsonplus import (
@@ -49,13 +56,16 @@ class AnotherPydantic(BaseModel):
 
 
 class _PassthroughCipher(CipherProtocol):
-    def encrypt(self, plaintext: bytes) -> tuple[str, bytes]:
+    def encrypt(
+        self, plaintext: bytes, aad: bytes | None = None
+    ) -> tuple[str, bytes]:
         return "passthrough", plaintext
 
-    def decrypt(self, ciphername: str, ciphertext: bytes) -> bytes:
+    def decrypt(
+        self, ciphername: str, ciphertext: bytes, aad: bytes | None = None
+    ) -> bytes:
         assert ciphername == "passthrough"
         return ciphertext
-
 
 def _make_encrypted_serde(
     allowed_msgpack_modules: (
@@ -99,6 +109,97 @@ def test_msgpack_method_pathlib_blocked_encrypted_strict(
     assert "blocked deserialization of method call pathlib.path.read_text" in (
         caplog.text.lower()
     )
+
+def test_build_aad_is_deterministic() -> None:
+    fields = ("thread-1", "namespace", "checkpoint-1")
+
+    assert build_aad("checkpoint", fields) == build_aad("checkpoint", fields)
+
+
+def test_build_aad_distinguishes_field_boundaries() -> None:
+    assert build_aad("test", ("ab", "c")) != build_aad("test", ("a", "bc"))
+
+
+def test_build_aad_distinguishes_field_order() -> None:
+    assert build_aad("test", ("thread", "namespace")) != build_aad(
+        "test", ("namespace", "thread")
+    )
+
+
+def test_build_aad_distinguishes_domains() -> None:
+    fields = ("thread-1", "namespace", "checkpoint-1")
+
+    assert build_aad("checkpoint", fields) != build_aad("metadata", fields)
+
+
+def test_build_checkpoint_aad_binds_all_fields() -> None:
+    base = build_checkpoint_aad("thread-1", "namespace", "checkpoint-1")
+
+    assert base != build_checkpoint_aad("thread-2", "namespace", "checkpoint-1")
+    assert base != build_checkpoint_aad("thread-1", "namespace-2", "checkpoint-1")
+    assert base != build_checkpoint_aad("thread-1", "namespace", "checkpoint-2")
+
+
+def test_build_blob_aad_binds_all_fields() -> None:
+    base = build_blob_aad("thread-1", "namespace", "channel-1", "version-1")
+
+    assert base != build_blob_aad("thread-2", "namespace", "channel-1", "version-1")
+    assert base != build_blob_aad("thread-1", "namespace-2", "channel-1", "version-1")
+    assert base != build_blob_aad("thread-1", "namespace", "channel-2", "version-1")
+    assert base != build_blob_aad("thread-1", "namespace", "channel-1", "version-2")
+
+
+def test_build_metadata_aad_binds_all_fields() -> None:
+    base = build_metadata_aad("thread-1", "namespace", "checkpoint-1")
+
+    assert base != build_metadata_aad("thread-2", "namespace", "checkpoint-1")
+    assert base != build_metadata_aad("thread-1", "namespace-2", "checkpoint-1")
+    assert base != build_metadata_aad("thread-1", "namespace", "checkpoint-2")
+
+
+def test_build_write_aad_binds_all_fields() -> None:
+    base = build_write_aad(
+        "thread-1",
+        "namespace",
+        "checkpoint-1",
+        "task-1",
+        0,
+        "channel-1",
+    )
+
+    assert base != build_write_aad(
+        "thread-2", "namespace", "checkpoint-1", "task-1", 0, "channel-1"
+    )
+    assert base != build_write_aad(
+        "thread-1", "namespace-2", "checkpoint-1", "task-1", 0, "channel-1"
+    )
+    assert base != build_write_aad(
+        "thread-1", "namespace", "checkpoint-2", "task-1", 0, "channel-1"
+    )
+    assert base != build_write_aad(
+        "thread-1", "namespace", "checkpoint-1", "task-2", 0, "channel-1"
+    )
+    assert base != build_write_aad(
+        "thread-1", "namespace", "checkpoint-1", "task-1", 1, "channel-1"
+    )
+    assert base != build_write_aad(
+        "thread-1", "namespace", "checkpoint-1", "task-1", 0, "channel-2"
+    )
+def test_encrypted_serializer_rejects_mismatched_aad() -> None:
+    serde = _make_encrypted_serde()
+
+    aad = build_checkpoint_aad("thread-1", "namespace", "checkpoint-1")
+    dumped = serde.dumps_typed("secret", aad=aad)
+
+    assert serde.loads_typed(dumped, aad=aad) == "secret"
+
+    for mismatched_aad in (
+        build_checkpoint_aad("thread-2", "namespace", "checkpoint-1"),
+        build_checkpoint_aad("thread-1", "namespace-2", "checkpoint-1"),
+        build_checkpoint_aad("thread-1", "namespace", "checkpoint-2"),
+    ):
+        with pytest.raises(ValueError):
+            serde.loads_typed(dumped, aad=mismatched_aad)
 
 
 class TestEncryptedSerializerMsgpackAllowlist:
@@ -308,10 +409,14 @@ class TestWithMsgpackAllowlistEncrypted:
                 return None
 
         class DummyCipher(CipherProtocol):
-            def encrypt(self, plaintext: bytes) -> tuple[str, bytes]:
+            def encrypt(
+                self, plaintext: bytes, aad: bytes | None = None
+            ) -> tuple[str, bytes]:
                 return "dummy", plaintext
 
-            def decrypt(self, ciphername: str, ciphertext: bytes) -> bytes:
+            def decrypt(
+                self, ciphername: str, ciphertext: bytes, aad: bytes | None = None
+            ) -> bytes:
                 return ciphertext
 
         encrypted = EncryptedSerializer(DummyCipher(), DummyInnerSerde())

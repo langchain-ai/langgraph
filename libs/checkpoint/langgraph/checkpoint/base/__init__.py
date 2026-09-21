@@ -743,6 +743,28 @@ def _with_msgpack_allowlist(
     return serde
 
 
+def _dump_typed_with_aad(
+    serde: SerializerProtocol,
+    obj: Any,
+    aad: bytes,
+) -> tuple[str, bytes]:
+    """Serialize a value with AAD when using an encrypted serializer."""
+    if isinstance(serde, EncryptedSerializer):
+        return serde.dumps_typed(obj, aad=aad)
+    return serde.dumps_typed(obj)
+
+
+def _load_typed_with_aad(
+    serde: SerializerProtocol,
+    data: tuple[str, bytes],
+    aad: bytes,
+) -> Any:
+    """Deserialize a value with AAD when using an encrypted serializer."""
+    if isinstance(serde, EncryptedSerializer):
+        return serde.loads_typed(data, aad=aad)
+    return serde.loads_typed(data)
+
+
 class EmptyChannelError(Exception):
     """Raised when attempting to get the value of a channel that hasn't been updated
     for the first time yet."""

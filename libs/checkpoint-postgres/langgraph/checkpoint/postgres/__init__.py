@@ -182,6 +182,10 @@ class PostgresSaver(BasePostgresSaver):
                         if value["channel_values"] is None:
                             value["channel_values"] = []
                         self._migrate_pending_sends(
+                            value["thread_id"],
+                            value["checkpoint_ns"],
+                            value["checkpoint_id"],
+                            sends["checkpoint_id"],
                             sends["sends"],
                             value["checkpoint"],
                             value["channel_values"],
@@ -253,6 +257,10 @@ class PostgresSaver(BasePostgresSaver):
                     if value["channel_values"] is None:
                         value["channel_values"] = []
                     self._migrate_pending_sends(
+                        value["thread_id"],
+                        value["checkpoint_ns"],
+                        value["checkpoint_id"],
+                        sends["checkpoint_id"],
                         sends["sends"],
                         value["checkpoint"],
                         value["channel_values"],
@@ -549,6 +557,8 @@ class PostgresSaver(BasePostgresSaver):
             stage2_rows = []
 
         return self._build_delta_channels_writes_history(
+            thread_id=thread_id,
+            checkpoint_ns=checkpoint_ns,
             channels=channels,
             chain_by_ch=chain_by_ch,
             seed_ver_by_ch=seed_ver_by_ch,
@@ -580,7 +590,11 @@ class PostgresSaver(BasePostgresSaver):
                 **value["checkpoint"],
                 "channel_values": {
                     **(value["checkpoint"].get("channel_values") or {}),
-                    **self._load_blobs(value["channel_values"]),
+                    **self._load_blobs(
+                        value["thread_id"],
+                        value["checkpoint_ns"],
+                        value["channel_values"],
+                    ),
                 },
             },
             value["metadata"],
@@ -595,7 +609,12 @@ class PostgresSaver(BasePostgresSaver):
                 if value["parent_checkpoint_id"]
                 else None
             ),
-            self._load_writes(value["pending_writes"]),
+            self._load_writes(
+                value["thread_id"],
+                value["checkpoint_ns"],
+                value["checkpoint_id"],
+                value["pending_writes"],
+            ),
         )
 
 

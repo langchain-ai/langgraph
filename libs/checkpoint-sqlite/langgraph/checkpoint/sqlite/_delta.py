@@ -25,7 +25,11 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from langgraph.checkpoint.base import DeltaChannelHistory, PendingWrite
-
+from langgraph.checkpoint.base import _load_typed_with_aad
+from langgraph.checkpoint.serde.aad import (
+    build_checkpoint_aad,
+    build_write_aad,
+)
 # Stage 1 streams ancestors of `target_cid` newest-first. The `<=`
 # predicate keeps target itself in the stream so we can read its
 # `parent_checkpoint_id` from the first row without a separate lookup;
@@ -78,6 +82,8 @@ def step_walk_with_row(
     walk_state: dict[str, Any],
     seeded: set[str],
     channels: Sequence[str],
+    thread_id: str,
+    checkpoint_ns: str,
 ) -> bool:
     """Process one streamed stage-1 row in the merged ancestor walk.
 
@@ -113,7 +119,11 @@ def step_walk_with_row(
         return False
     for ch in active:
         chain_by_ch[ch].append(cid)
-    ckpt = serde.loads_typed((type_tag, blob))
+    ckpt = _load_typed_with_aad(
+        serde,
+        (type_tag, blob),
+        build_checkpoint_aad(thread_id, checkpoint_ns, cid),
+    )
     channel_values: Mapping[str, Any] = ckpt.get("channel_values") or {}
     for ch in [ch for ch in active if ch in channel_values]:
         seed_val_by_ch[ch] = channel_values[ch]
@@ -132,6 +142,8 @@ def build_delta_channels_writes_history(
     seeded: set[str],
     stage2_rows: Sequence[tuple[str, str, str, int, str, bytes]],
     serde: Any,
+    thread_id: str,
+    checkpoint_ns: str,
 ) -> dict[str, DeltaChannelHistory]:
     """Demux stage-2 rows per channel; produce per-channel histories.
 
@@ -161,9 +173,24 @@ def build_delta_channels_writes_history(
         collected: list[PendingWrite] = []
         # Chain is newest-first; iterate oldest-first for the public order.
         for cid in reversed(chain_cids):
-            for type_tag, value_blob, task_id, _idx in cid_writes.get(cid, []):
+            for type_tag, value_blob, task_id, idx in cid_writes.get(cid, []):
                 collected.append(
-                    (task_id, ch, serde.loads_typed((type_tag, value_blob)))
+                    (
+                        task_id,
+                        ch,
+                        _load_typed_with_aad(
+                            serde,
+                            (type_tag, value_blob),
+                            build_write_aad(
+                                thread_id,
+                                checkpoint_ns,
+                                cid,
+                                task_id,
+                                idx,
+                                ch,
+                            ),
+                        ),
+                    )
                 )
         entry: DeltaChannelHistory = {"writes": collected}
         if ch in seeded:

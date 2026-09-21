@@ -13,7 +13,13 @@ from langgraph.checkpoint.base import (
     ChannelVersions,
     DeltaChannelHistory,
     PendingWrite,
+    _dump_typed_with_aad,
+    _load_typed_with_aad,
     get_checkpoint_id,
+)
+from langgraph.checkpoint.serde.aad import (
+    build_blob_aad,
+    build_write_aad,
 )
 from langgraph.checkpoint.serde.types import TASKS
 from psycopg.types.json import Jsonb
@@ -99,7 +105,12 @@ select
     parent_checkpoint_id,
     metadata,
     (
-        select array_agg(array[bl.channel::bytea, bl.type::bytea, bl.blob])
+        select array_agg(array[
+            bl.channel::bytea,
+            bl.version::bytea,
+            bl.type::bytea,
+            bl.blob
+        ])
         from jsonb_each_text(checkpoint -> 'channel_versions')
         inner join checkpoint_blobs bl
             on bl.thread_id = checkpoints.thread_id
@@ -109,7 +120,13 @@ select
     ) as channel_values,
     (
         select
-        array_agg(array[cw.task_id::text::bytea, cw.channel::bytea, cw.type::bytea, cw.blob] order by cw.task_id, cw.idx)
+        array_agg(array[
+                    cw.task_id::text::bytea,
+                    cw.idx::text::bytea,
+                    cw.channel::bytea,
+                    cw.type::bytea,
+                    cw.blob
+                ] order by cw.task_id, cw.idx)
         from checkpoint_writes cw
         where cw.thread_id = checkpoints.thread_id
             and cw.checkpoint_ns = checkpoints.checkpoint_ns
@@ -120,7 +137,15 @@ from checkpoints """
 SELECT_PENDING_SENDS_SQL = f"""
 select
     checkpoint_id,
-    array_agg(array[type::bytea, blob] order by task_path, task_id, idx) as sends
+    array_agg(
+        array[
+            task_id::text::bytea,
+            idx::text::bytea,
+            type::bytea,
+            blob
+        ]
+        order by task_path, task_id, idx
+    ) as sends
 from checkpoint_writes
 where thread_id = %s
     and checkpoint_id = any(%s)
@@ -354,33 +379,77 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
 
     def _migrate_pending_sends(
         self,
-        pending_sends: list[tuple[bytes, bytes]],
+        thread_id: str,
+        checkpoint_ns: str,
+        checkpoint_id: str,
+        source_checkpoint_id: str,
+        pending_sends: list[tuple[bytes, bytes, bytes, bytes]],
         checkpoint: dict[str, Any],
         channel_values: list[tuple[bytes, bytes, bytes]],
     ) -> None:
         if not pending_sends:
             return
-        # add to values
-        enc, blob = self.serde.dumps_typed(
-            [self.serde.loads_typed((c.decode(), b)) for c, b in pending_sends],
-        )
-        channel_values.append((TASKS.encode(), enc.encode(), blob))
-        # add to versions
-        checkpoint["channel_versions"][TASKS] = (
+
+        version = (
             max(checkpoint["channel_versions"].values())
             if checkpoint["channel_versions"]
             else self.get_next_version(None, None)
         )
 
+        values = [
+            _load_typed_with_aad(
+                self.serde,
+                (type_tag.decode(), blob),
+                build_write_aad(
+                    thread_id,
+                    checkpoint_ns,
+                    source_checkpoint_id,
+                    task_id.decode(),
+                    int(idx.decode()),
+                    TASKS,
+                ),
+            )
+            for task_id, idx, type_tag, blob in pending_sends
+        ]
+
+        enc, blob = _dump_typed_with_aad(
+            self.serde,
+            values,
+            build_blob_aad(
+                thread_id,
+                checkpoint_ns,
+                TASKS,
+                version,
+            ),
+        )
+
+        channel_values.append(
+            (TASKS.encode(), version.encode(), enc.encode(), blob)
+        )
+        checkpoint["channel_versions"][TASKS] = version
+
     def _load_blobs(
-        self, blob_values: list[tuple[bytes, bytes, bytes]]
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        blob_values: list[tuple[bytes, bytes, bytes, bytes]],
     ) -> dict[str, Any]:
         if not blob_values:
             return {}
+
         return {
-            k.decode(): self.serde.loads_typed((t.decode(), v))
-            for k, t, v in blob_values
-            if t.decode() != "empty"
+            channel.decode(): _load_typed_with_aad(
+                self.serde,
+                (type_tag.decode(), blob),
+                build_blob_aad(
+                    thread_id,
+                    checkpoint_ns,
+                    channel.decode(),
+                    version.decode(),
+                ),
+            )
+            for channel, version, type_tag, blob in blob_values
+            if type_tag.decode() != "empty"
         }
 
     @staticmethod
@@ -471,6 +540,8 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
     def _build_delta_channels_writes_history(
         self,
         *,
+        thread_id: str,
+        checkpoint_ns: str,
         channels: Sequence[str],
         chain_by_ch: Mapping[str, list[str]],
         seed_ver_by_ch: Mapping[str, str | None],
@@ -530,7 +601,18 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             cid_writes = writes_by_ch_by_cid.get(ch, {})
             for cid in chain_cids:
                 for type_tag, write_blob, task_id, _idx in cid_writes.get(cid, []):
-                    val = self.serde.loads_typed((type_tag, write_blob))
+                    val = _load_typed_with_aad(
+                        self.serde,
+                        (type_tag, write_blob),
+                        build_write_aad(
+                            thread_id,
+                            checkpoint_ns,
+                            cid,
+                            task_id,
+                            _idx,
+                            ch,
+                        ),
+                    )
                     collected.append((task_id, ch, val))
             collected.reverse()
 
@@ -538,7 +620,16 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             if seed_version is not None:
                 blob = seed_blob_by_ver.get((ch, seed_version))
                 if blob is not None and blob[0] != "empty":
-                    entry["seed"] = self.serde.loads_typed(blob)
+                    entry["seed"] = _load_typed_with_aad(
+                        self.serde,
+                        blob,
+                        build_blob_aad(
+                            thread_id,
+                            checkpoint_ns,
+                            ch,
+                            seed_version,
+                        ),
+                    )
                 elif ch in seed_inline_by_ch:
                     # Inline primitive: stored in the checkpoint, not the blobs
                     # table, so stage 2 never returned a row for it.
@@ -563,7 +654,16 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                 k,
                 cast(str, ver),
                 *(
-                    self.serde.dumps_typed(values[k])
+                    _dump_typed_with_aad(
+                        self.serde,
+                        values[k],
+                        build_blob_aad(
+                            thread_id,
+                            checkpoint_ns,
+                            k,
+                            cast(str, ver),
+                        ),
+                    )
                     if k in values
                     else ("empty", None)
                 ),
@@ -572,16 +672,31 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         ]
 
     def _load_writes(
-        self, writes: list[tuple[bytes, bytes, bytes, bytes]]
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        checkpoint_id: str,
+        writes: list[tuple[bytes, bytes, bytes, bytes, bytes]],
     ) -> list[tuple[str, str, Any]]:
         return (
             [
                 (
-                    tid.decode(),
+                    task_id.decode(),
                     channel.decode(),
-                    self.serde.loads_typed((t.decode(), v)),
+                    _load_typed_with_aad(
+                        self.serde,
+                        (type_tag.decode(), blob),
+                        build_write_aad(
+                            thread_id,
+                            checkpoint_ns,
+                            checkpoint_id,
+                            task_id.decode(),
+                            int(idx.decode()),
+                            channel.decode(),
+                        ),
+                    ),
                 )
-                for tid, channel, t, v in writes
+                for task_id, idx, channel, type_tag, blob in writes
             ]
             if writes
             else []
@@ -605,7 +720,18 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                 task_path,
                 WRITES_IDX_MAP.get(channel, idx),
                 channel,
-                *self.serde.dumps_typed(value),
+                *_dump_typed_with_aad(
+                    self.serde,
+                    value,
+                    build_write_aad(
+                        thread_id,
+                        checkpoint_ns,
+                        checkpoint_id,
+                        task_id,
+                        WRITES_IDX_MAP.get(channel, idx),
+                        channel,
+                    ),
+                ),
             )
             for idx, (channel, value) in enumerate(writes)
         ]
