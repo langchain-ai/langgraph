@@ -2686,6 +2686,126 @@ def test_set_node_defaults_combined_retry_and_error_handler():
     assert captured["error"] == "Always fails"
 
 
+def test_error_handler_successful_write_not_replayed_on_resume():
+    """https://github.com/langchain-ai/langgraph/issues/9002
+
+    When a node with an `error_handler` fails and the handler runs to
+    completion (committing its write), but a *different* task in the same
+    superstep also fails/interrupts so the run ends with an error, resuming
+    the thread must not re-execute the already-completed handler. Its
+    committed write must be preserved; only the genuinely failed task is
+    retried.
+    """
+
+    class State(TypedDict):
+        log: Annotated[list[str], operator.add]
+
+    calls = {"a": 0, "handler": 0, "b": 0}
+
+    def node_a(state: State) -> State:
+        calls["a"] += 1
+        raise ValueError("a failed")
+
+    def handler_a(state: State, error: NodeError) -> State:
+        calls["handler"] += 1
+        # A real side effect (refund / alert) that must fire exactly once.
+        return {"log": [f"handler#{calls['handler']}"]}
+
+    def node_b(state: State) -> State:
+        calls["b"] += 1
+        if calls["b"] == 1:
+            raise RuntimeError("b transient failure")
+        return {"log": ["b ok"]}
+
+    checkpointer = MemorySaver()
+    graph = (
+        StateGraph(State)
+        .add_node("a", node_a, error_handler=handler_a)
+        .add_node("b", node_b)
+        .add_edge(START, "a")
+        .add_edge(START, "b")
+        .add_edge("a", END)
+        .add_edge("b", END)
+        .compile(checkpointer=checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "t1"}}
+
+    # First run: "a" fails -> handler_a runs (side effect #1) and commits;
+    # "b" also fails, so the run raises.
+    with pytest.raises(RuntimeError, match="b transient failure"):
+        graph.invoke({"log": []}, config)
+
+    assert calls["handler"] == 1
+    assert calls["a"] == 1
+
+    # Resume: only "b" is retried; handler_a must NOT run again and its
+    # committed write ("handler#1") must survive.
+    result = graph.invoke(None, config)
+
+    assert calls["handler"] == 1  # side effect fired exactly once
+    assert calls["a"] == 1  # original failed node is not re-executed
+    assert calls["b"] == 2  # transient failure retried
+    assert result["log"] == ["handler#1", "b ok"]
+
+
+def test_error_handler_successful_write_not_replayed_after_interrupt():
+    """Same issue via the interrupt path: a concurrent node calls
+    interrupt(); the run pauses with the handler already committed, and
+    resuming must not re-run the already-completed handler."""
+
+    class State(TypedDict):
+        log: Annotated[list[str], operator.add]
+        value: str
+
+    calls = {"a": 0, "handler": 0, "b": 0}
+
+    def node_a(state: State) -> State:
+        calls["a"] += 1
+        raise ValueError("a failed")
+
+    def handler_a(state: State, error: NodeError) -> State:
+        calls["handler"] += 1
+        return {"log": [f"handler#{calls['handler']}"]}
+
+    def node_b(state: State) -> State:
+        calls["b"] += 1
+        if calls["b"] == 1:
+            interrupt("need input")
+        return {"log": [f"b#{calls['b']}"]}
+
+    checkpointer = MemorySaver()
+    graph = (
+        StateGraph(State)
+        .add_node("a", node_a, error_handler=handler_a)
+        .add_node("b", node_b)
+        .add_edge(START, "a")
+        .add_edge(START, "b")
+        .add_edge("a", END)
+        .add_edge("b", END)
+        .compile(checkpointer=checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "t1"}}
+
+    # First run: "a" fails -> handler_a runs and commits; "b" interrupts.
+    # With an error and an interrupt in the same superstep the error wins, so
+    # this raises (either the original error or an interrupt).
+    with pytest.raises((GraphInterrupt, ValueError)):
+        graph.invoke({"log": [], "value": ""}, config)
+
+    assert calls["handler"] == 1
+
+    # Resume: "b" proceeds (its interrupt is resolved by a fresh invoke);
+    # handler_a must NOT run again.
+    result = graph.invoke(None, config)
+
+    assert calls["handler"] == 1
+    assert calls["a"] == 1
+    assert calls["b"] == 2
+    assert "handler#1" in result["log"]
+
+
 def test_error_handler_resumes_after_crash():
     """If the error handler crashes, resuming should re-schedule the handler
     (not re-execute the original failed node)."""

@@ -814,6 +814,16 @@ class PregelLoop:
             )
             if handler_task is not None:
                 self.tasks[handler_task.id] = handler_task
+                # The handler may have already run to completion in a prior
+                # superstep and committed its writes (e.g. another task in the
+                # same superstep failed, ending the run; the thread is then
+                # resumed/retried). Restore those writes onto the freshly
+                # prepared handler task, mirroring `schedule_error_handler`:
+                # a task with non-empty writes is skipped by the runner, so the
+                # handler is not re-executed and its side effects are not
+                # duplicated. When the handler never ran before, no matching
+                # PendingWrite exists and the restore is a no-op.
+                self._reapply_writes_to_succeeded_nodes({handler_task.id: handler_task})
 
     def _pending_interrupts(self) -> set[str]:
         """Return the set of interrupt ids that are pending without corresponding resume values."""
