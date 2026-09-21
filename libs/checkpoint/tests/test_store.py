@@ -140,6 +140,43 @@ def test_get_text_at_path() -> None:
 
 
 @pytest.mark.parametrize(
+    "path,expected",
+    [
+        ("{items[0].text,title}", ["first", "Document"]),
+        ("{items[-1].text,title}", ["second", "Document"]),
+        ("{items[*].text,title}", ["first", "second", "Document"]),
+        ("{items[99].text,title}", ["Document"]),
+    ],
+)
+def test_get_text_at_path_multi_field_arrays(path: str, expected: list[str]) -> None:
+    data = {
+        "title": "Document",
+        "items": [{"text": "first"}, {"text": "second"}],
+    }
+
+    assert get_text_at_path(data, path) == expected
+
+
+def test_store_indexes_multi_field_array_values() -> None:
+    embedded: list[str] = []
+
+    def embed(texts: list[str]) -> list[list[float]]:
+        embedded.extend(texts)
+        return [[1.0] for _ in texts]
+
+    store = InMemoryStore(
+        index={"dims": 1, "embed": embed, "fields": ["{items[*].text,title}"]}
+    )
+    store.put(
+        ("documents",),
+        "doc",
+        {"title": "Document", "items": [{"text": "first"}, {"text": "second"}]},
+    )
+
+    assert embedded == ["first", "second", "Document"]
+
+
+@pytest.mark.parametrize(
     "mapping",
     [
         UserDict({"text": "searchable"}),
