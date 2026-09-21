@@ -408,7 +408,7 @@ async def test_aget_state_history_limit_zero():
     async for _ in remote_pregel.aget_state_history(config, limit=0):
         pass
 
-        assert mock_async_client.threads.get_history.call_args.kwargs["limit"] == 0
+    assert mock_async_client.threads.get_history.call_args.kwargs["limit"] == 0
 
 def test_update_state():
     # set up test
