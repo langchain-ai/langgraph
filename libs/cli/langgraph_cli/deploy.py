@@ -101,14 +101,6 @@ _NATIVE_AMD64_MACHINE = "x86_64"
 _PUSH_ATTEMPTS = 3
 _LOCAL_BUILD_TAG_PREFIX = "langgraph-deploy-tmp"
 _OPERATOR_DEFAULT_RESOURCE_SPEC: Mapping[str, object] = {}
-_LISTENER_REQUIRED_MARKER = "listener_id' is required"
-_HYBRID_LISTENER_GUIDANCE = (
-    "This workspace deploys through a listener in your own cluster, and the "
-    "control plane needs a listener ID to create a deployment. Create the "
-    "deployment once in the LangSmith UI, choosing the listener and namespace, "
-    "then re-run with --deployment-id <id>."
-)
-
 _CUSTOMER_REGISTRY_SOURCE: SourceName = "external_docker"
 
 
@@ -823,21 +815,20 @@ def _create_deployment(
 
 
 def _get_deployment_status_url(
-    updated: object, deployment_id: str, host_url: str
+    updated: object, deployment_id: str, endpoints: ControlPlaneEndpoints
 ) -> str | None:
     """Compute the LangSmith dashboard URL for a deployment, if possible."""
     tenant_id = updated.get("tenant_id") if isinstance(updated, dict) else None
     if not tenant_id:
         return None
-    base = ControlPlaneEndpoints.from_control_plane_url(host_url).dashboard_url
-    return f"{base}/o/{tenant_id}/host/deployments/{deployment_id}"
+    return f"{endpoints.dashboard_url}/o/{tenant_id}/host/deployments/{deployment_id}"
 
 
 def _emit_deployment_status_url(
-    updated: object, deployment_id: str, host_url: str
+    updated: object, deployment_id: str, endpoints: ControlPlaneEndpoints
 ) -> str | None:
     """Emit the deployment status URL and return it."""
-    url = _get_deployment_status_url(updated, deployment_id, host_url)
+    url = _get_deployment_status_url(updated, deployment_id, endpoints)
     if url:
         _get_emitter().status_url(url)
     return url
@@ -1380,6 +1371,7 @@ def _run_remote_build(
 @dataclass(frozen=True, slots=True)
 class DeployContext:
     client: HostBackendClient
+    endpoints: ControlPlaneEndpoints
     spec: BuildSpec
     verbose: bool
     selector: DeploymentSelector
@@ -1419,6 +1411,13 @@ def _resolve_or_create(
         secrets=ctx.secrets,
     )
     return created.id, step
+
+
+def _available_listeners(client: HostBackendClient) -> tuple[Listener, ...]:
+    resources = _call_host_backend_with_optional_tenant(
+        client, lambda c: c.list_listeners()
+    )
+    return tuple(Listener.from_resource(resource) for resource in resources)
 
 
 def _ensure_customer_registry_source(existing: ExistingDeployment) -> None:
@@ -1483,6 +1482,7 @@ class RemoteBuildSource:
 class CustomerRegistrySource:
     reference: ImageReference
     prebuilt_image: str | None
+    placement: RequestedPlacement = RequestedPlacement()
 
     def run(self, ctx: DeployContext) -> DeployOutcome:
         if isinstance(ctx.selector, ById):
@@ -1516,21 +1516,22 @@ class CustomerRegistrySource:
         )
 
     def _create(self, ctx: DeployContext, name: str, step: int) -> DeployOutcome:
+        placement = self.placement.resolve(
+            _available_listeners(ctx.client), required=ctx.endpoints.is_cloud
+        )
         image_uri, step = self._publish(ctx, step)
-        try:
-            created, _ = _create_deployment(
-                ctx.client,
-                step,
-                name=name,
-                source=_CUSTOMER_REGISTRY_SOURCE,
-                source_config={"resource_spec": _OPERATOR_DEFAULT_RESOURCE_SPEC},
-                source_revision_config={"image_uri": image_uri},
-                secrets=ctx.secrets,
-            )
-        except HostBackendError as err:
-            if err.status_code == 400 and _LISTENER_REQUIRED_MARKER in err.message:
-                raise click.ClickException(_HYBRID_LISTENER_GUIDANCE) from None
-            raise
+        created, _ = _create_deployment(
+            ctx.client,
+            step,
+            name=name,
+            source=_CUSTOMER_REGISTRY_SOURCE,
+            source_config={
+                "resource_spec": _OPERATOR_DEFAULT_RESOURCE_SPEC,
+                **placement.source_config(),
+            },
+            source_revision_config={"image_uri": image_uri},
+            secrets=ctx.secrets,
+        )
         return DeployOutcome(
             created.id, _image_revision_result(created.resource, "Deployment created")
         )
@@ -1590,6 +1591,7 @@ def _select_source(
     image_name: str | None,
     tag: str | None,
     remote_build_flag: bool | None,
+    placement: RequestedPlacement,
 ) -> DeploymentSource:
     if push_to is not None:
         if remote_build_flag is True:
@@ -1597,7 +1599,7 @@ def _select_source(
         reference = _push_reference(push_to, tag)
         if image is None:
             _require_local_docker()
-        return CustomerRegistrySource(reference, prebuilt_image=image)
+        return CustomerRegistrySource(reference, image, placement)
     if image and remote_build_flag is True:
         raise click.UsageError("--image cannot be combined with --remote builds.")
     use_remote_build, local_build_error = _resolve_build_mode(
@@ -1893,6 +1895,21 @@ def _deploy_base_options(
                 ),
             ),
             click.option(
+                "--listener-id",
+                help=(
+                    "Listener that will run the deployment, for workspaces that "
+                    "deploy through a listener in your own cluster. Only used when "
+                    "creating a deployment with --push-to."
+                ),
+            ),
+            click.option(
+                "--k8s-namespace",
+                help=(
+                    "Kubernetes namespace the listener deploys into. Only used when "
+                    "creating a deployment with --push-to."
+                ),
+            ),
+            click.option(
                 "--config",
                 "-c",
                 default=DEFAULT_CONFIG,
@@ -1994,6 +2011,8 @@ def _deploy_cmd(
     image_name: str | None,
     image: str | None,
     push_to: str | None,
+    listener_id: str | None,
+    k8s_namespace: str | None,
     tag: str | None,
     base_image: str | None,
     install_command: str | None,
@@ -2055,9 +2074,11 @@ def _deploy_cmd(
         image_name=image_name,
         tag=tag,
         remote_build_flag=remote_build_flag,
+        placement=RequestedPlacement(listener_id, k8s_namespace),
     )
 
     client = _create_host_backend_client(host_url, api_key, env_vars=env_vars)
+    endpoints = ControlPlaneEndpoints.from_control_plane_url(client.base_url)
     try:
         tracked_packages = find_tracked_packages(config, config_json) or None
     except Exception as exc:
@@ -2067,6 +2088,7 @@ def _deploy_cmd(
     outcome = source.run(
         DeployContext(
             client=client,
+            endpoints=endpoints,
             spec=BuildSpec(
                 config=config,
                 config_json=config_json,
@@ -2087,7 +2109,7 @@ def _deploy_cmd(
     dep_status_url = _emit_deployment_status_url(
         outcome.build_result.updated,
         outcome.deployment_id,
-        client.base_url,
+        endpoints,
     )
 
     if no_wait:

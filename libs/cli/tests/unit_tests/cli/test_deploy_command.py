@@ -17,6 +17,7 @@ from langgraph_cli.host_backend import HostBackendClient
 from langgraph_cli.image_reference import ImageReference
 
 CONTROL_PLANE_URL = "https://control-plane.example.com"
+CLOUD_CONTROL_PLANE_URL = "https://api.host.langchain.com"
 REGISTRY_URL = "https://registry.example.com/team"
 PUSH_TOKEN = "push-token"
 PUSHED_IMAGE = "registry.example.com/team/my-app:latest"
@@ -24,10 +25,21 @@ PUSHED_DIGEST = "registry.example.com/team/my-app@sha256:abc123"
 PUSH_REPOSITORY = "registry.example.com/team/agent"
 EXTERNAL_IMAGE = f"{PUSH_REPOSITORY}:latest"
 EXTERNAL_DIGEST = f"{PUSH_REPOSITORY}@sha256:abc123"
-LISTENER_REQUIRED = (
-    "Source configuration error: 'source_config.listener_id' is required for "
-    "workspace with available listener IDs: ['listener-1']"
-)
+LISTENER = {
+    "id": "listener-1",
+    "compute_id": "prod-cluster",
+    "compute_config": {"k8s_namespaces": ["agents"]},
+}
+OTHER_LISTENER = {
+    "id": "listener-2",
+    "compute_id": "other-cluster",
+    "compute_config": {"k8s_namespaces": ["agents"]},
+}
+TWO_NAMESPACE_LISTENER = {
+    "id": "listener-1",
+    "compute_id": "prod-cluster",
+    "compute_config": {"k8s_namespaces": ["agents", "agents-staging"]},
+}
 CREATED_ID = "dep-created"
 TRACKED_PACKAGES = ["langgraph:1.0.0"]
 SIGNED_UPLOAD_URL = "https://storage.example.com/signed"
@@ -39,6 +51,7 @@ NOT_A_CLI_DEPLOYMENT = (
     "push token is only available for 'internal_docker' source deployments"
 )
 LIST_DEPLOYMENTS = "GET /v2/deployments"
+LIST_LISTENERS = "GET /v2/listeners"
 CREATE_DEPLOYMENT = "POST /v2/deployments"
 
 
@@ -64,6 +77,7 @@ class ControlPlaneDouble:
     existing_deployments: list[dict] = field(default_factory=list)
     push_token_status: int = 200
     create_error: str | None = None
+    listeners: list[dict] = field(default_factory=list)
     bodies: dict[str, dict] = field(default_factory=dict)
 
     def handle(self, request: httpx.Request) -> httpx.Response:
@@ -74,6 +88,8 @@ class ControlPlaneDouble:
         return self._respond(request.method, request.url.path)
 
     def _respond(self, method: str, path: str) -> httpx.Response:
+        if (method, path) == ("GET", "/v2/listeners"):
+            return httpx.Response(200, json={"resources": self.listeners})
         if (method, path) == ("GET", "/v2/deployments"):
             return httpx.Response(200, json={"resources": self.existing_deployments})
         if (method, path) == ("POST", "/v2/deployments"):
@@ -199,7 +215,7 @@ class DeployProject:
     timeline: list[str]
     uploads: list[tuple[str, str, int]]
 
-    def run(self, *args: str) -> Result:
+    def run(self, *args: str, host_url: str = CONTROL_PLANE_URL) -> Result:
         return CliRunner().invoke(
             cli,
             [
@@ -207,7 +223,7 @@ class DeployProject:
                 "--api-key",
                 "test-key",
                 "--host-url",
-                CONTROL_PLANE_URL,
+                host_url,
                 "--name",
                 "my-app",
                 "--no-input",
@@ -496,6 +512,7 @@ def test_push_to_builds_pushes_then_creates_an_external_deployment(
     assert result.exit_code == 0, result.output
     assert deploy_project.timeline == [
         LIST_DEPLOYMENTS,
+        LIST_LISTENERS,
         "docker build",
         "docker push",
         "docker inspect-digest",
@@ -611,18 +628,6 @@ def test_push_to_rejects_a_non_external_deployment_before_any_docker_work(
     assert deploy_project.docker.verbs() == []
 
 
-def test_push_to_explains_the_listener_requirement_of_hybrid_workspaces(
-    deploy_project: DeployProject,
-) -> None:
-    deploy_project.control_plane.create_error = LISTENER_REQUIRED
-
-    result = deploy_project.run("--push-to", PUSH_REPOSITORY)
-
-    assert result.exit_code != 0
-    assert "listener" in result.output
-    assert "--deployment-id" in result.output
-
-
 def test_push_to_with_deployment_id_fetches_the_deployment_once(
     deploy_project: DeployProject,
 ) -> None:
@@ -652,3 +657,135 @@ def test_invalid_tag_fails_before_any_control_plane_call(
     assert result.exit_code != 0
     assert "Image tag may only contain" in result.output
     assert deploy_project.timeline == []
+
+
+def test_push_to_places_a_new_deployment_on_the_only_listener(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER]
+
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, host_url=CLOUD_CONTROL_PLANE_URL
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.timeline == [
+        LIST_DEPLOYMENTS,
+        LIST_LISTENERS,
+        "docker build",
+        "docker push",
+        "docker inspect-digest",
+        CREATE_DEPLOYMENT,
+    ]
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {},
+        "listener_id": "listener-1",
+        "listener_config": {"k8s_namespace": "agents"},
+    }
+
+
+def test_push_to_places_a_new_deployment_on_the_chosen_listener(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER, OTHER_LISTENER]
+
+    result = deploy_project.run(
+        "--push-to",
+        PUSH_REPOSITORY,
+        "--listener-id",
+        "listener-2",
+        "--k8s-namespace",
+        "agents",
+        host_url=CLOUD_CONTROL_PLANE_URL,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {},
+        "listener_id": "listener-2",
+        "listener_config": {"k8s_namespace": "agents"},
+    }
+
+
+@pytest.mark.parametrize(
+    ("listeners", "args", "message"),
+    [
+        pytest.param(
+            [LISTENER, OTHER_LISTENER], (), "--listener-id", id="two_listeners"
+        ),
+        pytest.param(
+            [TWO_NAMESPACE_LISTENER], (), "--k8s-namespace", id="two_namespaces"
+        ),
+        pytest.param(
+            [LISTENER],
+            ("--listener-id", "listener-9"),
+            "was not found",
+            id="unknown_listener",
+        ),
+        pytest.param(
+            [LISTENER],
+            ("--k8s-namespace", "nope"),
+            "does not serve namespace",
+            id="unknown_namespace",
+        ),
+    ],
+)
+def test_push_to_refuses_an_unresolved_placement_before_any_docker_work(
+    deploy_project: DeployProject, listeners, args, message
+) -> None:
+    deploy_project.control_plane.listeners = listeners
+
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, *args, host_url=CLOUD_CONTROL_PLANE_URL
+    )
+
+    assert result.exit_code != 0
+    assert message in result.output
+    assert deploy_project.docker.verbs() == []
+    assert CREATE_DEPLOYMENT not in deploy_project.timeline
+
+
+def test_self_hosted_control_plane_keeps_its_default_placement(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER]
+
+    result = deploy_project.run("--push-to", PUSH_REPOSITORY)
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {}
+    }
+
+
+def test_self_hosted_control_plane_places_when_asked(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER]
+
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, "--listener-id", "listener-1"
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {},
+        "listener_id": "listener-1",
+        "listener_config": {"k8s_namespace": "agents"},
+    }
+
+
+def test_updating_a_deployment_never_looks_up_listeners(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER]
+    deploy_project.control_plane.existing_deployments = [
+        {"id": "dep-ext", "name": "my-app", "source": "external_docker"}
+    ]
+
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, host_url=CLOUD_CONTROL_PLANE_URL
+    )
+
+    assert result.exit_code == 0, result.output
+    assert LIST_LISTENERS not in deploy_project.timeline

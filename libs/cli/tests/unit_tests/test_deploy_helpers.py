@@ -613,6 +613,7 @@ class TestSelectSource:
         "image_name": None,
         "tag": None,
         "remote_build_flag": None,
+        "placement": RequestedPlacement(),
     }
     REPOSITORY = "registry.example.com/app"
 
@@ -650,6 +651,19 @@ class TestSelectSource:
                     ImageReference(REPOSITORY, "latest"), prebuilt_image="app:dev"
                 ),
                 id="prebuilt_image_is_retagged_for_push_to_without_docker_checks",
+            ),
+            pytest.param(
+                {
+                    "push_to": REPOSITORY,
+                    "placement": RequestedPlacement("listener-1", "agents"),
+                },
+                True,
+                CustomerRegistrySource(
+                    ImageReference(REPOSITORY, "latest"),
+                    None,
+                    RequestedPlacement("listener-1", "agents"),
+                ),
+                id="push_to_carries_the_requested_placement",
             ),
             pytest.param(
                 {"remote_build_flag": True},
