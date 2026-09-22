@@ -752,7 +752,7 @@ def _create_deployment(
             "POST /v2/deployments succeeded but response missing a valid 'id'"
         )
     if agent is not None:
-        _get_emitter().info(f"Deployment name: {created['name']}")
+        _get_emitter().info(f"Deployment name: {created.get('name')}")
     _get_emitter().info(f"Deployment ID: {created_id}", deployment_id=created_id)
     return CreatedDeployment(created_id, created), step + 1
 
@@ -1934,6 +1934,7 @@ def deploy(ctx: click.Context, **_: object):
         ctx.params.get("agent_id") is not None
         or ctx.params.get("environment") is not None
     ) and ctx.get_parameter_source("name") == click.core.ParameterSource.ENVIRONMENT:
+        # Ignore the inherited name default so it does not conflict with agent mode.
         ctx.params["name"] = None
     docker_build_args = tuple(ctx.args)
     ctx.args = []  # Prevent Click from re-processing passthrough args later.
