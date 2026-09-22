@@ -551,8 +551,8 @@ class _TasksLifecycleBase(StreamTransformer):
             # A keyed instance's frame carries no task id (its namespace is
             # stable across invocations); the task that pushed it announced
             # the key in its own start event.
-            trigger_call_id = self._keyed_tasks.get(
-                (_parent_ns(ns), parsed_name, subgraph_key)
+            trigger_call_id = self._keyed_tasks.pop(
+                (_parent_ns(ns), parsed_name, subgraph_key), None
             )
         metadata = data.get("metadata") or {}
         child_lc = metadata.get("lc_agent_name")

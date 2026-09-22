@@ -12,7 +12,11 @@ from langgraph.checkpoint.base import (
     PendingWrite,
 )
 
-from langgraph._internal._config import filter_to_user_tags, patch_checkpoint_map
+from langgraph._internal._config import (
+    filter_to_user_tags,
+    patch_checkpoint_map,
+    recast_checkpoint_ns,
+)
 from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
@@ -168,6 +172,12 @@ def map_debug_checkpoint(
         task_ns = f"{task.name}{NS_END}{task.id}"
         if parent_ns:
             task_ns = f"{parent_ns}{NS_SEP}{task_ns}"
+        if send_key := task.config.get(CONF, {}).get(CONFIG_KEY_SUBGRAPH_KEY):
+            # a keyed push stores subgraph state at the addressable namespace
+            # the child loop builds, not the node:task_id path (see BaseLoop)
+            task_ns = NS_SEP.join(
+                (recast_checkpoint_ns(task_ns, keep_keys=True), f"{NS_END}{send_key}")
+            )
 
         # set config as signal that subgraph checkpoints exist
         task_states[task.id] = {

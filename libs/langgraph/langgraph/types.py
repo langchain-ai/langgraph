@@ -728,6 +728,10 @@ class Send:
             and subgraphs invoked inside the task use the key as their
             `subgraph_key`, giving them an addressable checkpoint namespace
             (e.g. `tools|:<key>`) that a later task with the same key continues.
+            The key need only be unique among instances of the same frame path
+            running at once: the duplicate check is per node per step, so the
+            same key reused under two parents running in parallel resolves to one
+            shared namespace unless those parents are themselves keyed.
 
     !!! example
 

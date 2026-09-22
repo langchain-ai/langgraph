@@ -458,7 +458,7 @@ def prepare_next_tasks(
     # Consume pending tasks
     tasks_channel = cast(Topic[Send] | None, channels.get(TASKS))
     if tasks_channel and tasks_channel.is_available():
-        for idx, packet in enumerate(tasks_channel.get()):
+        for idx, _ in enumerate(tasks_channel.get()):
             if task := prepare_single_task(
                 (PUSH, idx),
                 None,

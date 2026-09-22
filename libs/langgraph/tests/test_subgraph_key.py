@@ -532,6 +532,77 @@ def test_send_keyed_tasks_key_the_subgraphs_they_invoke(
     ]
 
 
+def make_interrupting_child() -> Pregel:
+    def reply(state: MessagesState) -> dict:
+        q = state["messages"][-1].text
+        ans = interrupt(f"approve {q}")
+        return {"messages": [AIMessage(content=f"child({ans}): {q}")]}
+
+    return (
+        StateGraph(MessagesState)
+        .add_node("reply", reply)
+        .add_edge(START, "reply")
+        .compile()
+    )
+
+
+def embedded_keyed_parent(child: Pregel, saver: BaseCheckpointSaver) -> Pregel:
+    def route(state: MessagesState) -> list[Send]:
+        return [Send("child", {"messages": state["messages"]}, key="k1")]
+
+    return (
+        StateGraph(MessagesState)
+        .add_node("child", child)
+        .add_conditional_edges(START, route, ["child"])
+        .compile(checkpointer=saver)
+    )
+
+
+def test_get_state_subgraphs_surfaces_keyed_push_instance(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    parent = embedded_keyed_parent(make_interrupting_child(), sync_checkpointer)
+    config = {"configurable": {"thread_id": str(uuid4())}}
+    parent.invoke({"messages": [HumanMessage(content="risky")]}, config)
+
+    assert namespaces(sync_checkpointer, config) == ["", "child|:k1"]
+    (task,) = parent.get_state(config, subgraphs=True).tasks
+    assert task.name == "child"
+    assert task.state.config["configurable"]["checkpoint_ns"] == "child|:k1"
+    assert [i.value for i in task.state.interrupts] == ["approve risky"]
+    assert texts(task.state.values) == ["risky"]
+
+    updated = parent.update_state(
+        task.state.config, {"messages": [AIMessage(content="(edited)")]}
+    )
+    assert updated["configurable"]["checkpoint_ns"] == "child|:k1"
+    assert namespaces(sync_checkpointer, config) == ["", "child|:k1"]
+    reread = parent.get_state(
+        {"configurable": {**config["configurable"], "checkpoint_ns": "child|:k1"}}
+    )
+    assert texts(reread.values)[-1] == "(edited)"
+
+
+def test_debug_stream_surfaces_keyed_push_instance(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    parent = embedded_keyed_parent(make_interrupting_child(), sync_checkpointer)
+    config = {"configurable": {"thread_id": str(uuid4())}}
+    checkpoints = [
+        c
+        for c in parent.stream(
+            {"messages": [HumanMessage(content="risky")]},
+            config,
+            stream_mode="debug",
+        )
+        if c["type"] == "checkpoint"
+    ]
+    (child_task,) = [
+        t for t in checkpoints[-1]["payload"]["tasks"] if t["name"] == "child"
+    ]
+    assert child_task["state"]["configurable"]["checkpoint_ns"] == "child|:k1"
+
+
 def test_send_key_gives_position_independent_task_ids(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -715,3 +786,17 @@ async def test_async_parallel_keyed_and_time_travel(
     assert out["result"] == repr(
         [["apples", "fruit: apples"], ["bananas", "fruit: bananas"]]
     )
+
+
+async def test_aget_state_subgraphs_surfaces_keyed_push_instance(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    parent = embedded_keyed_parent(make_interrupting_child(), async_checkpointer)
+    config = {"configurable": {"thread_id": str(uuid4())}}
+    await parent.ainvoke({"messages": [HumanMessage(content="risky")]}, config)
+
+    (task,) = (await parent.aget_state(config, subgraphs=True)).tasks
+    assert task.name == "child"
+    assert task.state.config["configurable"]["checkpoint_ns"] == "child|:k1"
+    assert [i.value for i in task.state.interrupts] == ["approve risky"]
+    assert texts(task.state.values) == ["risky"]

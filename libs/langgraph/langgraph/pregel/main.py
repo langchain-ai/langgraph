@@ -77,6 +77,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_SEND,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_STREAM_MESSAGES_V2,
+    CONFIG_KEY_SUBGRAPH_KEY,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
     ERROR,
@@ -1204,6 +1205,15 @@ class Pregel(
             task_ns = f"{task.name}{NS_END}{task.id}"
             if parent_ns:
                 task_ns = f"{parent_ns}{NS_SEP}{task_ns}"
+            if send_key := task.config.get(CONF, {}).get(CONFIG_KEY_SUBGRAPH_KEY):
+                # a keyed push stores subgraph state at the addressable namespace
+                # the child loop builds, not the node:task_id path (see BaseLoop)
+                task_ns = NS_SEP.join(
+                    (
+                        recast_checkpoint_ns(task_ns, keep_keys=True),
+                        f"{NS_END}{send_key}",
+                    )
+                )
             if not recurse:
                 # set config as signal that subgraph checkpoints exist
                 config = {
@@ -1327,6 +1337,15 @@ class Pregel(
             task_ns = f"{task.name}{NS_END}{task.id}"
             if parent_ns:
                 task_ns = f"{parent_ns}{NS_SEP}{task_ns}"
+            if send_key := task.config.get(CONF, {}).get(CONFIG_KEY_SUBGRAPH_KEY):
+                # a keyed push stores subgraph state at the addressable namespace
+                # the child loop builds, not the node:task_id path (see BaseLoop)
+                task_ns = NS_SEP.join(
+                    (
+                        recast_checkpoint_ns(task_ns, keep_keys=True),
+                        f"{NS_END}{send_key}",
+                    )
+                )
             if not recurse:
                 # set config as signal that subgraph checkpoints exist
                 config = {
