@@ -226,9 +226,6 @@ class RequestedPlacement:
                 "--name."
             )
 
-    def must_place(self, *, required: bool) -> bool:
-        return required or self.requested
-
     def resolve(self, listeners: Sequence[Listener]) -> Placement:
         if not listeners:
             if self.requested:
@@ -287,7 +284,7 @@ def _describe_listeners(listeners: Sequence[Listener]) -> str:
     if len(listeners) > len(shown):
         lines.append(f"  ... and {len(listeners) - len(shown)} more")
     if len(listeners) == MAX_PAGE_SIZE:
-        lines.append(f"  (the first {MAX_PAGE_SIZE} listeners are shown)")
+        lines.append(f"  (only the first {MAX_PAGE_SIZE} listeners were read)")
     return "\n".join(lines)
 
 
@@ -1551,7 +1548,8 @@ class CustomerRegistrySource:
         )
 
     def _placement(self, ctx: DeployContext) -> Placement:
-        if not self.placement.must_place(required=ctx.endpoints.is_cloud):
+        places_on_a_listener = ctx.endpoints.is_cloud or self.placement.requested
+        if not places_on_a_listener:
             return Unplaced()
         placement = self.placement.resolve(_available_listeners(ctx.client))
         if placement.summary:

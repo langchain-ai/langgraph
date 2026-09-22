@@ -975,35 +975,6 @@ NO_NAMESPACE = Listener("listener-3", "broken-cluster", ())
 
 class TestRequestedPlacement:
     @pytest.mark.parametrize(
-        ("request_", "required", "expected"),
-        [
-            pytest.param(RequestedPlacement(), True, True, id="cloud_must_place"),
-            pytest.param(
-                RequestedPlacement(),
-                False,
-                False,
-                id="self_hosted_keeps_its_bundled_operator",
-            ),
-            pytest.param(
-                RequestedPlacement(listener_id="listener-1"),
-                False,
-                True,
-                id="self_hosted_places_when_asked",
-            ),
-            pytest.param(
-                RequestedPlacement(k8s_namespace="agents"),
-                False,
-                True,
-                id="a_namespace_alone_is_still_a_request",
-            ),
-        ],
-    )
-    def test_must_place_decides_whether_listeners_matter(
-        self, request_, required, expected
-    ):
-        assert request_.must_place(required=required) is expected
-
-    @pytest.mark.parametrize(
         ("request_", "listeners", "expected"),
         [
             pytest.param(
