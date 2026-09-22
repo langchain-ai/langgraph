@@ -10,7 +10,7 @@ import tempfile
 import time
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Protocol, TypeVar
 
@@ -152,7 +152,13 @@ class ByName:
     name: str
 
 
-DeploymentSelector = ById | ByName
+@dataclass(frozen=True, slots=True)
+class ByAgent:
+    agent_id: str
+    environment: str
+
+
+DeploymentSelector = ById | ByName | ByAgent
 
 
 @dataclass(frozen=True, slots=True)
@@ -332,9 +338,7 @@ def _get_emitter() -> _Emitter:
 # ---------------------------------------------------------------------------
 
 
-def deployment_selector(
-    deployment_id: str | None, name: str | None
-) -> DeploymentSelector:
+def deployment_selector(deployment_id: str | None, name: str | None) -> ById | ByName:
     if deployment_id:
         return ById(deployment_id)
     if name:
@@ -668,14 +672,33 @@ def _fetch_deployment(
 def _find_deployment(
     client: HostBackendClient,
     step: int,
-    selector: ByName,
+    selector: ByName | ByAgent,
     *,
     not_found_message: str,
 ) -> tuple[ExistingDeployment | None, int]:
-    _log_deploy_step(step, f"Looking up deployment '{selector.name}'")
-    found = _call_host_backend_with_optional_tenant(
-        client, lambda c: find_deployment_by_name(c, selector.name)
-    )
+    if isinstance(selector, ByAgent):
+        _log_deploy_step(
+            step, f"Looking up agent '{selector.agent_id}' in {selector.environment}"
+        )
+        existing = _call_host_backend_with_optional_tenant(
+            client,
+            lambda c: c.list_deployments(
+                agent_id=selector.agent_id, agent_environment=selector.environment
+            ),
+        )
+        found = next(
+            (
+                ExistingDeployment(str(dep["id"]), _source_of(dep))
+                for dep in existing.get("resources", [])
+                if not dep.get("is_preview")
+            ),
+            None,
+        )
+    else:
+        _log_deploy_step(step, f"Looking up deployment '{selector.name}'")
+        found = _call_host_backend_with_optional_tenant(
+            client, lambda c: find_deployment_by_name(c, selector.name)
+        )
     em = _get_emitter()
     if found is None:
         em.warn(not_found_message)
@@ -694,25 +717,42 @@ def _create_deployment(
     client: HostBackendClient,
     step: int,
     *,
-    name: str,
+    name: str | None,
     source: str,
     source_config: dict[str, object],
     source_revision_config: dict[str, object],
     secrets: list[dict[str, str]],
+    agent: dict[str, str] | None = None,
 ) -> tuple[CreatedDeployment, int]:
-    _log_deploy_step(step, f"Creating deployment '{name}'")
-    created = client.create_deployment(
-        name=name,
-        source=source,
-        source_config=source_config,
-        source_revision_config=source_revision_config,
-        secrets=secrets,
+    _log_deploy_step(
+        step,
+        f"Creating deployment for agent '{agent['agent_id']}' in {agent['environment']}"
+        if agent is not None
+        else f"Creating deployment '{name}'",
     )
+    try:
+        created = client.create_deployment(
+            name=name,
+            source=source,
+            source_config=source_config,
+            source_revision_config=source_revision_config,
+            secrets=secrets,
+            agent=agent,
+        )
+    except HostBackendError as err:
+        if agent is not None and err.status_code == 409:
+            raise HostBackendError(
+                "This agent already has a deployment in this environment.",
+                status_code=409,
+            ) from None
+        raise
     created_id = created.get("id") if isinstance(created, dict) else None
     if not isinstance(created_id, str) or not created_id:
         raise HostBackendError(
             "POST /v2/deployments succeeded but response missing a valid 'id'"
         )
+    if agent is not None:
+        _get_emitter().info(f"Deployment name: {created.get('name')}")
     _get_emitter().info(f"Deployment ID: {created_id}", deployment_id=created_id)
     return CreatedDeployment(created_id, created), step + 1
 
@@ -1310,7 +1350,8 @@ def _resolve_or_create(
     created, step = _create_deployment(
         ctx.client,
         step,
-        name=ctx.selector.name,
+        name=ctx.selector.name if isinstance(ctx.selector, ByName) else None,
+        agent=asdict(ctx.selector) if isinstance(ctx.selector, ByAgent) else None,
         source=source,
         source_config={"deployment_type": ctx.deployment_type},
         source_revision_config={},
@@ -1394,7 +1435,9 @@ class CustomerRegistrySource:
         )
         if found is not None:
             return self._update(ctx, found, step)
-        return self._create(ctx, ctx.selector.name, step)
+        return self._create(
+            ctx, ctx.selector.name if isinstance(ctx.selector, ByName) else None, step
+        )
 
     def _update(
         self, ctx: DeployContext, existing: ExistingDeployment, step: int
@@ -1413,13 +1456,16 @@ class CustomerRegistrySource:
             existing.id, _image_revision_result(updated, "Deployment updated")
         )
 
-    def _create(self, ctx: DeployContext, name: str, step: int) -> DeployOutcome:
+    def _create(self, ctx: DeployContext, name: str | None, step: int) -> DeployOutcome:
         image_uri, step = self._publish(ctx, step)
         try:
             created, _ = _create_deployment(
                 ctx.client,
                 step,
                 name=name,
+                agent=asdict(ctx.selector)
+                if isinstance(ctx.selector, ByAgent)
+                else None,
                 source=_CUSTOMER_REGISTRY_SOURCE,
                 source_config={"resource_spec": _OPERATOR_DEFAULT_RESOURCE_SPEC},
                 source_revision_config={"image_uri": image_uri},
@@ -1643,6 +1689,16 @@ OPT_HOST_URL = click.option(
     hidden=True,
 )
 
+OPT_AGENT_ID = click.option(
+    "--agent-id", help="Logical agent ID (requires agent mode enabled for the tenant)."
+)
+
+OPT_AGENT_ENVIRONMENT = click.option(
+    "--environment",
+    type=click.Choice(["development", "staging", "production"]),
+    help="Agent environment (requires agent mode enabled for the tenant).",
+)
+
 OPT_VERBOSE = click.option(
     "--verbose",
     is_flag=True,
@@ -1741,6 +1797,8 @@ def _deploy_base_options(
         decorators = [
             OPT_HOST_API_KEY,
             OPT_HOST_DEPLOYMENT_NAME,
+            OPT_AGENT_ID,
+            OPT_AGENT_ENVIRONMENT,
             click.option(
                 "--deployment-id",
                 help=(
@@ -1872,6 +1930,12 @@ def deploy(ctx: click.Context, **_: object):
     # otherwise, we return None here and click will proceed to actually run the subcommand (list or delete)
     if ctx.invoked_subcommand is not None:
         return
+    if (
+        ctx.params.get("agent_id") is not None
+        or ctx.params.get("environment") is not None
+    ) and ctx.get_parameter_source("name") == click.core.ParameterSource.ENVIRONMENT:
+        # Ignore the inherited name default so it does not conflict with agent mode.
+        ctx.params["name"] = None
     docker_build_args = tuple(ctx.args)
     ctx.args = []  # Prevent Click from re-processing passthrough args later.
     return ctx.forward(_deploy_cmd, docker_build_args=docker_build_args)
@@ -1889,6 +1953,8 @@ def _deploy_cmd(
     deployment_id: str | None,
     deployment_type: str,
     name: str | None,
+    agent_id: str | None,
+    environment: str | None,
     image_name: str | None,
     image: str | None,
     push_to: str | None,
@@ -1914,6 +1980,17 @@ def _deploy_cmd(
         click.echo()
 
     validate_deploy_commands(install_command, build_command)
+    agent = None
+    if agent_id is not None or environment is not None:
+        if not agent_id or not agent_id.strip() or not environment:
+            raise click.UsageError(
+                "--agent-id and --environment are required together."
+            )
+        if name is not None or deployment_id is not None:
+            raise click.UsageError(
+                "--agent-id and --environment cannot be combined with --name or --deployment-id."
+            )
+        agent = {"agent_id": agent_id, "environment": environment}
     if not config.exists():
         message = (
             "We couldn't find a langgraph.json file. Run `langgraph deploy` from "
@@ -1929,9 +2006,9 @@ def _deploy_cmd(
 
     env_vars = _parse_env_from_config(config_json, config)
 
-    if not deployment_id and not name:
+    if not agent and not deployment_id and not name:
         name = env_vars.get(_DEPLOYMENT_NAME_ENV)
-    if not deployment_id and not name:
+    if not agent and not deployment_id and not name:
         default_name = normalize_name(pathlib.Path.cwd().name)
         if no_input:
             name = default_name
@@ -1976,7 +2053,9 @@ def _deploy_cmd(
                 build_command=build_command,
             ),
             verbose=verbose,
-            selector=deployment_selector(deployment_id, name),
+            selector=ByAgent(**agent)
+            if agent
+            else deployment_selector(deployment_id, name),
             deployment_type=deployment_type,
             secrets=secrets,
             tracked_packages=tracked_packages,
@@ -2044,17 +2123,32 @@ def _deploy_cmd(
 
 @OPT_HOST_API_KEY
 @OPT_HOST_URL
+@OPT_AGENT_ID
+@OPT_AGENT_ENVIRONMENT
 @click.option(
     "--name-contains",
     default="",
     help="Only show deployments whose names contain this value.",
 )
 @deploy.command("list", help="[Beta] List LangSmith Deployments.")
-def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -> None:
+def deploy_list(
+    api_key: str | None,
+    host_url: str | None,
+    name_contains: str,
+    agent_id: str | None,
+    environment: str | None,
+) -> None:
+    if agent_id is not None and not agent_id.strip():
+        raise click.UsageError("--agent-id must not be empty.")
+    filters = {}
+    if agent_id is not None:
+        filters["agent_id"] = agent_id
+    if environment is not None:
+        filters["agent_environment"] = environment
     client = _create_host_backend_client(host_url, api_key)
     response = _call_host_backend_with_optional_tenant(
         client,
-        lambda c: c.list_deployments(name_contains=name_contains),
+        lambda c: c.list_deployments(name_contains=name_contains, **filters),
     )
     resources = response.get("resources") if isinstance(response, dict) else None
     deployments = (
