@@ -512,6 +512,12 @@ def find_deployment_by_name(
     for resource in listed:
         if resource.get("name") == name and resource.get("id"):
             return ExistingDeployment(str(resource["id"]), _source_of(resource))
+    if len(listed) >= MAX_PAGE_SIZE:
+        raise click.ClickException(
+            "This workspace has more deployments than the CLI can search, so it "
+            f"cannot tell whether '{name}' already exists. Pass --deployment-id to "
+            "update an existing deployment."
+        )
     return None
 
 

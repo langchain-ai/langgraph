@@ -1149,3 +1149,33 @@ def test_finding_a_deployment_by_name_returns_none_when_the_server_has_no_match(
     )
 
     assert find_deployment_by_name(client, "agent") is None
+
+
+def test_a_full_page_without_a_match_refuses_to_claim_the_name_is_free():
+    page = [
+        {"id": f"dep-{index}", "name": f"other-agent-{index}"} for index in range(100)
+    ]
+    client = HostBackendClient(
+        "https://api.example.com",
+        "key",
+        transport=httpx.MockTransport(
+            lambda req: httpx.Response(200, json={"resources": page})
+        ),
+    )
+
+    with pytest.raises(click.ClickException, match="--deployment-id"):
+        find_deployment_by_name(client, "brand-new-agent")
+
+
+def test_a_partial_page_without_a_match_means_the_name_is_free():
+    client = HostBackendClient(
+        "https://api.example.com",
+        "key",
+        transport=httpx.MockTransport(
+            lambda req: httpx.Response(
+                200, json={"resources": [{"id": "dep-1", "name": "other"}]}
+            )
+        ),
+    )
+
+    assert find_deployment_by_name(client, "brand-new-agent") is None
