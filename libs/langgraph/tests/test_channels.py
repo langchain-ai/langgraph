@@ -13,7 +13,11 @@ from langgraph._internal._constants import OVERWRITE
 from langgraph._internal._typing import MISSING
 from langgraph.channels.binop import BinaryOperatorAggregate, _get_overwrite
 from langgraph.channels.delta import DeltaChannel
-from langgraph.channels.last_value import LastValue
+from langgraph.channels.last_value import LastValue, LastValueAfterFinish
+from langgraph.channels.named_barrier_value import (
+    NamedBarrierValue,
+    NamedBarrierValueAfterFinish,
+)
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
@@ -823,3 +827,23 @@ def test_delta_channel_from_checkpoint_seed_none_is_distinct_from_sentinel() -> 
     ch = spec.from_checkpoint(None)
     ch.replay_writes([("t0", "x", "after")])
     assert ch.get() == "after"
+
+
+def test_named_barrier_checkpoint_shapes_are_interchangeable() -> None:
+    names = {"a", "b", "c"}
+
+    plain = NamedBarrierValue(str, names).from_checkpoint(MISSING)
+    plain.update(["a"])
+
+    finished = NamedBarrierValueAfterFinish(str, names).from_checkpoint(
+        plain.checkpoint()
+    )
+    assert finished.seen == {"a"}
+    assert finished.finished is False
+
+    finished.update(["b"])
+    finished.finish()
+    restored_plain = NamedBarrierValue(str, names).from_checkpoint(
+        finished.checkpoint()
+    )
+    assert restored_plain.seen == {"a", "b"}
