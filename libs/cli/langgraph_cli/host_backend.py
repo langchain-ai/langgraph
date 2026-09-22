@@ -195,18 +195,22 @@ class HostBackendClient:
     def create_deployment(
         self,
         *,
-        name: str,
+        name: str | None,
         source: SourceName,
         source_config: dict[str, object],
         source_revision_config: dict[str, object],
         secrets: list[dict[str, str]] | None = None,
+        agent: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
-            "name": name,
             "source": source,
             "source_config": source_config,
             "source_revision_config": source_revision_config,
         }
+        if agent is not None:
+            payload["agent"] = agent
+        else:
+            payload["name"] = name
         if secrets is not None:
             payload["secrets"] = secrets
         return self._request("POST", "/v2/deployments", payload)
@@ -217,8 +221,16 @@ class HostBackendClient:
         name: str | None = None,
         name_contains: str | None = None,
         limit: int | None = None,
+        agent_id: str | None = None,
+        agent_environment: str | None = None,
     ) -> list[dict[str, Any]]:
-        given = (("name", name), ("name_contains", name_contains), ("limit", limit))
+        given = (
+            ("name", name),
+            ("name_contains", name_contains),
+            ("limit", limit),
+            ("agent_id", agent_id),
+            ("agent_environment", agent_environment),
+        )
         params = {key: value for key, value in given if value is not None}
         return _resources(self._request("GET", "/v2/deployments", params=params))
 
