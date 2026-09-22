@@ -629,8 +629,15 @@ def test_is_cloud_recognises_the_managed_control_plane(control_plane_url, expect
         ),
         pytest.param(
             lambda c: c.list_deployments(),
-            {"name_contains": ""},
-            id="no_filter_lists_everything",
+            {},
+            id="no_filter_sends_no_parameters",
+        ),
+        pytest.param(
+            lambda c: c.list_deployments(
+                name="agent", name_contains="agent", limit=100
+            ),
+            {"name": "agent", "name_contains": "agent", "limit": "100"},
+            id="both_filters_travel_together_for_older_servers",
         ),
     ],
 )

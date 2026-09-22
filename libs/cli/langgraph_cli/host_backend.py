@@ -190,11 +190,14 @@ class HostBackendClient:
         return self._request("POST", "/v2/deployments", payload)
 
     def list_deployments(
-        self, *, name: str | None = None, name_contains: str | None = None
+        self,
+        *,
+        name: str | None = None,
+        name_contains: str | None = None,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]:
-        params = (
-            {"name": name} if name is not None else {"name_contains": name_contains}
-        )
+        given = (("name", name), ("name_contains", name_contains), ("limit", limit))
+        params = {key: value for key, value in given if value is not None}
         return _resources(self._request("GET", "/v2/deployments", params=params))
 
     def list_listeners(self) -> list[dict[str, Any]]:
