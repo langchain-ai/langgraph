@@ -70,9 +70,17 @@ def cache(request: pytest.FixtureRequest) -> Iterator[BaseCache]:
         # Get worker ID for parallel test isolation
         worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
 
-        redis_client = redis.Redis(
-            host="localhost", port=6379, db=0, decode_responses=False
-        )
+        redis_url = os.environ.get("REDIS_URL")
+        if redis_url:
+            redis_client = redis.Redis.from_url(
+                redis_url, db=0, decode_responses=False
+            )
+        else:
+            host = os.environ.get("REDIS_HOST", "localhost")
+            port = int(os.environ.get("REDIS_PORT", 6379))
+            redis_client = redis.Redis(
+                host=host, port=port, db=0, decode_responses=False
+            )
         # Use worker-specific prefix to avoid cache pollution between parallel tests
         cache = RedisCache(redis_client, prefix=f"test:cache:{worker_id}:")
         yield cache
