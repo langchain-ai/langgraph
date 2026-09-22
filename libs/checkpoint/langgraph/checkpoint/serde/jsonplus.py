@@ -671,8 +671,31 @@ def _create_msgpack_ext_hook(
                 )
                 if not _check_allowed(tup[0], tup[1]):
                     return tup[2]
+                cls = getattr(importlib.import_module(tup[0]), tup[1])
+                if dataclasses.is_dataclass(cls) and not isinstance(cls, type):
+                    # Dataclass *instances* are dataclasses too, but the ext payload stores the class.
+                    cls = type(cls)
+                if dataclasses.is_dataclass(cls):
+                    # Keep init=False fields in the payload for round-tripping, but do not pass them to
+                    # the generated __init__, which rejects them.
+                    init_fields = {
+                        field.name for field in dataclasses.fields(cls) if field.init
+                    }
+                    init_kwargs = {
+                        name: value for name, value in tup[2].items() if name in init_fields
+                    }
+                    post_init_kwargs = {
+                        name: value for name, value in tup[2].items() if name not in init_fields
+                    }
+                    obj = cls(**init_kwargs)
+                    for name, value in post_init_kwargs.items():
+                        if getattr(cls, "__dataclass_params__").frozen:
+                            object.__setattr__(obj, name, value)
+                        else:
+                            setattr(obj, name, value)
+                    return obj
                 # module, name, kwargs
-                return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
+                return cls(**tup[2])
             except Exception:
                 return None
         elif code == EXT_METHOD_SINGLE_ARG:

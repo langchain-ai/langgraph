@@ -6,6 +6,7 @@ from typing import Any, Generic
 from typing_extensions import Self
 
 from langgraph._internal._typing import MISSING
+from langgraph.channels._overwrite import get_overwrite
 from langgraph.channels.base import BaseChannel, Value
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
@@ -61,7 +62,8 @@ class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
                 f"At key '{self.key}': UntrackedValue(guard=True) can receive only one value per step. Use guard=False if you want to store any one of multiple values."
             )
 
-        self.value = values[-1]
+        is_overwrite, overwrite_value = get_overwrite(values[-1])
+        self.value = overwrite_value if is_overwrite else values[-1]
         return True
 
     def get(self) -> Value:

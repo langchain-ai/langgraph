@@ -4134,10 +4134,13 @@ class Pregel(
             return chunks
 
     def clear_cache(self, nodes: Sequence[str] | None = None) -> None:
-        """Clear the cache for the given nodes."""
+        """Clear the cache for the given nodes.
+
+        Passing ``None`` clears all nodes. An explicit empty sequence is a no-op.
+        """
         if not self.cache:
             raise ValueError("No cache is set for this graph. Cannot clear cache.")
-        nodes = nodes or self.nodes.keys()
+        nodes = self.nodes.keys() if nodes is None else nodes
         # collect namespaces to clear
         namespaces: list[tuple[str, ...]] = []
         for node in nodes:
@@ -4153,10 +4156,13 @@ class Pregel(
         self.cache.clear(namespaces)
 
     async def aclear_cache(self, nodes: Sequence[str] | None = None) -> None:
-        """Asynchronously clear the cache for the given nodes."""
+        """Asynchronously clear the cache for the given nodes.
+
+        Passing ``None`` clears all nodes. An explicit empty sequence is a no-op.
+        """
         if not self.cache:
             raise ValueError("No cache is set for this graph. Cannot clear cache.")
-        nodes = nodes or self.nodes.keys()
+        nodes = self.nodes.keys() if nodes is None else nodes
         # collect namespaces to clear
         namespaces: list[tuple[str, ...]] = []
         for node in nodes:
