@@ -1456,7 +1456,7 @@ def _ensure_index_config(
     index_config = index_config.copy()
     tokenized: list[tuple[str, Literal["$"] | list[str]]] = []
     tot = 0
-    fields = index_config.get("fields") or ["$"]
+    fields = index_config.get("fields") if index_config.get("fields") is not None else ["$"]
     if isinstance(fields, str):
         fields = [fields]
     if not isinstance(fields, list):

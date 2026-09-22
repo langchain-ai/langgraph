@@ -196,7 +196,7 @@ class InMemoryStore(BaseStore):
             )
             self.index_config["__tokenized_fields"] = [
                 (p, tokenize_path(p)) if p != "$" else (p, p)
-                for p in (self.index_config.get("fields") or ["$"])
+                for p in (self.index_config.get("fields") if self.index_config.get("fields") is not None else ["$"])
             ]
 
         else:

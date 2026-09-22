@@ -1058,3 +1058,43 @@ def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
     assert result3[0].key == "3"
     assert result4[0].key == "4"
     assert result5[0].key == "5"
+
+
+async def test_empty_fields_list_does_not_fall_back_to_root(
+    fake_embeddings: CharacterEmbeddings,
+) -> None:
+    """An explicit ``fields=[]`` must disable default field embedding.
+
+    Regression test for #9033: ``InMemoryStore`` used ``get("fields") or ["$"]``,
+    so an explicit empty list was indistinguishable from a missing value and
+    every document was embedded as a whole ("$") despite the store-level opt-out.
+    """
+    store = InMemoryStore(
+        index={
+            "dims": fake_embeddings.dims,
+            "embed": fake_embeddings,
+            "fields": [],
+        }
+    )
+    # The explicit empty list must survive normalization instead of becoming ["$"].
+    assert store.index_config["__tokenized_fields"] == []
+
+    await store.aput(("test",), "doc1", {"text": "alpha"})
+
+    # No vectors are produced for the document.
+    assert store._vectors[("test",)]["doc1"] == {}
+
+
+def test_empty_fields_list_is_preserved_sync(
+    fake_embeddings: CharacterEmbeddings,
+) -> None:
+    """Sync check that ``fields=[]`` survives configuration normalization."""
+    store = InMemoryStore(
+        index={
+            "dims": fake_embeddings.dims,
+            "embed": fake_embeddings,
+            "fields": [],
+        }
+    )
+    assert store.index_config["fields"] == []
+    assert store.index_config["__tokenized_fields"] == []
