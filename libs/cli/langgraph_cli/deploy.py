@@ -157,7 +157,10 @@ class Listener:
     namespaces: tuple[str, ...]
 
     @classmethod
-    def from_resource(cls, resource: Mapping[str, object]) -> "Listener":
+    def from_resource(cls, resource: Mapping[str, object]) -> "Listener | None":
+        identifier = str(resource.get("id") or "")
+        if not identifier:
+            return None
         compute_config = resource.get("compute_config")
         namespaces = (
             compute_config.get("k8s_namespaces")
@@ -165,7 +168,7 @@ class Listener:
             else None
         )
         return cls(
-            str(resource.get("id", "")),
+            identifier,
             str(resource.get("compute_id", "")),
             tuple(str(namespace) for namespace in namespaces)
             if isinstance(namespaces, list)
@@ -1445,7 +1448,8 @@ def _available_listeners(client: HostBackendClient) -> tuple[Listener, ...]:
     resources = _call_host_backend_with_optional_tenant(
         client, lambda c: c.list_listeners()
     )
-    return tuple(Listener.from_resource(resource) for resource in resources)
+    listeners = (Listener.from_resource(resource) for resource in resources)
+    return tuple(listener for listener in listeners if listener is not None)
 
 
 def _ensure_customer_registry_source(existing: ExistingDeployment) -> None:
@@ -1510,7 +1514,7 @@ class RemoteBuildSource:
 class CustomerRegistrySource:
     reference: ImageReference
     prebuilt_image: str | None
-    placement: RequestedPlacement = RequestedPlacement()
+    placement: RequestedPlacement
 
     def run(self, ctx: DeployContext) -> DeployOutcome:
         if isinstance(ctx.selector, ById):
@@ -1648,7 +1652,9 @@ def _select_source(
         reference = _push_reference(push_to, tag)
         if image is None:
             _require_local_docker()
-        return CustomerRegistrySource(reference, image, placement)
+        return CustomerRegistrySource(
+            reference=reference, prebuilt_image=image, placement=placement
+        )
     if image and remote_build_flag is True:
         raise click.UsageError("--image cannot be combined with --remote builds.")
     use_remote_build, local_build_error = _resolve_build_mode(

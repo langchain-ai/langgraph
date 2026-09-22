@@ -280,7 +280,8 @@ class HostBackendClient:
         return _resources(
             self._request(
                 "GET",
-                f"/v2/deployments/{deployment_id}/revisions?limit={limit}",
+                f"/v2/deployments/{deployment_id}/revisions",
+                params={"limit": limit},
             )
         )
 

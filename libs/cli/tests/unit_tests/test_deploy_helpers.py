@@ -626,7 +626,9 @@ class TestSelectSource:
                 {"push_to": REPOSITORY},
                 True,
                 CustomerRegistrySource(
-                    ImageReference(REPOSITORY, "latest"), prebuilt_image=None
+                    reference=ImageReference(REPOSITORY, "latest"),
+                    prebuilt_image=None,
+                    placement=RequestedPlacement(),
                 ),
                 id="push_to_selects_the_external_source_with_the_default_tag",
             ),
@@ -634,7 +636,9 @@ class TestSelectSource:
                 {"push_to": f"{REPOSITORY}:v2"},
                 True,
                 CustomerRegistrySource(
-                    ImageReference(REPOSITORY, "v2"), prebuilt_image=None
+                    reference=ImageReference(REPOSITORY, "v2"),
+                    prebuilt_image=None,
+                    placement=RequestedPlacement(),
                 ),
                 id="push_to_keeps_a_tag_given_in_the_reference",
             ),
@@ -642,7 +646,9 @@ class TestSelectSource:
                 {"push_to": REPOSITORY, "tag": "v3"},
                 True,
                 CustomerRegistrySource(
-                    ImageReference(REPOSITORY, "v3"), prebuilt_image=None
+                    reference=ImageReference(REPOSITORY, "v3"),
+                    prebuilt_image=None,
+                    placement=RequestedPlacement(),
                 ),
                 id="tag_flag_composes_with_push_to",
             ),
@@ -650,7 +656,9 @@ class TestSelectSource:
                 {"push_to": REPOSITORY, "image": "app:dev"},
                 False,
                 CustomerRegistrySource(
-                    ImageReference(REPOSITORY, "latest"), prebuilt_image="app:dev"
+                    reference=ImageReference(REPOSITORY, "latest"),
+                    prebuilt_image="app:dev",
+                    placement=RequestedPlacement(),
                 ),
                 id="prebuilt_image_is_retagged_for_push_to_without_docker_checks",
             ),
@@ -661,9 +669,9 @@ class TestSelectSource:
                 },
                 True,
                 CustomerRegistrySource(
-                    ImageReference(REPOSITORY, "latest"),
-                    None,
-                    RequestedPlacement("listener-1", "agents"),
+                    reference=ImageReference(REPOSITORY, "latest"),
+                    prebuilt_image=None,
+                    placement=RequestedPlacement("listener-1", "agents"),
                 ),
                 id="push_to_carries_the_requested_placement",
             ),
@@ -952,6 +960,8 @@ class TestListener:
                 Listener("listener-1", "", ()),
                 id="only_an_id",
             ),
+            pytest.param({"compute_id": "c"}, None, id="no_id_is_not_a_listener"),
+            pytest.param({"id": ""}, None, id="empty_id_is_not_a_listener"),
         ],
     )
     def test_from_resource_reads_the_control_plane_shape(self, resource, expected):

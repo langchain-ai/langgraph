@@ -914,3 +914,21 @@ def test_a_truncated_listener_page_says_so(deploy_project: DeployProject) -> Non
 
     assert result.exit_code != 0
     assert "first 100" in result.output
+
+
+def test_a_listener_without_an_id_is_ignored(deploy_project: DeployProject) -> None:
+    deploy_project.control_plane.listeners = [
+        {"compute_id": "broken", "compute_config": {"k8s_namespaces": ["agents"]}},
+        LISTENER,
+    ]
+
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, host_url=CLOUD_CONTROL_PLANE_URL
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {},
+        "listener_id": "listener-1",
+        "listener_config": {"k8s_namespace": "agents"},
+    }
