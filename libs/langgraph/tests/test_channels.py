@@ -49,6 +49,13 @@ def test_last_value() -> None:
     assert channel.get() == 4
 
 
+def test_binary_operator_aggregate_overwrite_seeds_empty_channel() -> None:
+    ch = BinaryOperatorAggregate(dict | None, lambda existing, new: new)
+    ch.key = "goal"
+    ch.update([Overwrite({"goal": "ship"})])
+    assert ch.get() == {"goal": "ship"}
+
+
 def test_last_value_overwrite() -> None:
     ch = LastValue(dict).from_checkpoint(MISSING)
     ch.update([Overwrite({"a": 1})])

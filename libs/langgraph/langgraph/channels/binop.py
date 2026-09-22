@@ -100,7 +100,9 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
         if not values:
             return False
         if self.value is MISSING:
-            self.value = values[0]
+            # A replace-style write can seed a channel that has no constructible default.
+            is_overwrite, overwrite_value = _get_overwrite(values[0])
+            self.value = overwrite_value if is_overwrite else values[0]
             values = values[1:]
         seen_overwrite: bool = False
         for value in values:
