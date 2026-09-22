@@ -655,3 +655,34 @@ def test_list_deployments_sends_one_name_filter(call, expected_params):
     )
 
     assert seen == expected_params
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        pytest.param(
+            {"detail": "Source configuration error: bad listener"},
+            "Source configuration error: bad listener",
+            id="fastapi_detail_is_unwrapped",
+        ),
+        pytest.param(
+            {"detail": {"loc": ["body"], "msg": "nope"}},
+            None,
+            id="a_structured_detail_is_left_alone",
+        ),
+        pytest.param({"other": "shape"}, None, id="an_unknown_shape_is_left_alone"),
+    ],
+)
+def test_error_detail_is_readable(body, expected):
+    c = HostBackendClient(
+        "https://api.example.com",
+        "key",
+        transport=httpx.MockTransport(lambda req: httpx.Response(400, json=body)),
+    )
+
+    with pytest.raises(HostBackendError) as error:
+        c.get_deployment("dep-1")
+
+    assert error.value.detail == expected
+    if expected is not None:
+        assert error.value.message.endswith(expected)

@@ -103,9 +103,24 @@ def _resources(payload: object) -> list[dict[str, Any]]:
 class HostBackendError(click.ClickException):
     """Raised when the host backend returns an error response."""
 
-    def __init__(self, message: str, status_code: int | None = None):
+    def __init__(
+        self,
+        message: str,
+        status_code: int | None = None,
+        detail: str | None = None,
+    ):
         super().__init__(message)
         self.status_code = status_code
+        self.detail = detail
+
+
+def _error_detail(response: httpx.Response) -> str | None:
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    detail = body.get("detail") if isinstance(body, dict) else None
+    return detail if isinstance(detail, str) else None
 
 
 class HostBackendClient:
@@ -153,10 +168,12 @@ class HostBackendClient:
             resp = self._client.request(method, path, json=payload, params=params)
             resp.raise_for_status()
         except httpx.HTTPStatusError as err:
-            detail = err.response.text or str(err.response.status_code)
+            detail = _error_detail(err.response)
+            reason = detail or err.response.text or str(err.response.status_code)
             raise HostBackendError(
-                f"{method} {path} failed with status {err.response.status_code}: {detail}",
+                f"{method} {path} failed with status {err.response.status_code}: {reason}",
                 status_code=err.response.status_code,
+                detail=detail,
             ) from None
         except httpx.TransportError as err:
             raise HostBackendError(str(err)) from None

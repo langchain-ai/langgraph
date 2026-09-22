@@ -105,7 +105,7 @@ class ControlPlaneDouble:
             )
         if (method, path) == ("POST", "/v2/deployments"):
             if self.create_error is not None:
-                return httpx.Response(400, text=self.create_error)
+                return httpx.Response(400, json={"detail": self.create_error})
             return httpx.Response(201, json={"id": CREATED_ID, "tenant_id": "tenant-1"})
         if path.endswith("/push-token"):
             if self.push_token_status != 200:
@@ -886,6 +886,8 @@ def test_a_control_plane_that_demands_a_listener_names_the_flags(
     assert "--listener-id" in result.output
     assert "--k8s-namespace" in result.output
     assert "listener-1" in result.output
+    assert "{" not in result.output
+    assert "POST /v2/deployments failed" not in result.output
 
 
 def test_listener_flags_without_push_to_make_no_call_at_all(

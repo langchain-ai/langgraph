@@ -1452,7 +1452,9 @@ def _resolve_or_create(
 
 
 def _needs_a_listener(err: HostBackendError) -> bool:
-    return err.status_code == 400 and _LISTENER_REQUIRED_MARKER in err.message
+    return err.status_code == 400 and _LISTENER_REQUIRED_MARKER in (
+        err.detail or err.message
+    )
 
 
 def _available_listeners(client: HostBackendClient) -> tuple[Listener, ...]:
@@ -1589,7 +1591,7 @@ class CustomerRegistrySource:
             if _needs_a_listener(err):
                 raise click.UsageError(
                     "This workspace deploys through a listener. Re-run with "
-                    f"--listener-id and --k8s-namespace.\n{err.message}"
+                    f"--listener-id and --k8s-namespace.\n{err.detail or err.message}"
                 ) from None
             raise
         return DeployOutcome(
