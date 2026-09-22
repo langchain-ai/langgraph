@@ -10,12 +10,14 @@ import time
 from typing import Annotated, Any
 
 import pytest
+from langchain_core.messages import AIMessage, AnyMessage, RemoveMessage
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from typing_extensions import TypedDict
 
 from langgraph.constants import END, START
-from langgraph.errors import InvalidUpdateError
+from langgraph.errors import GraphRecursionError, InvalidUpdateError, QueueApplyError
 from langgraph.graph import StateGraph
+from langgraph.graph.message import add_messages
 from langgraph.pregel._queue import (
     CHECKPOINT_META_QUEUE_CONSUMED,
     QUEUE_NS,
@@ -29,6 +31,16 @@ pytestmark = pytest.mark.anyio
 
 class State(TypedDict):
     log: Annotated[list[str], operator.add]
+
+
+def rejects_queued_once_started(left: list[str], right: list[str]) -> list[str]:
+    if left and any(v.startswith("queued") for v in right):
+        raise ValueError("too late")
+    return left + right
+
+
+class LateRejecting(TypedDict):
+    log: Annotated[list[str], rejects_queued_once_started]
 
 
 class Gate:
@@ -282,6 +294,68 @@ def test_validation(sync_checkpointer: BaseCheckpointSaver) -> None:
 
     with pytest.raises(ValueError, match="No checkpointer"):
         builder.compile().queue_state(config, {"n": 1})
+
+
+def test_validation_runs_against_current_state(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class Messages(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages]
+
+    builder = StateGraph(Messages)
+    builder.add_node("a", lambda s: {"messages": [AIMessage("reply")]})
+    builder.add_edge(START, "a")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    graph.invoke({"messages": [AIMessage("hello", id="existing")]}, config)
+
+    graph.queue_state(config, {"messages": [RemoveMessage(id="existing")]}, steer="a")
+    with pytest.raises(InvalidUpdateError, match="rejected"):
+        graph.queue_state(
+            config, {"messages": [RemoveMessage(id="missing")]}, steer="a"
+        )
+
+    result = graph.invoke(
+        {"messages": [AIMessage("again", id="second")]}, config, durability="sync"
+    )
+    assert [m.content for m in result["messages"]] == ["reply", "again", "reply"]
+    assert "existing" not in [m.id for m in result["messages"]]
+
+
+def test_update_rejected_at_consumption_fails_the_run(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Accepted against the current state, rejected by the reducer once the
+    run has moved on: the run fails naming the update, the update is marked
+    consumed with the error, and the thread resumes from the last step."""
+
+    graph = chain(schema=LateRejecting).compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    item_id = graph.queue_state(config, {"log": ["queued"]}, steer="c")
+
+    with pytest.raises(QueueApplyError, match=item_id) as info:
+        graph.invoke({"log": ["in"]}, config, durability="sync")
+    assert isinstance(info.value.__cause__, ValueError)
+    assert info.value.update_id == item_id
+
+    assert graph.get_state(config).next == ("c",)
+    assert graph.get_state(config).queued == ()
+    [saved] = sync_checkpointer.list(queue_config(config))
+    assert saved.metadata["consumed"] is True
+    assert "too late" in saved.metadata["error"]
+    assert graph.invoke(None, config)["log"] == ["in", "a", "b", "c", "d"]
+
+
+def test_follow_up_has_its_own_recursion_limit(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = chain().compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}, "recursion_limit": 5}
+    graph.queue_state(config, {"log": ["follow"]})
+    result = graph.invoke({"log": ["in"]}, config)
+    assert result["log"] == ["in", "a", "b", "c", "d", "follow", "a", "b", "c", "d"]
+    with pytest.raises(GraphRecursionError):
+        graph.invoke({"log": ["in"]}, {**config, "recursion_limit": 3})
 
 
 def test_stale_item_is_acked_not_reapplied(

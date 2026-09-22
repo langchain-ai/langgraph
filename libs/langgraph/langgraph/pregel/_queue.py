@@ -65,16 +65,6 @@ class QueueItemMetadata(CheckpointMetadata, total=False):
     error: str
 
 
-class QueueApplyError(Exception):
-    """A queued update failed to apply at consumption; carries the item so
-    the loop can acknowledge it as failed before re-raising the cause."""
-
-    def __init__(self, item: QueueItem, error: BaseException) -> None:
-        super().__init__(f"Queued update {item.id} failed to apply: {error!r}")
-        self.item = item
-        self.error = error
-
-
 class QueueItem(NamedTuple):
     """A pending queued update as read from the saver."""
 

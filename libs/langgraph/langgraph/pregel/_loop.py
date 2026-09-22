@@ -77,6 +77,7 @@ from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import (
     EmptyInputError,
     GraphInterrupt,
+    QueueApplyError,
 )
 from langgraph.managed.base import (
     ManagedValueMapping,
@@ -120,7 +121,6 @@ from langgraph.pregel._io import (
 from langgraph.pregel._messages import ensure_message_ids
 from langgraph.pregel._queue import (
     CHECKPOINT_META_QUEUE_CONSUMED,
-    QueueApplyError,
     QueueItem,
     aack,
     aack_after,
@@ -847,7 +847,7 @@ class PregelLoop:
                     )
                 )
             except Exception as exc:
-                raise QueueApplyError(item, exc) from exc
+                raise QueueApplyError(item.id, exc) from exc
             self._queue_consumed.append(item)
             self._queue_applied_ids.add(item.id)
         if self.updated_channels is not None:
@@ -861,6 +861,9 @@ class PregelLoop:
                 self.trigger_to_nodes,
             ) | (self.updated_channels or set())
             self._put_checkpoint({"source": "input"})
+            # a follow-up is a new run to its caller, so it gets a fresh recursion
+            # budget rather than what is left of the run it is appended to
+            self.stop = self.step + self.config["recursion_limit"] + 1
         self._emit("values", map_output_values, self.output_keys, True, self.channels)
 
     def _schedule_queue_read(self) -> None:
@@ -1849,10 +1852,10 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         except QueueApplyError as e:
             ack(
                 cast(BaseCheckpointSaver, self.checkpointer),
-                e.item,
+                next(item for item in items if item.id == e.update_id),
                 error=repr(e.error),
             )
-            raise e.error from None
+            raise
         if stale:
             self._submit_queue_ack(None, stale)
         if not tasks and self.durability == "sync":
@@ -2168,10 +2171,10 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         except QueueApplyError as e:
             await aack(
                 cast(BaseCheckpointSaver, self.checkpointer),
-                e.item,
+                next(item for item in items if item.id == e.update_id),
                 error=repr(e.error),
             )
-            raise e.error from None
+            raise
         if stale:
             self._submit_queue_ack(None, stale)
         if not tasks and self.durability == "sync":

@@ -76,6 +76,7 @@ __all__ = (
     "StateUpdate",
     "PregelTask",
     "PregelExecutableTask",
+    "QueuedUpdate",
     "StateSnapshot",
     "Send",
     "Command",

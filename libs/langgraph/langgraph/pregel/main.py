@@ -2551,15 +2551,33 @@ class Pregel(
             if item.id not in consumed
         )
 
+    def _queue_item_config(self, config: RunnableConfig) -> RunnableConfig:
+        """Config of the graph a queued update is addressed to, normalized as
+        `update_state` does."""
+        config = merge_configs(self.config, config) if self.config else config
+        if self.checkpointer is True:
+            ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+            config = merge_configs(
+                config, {CONF: {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}}
+            )
+        thread_id = config[CONF][CONFIG_KEY_THREAD_ID]
+        if not isinstance(thread_id, str):
+            config[CONF][CONFIG_KEY_THREAD_ID] = str(thread_id)
+        return config
+
     def _prepare_queue_item(
         self,
         config: RunnableConfig,
         values: dict[str, Any] | Any,
         steer: str | None,
+        saved: CheckpointTuple | None,
     ) -> tuple[RunnableConfig, Checkpoint, CheckpointMetadata]:
         """Validate a queued update and build its checkpoint. Applies the
-        update to fresh channels so what the reducers reject fails here,
-        synchronously, rather than inside the run that consumes it."""
+        update to a copy of the thread's current state, `saved`, so what the
+        reducers reject fails here, synchronously, rather than inside the run
+        that consumes it. The trial runs on the current state rather than on
+        empty channels because reducers that read existing state, such as
+        removing a message by id, would otherwise reject a valid update."""
         if steer is not None:
             if steer in (START, END) or steer not in self.nodes:
                 raise ValueError(f"Node {steer!r} not found")
@@ -2569,10 +2587,11 @@ class Pregel(
         for chan, _ in writes:
             if not isinstance(self.channels.get(chan), BaseChannel):
                 raise InvalidUpdateError(f"Unknown channel {chan!r}")
-        channels, _ = channels_from_checkpoint(self.channels, empty_checkpoint())
+        base = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
+        channels, _ = channels_from_checkpoint(self.channels, base)
         try:
             apply_writes(
-                empty_checkpoint(),
+                base,
                 channels,
                 [PregelTaskWrites((), INPUT, writes, [])],
                 None,
@@ -2584,15 +2603,6 @@ class Pregel(
             raise InvalidUpdateError(
                 f"Queued update rejected by a channel: {exc!r}"
             ) from exc
-        config = merge_configs(self.config, config) if self.config else config
-        if self.checkpointer is True:
-            ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
-            config = merge_configs(
-                config, {CONF: {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}}
-            )
-        thread_id = config[CONF][CONFIG_KEY_THREAD_ID]
-        if not isinstance(thread_id, str):
-            config[CONF][CONFIG_KEY_THREAD_ID] = str(thread_id)
         checkpoint, metadata = create_queue_item(values, steer)
         return queue_config(config), checkpoint, metadata
 
@@ -2616,7 +2626,11 @@ class Pregel(
         in flight, which LangGraph Platform enforces. A run that resumes an
         interrupt does not consume the queue on entry, and an idle thread
         consumes nothing until its next run completes a step. Pending updates
-        are visible as `StateSnapshot.queued`.
+        are visible as `StateSnapshot.queued`. Validation runs against the
+        thread's current state when the update is accepted; if the state has
+        changed by the time it is applied and a reducer then rejects it, the
+        run fails with `QueueApplyError` naming the update, and the update is
+        marked consumed with that error so it is not retried.
 
         A subgraph is addressed with a `checkpoint_ns` in the config, as with
         `update_state`; `steer` then names one of its nodes.
@@ -2665,7 +2679,10 @@ class Pregel(
                 )
             else:
                 raise ValueError(f"Subgraph {recast} not found")
-        qconfig, checkpoint, metadata = self._prepare_queue_item(config, values, steer)
+        config = self._queue_item_config(config)
+        qconfig, checkpoint, metadata = self._prepare_queue_item(
+            config, values, steer, checkpointer.get_tuple(config)
+        )
         checkpointer.put(qconfig, checkpoint, metadata, queue_item_versions(checkpoint))
         return checkpoint["id"]
 
@@ -2702,7 +2719,10 @@ class Pregel(
                 )
             else:
                 raise ValueError(f"Subgraph {recast} not found")
-        qconfig, checkpoint, metadata = self._prepare_queue_item(config, values, steer)
+        config = self._queue_item_config(config)
+        qconfig, checkpoint, metadata = self._prepare_queue_item(
+            config, values, steer, await checkpointer.aget_tuple(config)
+        )
         await checkpointer.aput(
             qconfig, checkpoint, metadata, queue_item_versions(checkpoint)
         )
