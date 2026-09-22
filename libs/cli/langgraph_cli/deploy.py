@@ -172,6 +172,10 @@ class Listener:
 
 @dataclass(frozen=True, slots=True)
 class Unplaced:
+    @property
+    def summary(self) -> str:
+        return ""
+
     def source_config(self) -> dict[str, object]:
         return {}
 
@@ -180,6 +184,13 @@ class Unplaced:
 class OnListener:
     listener_id: str
     k8s_namespace: str
+
+    @property
+    def summary(self) -> str:
+        return (
+            f"Deploying through listener {self.listener_id} "
+            f"in namespace {self.k8s_namespace}"
+        )
 
     def source_config(self) -> dict[str, object]:
         return {
@@ -817,7 +828,6 @@ def _create_deployment(
 def _get_deployment_status_url(
     updated: object, deployment_id: str, endpoints: ControlPlaneEndpoints
 ) -> str | None:
-    """Compute the LangSmith dashboard URL for a deployment, if possible."""
     tenant_id = updated.get("tenant_id") if isinstance(updated, dict) else None
     if not tenant_id:
         return None
@@ -827,7 +837,6 @@ def _get_deployment_status_url(
 def _emit_deployment_status_url(
     updated: object, deployment_id: str, endpoints: ControlPlaneEndpoints
 ) -> str | None:
-    """Emit the deployment status URL and return it."""
     url = _get_deployment_status_url(updated, deployment_id, endpoints)
     if url:
         _get_emitter().status_url(url)
@@ -1526,6 +1535,8 @@ class CustomerRegistrySource:
         placement = self.placement.resolve(
             _available_listeners(ctx.client), required=ctx.endpoints.is_cloud
         )
+        if placement.summary:
+            _get_emitter().info(placement.summary)
         image_uri, step = self._publish(ctx, step)
         created, _ = _create_deployment(
             ctx.client,

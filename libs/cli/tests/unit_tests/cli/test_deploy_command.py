@@ -810,3 +810,24 @@ def test_listener_flags_are_refused_on_an_existing_deployment(
     assert result.exit_code != 0
     assert "fixed when the deployment is created" in result.output
     assert deploy_project.docker.verbs() == []
+
+
+def test_automatic_placement_is_announced(deploy_project: DeployProject) -> None:
+    deploy_project.control_plane.listeners = [LISTENER]
+
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, host_url=CLOUD_CONTROL_PLANE_URL
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "listener-1" in result.output
+    assert "agents" in result.output
+
+
+def test_a_deployment_without_a_listener_announces_nothing(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run("--push-to", PUSH_REPOSITORY)
+
+    assert result.exit_code == 0, result.output
+    assert "listener" not in result.output
