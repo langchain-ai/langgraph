@@ -541,6 +541,12 @@ class TestCreateHostBackendClientNoInput:
 
 
 class TestSmithDashboardBaseUrl:
+    def test_dev_smith_api_host_url(self):
+        assert (
+            _smith_dashboard_base_url("https://dev.api.smith.langchain.com/")
+            == "https://dev.smith.langchain.com"
+        )
+
     def test_none_returns_default(self):
         assert _smith_dashboard_base_url(None) == "https://smith.langchain.com"
 

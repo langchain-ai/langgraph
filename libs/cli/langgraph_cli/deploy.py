@@ -606,6 +606,7 @@ def _resolve_deployment(
     name: str | None,
     *,
     not_found_message: str,
+    agent: dict[str, str] | None = None,
 ) -> tuple[str | None, bool, int]:
     """Resolve an existing deployment by ID or exact name match."""
     needs_creation = False
@@ -616,10 +617,29 @@ def _resolve_deployment(
         )
         return deployment_id, needs_creation, step + 1
 
-    _log_deploy_step(step, f"Looking up deployment '{name}'")
-    found_id = _call_host_backend_with_optional_tenant(
-        client, lambda c: find_deployment_id_by_name(c, name)
-    )
+    if agent is not None:
+        _log_deploy_step(
+            step, f"Looking up agent '{agent['agent_id']}' in {agent['environment']}"
+        )
+        existing = _call_host_backend_with_optional_tenant(
+            client,
+            lambda c: c.list_deployments(
+                agent_id=agent["agent_id"], agent_environment=agent["environment"]
+            ),
+        )
+        found_id = next(
+            (
+                dep["id"]
+                for dep in existing.get("resources", [])
+                if not dep.get("is_preview")
+            ),
+            None,
+        )
+    else:
+        _log_deploy_step(step, f"Looking up deployment '{name}'")
+        found_id = _call_host_backend_with_optional_tenant(
+            client, lambda c: find_deployment_id_by_name(c, name)
+        )
     em = _get_emitter()
     if found_id:
         deployment_id = str(found_id)
@@ -634,26 +654,43 @@ def _create_deployment(
     client: HostBackendClient,
     step: int,
     *,
-    name: str,
+    name: str | None,
     deployment_type: str,
     source: str,
     config_rel: str | None = None,
     secrets: list[dict[str, str]] | None = None,
+    agent: dict[str, str] | None = None,
 ) -> tuple[str, int]:
     """Create a deployment and return its ID and next step number."""
-    _log_deploy_step(step, f"Creating deployment '{name}'")
-    created = client.create_deployment(
-        name=name,
-        deployment_type=deployment_type,
-        source=source,
-        config_path=config_rel,
-        secrets=secrets,
+    _log_deploy_step(
+        step,
+        f"Creating deployment for agent '{agent['agent_id']}' in {agent['environment']}"
+        if agent is not None
+        else f"Creating deployment '{name}'",
     )
+    try:
+        created = client.create_deployment(
+            name=name,
+            deployment_type=deployment_type,
+            source=source,
+            config_path=config_rel,
+            secrets=secrets,
+            agent=agent,
+        )
+    except HostBackendError as err:
+        if agent is not None and err.status_code == 409:
+            raise HostBackendError(
+                "This agent already has a deployment in this environment.",
+                status_code=409,
+            ) from None
+        raise
     created_id = created.get("id") if isinstance(created, dict) else None
     if not isinstance(created_id, str) or not created_id:
         raise HostBackendError(
             "POST /v2/deployments succeeded but response missing a valid 'id'"
         )
+    if agent is not None:
+        _get_emitter().info(f"Deployment name: {created['name']}")
     _get_emitter().info(f"Deployment ID: {created_id}", deployment_id=created_id)
     return created_id, step + 1
 
@@ -669,12 +706,12 @@ def _smith_dashboard_base_url(host_url: str | None) -> str:
     if hostname in ("localhost", "127.0.0.1"):
         return host_url.rstrip("/")
 
-    api_host_suffix = "api.host.langchain.com"
-    if hostname == api_host_suffix:
-        return "https://smith.langchain.com"
-    if hostname.endswith(f".{api_host_suffix}"):
-        prefix = hostname[: -(len(api_host_suffix) + 1)]
-        return f"https://{prefix}.smith.langchain.com"
+    for api_host_suffix in ("api.host.langchain.com", "api.smith.langchain.com"):
+        if hostname == api_host_suffix:
+            return "https://smith.langchain.com"
+        if hostname.endswith(f".{api_host_suffix}"):
+            prefix = hostname[: -(len(api_host_suffix) + 1)]
+            return f"https://{prefix}.smith.langchain.com"
 
     return "https://smith.langchain.com"
 
@@ -1344,6 +1381,16 @@ OPT_HOST_URL = click.option(
     hidden=True,
 )
 
+OPT_AGENT_ID = click.option(
+    "--agent-id", help="Logical agent ID (requires agent mode enabled for the tenant)."
+)
+
+OPT_AGENT_ENVIRONMENT = click.option(
+    "--environment",
+    type=click.Choice(["development", "staging", "production"]),
+    help="Agent environment (requires agent mode enabled for the tenant).",
+)
+
 OPT_VERBOSE = click.option(
     "--verbose",
     is_flag=True,
@@ -1442,6 +1489,8 @@ def _deploy_base_options(
         decorators = [
             OPT_HOST_API_KEY,
             OPT_HOST_DEPLOYMENT_NAME,
+            OPT_AGENT_ID,
+            OPT_AGENT_ENVIRONMENT,
             click.option(
                 "--deployment-id",
                 help=(
@@ -1578,6 +1627,8 @@ def _deploy_cmd(
     deployment_id: str | None,
     deployment_type: str,
     name: str | None,
+    agent_id: str | None,
+    environment: str | None,
     image_name: str | None,
     image: str | None,
     tag: str,
@@ -1603,6 +1654,17 @@ def _deploy_cmd(
 
     # -- 1. Preflight --
     validate_deploy_commands(install_command, build_command)
+    agent = None
+    if agent_id is not None or environment is not None:
+        if not agent_id or not agent_id.strip() or not environment:
+            raise click.UsageError(
+                "--agent-id and --environment are required together."
+            )
+        if name is not None or deployment_id is not None:
+            raise click.UsageError(
+                "--agent-id and --environment cannot be combined with --name or --deployment-id."
+            )
+        agent = {"agent_id": agent_id, "environment": environment}
     if not config.exists():
         message = (
             "We couldn't find a langgraph.json file. Run `langgraph deploy` from "
@@ -1618,9 +1680,9 @@ def _deploy_cmd(
 
     env_vars = _parse_env_from_config(config_json, config)
 
-    if not deployment_id and not name:
+    if not agent and not deployment_id and not name:
         name = env_vars.get(_DEPLOYMENT_NAME_ENV)
-    if not deployment_id and not name:
+    if not agent and not deployment_id and not name:
         default_name = normalize_name(pathlib.Path.cwd().name)
         if no_input:
             name = default_name
@@ -1661,6 +1723,7 @@ def _deploy_cmd(
             if use_remote_build
             else "No deployment found. Will create after build."
         ),
+        agent=agent,
     )
 
     if needs_creation:
@@ -1671,6 +1734,7 @@ def _deploy_cmd(
             deployment_type=deployment_type,
             source="internal_source" if use_remote_build else "internal_docker",
             secrets=secrets,
+            agent=agent,
         )
 
     if not deployment_id:
@@ -1784,17 +1848,32 @@ def _deploy_cmd(
 
 @OPT_HOST_API_KEY
 @OPT_HOST_URL
+@OPT_AGENT_ID
+@OPT_AGENT_ENVIRONMENT
 @click.option(
     "--name-contains",
     default="",
     help="Only show deployments whose names contain this value.",
 )
 @deploy.command("list", help="[Beta] List LangSmith Deployments.")
-def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -> None:
+def deploy_list(
+    api_key: str | None,
+    host_url: str | None,
+    name_contains: str,
+    agent_id: str | None,
+    environment: str | None,
+) -> None:
+    if agent_id is not None and not agent_id.strip():
+        raise click.UsageError("--agent-id must not be empty.")
+    filters = {}
+    if agent_id is not None:
+        filters["agent_id"] = agent_id
+    if environment is not None:
+        filters["agent_environment"] = environment
     client = _create_host_backend_client(host_url, api_key)
     response = _call_host_backend_with_optional_tenant(
         client,
-        lambda c: c.list_deployments(name_contains=name_contains),
+        lambda c: c.list_deployments(name_contains=name_contains, **filters),
     )
     resources = response.get("resources") if isinstance(response, dict) else None
     deployments = (
