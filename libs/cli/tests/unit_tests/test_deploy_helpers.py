@@ -740,6 +740,16 @@ class TestSelectSource:
                 "--image cannot be combined with --remote builds.",
                 id="image_with_remote",
             ),
+            pytest.param(
+                {"placement": RequestedPlacement(listener_id="listener-1")},
+                "only apply when creating a deployment with --push-to",
+                id="listener_without_push_to",
+            ),
+            pytest.param(
+                {"placement": RequestedPlacement(k8s_namespace="agents")},
+                "only apply when creating a deployment with --push-to",
+                id="namespace_without_push_to",
+            ),
         ],
     )
     def test_conflicting_flags_are_rejected(self, monkeypatch, flags, message):

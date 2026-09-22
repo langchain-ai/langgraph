@@ -219,14 +219,14 @@ class RequestedPlacement:
                 return listeners[0]
             raise click.UsageError(
                 "This workspace has several listeners. Choose one with "
-                f"--listener-id:\n{_describe(listeners)}"
+                f"--listener-id:\n{_describe_listeners(listeners)}"
             )
         for listener in listeners:
             if listener.id == self.listener_id:
                 return listener
         raise click.UsageError(
             f"Listener {self.listener_id} was not found in this workspace. "
-            f"Available listeners:\n{_describe(listeners)}"
+            f"Available listeners:\n{_describe_listeners(listeners)}"
         )
 
     def _namespace(self, listener: Listener) -> str:
@@ -250,7 +250,7 @@ class RequestedPlacement:
         return self.k8s_namespace
 
 
-def _describe(listeners: Sequence[Listener]) -> str:
+def _describe_listeners(listeners: Sequence[Listener]) -> str:
     return "\n".join(
         f"  {listener.id}  cluster {listener.compute_id}  "
         f"namespaces: {', '.join(listener.namespaces)}"
@@ -1502,6 +1502,13 @@ class CustomerRegistrySource:
         self, ctx: DeployContext, existing: ExistingDeployment, step: int
     ) -> DeployOutcome:
         _ensure_customer_registry_source(existing)
+        if self.placement.requested:
+            raise click.UsageError(
+                f"Deployment {existing.id} already exists, and its listener and "
+                "namespace are fixed when the deployment is created. Drop "
+                "--listener-id and --k8s-namespace, or use a different --name to "
+                "create a new deployment."
+            )
         image_uri, step = self._publish(ctx, step)
         _log_deploy_step(step, f"Updating deployment {existing.id}")
         updated = ctx.client.update_deployment(
@@ -1593,6 +1600,11 @@ def _select_source(
     remote_build_flag: bool | None,
     placement: RequestedPlacement,
 ) -> DeploymentSource:
+    if push_to is None and placement.requested:
+        raise click.UsageError(
+            "--listener-id and --k8s-namespace only apply when creating a "
+            "deployment with --push-to."
+        )
     if push_to is not None:
         if remote_build_flag is True:
             raise click.UsageError("--push-to cannot be combined with --remote.")

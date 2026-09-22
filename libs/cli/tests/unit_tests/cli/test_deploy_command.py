@@ -789,3 +789,24 @@ def test_updating_a_deployment_never_looks_up_listeners(
 
     assert result.exit_code == 0, result.output
     assert LIST_LISTENERS not in deploy_project.timeline
+
+
+def test_listener_flags_are_refused_on_an_existing_deployment(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER]
+    deploy_project.control_plane.existing_deployments = [
+        {"id": "dep-ext", "name": "my-app", "source": "external_docker"}
+    ]
+
+    result = deploy_project.run(
+        "--push-to",
+        PUSH_REPOSITORY,
+        "--listener-id",
+        "listener-1",
+        host_url=CLOUD_CONTROL_PLANE_URL,
+    )
+
+    assert result.exit_code != 0
+    assert "fixed when the deployment is created" in result.output
+    assert deploy_project.docker.verbs() == []
