@@ -1,0 +1,39 @@
+libs/cli/langgraph_cli/exec.py
+  s_052c045e7735cc::t_feb9f0dc867b9c 4,6,10-14
+  s_052c045e7735cc::t_6a7d5c38ae1529 15
+libs/cli/tests/unit_tests/test_host_backend.py
+  s_052c045e7735cc::t_feb9f0dc867b9c 6-10,15,29-30,42-43,51,57,66,75-76,88-89,100-101,112,123,161-162,173-174,178-548
+  s_052c045e7735cc::t_3f92ecb4feb1d7 549-555
+libs/cli/tests/unit_tests/test_image_reference.py
+  s_052c045e7735cc::t_feb9f0dc867b9c 1-71
+libs/cli/langgraph_cli/image_reference.py
+  s_052c045e7735cc::t_feb9f0dc867b9c 1-35
+libs/cli/langgraph_cli/deploy.py
+  s_052c045e7735cc::t_5d5c7355fee582 341,1466-1468,2055-2057
+  s_052c045e7735cc::t_3f92ecb4feb1d7 13,155-159,161-163,675,678-679,681,686,689,691,698-700,722-724,726,737-738,1353-1354,1438-1440,1459
+  s_052c045e7735cc::t_feb9f0dc867b9c 11,15,23,27-34,95-96,98-113,145-154,160,164-169,343-346,372-373,375-390,418,426-428,455,459-460,462,662-672,703,705-713,757,761,767,772,974,987-999,1005,1014-1103,1109,1119,1128,1158-1164,1176,1183,1190,1192,1206,1211,1219,1229-1233,1255-1256,1313-1352,1355-1437,1441-1458,1460-1465,1469-1563,1601-1607,1612-1613,1646,1650-1652,1688,1814-1817,1831-1832,1841-1850,1959-1960,2026-2031,2041-2042,2044-2053,2058,2062,2064-2066,2070,2075-2080,2083,2087,2095,2111,2337,2343-2345,2347,2349,2351-2353
+libs/cli/tests/unit_tests/cli/test_deploy_command.py
+  s_052c045e7735cc::t_feb9f0dc867b9c 1-654
+libs/cli/langgraph_cli/host_backend.py
+  s_052c045e7735cc::t_feb9f0dc867b9c 5-7,12-72,77-85,103-104,118,122-128,159,161-163,169-170,221-222,229-230,235
+  s_052c045e7735cc::t_3f92ecb4feb1d7 73-76
+libs/cli/tests/unit_tests/test_deploy_helpers.py
+  s_052c045e7735cc::t_feb9f0dc867b9c 16-19,28,34,267-269,275-277,543-548,550-553,556,558-560,562-563,566-682,684-687,690,692-694,697-730,780-788
+  s_052c045e7735cc::t_182c9725d520c8 789
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c78ee0d7a47196a9a7fcca375722fcdb45dcdd13",
+  "prompts": {},
+  "sessions": {
+    "s_052c045e7735cc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0c663-ede4-7d32-aa94-e210efdbf5b0",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  }
+}
