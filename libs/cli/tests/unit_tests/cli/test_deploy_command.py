@@ -801,6 +801,24 @@ def test_updating_a_deployment_never_looks_up_listeners(
     assert LIST_LISTENERS not in deploy_project.timeline
 
 
+def test_listener_flags_are_refused_for_a_deployment_id_without_any_call(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run(
+        "--push-to",
+        PUSH_REPOSITORY,
+        "--deployment-id",
+        "dep-ext",
+        "--k8s-namespace",
+        "agents",
+        host_url=CLOUD_CONTROL_PLANE_URL,
+    )
+
+    assert result.exit_code != 0
+    assert "fixed when a deployment is created" in result.output
+    assert deploy_project.timeline == []
+
+
 def test_listener_flags_are_refused_on_an_existing_deployment(
     deploy_project: DeployProject,
 ) -> None:
@@ -818,7 +836,7 @@ def test_listener_flags_are_refused_on_an_existing_deployment(
     )
 
     assert result.exit_code != 0
-    assert "fixed when the deployment is created" in result.output
+    assert "fixed when a deployment is created" in result.output
     assert deploy_project.docker.verbs() == []
 
 
@@ -868,3 +886,31 @@ def test_a_control_plane_that_demands_a_listener_names_the_flags(
     assert "--listener-id" in result.output
     assert "--k8s-namespace" in result.output
     assert "listener-1" in result.output
+
+
+def test_listener_flags_without_push_to_make_no_call_at_all(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run("--listener-id", "listener-1")
+
+    assert result.exit_code != 0
+    assert "--push-to" in result.output
+    assert deploy_project.timeline == []
+
+
+def test_a_truncated_listener_page_says_so(deploy_project: DeployProject) -> None:
+    deploy_project.control_plane.listeners = [
+        {
+            "id": f"listener-{index}",
+            "compute_id": "cluster",
+            "compute_config": {"k8s_namespaces": ["agents"]},
+        }
+        for index in range(100)
+    ]
+
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, host_url=CLOUD_CONTROL_PLANE_URL
+    )
+
+    assert result.exit_code != 0
+    assert "first 100" in result.output

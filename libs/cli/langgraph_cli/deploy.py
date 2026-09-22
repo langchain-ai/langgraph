@@ -26,6 +26,7 @@ from langgraph_cli.dependency_tracking import find_tracked_packages
 from langgraph_cli.docker import build_docker_image, can_build_locally
 from langgraph_cli.exec import CommandRunner, Runner, subp_exec
 from langgraph_cli.host_backend import (
+    MAX_PAGE_SIZE,
     ControlPlaneEndpoints,
     HostBackendClient,
     HostBackendError,
@@ -103,6 +104,7 @@ _LOCAL_BUILD_TAG_PREFIX = "langgraph-deploy-tmp"
 _OPERATOR_DEFAULT_RESOURCE_SPEC: Mapping[str, object] = {}
 _CUSTOMER_REGISTRY_SOURCE: SourceName = "external_docker"
 _LISTENER_REQUIRED_MARKER = "listener_id' is required"
+_LISTENERS_SHOWN = 10
 
 
 _TERMINAL_STATUSES = frozenset(
@@ -212,6 +214,15 @@ class RequestedPlacement:
     def requested(self) -> bool:
         return self.listener_id is not None or self.k8s_namespace is not None
 
+    def ensure_not_requested(self, deployment_id: str) -> None:
+        if self.requested:
+            raise click.UsageError(
+                "Listener and namespace are fixed when a deployment is created. "
+                f"Deployment {deployment_id} already exists, so drop --listener-id "
+                "and --k8s-namespace, or create a new deployment with a different "
+                "--name."
+            )
+
     def must_place(self, *, required: bool) -> bool:
         return required or self.requested
 
@@ -264,11 +275,17 @@ class RequestedPlacement:
 
 
 def _describe_listeners(listeners: Sequence[Listener]) -> str:
-    return "\n".join(
+    shown = listeners[:_LISTENERS_SHOWN]
+    lines = [
         f"  {listener.id}  cluster {listener.compute_id}  "
         f"namespaces: {', '.join(listener.namespaces)}"
-        for listener in listeners
-    )
+        for listener in shown
+    ]
+    if len(listeners) > len(shown):
+        lines.append(f"  ... and {len(listeners) - len(shown)} more")
+    if len(listeners) == MAX_PAGE_SIZE:
+        lines.append(f"  (the first {MAX_PAGE_SIZE} listeners are shown)")
+    return "\n".join(lines)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1497,6 +1514,7 @@ class CustomerRegistrySource:
 
     def run(self, ctx: DeployContext) -> DeployOutcome:
         if isinstance(ctx.selector, ById):
+            self.placement.ensure_not_requested(ctx.selector.deployment_id)
             existing, step = _fetch_deployment(ctx.client, 1, ctx.selector)
             return self._update(ctx, existing, step)
         found, step = _find_deployment(
@@ -1513,13 +1531,7 @@ class CustomerRegistrySource:
         self, ctx: DeployContext, existing: ExistingDeployment, step: int
     ) -> DeployOutcome:
         _ensure_customer_registry_source(existing)
-        if self.placement.requested:
-            raise click.UsageError(
-                f"Deployment {existing.id} already exists, and its listener and "
-                "namespace are fixed when the deployment is created. Drop "
-                "--listener-id and --k8s-namespace, or use a different --name to "
-                "create a new deployment."
-            )
+        self.placement.ensure_not_requested(existing.id)
         image_uri, step = self._publish(ctx, step)
         _log_deploy_step(step, f"Updating deployment {existing.id}")
         updated = ctx.client.update_deployment(
