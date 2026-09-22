@@ -1,11 +1,11 @@
 import collections.abc
 from collections.abc import Callable, Sequence
-from typing import Any, Generic
+from typing import Generic
 
 from typing_extensions import NotRequired, Required, Self
 
-from langgraph._internal._constants import OVERWRITE
 from langgraph._internal._typing import MISSING
+from langgraph.channels._overwrite import get_overwrite as _get_overwrite
 from langgraph.channels.base import BaseChannel, Value
 from langgraph.errors import (
     EmptyChannelError,
@@ -13,7 +13,6 @@ from langgraph.errors import (
     InvalidUpdateError,
     create_error_message,
 )
-from langgraph.types import Overwrite
 
 __all__ = ("BinaryOperatorAggregate",)
 
@@ -26,29 +25,6 @@ def _strip_extras(t):  # type: ignore[no-untyped-def]
             return _strip_extras(t.__args__[0])
         return _strip_extras(t.__origin__)
     return t
-
-
-def _get_overwrite(value: Any) -> tuple[bool, Any]:
-    """Inspects the given value and returns (is_overwrite, overwrite_value).
-
-    Recognises three forms:
-
-    * The typed `Overwrite` dataclass instance.
-    * The sentinel-keyed `{"__overwrite__": value}` dict form.
-    * The dataclass-erased `{"value": ..., "type": "__overwrite__"}` form that
-      results from JSON-serialising an `Overwrite` (e.g. an `orjson`-encoded
-      state update routed through the LangGraph API server). This keeps the
-      `Overwrite` semantics intact across JSON boundaries that strip dataclass
-      types.
-    """
-    if isinstance(value, Overwrite):
-        return True, value.value
-    if isinstance(value, dict):
-        if len(value) == 1 and OVERWRITE in value:
-            return True, value[OVERWRITE]
-        if value.get("type") == OVERWRITE and "value" in value:
-            return True, value["value"]
-    return False, None
 
 
 def _operators_equal(a: Callable, b: Callable) -> bool:
