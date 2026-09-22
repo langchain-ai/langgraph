@@ -83,6 +83,15 @@ def _without_api_path(path: str) -> str:
     return path
 
 
+def _resources(payload: object) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    resources = payload.get("resources")
+    if not isinstance(resources, list):
+        return []
+    return [item for item in resources if isinstance(item, dict)]
+
+
 class HostBackendError(click.ClickException):
     """Raised when the host backend returns an error response."""
 
@@ -172,11 +181,13 @@ class HostBackendClient:
             payload["secrets"] = secrets
         return self._request("POST", "/v2/deployments", payload)
 
-    def list_deployments(self, name_contains: str = "") -> dict[str, Any]:
-        return self._request(
-            "GET",
-            "/v2/deployments",
-            params={"name_contains": name_contains},
+    def list_deployments(self, name_contains: str = "") -> list[dict[str, Any]]:
+        return _resources(
+            self._request(
+                "GET",
+                "/v2/deployments",
+                params={"name_contains": name_contains},
+            )
         )
 
     def get_deployment(self, deployment_id: str) -> dict[str, Any]:
@@ -251,10 +262,14 @@ class HostBackendClient:
             payload["secrets"] = secrets
         return self._request("PATCH", f"/v2/deployments/{deployment_id}", payload)
 
-    def list_revisions(self, deployment_id: str, limit: int = 1) -> dict[str, Any]:
-        return self._request(
-            "GET",
-            f"/v2/deployments/{deployment_id}/revisions?limit={limit}",
+    def list_revisions(
+        self, deployment_id: str, limit: int = 1
+    ) -> list[dict[str, Any]]:
+        return _resources(
+            self._request(
+                "GET",
+                f"/v2/deployments/{deployment_id}/revisions?limit={limit}",
+            )
         )
 
     def get_revision(self, deployment_id: str, revision_id: str) -> dict[str, Any]:

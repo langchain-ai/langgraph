@@ -280,11 +280,13 @@ class TestCallHostBackendWithOptionalTenant:
         return c
 
     def test_success_passes_through(self):
-        client = self._make_client(lambda req: httpx.Response(200, json={"ok": True}))
+        client = self._make_client(
+            lambda req: httpx.Response(200, json={"resources": [{"id": "dep-1"}]})
+        )
         result = _call_host_backend_with_optional_tenant(
             client, lambda c: c.list_deployments()
         )
-        assert result == {"ok": True}
+        assert result == [{"id": "dep-1"}]
 
     def test_403_not_enabled_gives_actionable_error(self):
         detail = (

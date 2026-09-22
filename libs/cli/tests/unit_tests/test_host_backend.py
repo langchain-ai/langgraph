@@ -88,8 +88,7 @@ def test_list_deployments_sends_query_params():
     c = HostBackendClient(
         "https://api.example.com", "test-key", transport=httpx.MockTransport(handler)
     )
-    result = c.list_deployments("my app")
-    assert result == {"ok": True}
+    assert c.list_deployments("my app") == []
 
 
 def _capturing_client(captured: dict) -> HostBackendClient:
@@ -421,7 +420,7 @@ def test_injected_transport_receives_requests_under_the_prefixed_base_url():
         transport=httpx.MockTransport(handler),
     )
 
-    assert c.list_revisions("dep-1", limit=2) == {"ok": True}
+    assert c.list_revisions("dep-1", limit=2) == []
     assert seen == {
         "url": "https://smith.example.com/api-host/v2/deployments/dep-1/revisions?limit=2",
         "api_key": "key",
@@ -546,3 +545,31 @@ def test_control_plane_endpoints_resolve(host_url, langsmith_endpoint, expected)
     endpoints = ControlPlaneEndpoints.resolve(host_url, langsmith_endpoint)
 
     assert (endpoints.control_plane_url, endpoints.dashboard_url) == expected
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        pytest.param(
+            {"resources": [{"id": "a"}, {"id": "b"}]},
+            [{"id": "a"}, {"id": "b"}],
+            id="list_returns_the_resources",
+        ),
+        pytest.param({"resources": []}, [], id="empty_list"),
+        pytest.param({}, [], id="missing_key"),
+        pytest.param({"resources": None}, [], id="null_resources"),
+        pytest.param(
+            {"resources": ["nope", {"id": "a"}]}, [{"id": "a"}], id="skips_non_objects"
+        ),
+        pytest.param([], [], id="unexpected_envelope"),
+    ],
+)
+def test_list_endpoints_return_resource_objects(payload, expected):
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload)
+
+    c = HostBackendClient(
+        "https://api.example.com", "key", transport=httpx.MockTransport(handler)
+    )
+
+    assert c.list_deployments() == expected

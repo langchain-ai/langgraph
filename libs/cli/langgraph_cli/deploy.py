@@ -375,14 +375,8 @@ def _source_of(resource: object) -> str | None:
 def find_deployment_by_name(
     client: HostBackendClient, name: str
 ) -> ExistingDeployment | None:
-    listed = client.list_deployments(name_contains=name)
-    resources = listed.get("resources", []) if isinstance(listed, dict) else []
-    for resource in resources:
-        if (
-            isinstance(resource, dict)
-            and resource.get("name") == name
-            and resource.get("id")
-        ):
+    for resource in client.list_deployments(name_contains=name):
+        if resource.get("name") == name and resource.get("id"):
             return ExistingDeployment(str(resource["id"]), _source_of(resource))
     return None
 
@@ -750,14 +744,11 @@ def _poll_revision_status(
 ) -> tuple[str, str | None]:
     """Poll latest revision status until terminal status or timeout."""
     em = _get_emitter()
-    revisions_resp = client.list_revisions(deployment_id, limit=1)
-    resources = (
-        revisions_resp.get("resources", []) if isinstance(revisions_resp, dict) else []
-    )
-    if not resources:
+    revisions = client.list_revisions(deployment_id, limit=1)
+    if not revisions:
         return "", None
 
-    revision_id = str(resources[0]["id"])
+    revision_id = str(revisions[0]["id"])
     last_status = ""
     deadline = time.time() + timeout_seconds
     start_time = time.monotonic()
@@ -2052,15 +2043,9 @@ def _deploy_cmd(
 @deploy.command("list", help="[Beta] List LangSmith Deployments.")
 def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -> None:
     client = _create_host_backend_client(host_url, api_key)
-    response = _call_host_backend_with_optional_tenant(
+    deployments = _call_host_backend_with_optional_tenant(
         client,
         lambda c: c.list_deployments(name_contains=name_contains),
-    )
-    resources = response.get("resources") if isinstance(response, dict) else None
-    deployments = (
-        [item for item in resources if isinstance(item, dict)]
-        if isinstance(resources, list)
-        else []
     )
     if not deployments:
         click.echo("No deployments found.")
@@ -2101,15 +2086,9 @@ def deploy_revisions_list(
     api_key: str | None, host_url: str | None, limit: int, deployment_id: str
 ) -> None:
     client = _create_host_backend_client(host_url, api_key)
-    response = _call_host_backend_with_optional_tenant(
+    revisions = _call_host_backend_with_optional_tenant(
         client,
         lambda c: c.list_revisions(deployment_id, limit=limit),
-    )
-    resources = response.get("resources") if isinstance(response, dict) else None
-    revisions = (
-        [item for item in resources if isinstance(item, dict)]
-        if isinstance(resources, list)
-        else []
     )
     if not revisions:
         click.echo(f"No revisions found for deployment {deployment_id}.")
@@ -2260,17 +2239,12 @@ def deploy_logs(
         dep_id = found.id
 
     if log_type == "build" and not revision_id:
-        revisions_resp = client.list_revisions(dep_id, limit=1)
-        resources = (
-            revisions_resp.get("resources", [])
-            if isinstance(revisions_resp, dict)
-            else []
-        )
-        if not resources:
+        revisions = client.list_revisions(dep_id, limit=1)
+        if not revisions:
             raise click.ClickException(
                 "No revisions found for this deployment. Cannot fetch build logs."
             )
-        revision_id = str(resources[0]["id"])
+        revision_id = str(revisions[0]["id"])
         click.secho(f"Using latest revision: {revision_id}", fg="cyan")
 
     payload: dict = {"limit": limit, "order": "desc"}
