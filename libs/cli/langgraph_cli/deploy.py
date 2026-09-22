@@ -105,6 +105,10 @@ _OPERATOR_DEFAULT_RESOURCE_SPEC: Mapping[str, object] = {}
 _CUSTOMER_REGISTRY_SOURCE: SourceName = "external_docker"
 _LISTENER_REQUIRED_MARKER = "listener_id' is required"
 _LISTENERS_SHOWN = 10
+_NO_LISTENERS = (
+    "This workspace has no listeners, so --listener-id and --k8s-namespace "
+    "do not apply."
+)
 
 
 _TERMINAL_STATUSES = frozenset(
@@ -234,32 +238,20 @@ class RequestedPlacement:
                 "--name."
             )
 
-    def resolve(self, listeners: Sequence[Listener]) -> Placement:
-        if not listeners:
-            if self.requested:
-                raise click.UsageError(
-                    "This workspace has no listeners, so --listener-id and "
-                    "--k8s-namespace do not apply."
-                )
-            return Unplaced()
-        listener = self._listener(listeners)
+    def on(self, listener: Listener) -> Placement:
         return OnListener(listener.id, self._namespace(listener))
 
-    def _listener(self, listeners: Sequence[Listener]) -> Listener:
-        if self.listener_id is None:
-            if len(listeners) == 1:
-                return listeners[0]
+    def among(self, listeners: Sequence[Listener]) -> Placement:
+        if not listeners:
+            if self.requested:
+                raise click.UsageError(_NO_LISTENERS)
+            return Unplaced()
+        if len(listeners) > 1:
             raise click.UsageError(
                 "This workspace has several listeners. Choose one with "
                 f"--listener-id:\n{_describe_listeners(listeners)}"
             )
-        for listener in listeners:
-            if listener.id == self.listener_id:
-                return listener
-        raise click.UsageError(
-            f"Listener {self.listener_id} was not found in this workspace. "
-            f"Available listeners:\n{_describe_listeners(listeners)}"
-        )
+        return self.on(listeners[0])
 
     def _namespace(self, listener: Listener) -> str:
         if not listener.namespaces:
@@ -1514,6 +1506,24 @@ def _needs_a_listener(err: HostBackendError) -> bool:
     )
 
 
+def _requested_listener(client: HostBackendClient, listener_id: str) -> Listener:
+    try:
+        resource = _call_host_backend_with_optional_tenant(
+            client, lambda c: c.get_listener(listener_id)
+        )
+    except HostBackendError as err:
+        if err.status_code != 404:
+            raise
+        available = _available_listeners(client)
+        if not available:
+            raise click.UsageError(_NO_LISTENERS) from None
+        raise click.UsageError(
+            f"Listener {listener_id} was not found in this workspace. "
+            f"Available listeners:\n{_describe_listeners(available)}"
+        ) from None
+    return Listener.from_resource(resource)
+
+
 def _available_listeners(client: HostBackendClient) -> tuple[Listener, ...]:
     resources = _call_host_backend_with_optional_tenant(
         client, lambda c: c.list_listeners()
@@ -1620,9 +1630,12 @@ class CustomerRegistrySource:
         )
 
     def _resolve_placement(self, ctx: DeployContext) -> Placement:
-        if not (ctx.endpoints.is_cloud or self.requested_placement.requested):
+        requested = self.requested_placement
+        if requested.listener_id is not None:
+            return requested.on(_requested_listener(ctx.client, requested.listener_id))
+        if not (ctx.endpoints.is_cloud or requested.requested):
             return Unplaced()
-        return self.requested_placement.resolve(_available_listeners(ctx.client))
+        return requested.among(_available_listeners(ctx.client))
 
     def _announce(self, placement: Placement) -> None:
         if isinstance(placement, OnListener):

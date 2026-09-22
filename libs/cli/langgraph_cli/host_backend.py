@@ -234,6 +234,9 @@ class HostBackendClient:
         params = {key: value for key, value in given if value is not None}
         return _resources(self._request("GET", "/v2/deployments", params=params))
 
+    def get_listener(self, listener_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/v2/listeners/{listener_id}")
+
     def list_listeners(self) -> list[dict[str, Any]]:
         return _resources(
             self._request("GET", "/v2/listeners", params={"limit": MAX_PAGE_SIZE})

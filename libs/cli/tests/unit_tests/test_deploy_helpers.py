@@ -993,22 +993,10 @@ class TestRequestedPlacement:
                 OnListener("listener-2", "agents-staging"),
                 id="namespace_alone_picks_the_only_listener",
             ),
-            pytest.param(
-                RequestedPlacement(listener_id="listener-1"),
-                (ONE_NAMESPACE, TWO_NAMESPACES),
-                OnListener("listener-1", "agents"),
-                id="listener_alone_picks_its_only_namespace",
-            ),
-            pytest.param(
-                RequestedPlacement(listener_id="listener-2", k8s_namespace="agents"),
-                (ONE_NAMESPACE, TWO_NAMESPACES),
-                OnListener("listener-2", "agents"),
-                id="both_given",
-            ),
         ],
     )
     def test_resolves_to_a_placement(self, request_, listeners, expected):
-        assert request_.resolve(listeners) == expected
+        assert request_.among(listeners) == expected
 
     @pytest.mark.parametrize(
         ("request_", "listeners", "message"),
@@ -1038,38 +1026,20 @@ class TestRequestedPlacement:
                 id="namespace_without_any_listener",
             ),
             pytest.param(
-                RequestedPlacement(listener_id="listener-9"),
-                (ONE_NAMESPACE,),
-                "was not found",
-                id="unknown_listener",
-            ),
-            pytest.param(
                 RequestedPlacement(),
                 (TWO_NAMESPACES,),
                 "--k8s-namespace",
                 id="several_namespaces_need_a_choice",
             ),
-            pytest.param(
-                RequestedPlacement(listener_id="listener-2", k8s_namespace="nope"),
-                (TWO_NAMESPACES,),
-                "does not serve namespace",
-                id="unknown_namespace",
-            ),
-            pytest.param(
-                RequestedPlacement(listener_id="listener-3"),
-                (NO_NAMESPACE,),
-                "serves no namespaces",
-                id="listener_without_namespaces",
-            ),
         ],
     )
     def test_refuses_and_names_the_choices(self, request_, listeners, message):
         with pytest.raises(click.UsageError, match=message):
-            request_.resolve(listeners)
+            request_.among(listeners)
 
     def test_the_error_lists_every_listener_with_its_cluster_and_namespaces(self):
         with pytest.raises(click.UsageError) as error:
-            RequestedPlacement().resolve((ONE_NAMESPACE, TWO_NAMESPACES))
+            RequestedPlacement().among((ONE_NAMESPACE, TWO_NAMESPACES))
 
         assert "listener-1" in error.value.message
         assert "prod-cluster" in error.value.message
@@ -1200,3 +1170,52 @@ def test_a_deployment_id_with_listener_flags_is_refused_without_probing_docker(
             placement=RequestedPlacement(listener_id="listener-1"),
             selector=ById("dep-1"),
         )
+
+
+class TestPlacementOnAKnownListener:
+    @pytest.mark.parametrize(
+        ("request_", "listener", "expected"),
+        [
+            pytest.param(
+                RequestedPlacement(listener_id="listener-1"),
+                ONE_NAMESPACE,
+                OnListener("listener-1", "agents"),
+                id="the_only_namespace_is_used",
+            ),
+            pytest.param(
+                RequestedPlacement(listener_id="listener-2", k8s_namespace="agents"),
+                TWO_NAMESPACES,
+                OnListener("listener-2", "agents"),
+                id="the_chosen_namespace_is_used",
+            ),
+        ],
+    )
+    def test_places_on_the_listener(self, request_, listener, expected):
+        assert request_.on(listener) == expected
+
+    @pytest.mark.parametrize(
+        ("request_", "listener", "message"),
+        [
+            pytest.param(
+                RequestedPlacement(listener_id="listener-2"),
+                TWO_NAMESPACES,
+                "--k8s-namespace",
+                id="several_namespaces_need_a_choice",
+            ),
+            pytest.param(
+                RequestedPlacement(listener_id="listener-2", k8s_namespace="nope"),
+                TWO_NAMESPACES,
+                "does not serve namespace",
+                id="unknown_namespace",
+            ),
+            pytest.param(
+                RequestedPlacement(listener_id="listener-3"),
+                NO_NAMESPACE,
+                "serves no namespaces",
+                id="listener_without_namespaces",
+            ),
+        ],
+    )
+    def test_refuses_and_names_the_namespaces(self, request_, listener, message):
+        with pytest.raises(click.UsageError, match=message):
+            request_.on(listener)
