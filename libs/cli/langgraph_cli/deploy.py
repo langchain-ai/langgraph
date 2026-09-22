@@ -51,6 +51,7 @@ RESERVED_ENV_VARS = frozenset(
         "LANGGRAPH_AUTH_TYPE",
         "LANGSMITH_AUTH_ENDPOINT",
         "LANGSMITH_TENANT_ID",
+        "LANGSMITH_WORKSPACE_ID",
         "LANGSMITH_AUTH_VERIFY_TENANT_ID",
         "LANGSMITH_HOST_PROJECT_ID",
         "LANGSMITH_HOST_PROJECT_NAME",
@@ -1229,6 +1230,24 @@ def _run_remote_build(
 # ---------------------------------------------------------------------------
 
 
+def _get_tenant_id(env_vars: dict[str, str]) -> str | None:
+    """Get the tenant ID from LANGSMITH_TENANT_ID or LANGSMITH_WORKSPACE_ID."""
+    tenant_id = env_vars.get("LANGSMITH_TENANT_ID") or os.environ.get(
+        "LANGSMITH_TENANT_ID"
+    )
+    fallback_tenant_id = env_vars.get("LANGSMITH_WORKSPACE_ID") or os.environ.get(
+        "LANGSMITH_WORKSPACE_ID"
+    )
+    if tenant_id and fallback_tenant_id:
+        raise click.UsageError(
+            "LANGSMITH_TENANT_ID and LANGSMITH_WORKSPACE_ID cannot both be set. "
+            "Set only one."
+        )
+    if tenant_id:
+        return tenant_id
+    return fallback_tenant_id or None
+
+
 def _create_host_backend_client(
     host_url: str | None,
     api_key: str | None,
@@ -1236,6 +1255,7 @@ def _create_host_backend_client(
 ) -> HostBackendClient:
     if env_vars is None:
         env_vars = _parse_env_from_config({}, pathlib.Path.cwd() / DEFAULT_CONFIG)
+    tenant_id = _get_tenant_id(env_vars)
     resolved_api_key = api_key
     if not resolved_api_key:
         for key_name in _API_KEY_ENV_NAMES:
@@ -1258,9 +1278,6 @@ def _create_host_backend_client(
             fg="yellow",
         )
         resolved_api_key = click.prompt("Enter LangSmith API key", hide_input=True)
-    tenant_id = env_vars.get("LANGSMITH_TENANT_ID") or os.environ.get(
-        "LANGSMITH_TENANT_ID"
-    )
     return HostBackendClient(host_url, resolved_api_key, tenant_id=tenant_id)
 
 
