@@ -963,57 +963,68 @@ NO_NAMESPACE = Listener("listener-3", "broken-cluster", ())
 
 class TestRequestedPlacement:
     @pytest.mark.parametrize(
-        ("request_", "listeners", "required", "expected"),
+        ("request_", "required", "expected"),
         [
-            pytest.param(
-                RequestedPlacement(), (), True, Unplaced(), id="no_listeners_no_request"
-            ),
+            pytest.param(RequestedPlacement(), True, True, id="cloud_must_place"),
             pytest.param(
                 RequestedPlacement(),
-                (ONE_NAMESPACE,),
-                True,
-                OnListener("listener-1", "agents"),
-                id="cloud_uses_the_only_possible_answer",
-            ),
-            pytest.param(
-                RequestedPlacement(),
-                (ONE_NAMESPACE,),
                 False,
-                Unplaced(),
+                False,
                 id="self_hosted_keeps_its_bundled_operator",
             ),
             pytest.param(
                 RequestedPlacement(listener_id="listener-1"),
-                (ONE_NAMESPACE,),
                 False,
-                OnListener("listener-1", "agents"),
+                True,
                 id="self_hosted_places_when_asked",
+            ),
+            pytest.param(
+                RequestedPlacement(k8s_namespace="agents"),
+                False,
+                True,
+                id="a_namespace_alone_is_still_a_request",
+            ),
+        ],
+    )
+    def test_must_place_decides_whether_listeners_matter(
+        self, request_, required, expected
+    ):
+        assert request_.must_place(required=required) is expected
+
+    @pytest.mark.parametrize(
+        ("request_", "listeners", "expected"),
+        [
+            pytest.param(
+                RequestedPlacement(), (), Unplaced(), id="no_listeners_no_request"
+            ),
+            pytest.param(
+                RequestedPlacement(),
+                (ONE_NAMESPACE,),
+                OnListener("listener-1", "agents"),
+                id="uses_the_only_possible_answer",
             ),
             pytest.param(
                 RequestedPlacement(k8s_namespace="agents-staging"),
                 (TWO_NAMESPACES,),
-                True,
                 OnListener("listener-2", "agents-staging"),
                 id="namespace_alone_picks_the_only_listener",
             ),
             pytest.param(
                 RequestedPlacement(listener_id="listener-1"),
                 (ONE_NAMESPACE, TWO_NAMESPACES),
-                True,
                 OnListener("listener-1", "agents"),
                 id="listener_alone_picks_its_only_namespace",
             ),
             pytest.param(
                 RequestedPlacement(listener_id="listener-2", k8s_namespace="agents"),
                 (ONE_NAMESPACE, TWO_NAMESPACES),
-                True,
                 OnListener("listener-2", "agents"),
                 id="both_given",
             ),
         ],
     )
-    def test_resolves_to_a_placement(self, request_, listeners, required, expected):
-        assert request_.resolve(listeners, required=required) == expected
+    def test_resolves_to_a_placement(self, request_, listeners, expected):
+        assert request_.resolve(listeners) == expected
 
     @pytest.mark.parametrize(
         ("request_", "listeners", "message"),
@@ -1035,6 +1046,12 @@ class TestRequestedPlacement:
                 (ONE_NAMESPACE, TWO_NAMESPACES),
                 "--listener-id",
                 id="namespace_alone_is_ambiguous_with_several_listeners",
+            ),
+            pytest.param(
+                RequestedPlacement(k8s_namespace="agents"),
+                (),
+                "no listeners",
+                id="namespace_without_any_listener",
             ),
             pytest.param(
                 RequestedPlacement(listener_id="listener-9"),
@@ -1064,11 +1081,11 @@ class TestRequestedPlacement:
     )
     def test_refuses_and_names_the_choices(self, request_, listeners, message):
         with pytest.raises(click.UsageError, match=message):
-            request_.resolve(listeners, required=True)
+            request_.resolve(listeners)
 
     def test_the_error_lists_every_listener_with_its_cluster_and_namespaces(self):
         with pytest.raises(click.UsageError) as error:
-            RequestedPlacement().resolve((ONE_NAMESPACE, TWO_NAMESPACES), required=True)
+            RequestedPlacement().resolve((ONE_NAMESPACE, TWO_NAMESPACES))
 
         assert "listener-1" in error.value.message
         assert "prod-cluster" in error.value.message

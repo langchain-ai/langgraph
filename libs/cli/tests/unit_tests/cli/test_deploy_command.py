@@ -512,7 +512,6 @@ def test_push_to_builds_pushes_then_creates_an_external_deployment(
     assert result.exit_code == 0, result.output
     assert deploy_project.timeline == [
         LIST_DEPLOYMENTS,
-        LIST_LISTENERS,
         "docker build",
         "docker push",
         "docker inspect-digest",
@@ -831,3 +830,30 @@ def test_a_deployment_without_a_listener_announces_nothing(
 
     assert result.exit_code == 0, result.output
     assert "listener" not in result.output
+
+
+def test_a_self_hosted_create_without_flags_never_looks_up_listeners(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER]
+
+    result = deploy_project.run("--push-to", PUSH_REPOSITORY)
+
+    assert result.exit_code == 0, result.output
+    assert LIST_LISTENERS not in deploy_project.timeline
+
+
+def test_a_control_plane_that_demands_a_listener_names_the_flags(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.create_error = (
+        "Source configuration error: 'source_config.listener_id' is required "
+        "for workspace with available listener IDs: ['listener-1']"
+    )
+
+    result = deploy_project.run("--push-to", PUSH_REPOSITORY)
+
+    assert result.exit_code != 0
+    assert "--listener-id" in result.output
+    assert "--k8s-namespace" in result.output
+    assert "listener-1" in result.output

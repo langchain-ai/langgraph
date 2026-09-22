@@ -102,6 +102,7 @@ _PUSH_ATTEMPTS = 3
 _LOCAL_BUILD_TAG_PREFIX = "langgraph-deploy-tmp"
 _OPERATOR_DEFAULT_RESOURCE_SPEC: Mapping[str, object] = {}
 _CUSTOMER_REGISTRY_SOURCE: SourceName = "external_docker"
+_LISTENER_REQUIRED_MARKER = "listener_id' is required"
 
 
 _TERMINAL_STATUSES = frozenset(
@@ -211,15 +212,16 @@ class RequestedPlacement:
     def requested(self) -> bool:
         return self.listener_id is not None or self.k8s_namespace is not None
 
-    def resolve(self, listeners: Sequence[Listener], *, required: bool) -> Placement:
+    def must_place(self, *, required: bool) -> bool:
+        return required or self.requested
+
+    def resolve(self, listeners: Sequence[Listener]) -> Placement:
         if not listeners:
             if self.requested:
                 raise click.UsageError(
                     "This workspace has no listeners, so --listener-id and "
                     "--k8s-namespace do not apply."
                 )
-            return Unplaced()
-        if not required and not self.requested:
             return Unplaced()
         listener = self._listener(listeners)
         return OnListener(listener.id, self._namespace(listener))
@@ -1531,25 +1533,37 @@ class CustomerRegistrySource:
             existing.id, _image_revision_result(updated, "Deployment updated")
         )
 
-    def _create(self, ctx: DeployContext, name: str, step: int) -> DeployOutcome:
-        placement = self.placement.resolve(
-            _available_listeners(ctx.client), required=ctx.endpoints.is_cloud
-        )
+    def _placement(self, ctx: DeployContext) -> Placement:
+        if not self.placement.must_place(required=ctx.endpoints.is_cloud):
+            return Unplaced()
+        placement = self.placement.resolve(_available_listeners(ctx.client))
         if placement.summary:
             _get_emitter().info(placement.summary)
+        return placement
+
+    def _create(self, ctx: DeployContext, name: str, step: int) -> DeployOutcome:
+        placement = self._placement(ctx)
         image_uri, step = self._publish(ctx, step)
-        created, _ = _create_deployment(
-            ctx.client,
-            step,
-            name=name,
-            source=_CUSTOMER_REGISTRY_SOURCE,
-            source_config={
-                "resource_spec": _OPERATOR_DEFAULT_RESOURCE_SPEC,
-                **placement.source_config(),
-            },
-            source_revision_config={"image_uri": image_uri},
-            secrets=ctx.secrets,
-        )
+        try:
+            created, _ = _create_deployment(
+                ctx.client,
+                step,
+                name=name,
+                source=_CUSTOMER_REGISTRY_SOURCE,
+                source_config={
+                    "resource_spec": _OPERATOR_DEFAULT_RESOURCE_SPEC,
+                    **placement.source_config(),
+                },
+                source_revision_config={"image_uri": image_uri},
+                secrets=ctx.secrets,
+            )
+        except HostBackendError as err:
+            if err.status_code == 400 and _LISTENER_REQUIRED_MARKER in err.message:
+                raise click.UsageError(
+                    "This workspace deploys through a listener. Re-run with "
+                    f"--listener-id and --k8s-namespace.\n{err.message}"
+                ) from None
+            raise
         return DeployOutcome(
             created.id, _image_revision_result(created.resource, "Deployment created")
         )
