@@ -189,14 +189,13 @@ class HostBackendClient:
             payload["secrets"] = secrets
         return self._request("POST", "/v2/deployments", payload)
 
-    def list_deployments(self, name_contains: str = "") -> list[dict[str, Any]]:
-        return _resources(
-            self._request(
-                "GET",
-                "/v2/deployments",
-                params={"name_contains": name_contains},
-            )
+    def list_deployments(
+        self, *, name: str | None = None, name_contains: str | None = None
+    ) -> list[dict[str, Any]]:
+        params = (
+            {"name": name} if name is not None else {"name_contains": name_contains}
         )
+        return _resources(self._request("GET", "/v2/deployments", params=params))
 
     def list_listeners(self) -> list[dict[str, Any]]:
         return _resources(

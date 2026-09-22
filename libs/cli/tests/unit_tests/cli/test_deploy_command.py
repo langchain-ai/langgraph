@@ -85,13 +85,24 @@ class ControlPlaneDouble:
         self.timeline.append(route)
         if request.content:
             self.bodies[route] = json.loads(request.content)
-        return self._respond(request.method, request.url.path)
+        return self._respond(request)
 
-    def _respond(self, method: str, path: str) -> httpx.Response:
+    def _respond(self, request: httpx.Request) -> httpx.Response:
+        method, path = request.method, request.url.path
         if (method, path) == ("GET", "/v2/listeners"):
             return httpx.Response(200, json={"resources": self.listeners})
         if (method, path) == ("GET", "/v2/deployments"):
-            return httpx.Response(200, json={"resources": self.existing_deployments})
+            name = request.url.params.get("name")
+            return httpx.Response(
+                200,
+                json={
+                    "resources": [
+                        deployment
+                        for deployment in self.existing_deployments
+                        if name is None or deployment.get("name") == name
+                    ]
+                },
+            )
         if (method, path) == ("POST", "/v2/deployments"):
             if self.create_error is not None:
                 return httpx.Response(400, text=self.create_error)

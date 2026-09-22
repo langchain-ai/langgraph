@@ -15,6 +15,7 @@ import langgraph_cli.deploy as deploy_mod
 from langgraph_cli.deploy import (
     CustomerRegistrySource,
     DockerBuildCommand,
+    ExistingDeployment,
     Listener,
     ManagedRegistrySource,
     OnListener,
@@ -31,6 +32,7 @@ from langgraph_cli.deploy import (
     _resolve_pushed_image_digest,
     _select_source,
     _validate_prebuilt_image,
+    find_deployment_by_name,
     normalize_image_tag,
     normalize_name,
 )
@@ -1107,3 +1109,35 @@ class TestRequestedPlacement:
     )
     def test_source_config_matches_the_control_plane_shape(self, placement, expected):
         assert placement.source_config() == expected
+
+
+def test_finding_a_deployment_by_name_asks_the_server_for_an_exact_match():
+    seen: dict = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["params"] = dict(req.url.params)
+        return httpx.Response(
+            200,
+            json={"resources": [{"id": "dep-1", "name": "agent", "source": "github"}]},
+        )
+
+    client = HostBackendClient(
+        "https://api.example.com", "key", transport=httpx.MockTransport(handler)
+    )
+
+    found = find_deployment_by_name(client, "agent")
+
+    assert seen["params"] == {"name": "agent"}
+    assert found == ExistingDeployment("dep-1", "github")
+
+
+def test_finding_a_deployment_by_name_returns_none_when_the_server_has_no_match():
+    client = HostBackendClient(
+        "https://api.example.com",
+        "key",
+        transport=httpx.MockTransport(
+            lambda req: httpx.Response(200, json={"resources": []})
+        ),
+    )
+
+    assert find_deployment_by_name(client, "agent") is None

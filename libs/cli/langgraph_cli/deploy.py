@@ -491,8 +491,8 @@ def _source_of(resource: object) -> str | None:
 def find_deployment_by_name(
     client: HostBackendClient, name: str
 ) -> ExistingDeployment | None:
-    for resource in client.list_deployments(name_contains=name):
-        if resource.get("name") == name and resource.get("id"):
+    for resource in client.list_deployments(name=name):
+        if resource.get("id"):
             return ExistingDeployment(str(resource["id"]), _source_of(resource))
     return None
 

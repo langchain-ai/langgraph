@@ -88,7 +88,7 @@ def test_list_deployments_sends_query_params():
     c = HostBackendClient(
         "https://api.example.com", "test-key", transport=httpx.MockTransport(handler)
     )
-    assert c.list_deployments("my app") == []
+    assert c.list_deployments(name_contains="my app") == []
 
 
 def _capturing_client(captured: dict) -> HostBackendClient:
@@ -612,3 +612,39 @@ def test_is_cloud_recognises_the_managed_control_plane(control_plane_url, expect
     endpoints = ControlPlaneEndpoints.from_control_plane_url(control_plane_url)
 
     assert endpoints.is_cloud is expected
+
+
+@pytest.mark.parametrize(
+    ("call", "expected_params"),
+    [
+        pytest.param(
+            lambda c: c.list_deployments(name="agent"),
+            {"name": "agent"},
+            id="exact_name_filters_server_side",
+        ),
+        pytest.param(
+            lambda c: c.list_deployments(name_contains="age"),
+            {"name_contains": "age"},
+            id="substring_search_keeps_its_own_parameter",
+        ),
+        pytest.param(
+            lambda c: c.list_deployments(),
+            {"name_contains": ""},
+            id="no_filter_lists_everything",
+        ),
+    ],
+)
+def test_list_deployments_sends_one_name_filter(call, expected_params):
+    seen: dict = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.update(dict(req.url.params))
+        return httpx.Response(200, json={"resources": []})
+
+    call(
+        HostBackendClient(
+            "https://api.example.com", "key", transport=httpx.MockTransport(handler)
+        )
+    )
+
+    assert seen == expected_params
