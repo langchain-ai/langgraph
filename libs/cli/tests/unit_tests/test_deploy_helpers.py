@@ -960,8 +960,6 @@ class TestListener:
                 Listener("listener-1", "", ()),
                 id="only_an_id",
             ),
-            pytest.param({"compute_id": "c"}, None, id="no_id_is_not_a_listener"),
-            pytest.param({"id": ""}, None, id="empty_id_is_not_a_listener"),
         ],
     )
     def test_from_resource_reads_the_control_plane_shape(self, resource, expected):
@@ -1179,3 +1177,15 @@ def test_a_partial_page_without_a_match_means_the_name_is_free():
     )
 
     assert find_deployment_by_name(client, "brand-new-agent") is None
+
+
+@pytest.mark.parametrize(
+    "resource",
+    [
+        pytest.param({"compute_id": "c"}, id="no_id"),
+        pytest.param({"id": ""}, id="empty_id"),
+    ],
+)
+def test_a_listener_without_an_id_is_refused(resource):
+    with pytest.raises(HostBackendError, match="without an id"):
+        Listener.from_resource(resource)

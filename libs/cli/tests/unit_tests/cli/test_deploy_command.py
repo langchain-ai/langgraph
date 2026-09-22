@@ -918,24 +918,6 @@ def test_a_truncated_listener_page_says_so(deploy_project: DeployProject) -> Non
     assert "first 100" in result.output
 
 
-def test_a_listener_without_an_id_is_ignored(deploy_project: DeployProject) -> None:
-    deploy_project.control_plane.listeners = [
-        {"compute_id": "broken", "compute_config": {"k8s_namespaces": ["agents"]}},
-        LISTENER,
-    ]
-
-    result = deploy_project.run(
-        "--push-to", PUSH_REPOSITORY, host_url=CLOUD_CONTROL_PLANE_URL
-    )
-
-    assert result.exit_code == 0, result.output
-    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
-        "resource_spec": {},
-        "listener_id": "listener-1",
-        "listener_config": {"k8s_namespace": "agents"},
-    }
-
-
 def test_a_managed_build_in_a_listener_workspace_points_at_push_to(
     deploy_project: DeployProject,
 ) -> None:
@@ -948,4 +930,35 @@ def test_a_managed_build_in_a_listener_workspace_points_at_push_to(
 
     assert result.exit_code != 0
     assert "--push-to" in result.output
+    assert deploy_project.docker.verbs() == []
+
+
+def test_a_managed_control_plane_without_listeners_creates_as_before(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, host_url=CLOUD_CONTROL_PLANE_URL
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {}
+    }
+    assert deploy_project.timeline.count(LIST_LISTENERS) == 1
+
+
+def test_a_listener_without_an_id_is_reported_rather_than_ignored(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [
+        {"compute_id": "broken", "compute_config": {"k8s_namespaces": ["agents"]}},
+        LISTENER,
+    ]
+
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, host_url=CLOUD_CONTROL_PLANE_URL
+    )
+
+    assert result.exit_code != 0
+    assert "without an id" in result.output
     assert deploy_project.docker.verbs() == []

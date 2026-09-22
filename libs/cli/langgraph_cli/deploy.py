@@ -157,10 +157,12 @@ class Listener:
     namespaces: tuple[str, ...]
 
     @classmethod
-    def from_resource(cls, resource: Mapping[str, object]) -> "Listener | None":
+    def from_resource(cls, resource: Mapping[str, object]) -> "Listener":
         identifier = str(resource.get("id") or "")
         if not identifier:
-            return None
+            raise HostBackendError(
+                "The control plane returned a listener without an id."
+            )
         compute_config = resource.get("compute_config")
         namespaces = (
             compute_config.get("k8s_namespaces")
@@ -1467,8 +1469,7 @@ def _available_listeners(client: HostBackendClient) -> tuple[Listener, ...]:
     resources = _call_host_backend_with_optional_tenant(
         client, lambda c: c.list_listeners()
     )
-    listeners = (Listener.from_resource(resource) for resource in resources)
-    return tuple(listener for listener in listeners if listener is not None)
+    return tuple(Listener.from_resource(resource) for resource in resources)
 
 
 def _ensure_customer_registry_source(existing: ExistingDeployment) -> None:
