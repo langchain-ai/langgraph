@@ -162,6 +162,35 @@ def test_queue_mid_run(
     assert list_pending(sync_checkpointer, config) == []
 
 
+def test_item_queued_during_last_step_is_applied_at_end(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    gate = Gate()
+    graph = chain(gate, gated="d").compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    thread, result = run_in_thread(
+        graph.invoke, {"log": ["in"]}, config, durability=durability
+    )
+    assert gate.entered.wait(10)
+    graph.queue_state(config, {"log": ["late"]})
+    gate.release.set()
+    thread.join(20)
+    assert "error" not in result, result.get("error")
+    assert result["value"]["log"] == [
+        "in",
+        "a",
+        "b",
+        "c",
+        "d",
+        "late",
+        "a",
+        "b",
+        "c",
+        "d",
+    ]
+    assert graph.get_state(config).queued == ()
+
+
 def test_follow_up_writes_an_input_checkpoint(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:

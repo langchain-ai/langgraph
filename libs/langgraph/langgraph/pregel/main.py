@@ -2644,7 +2644,8 @@ class Pregel(
         with a checkpointer polls its queue whether or not this method is ever
         called: under `durability="sync"` once per superstep, in parallel with
         the checkpoint write; under `"async"` one read in flight at a time,
-        never waited for; under `"exit"` once at entry and once at the end.
+        waited for only at the end of the run; under `"exit"` once at entry
+        and once at the end.
 
         Args:
             config: The config of the thread, or of a subgraph within it.

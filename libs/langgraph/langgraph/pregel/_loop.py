@@ -1829,11 +1829,14 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         fut = self._queue_read_fut
         if not tasks:
             # the run would finish: a fresh read, in parallel with the
-            # checkpoint write the loop waits for anyway
+            # checkpoint write the loop waits for anyway. Under "async" the
+            # in-flight read predates the last step, so an item accepted
+            # during that step would otherwise wait for the next run.
             if self.durability == "exit":
                 if not self._queue_writes_at_exit():
                     return
                 self._put_exit_checkpoint()
+            if self.durability != "sync":
                 fut = self._submit_queue_read()
             if fut is None:
                 return
@@ -2153,6 +2156,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
                 if not self._queue_writes_at_exit():
                     return
                 self._put_exit_checkpoint()
+            if self.durability != "sync":
                 fut = self._submit_queue_read()
             if fut is None:
                 return
