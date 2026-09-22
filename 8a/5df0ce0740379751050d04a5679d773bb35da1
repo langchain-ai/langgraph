@@ -1,0 +1,21 @@
+libs/cli/tests/unit_tests/test_deploy_agents.py
+  s_052c045e7735cc::t_efc14537ea81ca 69-70,97-105
+libs/cli/langgraph_cli/deploy.py
+  s_052c045e7735cc::t_bcd6aa90a15184 1613-1617
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8a5df0ce0740379751050d04a5679d773bb35da1",
+  "prompts": {},
+  "sessions": {
+    "s_052c045e7735cc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0c663-ede4-7d32-aa94-e210efdbf5b0",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  }
+}
