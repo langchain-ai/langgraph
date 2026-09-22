@@ -105,6 +105,7 @@ _OPERATOR_DEFAULT_RESOURCE_SPEC: Mapping[str, object] = {}
 _CUSTOMER_REGISTRY_SOURCE: SourceName = "external_docker"
 _LISTENER_REQUIRED_MARKER = "listener_id' is required"
 _LISTENERS_SHOWN = 10
+_LISTENER_NOT_FOUND_STATUSES = frozenset({404, 422})
 _NO_LISTENERS = (
     "This workspace has no listeners, so --listener-id and --k8s-namespace "
     "do not apply."
@@ -1512,7 +1513,7 @@ def _requested_listener(client: HostBackendClient, listener_id: str) -> Listener
             client, lambda c: c.get_listener(listener_id)
         )
     except HostBackendError as err:
-        if err.status_code != 404:
+        if err.status_code not in _LISTENER_NOT_FOUND_STATUSES:
             raise
         available = _available_listeners(client)
         if not available:
