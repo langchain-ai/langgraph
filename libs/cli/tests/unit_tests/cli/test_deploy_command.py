@@ -932,3 +932,18 @@ def test_a_listener_without_an_id_is_ignored(deploy_project: DeployProject) -> N
         "listener_id": "listener-1",
         "listener_config": {"k8s_namespace": "agents"},
     }
+
+
+def test_a_managed_build_in_a_listener_workspace_points_at_push_to(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.create_error = (
+        "Source configuration error: 'source_config.listener_id' is required "
+        "for workspace with available listener IDs: ['listener-1']"
+    )
+
+    result = deploy_project.run("--no-remote")
+
+    assert result.exit_code != 0
+    assert "--push-to" in result.output
+    assert deploy_project.docker.verbs() == []

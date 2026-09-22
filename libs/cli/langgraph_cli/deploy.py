@@ -1430,16 +1430,29 @@ def _resolve_or_create(
     )
     if found is not None:
         return found.id, step
-    created, step = _create_deployment(
-        ctx.client,
-        step,
-        name=ctx.selector.name,
-        source=source,
-        source_config={"deployment_type": ctx.deployment_type},
-        source_revision_config={},
-        secrets=ctx.secrets,
-    )
+    try:
+        created, step = _create_deployment(
+            ctx.client,
+            step,
+            name=ctx.selector.name,
+            source=source,
+            source_config={"deployment_type": ctx.deployment_type},
+            source_revision_config={},
+            secrets=ctx.secrets,
+        )
+    except HostBackendError as err:
+        if _needs_a_listener(err):
+            raise click.UsageError(
+                "This workspace deploys through a listener in your own cluster, so "
+                "the image has to come from a registry you manage. Re-run with "
+                "--push-to <registry>/<repository>."
+            ) from None
+        raise
     return created.id, step
+
+
+def _needs_a_listener(err: HostBackendError) -> bool:
+    return err.status_code == 400 and _LISTENER_REQUIRED_MARKER in err.message
 
 
 def _available_listeners(client: HostBackendClient) -> tuple[Listener, ...]:
@@ -1573,7 +1586,7 @@ class CustomerRegistrySource:
                 secrets=ctx.secrets,
             )
         except HostBackendError as err:
-            if err.status_code == 400 and _LISTENER_REQUIRED_MARKER in err.message:
+            if _needs_a_listener(err):
                 raise click.UsageError(
                     "This workspace deploys through a listener. Re-run with "
                     f"--listener-id and --k8s-namespace.\n{err.message}"
