@@ -1610,6 +1610,11 @@ def deploy(ctx: click.Context, **_: object):
     # otherwise, we return None here and click will proceed to actually run the subcommand (list or delete)
     if ctx.invoked_subcommand is not None:
         return
+    if (
+        ctx.params.get("agent_id") is not None
+        or ctx.params.get("environment") is not None
+    ) and ctx.get_parameter_source("name") == click.core.ParameterSource.ENVIRONMENT:
+        ctx.params["name"] = None
     docker_build_args = tuple(ctx.args)
     ctx.args = []  # Prevent Click from re-processing passthrough args later.
     return ctx.forward(_deploy_cmd, docker_build_args=docker_build_args)

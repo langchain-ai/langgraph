@@ -66,7 +66,8 @@ AGENT_ARGS = [
 ]
 
 
-def test_agent_create(deployment_api, tmp_path):
+def test_agent_create(deployment_api, tmp_path, monkeypatch):
+    monkeypatch.setenv("LANGSMITH_DEPLOYMENT_NAME", "legacy")
     _, requests, build = deployment_api
     result = CliRunner().invoke(cli, AGENT_ARGS)
     assert result.exit_code == 0, result.output
@@ -93,3 +94,12 @@ def test_agent_update(deployment_api):
     assert result.exit_code == 0, result.output
     assert len(requests) == 1
     assert build.call_args.kwargs["deployment_id"] == "existing-id"
+
+
+def test_agent_rejects_explicit_name(deployment_api, monkeypatch):
+    monkeypatch.setenv("LANGSMITH_DEPLOYMENT_NAME", "legacy")
+    _, requests, _ = deployment_api
+    result = CliRunner().invoke(cli, [*AGENT_ARGS, "--name", "legacy"])
+    assert result.exit_code == 2
+    assert "cannot be combined" in result.output
+    assert not requests
