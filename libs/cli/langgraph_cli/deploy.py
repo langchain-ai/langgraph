@@ -179,6 +179,94 @@ class Listener:
 
 
 @dataclass(frozen=True, slots=True)
+class Unplaced:
+    def source_config(self) -> dict[str, object]:
+        return {}
+
+
+@dataclass(frozen=True, slots=True)
+class OnListener:
+    listener_id: str
+    k8s_namespace: str
+
+    def source_config(self) -> dict[str, object]:
+        return {
+            "listener_id": self.listener_id,
+            "listener_config": {"k8s_namespace": self.k8s_namespace},
+        }
+
+
+Placement = Unplaced | OnListener
+
+
+@dataclass(frozen=True, slots=True)
+class RequestedPlacement:
+    listener_id: str | None = None
+    k8s_namespace: str | None = None
+
+    @property
+    def requested(self) -> bool:
+        return self.listener_id is not None or self.k8s_namespace is not None
+
+    def resolve(self, listeners: Sequence[Listener], *, required: bool) -> Placement:
+        if not listeners:
+            if self.requested:
+                raise click.UsageError(
+                    "This workspace has no listeners, so --listener-id and "
+                    "--k8s-namespace do not apply."
+                )
+            return Unplaced()
+        if not required and not self.requested:
+            return Unplaced()
+        listener = self._listener(listeners)
+        return OnListener(listener.id, self._namespace(listener))
+
+    def _listener(self, listeners: Sequence[Listener]) -> Listener:
+        if self.listener_id is None:
+            if len(listeners) == 1:
+                return listeners[0]
+            raise click.UsageError(
+                "This workspace has several listeners. Choose one with "
+                f"--listener-id:\n{_describe(listeners)}"
+            )
+        for listener in listeners:
+            if listener.id == self.listener_id:
+                return listener
+        raise click.UsageError(
+            f"Listener {self.listener_id} was not found in this workspace. "
+            f"Available listeners:\n{_describe(listeners)}"
+        )
+
+    def _namespace(self, listener: Listener) -> str:
+        if not listener.namespaces:
+            raise click.UsageError(
+                f"Listener {listener.id} serves no namespaces. Check its configuration."
+            )
+        if self.k8s_namespace is None:
+            if len(listener.namespaces) == 1:
+                return listener.namespaces[0]
+            raise click.UsageError(
+                f"Listener {listener.id} serves several namespaces. Choose one with "
+                f"--k8s-namespace: {', '.join(listener.namespaces)}"
+            )
+        if self.k8s_namespace not in listener.namespaces:
+            raise click.UsageError(
+                f"Listener {listener.id} does not serve namespace "
+                f"'{self.k8s_namespace}'. Choose one of: "
+                f"{', '.join(listener.namespaces)}"
+            )
+        return self.k8s_namespace
+
+
+def _describe(listeners: Sequence[Listener]) -> str:
+    return "\n".join(
+        f"  {listener.id}  cluster {listener.compute_id}  "
+        f"namespaces: {', '.join(listener.namespaces)}"
+        for listener in listeners
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class ExistingDeployment:
     id: str
     source: str | None

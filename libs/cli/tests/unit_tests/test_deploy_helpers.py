@@ -17,7 +17,10 @@ from langgraph_cli.deploy import (
     DockerBuildCommand,
     Listener,
     ManagedRegistrySource,
+    OnListener,
     RemoteBuildSource,
+    RequestedPlacement,
+    Unplaced,
     _call_host_backend_with_optional_tenant,
     _create_host_backend_client,
     _docker_config_for_token,
@@ -927,3 +930,139 @@ class TestListener:
     )
     def test_from_resource_reads_the_control_plane_shape(self, resource, expected):
         assert Listener.from_resource(resource) == expected
+
+
+ONE_NAMESPACE = Listener("listener-1", "prod-cluster", ("agents",))
+TWO_NAMESPACES = Listener("listener-2", "multi-cluster", ("agents", "agents-staging"))
+NO_NAMESPACE = Listener("listener-3", "broken-cluster", ())
+
+
+class TestRequestedPlacement:
+    @pytest.mark.parametrize(
+        ("request_", "listeners", "required", "expected"),
+        [
+            pytest.param(
+                RequestedPlacement(), (), True, Unplaced(), id="no_listeners_no_request"
+            ),
+            pytest.param(
+                RequestedPlacement(),
+                (ONE_NAMESPACE,),
+                True,
+                OnListener("listener-1", "agents"),
+                id="cloud_uses_the_only_possible_answer",
+            ),
+            pytest.param(
+                RequestedPlacement(),
+                (ONE_NAMESPACE,),
+                False,
+                Unplaced(),
+                id="self_hosted_keeps_its_bundled_operator",
+            ),
+            pytest.param(
+                RequestedPlacement(listener_id="listener-1"),
+                (ONE_NAMESPACE,),
+                False,
+                OnListener("listener-1", "agents"),
+                id="self_hosted_places_when_asked",
+            ),
+            pytest.param(
+                RequestedPlacement(k8s_namespace="agents-staging"),
+                (TWO_NAMESPACES,),
+                True,
+                OnListener("listener-2", "agents-staging"),
+                id="namespace_alone_picks_the_only_listener",
+            ),
+            pytest.param(
+                RequestedPlacement(listener_id="listener-1"),
+                (ONE_NAMESPACE, TWO_NAMESPACES),
+                True,
+                OnListener("listener-1", "agents"),
+                id="listener_alone_picks_its_only_namespace",
+            ),
+            pytest.param(
+                RequestedPlacement(listener_id="listener-2", k8s_namespace="agents"),
+                (ONE_NAMESPACE, TWO_NAMESPACES),
+                True,
+                OnListener("listener-2", "agents"),
+                id="both_given",
+            ),
+        ],
+    )
+    def test_resolves_to_a_placement(self, request_, listeners, required, expected):
+        assert request_.resolve(listeners, required=required) == expected
+
+    @pytest.mark.parametrize(
+        ("request_", "listeners", "message"),
+        [
+            pytest.param(
+                RequestedPlacement(listener_id="listener-1"),
+                (),
+                "no listeners",
+                id="workspace_has_no_listeners",
+            ),
+            pytest.param(
+                RequestedPlacement(),
+                (ONE_NAMESPACE, TWO_NAMESPACES),
+                "--listener-id",
+                id="several_listeners_need_a_choice",
+            ),
+            pytest.param(
+                RequestedPlacement(k8s_namespace="agents"),
+                (ONE_NAMESPACE, TWO_NAMESPACES),
+                "--listener-id",
+                id="namespace_alone_is_ambiguous_with_several_listeners",
+            ),
+            pytest.param(
+                RequestedPlacement(listener_id="listener-9"),
+                (ONE_NAMESPACE,),
+                "was not found",
+                id="unknown_listener",
+            ),
+            pytest.param(
+                RequestedPlacement(),
+                (TWO_NAMESPACES,),
+                "--k8s-namespace",
+                id="several_namespaces_need_a_choice",
+            ),
+            pytest.param(
+                RequestedPlacement(listener_id="listener-2", k8s_namespace="nope"),
+                (TWO_NAMESPACES,),
+                "does not serve namespace",
+                id="unknown_namespace",
+            ),
+            pytest.param(
+                RequestedPlacement(listener_id="listener-3"),
+                (NO_NAMESPACE,),
+                "serves no namespaces",
+                id="listener_without_namespaces",
+            ),
+        ],
+    )
+    def test_refuses_and_names_the_choices(self, request_, listeners, message):
+        with pytest.raises(click.UsageError, match=message):
+            request_.resolve(listeners, required=True)
+
+    def test_the_error_lists_every_listener_with_its_cluster_and_namespaces(self):
+        with pytest.raises(click.UsageError) as error:
+            RequestedPlacement().resolve((ONE_NAMESPACE, TWO_NAMESPACES), required=True)
+
+        assert "listener-1" in error.value.message
+        assert "prod-cluster" in error.value.message
+        assert "agents-staging" in error.value.message
+
+    @pytest.mark.parametrize(
+        ("placement", "expected"),
+        [
+            pytest.param(Unplaced(), {}, id="unplaced_adds_nothing"),
+            pytest.param(
+                OnListener("listener-1", "agents"),
+                {
+                    "listener_id": "listener-1",
+                    "listener_config": {"k8s_namespace": "agents"},
+                },
+                id="placed_carries_listener_and_namespace",
+            ),
+        ],
+    )
+    def test_source_config_matches_the_control_plane_shape(self, placement, expected):
+        assert placement.source_config() == expected
