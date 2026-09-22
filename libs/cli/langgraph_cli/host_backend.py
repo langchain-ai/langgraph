@@ -37,6 +37,13 @@ class ControlPlaneEndpoints:
             return cls.from_langsmith_endpoint(langsmith_endpoint)
         return cls(CLOUD_CONTROL_PLANE_URL, CLOUD_DASHBOARD_URL)
 
+    @property
+    def is_cloud(self) -> bool:
+        hostname = urlparse(self.control_plane_url).hostname or ""
+        return hostname == CLOUD_CONTROL_PLANE_HOST or hostname.endswith(
+            f".{CLOUD_CONTROL_PLANE_HOST}"
+        )
+
     @classmethod
     def from_control_plane_url(cls, url: str) -> ControlPlaneEndpoints:
         control_plane_url = url.rstrip("/")

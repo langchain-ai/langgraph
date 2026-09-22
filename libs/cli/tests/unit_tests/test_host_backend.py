@@ -588,3 +588,27 @@ def test_list_listeners_asks_for_a_full_page():
 
     assert c.list_listeners() == [{"id": "listener-1"}]
     assert seen["url"] == "https://api.example.com/v2/listeners?limit=100"
+
+
+@pytest.mark.parametrize(
+    ("control_plane_url", "expected"),
+    [
+        pytest.param("https://api.host.langchain.com", True, id="cloud"),
+        pytest.param("https://eu.api.host.langchain.com", True, id="cloud_region"),
+        pytest.param("https://dev.api.host.langchain.com", True, id="cloud_dev"),
+        pytest.param("https://smith.example.com/api-host", False, id="self_hosted"),
+        pytest.param(
+            "https://corp.example.com/langsmith/api-host",
+            False,
+            id="self_hosted_prefix",
+        ),
+        pytest.param("http://localhost:8080/api-host", False, id="local"),
+        pytest.param(
+            "https://evil-api.host.langchain.com", False, id="lookalike_needs_a_dot"
+        ),
+    ],
+)
+def test_is_cloud_recognises_the_managed_control_plane(control_plane_url, expected):
+    endpoints = ControlPlaneEndpoints.from_control_plane_url(control_plane_url)
+
+    assert endpoints.is_cloud is expected
