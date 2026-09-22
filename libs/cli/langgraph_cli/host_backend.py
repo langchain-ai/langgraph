@@ -70,10 +70,9 @@ def _cloud_control_plane_host_for(langsmith_api_host: str) -> str:
 
 
 def _cloud_dashboard_for(control_plane_host: str) -> str:
-    for api_host in (CLOUD_CONTROL_PLANE_HOST, CLOUD_API_HOST):
-        if control_plane_host.endswith(f".{api_host}"):
-            region = control_plane_host[: -len(api_host) - 1]
-            return f"https://{region}.{CLOUD_DASHBOARD_HOST}"
+    if control_plane_host.endswith(f".{CLOUD_CONTROL_PLANE_HOST}"):
+        region = control_plane_host[: -len(CLOUD_CONTROL_PLANE_HOST) - 1]
+        return f"https://{region}.{CLOUD_DASHBOARD_HOST}"
     return CLOUD_DASHBOARD_URL
 
 

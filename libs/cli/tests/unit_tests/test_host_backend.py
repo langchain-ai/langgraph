@@ -546,10 +546,3 @@ def test_control_plane_endpoints_resolve(host_url, langsmith_endpoint, expected)
     endpoints = ControlPlaneEndpoints.resolve(host_url, langsmith_endpoint)
 
     assert (endpoints.control_plane_url, endpoints.dashboard_url) == expected
-
-
-def test_dev_smith_api_host_url():
-    endpoints = ControlPlaneEndpoints.from_control_plane_url(
-        "https://dev.api.smith.langchain.com/"
-    )
-    assert endpoints.dashboard_url == "https://dev.smith.langchain.com"
