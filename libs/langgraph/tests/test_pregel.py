@@ -5583,6 +5583,7 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                 "interrupts": [
                     {
                         "id": AnyStr(),
+                        "response_schema": None,
                         "value": "test",
                     },
                 ],
@@ -5627,6 +5628,7 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                         "interrupts": (
                             {
                                 "id": AnyStr(),
+                                "response_schema": None,
                                 "value": "test",
                             },
                         ),

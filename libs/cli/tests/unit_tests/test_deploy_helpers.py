@@ -13,6 +13,10 @@ import pytest
 
 import langgraph_cli.deploy as deploy_mod
 from langgraph_cli.deploy import (
+    CustomerRegistrySource,
+    DockerBuildCommand,
+    ManagedRegistrySource,
+    RemoteBuildSource,
     _call_host_backend_with_optional_tenant,
     _create_host_backend_client,
     _docker_config_for_token,
@@ -21,12 +25,13 @@ from langgraph_cli.deploy import (
     _parse_env_from_config,
     _resolve_env_path,
     _resolve_pushed_image_digest,
-    _smith_dashboard_base_url,
+    _select_source,
     _validate_prebuilt_image,
     normalize_image_tag,
     normalize_name,
 )
 from langgraph_cli.host_backend import HostBackendClient, HostBackendError
+from langgraph_cli.image_reference import ImageReference
 
 
 class TestDockerConfigForToken:
@@ -259,22 +264,18 @@ class TestEnvWithoutDeploymentName:
 
 class TestCallHostBackendWithOptionalTenant:
     def _make_client(self, handler):
-        c = HostBackendClient("https://api.example.com", "test-key")
-        c._client = httpx.Client(
-            base_url="https://api.example.com",
+        c = HostBackendClient(
+            "https://api.example.com",
+            "test-key",
             transport=httpx.MockTransport(handler),
-            headers={"X-Api-Key": "test-key", "Accept": "application/json"},
-            timeout=30,
         )
         return c
 
     def _make_eu_client(self, handler):
-        c = HostBackendClient("https://eu.api.host.langchain.com", "test-key")
-        c._client = httpx.Client(
-            base_url="https://eu.api.host.langchain.com",
+        c = HostBackendClient(
+            "https://eu.api.host.langchain.com",
+            "test-key",
             transport=httpx.MockTransport(handler),
-            headers={"X-Api-Key": "test-key", "Accept": "application/json"},
-            timeout=30,
         )
         return c
 
@@ -334,7 +335,6 @@ class TestCallHostBackendWithOptionalTenant:
         assert exc_info.value.status_code == 403
         assert "smith.langchain.com" in exc_info.value.message
         assert seen_tenant_ids == [None, "workspace-123"]
-        assert client._client.headers["X-Tenant-ID"] == "workspace-123"
 
     def test_other_403_re_raises_original(self):
         client = self._make_client(
@@ -540,60 +540,193 @@ class TestCreateHostBackendClientNoInput:
         assert client is not None
 
 
-class TestSmithDashboardBaseUrl:
-    def test_none_returns_default(self):
-        assert _smith_dashboard_base_url(None) == "https://smith.langchain.com"
+class TestCreateHostBackendClientEndpoint:
+    def test_langsmith_endpoint_from_project_env_selects_self_hosted_control_plane(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test")
+        monkeypatch.delenv("LANGSMITH_ENDPOINT", raising=False)
 
-    def test_empty_returns_default(self):
-        assert _smith_dashboard_base_url("") == "https://smith.langchain.com"
-
-    def test_prod_host_url(self):
-        assert (
-            _smith_dashboard_base_url("https://api.host.langchain.com")
-            == "https://smith.langchain.com"
+        client = _create_host_backend_client(
+            host_url=None,
+            api_key=None,
+            env_vars={"LANGSMITH_ENDPOINT": "https://smith.example.com/api/v1"},
         )
 
-    def test_dev_host_url(self):
-        assert (
-            _smith_dashboard_base_url("https://dev.api.host.langchain.com")
-            == "https://dev.smith.langchain.com"
+        assert client.base_url == "https://smith.example.com/api-host"
+
+    def test_explicit_host_url_wins_over_langsmith_endpoint(self, monkeypatch):
+        monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test")
+        monkeypatch.setenv("LANGSMITH_ENDPOINT", "https://smith.example.com/api/v1")
+
+        client = _create_host_backend_client(
+            host_url="https://custom.host.com", api_key=None, env_vars={}
         )
 
-    def test_eu_host_url(self):
-        assert (
-            _smith_dashboard_base_url("https://eu.api.host.langchain.com")
-            == "https://eu.smith.langchain.com"
+        assert client.base_url == "https://custom.host.com"
+
+
+class TestDockerBuildCommand:
+    @pytest.mark.parametrize(
+        ("machine", "verbose", "expected"),
+        [
+            pytest.param(
+                "x86_64",
+                False,
+                DockerBuildCommand(("docker", "build"), ()),
+                id="amd64_host_builds_natively",
+            ),
+            pytest.param(
+                "arm64",
+                False,
+                DockerBuildCommand(
+                    ("docker", "buildx", "build"),
+                    ("--platform", "linux/amd64", "--load", "--progress=quiet"),
+                ),
+                id="other_hosts_cross_build_quietly",
+            ),
+            pytest.param(
+                "arm64",
+                True,
+                DockerBuildCommand(
+                    ("docker", "buildx", "build"),
+                    ("--platform", "linux/amd64", "--load"),
+                ),
+                id="verbose_cross_build_keeps_progress_output",
+            ),
+        ],
+    )
+    def test_for_host_targets_the_deployment_platform(self, machine, verbose, expected):
+        assert DockerBuildCommand.for_host(machine, verbose=verbose) == expected
+
+
+class TestSelectSource:
+    OPTIONS = {
+        "push_to": None,
+        "image": None,
+        "image_name": None,
+        "tag": None,
+        "remote_build_flag": None,
+    }
+    REPOSITORY = "registry.example.com/app"
+
+    @pytest.mark.parametrize(
+        ("flags", "docker_available", "expected"),
+        [
+            pytest.param(
+                {"push_to": REPOSITORY},
+                True,
+                CustomerRegistrySource(
+                    ImageReference(REPOSITORY, "latest"), prebuilt_image=None
+                ),
+                id="push_to_selects_the_external_source_with_the_default_tag",
+            ),
+            pytest.param(
+                {"push_to": f"{REPOSITORY}:v2"},
+                True,
+                CustomerRegistrySource(
+                    ImageReference(REPOSITORY, "v2"), prebuilt_image=None
+                ),
+                id="push_to_keeps_a_tag_given_in_the_reference",
+            ),
+            pytest.param(
+                {"push_to": REPOSITORY, "tag": "v3"},
+                True,
+                CustomerRegistrySource(
+                    ImageReference(REPOSITORY, "v3"), prebuilt_image=None
+                ),
+                id="tag_flag_composes_with_push_to",
+            ),
+            pytest.param(
+                {"push_to": REPOSITORY, "image": "app:dev"},
+                False,
+                CustomerRegistrySource(
+                    ImageReference(REPOSITORY, "latest"), prebuilt_image="app:dev"
+                ),
+                id="prebuilt_image_is_retagged_for_push_to_without_docker_checks",
+            ),
+            pytest.param(
+                {"remote_build_flag": True},
+                True,
+                RemoteBuildSource(),
+                id="remote_flag_selects_the_source_upload",
+            ),
+            pytest.param(
+                {},
+                False,
+                RemoteBuildSource(),
+                id="no_local_docker_falls_back_to_the_source_upload",
+            ),
+            pytest.param(
+                {},
+                True,
+                ManagedRegistrySource(
+                    prebuilt_image=None, image_name=None, tag="latest"
+                ),
+                id="local_docker_selects_the_internal_docker_source",
+            ),
+            pytest.param(
+                {"image": "app:dev", "tag": "v1"},
+                False,
+                ManagedRegistrySource(
+                    prebuilt_image="app:dev", image_name=None, tag="v1"
+                ),
+                id="prebuilt_image_forces_the_internal_docker_source",
+            ),
+        ],
+    )
+    def test_flags_select_one_source(
+        self, monkeypatch, mocker, flags, docker_available, expected
+    ):
+        mocker.patch(
+            "langgraph_cli.deploy._get_emitter", return_value=mocker.MagicMock()
+        )
+        monkeypatch.setattr(
+            deploy_mod,
+            "can_build_locally",
+            lambda: (True, None) if docker_available else (False, "Docker is required"),
         )
 
-    def test_staging_host_url(self):
-        assert (
-            _smith_dashboard_base_url("https://staging.api.host.langchain.com")
-            == "https://staging.smith.langchain.com"
+        assert _select_source(**{**self.OPTIONS, **flags}) == expected
+
+    def test_push_to_build_requires_local_docker(self, monkeypatch):
+        monkeypatch.setattr(
+            deploy_mod, "can_build_locally", lambda: (False, "Docker is required")
         )
 
-    def test_localhost(self):
-        assert (
-            _smith_dashboard_base_url("http://localhost:8080")
-            == "http://localhost:8080"
-        )
+        with pytest.raises(click.UsageError, match="Docker is required"):
+            _select_source(**{**self.OPTIONS, "push_to": self.REPOSITORY})
 
-    def test_localhost_trailing_slash(self):
-        assert (
-            _smith_dashboard_base_url("http://localhost:8080/")
-            == "http://localhost:8080"
-        )
+    @pytest.mark.parametrize(
+        ("flags", "message"),
+        [
+            pytest.param(
+                {"push_to": REPOSITORY, "remote_build_flag": True},
+                "--push-to cannot be combined with --remote.",
+                id="push_to_with_remote",
+            ),
+            pytest.param(
+                {"push_to": f"{REPOSITORY}:v1", "tag": "v2"},
+                "already includes a tag",
+                id="push_to_with_a_tag_and_the_tag_flag",
+            ),
+            pytest.param(
+                {"push_to": f"{REPOSITORY}@sha256:abc"},
+                "not a digest",
+                id="push_to_with_a_digest",
+            ),
+            pytest.param(
+                {"image": "app:dev", "remote_build_flag": True},
+                "--image cannot be combined with --remote builds.",
+                id="image_with_remote",
+            ),
+        ],
+    )
+    def test_conflicting_flags_are_rejected(self, monkeypatch, flags, message):
+        monkeypatch.setattr(deploy_mod, "can_build_locally", lambda: (True, None))
 
-    def test_127_0_0_1(self):
-        assert (
-            _smith_dashboard_base_url("http://127.0.0.1:3000")
-            == "http://127.0.0.1:3000"
-        )
-
-    def test_unknown_domain_returns_default(self):
-        assert (
-            _smith_dashboard_base_url("https://custom.example.com")
-            == "https://smith.langchain.com"
-        )
+        with pytest.raises(click.UsageError, match=message):
+            _select_source(**{**self.OPTIONS, **flags})
 
 
 class TestResolvePushedImageDigest:
@@ -643,6 +776,16 @@ class TestResolvePushedImageDigest:
             verbose=False,
         )
         assert out == "us-central1-docker.pkg.dev/proj/repo@sha256:abc123"
+
+    def test_registry_port_without_tag_still_resolves_the_digest(self):
+        runner = self._runner('["localhost:5000/repo@sha256:abc123"]')
+        out = _resolve_pushed_image_digest(
+            runner,
+            remote_image="localhost:5000/repo",
+            docker_config_dir=None,
+            verbose=False,
+        )
+        assert out == "localhost:5000/repo@sha256:abc123"
 
     def test_empty_repodigests_falls_back_with_warning(self, mocker):
         emitter = mocker.MagicMock()

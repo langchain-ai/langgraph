@@ -320,6 +320,31 @@ def test_top_level_help_truncates_command_descriptions_to_single_line() -> None:
     assert "[Beta] List LangSmith Deployments." in deploy_list_line
 
 
+def test_deploy_missing_config_shows_actionable_error(tmp_path, monkeypatch) -> None:
+    runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(cli, ["deploy"])
+
+    assert result.exit_code == 1
+    assert "We couldn't find a langgraph.json file." in result.output
+    assert "Run `langgraph deploy` from the root" in result.output
+    assert "https://docs.langchain.com/langsmith/deployment-quickstart" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_deploy_missing_config_emits_json_error(tmp_path, monkeypatch) -> None:
+    runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(cli, ["deploy", "--json"])
+
+    assert result.exit_code == 1
+    events = [json.loads(line) for line in result.output.splitlines()]
+    assert events[-1]["event"] == "error"
+    assert "We couldn't find a langgraph.json file." in events[-1]["message"]
+
+
 def test_dev_command_requires_ssl_certfile_and_keyfile_together(tmp_path) -> None:
     config_path = tmp_path / "langgraph.json"
     config_path.write_text(
