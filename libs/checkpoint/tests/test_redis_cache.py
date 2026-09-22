@@ -1,5 +1,6 @@
 """Unit tests for Redis cache implementation."""
 
+import os
 import time
 
 import pytest
@@ -9,13 +10,24 @@ from langgraph.cache.base import FullKey
 from langgraph.cache.redis import RedisCache
 
 
+def _test_redis(*, db: int = 0) -> redis.Redis:
+    """Build a Redis client from REDIS_URL or REDIS_HOST/REDIS_PORT, defaulting to localhost."""
+    url = os.getenv("REDIS_URL")
+    if url:
+        return redis.Redis.from_url(url, db=db, decode_responses=False)
+    return redis.Redis(
+        host=os.getenv("REDIS_HOST", "localhost"),
+        port=int(os.getenv("REDIS_PORT", 6379)),
+        db=db,
+        decode_responses=False,
+    )
+
+
 class TestRedisCache:
     @pytest.fixture(autouse=True)
     def setup(self) -> None:
         """Set up test Redis client and cache."""
-        self.client = redis.Redis(
-            host="localhost", port=6379, db=0, decode_responses=False
-        )
+        self.client = _test_redis(db=0)
         try:
             self.client.ping()
         except redis.ConnectionError:
@@ -165,7 +177,7 @@ class TestRedisCache:
     async def test_async_operations(self) -> None:
         """Test async set and get operations with sync Redis client."""
         # Create sync Redis client and cache (like main integration tests)
-        client = redis.Redis(host="localhost", port=6379, db=1, decode_responses=False)
+        client = _test_redis(db=1)
         try:
             client.ping()
         except Exception:
@@ -191,7 +203,7 @@ class TestRedisCache:
     async def test_async_clear(self) -> None:
         """Test async clear operations with sync Redis client."""
         # Create sync Redis client and cache (like main integration tests)
-        client = redis.Redis(host="localhost", port=6379, db=1, decode_responses=False)
+        client = _test_redis(db=1)
         try:
             client.ping()
         except Exception:
