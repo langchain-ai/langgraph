@@ -1169,3 +1169,56 @@ class SyncRunsClient:
             headers=headers,
             params=params,
         )
+
+    def insert_input(
+        self,
+        thread_id: str,
+        run_id: str,
+        /,
+        *,
+        input: Input,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> Run:
+        """Append input to an active run at its next step boundary.
+
+        Durably enqueues ``input`` to be consumed by the running agent before
+        its next model call, without cancelling or interrupting the step that
+        is currently in flight. The input is applied through the graph's normal
+        reducer path (e.g. ``add_messages`` for a messages state) and is visible
+        in the thread history after the boundary checkpoint is written.
+
+        Args:
+            thread_id: The ID of the thread that owns the run.
+            run_id: The ID of the currently active run to deliver input to.
+            input: The input to append. Shaped like the graph's normal input
+                and applied via the graph's reducers at the next superstep
+                boundary.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            The active ``Run`` object.
+
+        Raises:
+            httpx.HTTPStatusError: 409 Conflict if the run is not currently
+                active (already interrupted, terminal, or not found).
+
+        ???+ example "Example Usage"
+
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
+            run = client.runs.insert_input(
+                thread_id="my-thread-id",
+                run_id="my-run-id",
+                input={"messages": [{"role": "user", "content": "New message"}]},
+            )
+            ```
+
+        """
+        return self.http.post(
+            f"/threads/{_quote_path_param(thread_id)}/runs/{_quote_path_param(run_id)}/input",
+            json={"input": input},
+            headers=headers,
+            params=params,
+        )

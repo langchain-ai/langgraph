@@ -181,6 +181,40 @@ class TestAsyncPathEncoding:
         segment = wire[len("/assistants/") :]
         assert "/" not in segment
 
+    async def test_runs_insert_input_double_id_pivot_stays_on_threads_runs_input(
+        self,
+    ) -> None:
+        captured: list[tuple[str, str]] = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            captured.append((request.method, _wire_path(request)))
+            return httpx.Response(200, json={"run_id": "r1", "thread_id": "t1"})
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="https://example.com"
+        ) as client:
+            runs_client = RunsClient(HttpClient(client))
+            await runs_client.insert_input(
+                "..", "../runs/crons/cron-id", input={"messages": []}
+            )
+
+        assert len(captured) == 1
+        method, wire = captured[0]
+        assert method == "POST"
+        # Path must be /threads/{encoded_thread}/runs/{encoded_run}/input
+        assert wire.startswith("/threads/")
+        parts = wire.split("/")
+        # Expected: ['', 'threads', '<enc_thread>', 'runs', '<enc_run>', 'input']
+        assert len(parts) == 6
+        assert parts[1] == "threads"
+        assert parts[3] == "runs"
+        assert parts[5] == "input"
+        assert "/" not in parts[2]
+        assert "/" not in parts[4]
+        assert parts[2] == "%2E%2E"
+        assert parts[4] == "..%2Fruns%2Fcrons%2Fcron-id"
+
     async def test_runs_delete_double_id_pivot_stays_on_threads_runs(self) -> None:
         captured: list[tuple[str, str]] = []
 
@@ -384,6 +418,38 @@ class TestSyncPathEncoding:
         assert wire.startswith("/assistants/")
         segment = wire[len("/assistants/") :]
         assert "/" not in segment
+
+    def test_runs_insert_input_double_id_pivot_stays_on_threads_runs_input(
+        self,
+    ) -> None:
+        captured: list[tuple[str, str]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured.append((request.method, _wire_path(request)))
+            return httpx.Response(200, json={"run_id": "r1", "thread_id": "t1"})
+
+        transport = httpx.MockTransport(handler)
+        with httpx.Client(
+            transport=transport, base_url="https://example.com"
+        ) as client:
+            runs_client = SyncRunsClient(SyncHttpClient(client))
+            runs_client.insert_input(
+                "..", "../runs/crons/cron-id", input={"messages": []}
+            )
+
+        assert len(captured) == 1
+        method, wire = captured[0]
+        assert method == "POST"
+        assert wire.startswith("/threads/")
+        parts = wire.split("/")
+        assert len(parts) == 6
+        assert parts[1] == "threads"
+        assert parts[3] == "runs"
+        assert parts[5] == "input"
+        assert "/" not in parts[2]
+        assert "/" not in parts[4]
+        assert parts[2] == "%2E%2E"
+        assert parts[4] == "..%2Fruns%2Fcrons%2Fcron-id"
 
     def test_runs_delete_double_id_pivot_stays_on_threads_runs(self) -> None:
         captured: list[tuple[str, str]] = []
