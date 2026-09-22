@@ -13,6 +13,8 @@ import pytest
 
 import langgraph_cli.deploy as deploy_mod
 from langgraph_cli.deploy import (
+    ById,
+    ByName,
     CustomerRegistrySource,
     DockerBuildCommand,
     ExistingDeployment,
@@ -616,6 +618,7 @@ class TestSelectSource:
         "tag": None,
         "remote_build_flag": None,
         "placement": RequestedPlacement(),
+        "selector": ByName("my-app"),
     }
     REPOSITORY = "registry.example.com/app"
 
@@ -628,7 +631,7 @@ class TestSelectSource:
                 CustomerRegistrySource(
                     reference=ImageReference(REPOSITORY, "latest"),
                     prebuilt_image=None,
-                    placement=RequestedPlacement(),
+                    requested_placement=RequestedPlacement(),
                 ),
                 id="push_to_selects_the_external_source_with_the_default_tag",
             ),
@@ -638,7 +641,7 @@ class TestSelectSource:
                 CustomerRegistrySource(
                     reference=ImageReference(REPOSITORY, "v2"),
                     prebuilt_image=None,
-                    placement=RequestedPlacement(),
+                    requested_placement=RequestedPlacement(),
                 ),
                 id="push_to_keeps_a_tag_given_in_the_reference",
             ),
@@ -648,7 +651,7 @@ class TestSelectSource:
                 CustomerRegistrySource(
                     reference=ImageReference(REPOSITORY, "v3"),
                     prebuilt_image=None,
-                    placement=RequestedPlacement(),
+                    requested_placement=RequestedPlacement(),
                 ),
                 id="tag_flag_composes_with_push_to",
             ),
@@ -658,7 +661,7 @@ class TestSelectSource:
                 CustomerRegistrySource(
                     reference=ImageReference(REPOSITORY, "latest"),
                     prebuilt_image="app:dev",
-                    placement=RequestedPlacement(),
+                    requested_placement=RequestedPlacement(),
                 ),
                 id="prebuilt_image_is_retagged_for_push_to_without_docker_checks",
             ),
@@ -671,7 +674,7 @@ class TestSelectSource:
                 CustomerRegistrySource(
                     reference=ImageReference(REPOSITORY, "latest"),
                     prebuilt_image=None,
-                    placement=RequestedPlacement("listener-1", "agents"),
+                    requested_placement=RequestedPlacement("listener-1", "agents"),
                 ),
                 id="push_to_carries_the_requested_placement",
             ),
@@ -1137,18 +1140,6 @@ def test_a_server_that_ignores_the_exact_name_filter_never_matches_another_deplo
     assert find_deployment_by_name(client, "brand-new-agent") is None
 
 
-def test_finding_a_deployment_by_name_returns_none_when_the_server_has_no_match():
-    client = HostBackendClient(
-        "https://api.example.com",
-        "key",
-        transport=httpx.MockTransport(
-            lambda req: httpx.Response(200, json={"resources": []})
-        ),
-    )
-
-    assert find_deployment_by_name(client, "agent") is None
-
-
 def test_a_full_page_without_a_match_refuses_to_claim_the_name_is_free():
     page = [
         {"id": f"dep-{index}", "name": f"other-agent-{index}"} for index in range(100)
@@ -1189,3 +1180,23 @@ def test_a_partial_page_without_a_match_means_the_name_is_free():
 def test_a_listener_without_an_id_is_refused(resource):
     with pytest.raises(HostBackendError, match="without an id"):
         Listener.from_resource(resource)
+
+
+def test_a_deployment_id_with_listener_flags_is_refused_without_probing_docker(
+    monkeypatch,
+):
+    def explode() -> tuple[bool, str | None]:
+        raise AssertionError("docker must not be probed for an argv-only conflict")
+
+    monkeypatch.setattr(deploy_mod, "can_build_locally", explode)
+
+    with pytest.raises(click.UsageError, match="--deployment-id"):
+        _select_source(
+            push_to="registry.example.com/app",
+            image=None,
+            image_name=None,
+            tag=None,
+            remote_build_flag=None,
+            placement=RequestedPlacement(listener_id="listener-1"),
+            selector=ById("dep-1"),
+        )

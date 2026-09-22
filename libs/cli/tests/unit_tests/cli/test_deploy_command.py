@@ -692,6 +692,7 @@ def test_push_to_places_a_new_deployment_on_the_only_listener(
         "listener_id": "listener-1",
         "listener_config": {"k8s_namespace": "agents"},
     }
+    assert "Deploying through listener listener-1 in namespace agents" in result.output
 
 
 def test_push_to_places_a_new_deployment_on_the_chosen_listener(
@@ -838,18 +839,6 @@ def test_listener_flags_are_refused_on_an_existing_deployment(
     assert result.exit_code != 0
     assert "fixed when a deployment is created" in result.output
     assert deploy_project.docker.verbs() == []
-
-
-def test_automatic_placement_is_announced(deploy_project: DeployProject) -> None:
-    deploy_project.control_plane.listeners = [LISTENER]
-
-    result = deploy_project.run(
-        "--push-to", PUSH_REPOSITORY, host_url=CLOUD_CONTROL_PLANE_URL
-    )
-
-    assert result.exit_code == 0, result.output
-    assert "listener-1" in result.output
-    assert "agents" in result.output
 
 
 def test_a_deployment_without_a_listener_announces_nothing(

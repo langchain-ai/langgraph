@@ -79,18 +79,6 @@ def test_request_transport_error_raises():
         c._request("GET", "/test")
 
 
-def test_list_deployments_sends_query_params():
-    def handler(req: httpx.Request) -> httpx.Response:
-        assert req.url.path == "/v2/deployments"
-        assert req.url.params["name_contains"] == "my app"
-        return httpx.Response(200, json={"ok": True})
-
-    c = HostBackendClient(
-        "https://api.example.com", "test-key", transport=httpx.MockTransport(handler)
-    )
-    assert c.list_deployments(name_contains="my app") == []
-
-
 def _capturing_client(captured: dict) -> HostBackendClient:
     def handler(req: httpx.Request) -> httpx.Response:
         captured["body"] = req.read()

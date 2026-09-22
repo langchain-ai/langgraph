@@ -1534,11 +1534,10 @@ class RemoteBuildSource:
 class CustomerRegistrySource:
     reference: ImageReference
     prebuilt_image: str | None
-    placement: RequestedPlacement
+    requested_placement: RequestedPlacement
 
     def run(self, ctx: DeployContext) -> DeployOutcome:
         if isinstance(ctx.selector, ById):
-            self.placement.ensure_not_requested(ctx.selector.deployment_id)
             existing, step = _fetch_deployment(ctx.client, 1, ctx.selector)
             return self._update(ctx, existing, step)
         found, step = _find_deployment(
@@ -1555,7 +1554,7 @@ class CustomerRegistrySource:
         self, ctx: DeployContext, existing: ExistingDeployment, step: int
     ) -> DeployOutcome:
         _ensure_customer_registry_source(existing)
-        self.placement.ensure_not_requested(existing.id)
+        self.requested_placement.ensure_not_requested(existing.id)
         image_uri, step = self._publish(ctx, step)
         _log_deploy_step(step, f"Updating deployment {existing.id}")
         updated = ctx.client.update_deployment(
@@ -1569,17 +1568,22 @@ class CustomerRegistrySource:
             existing.id, _image_revision_result(updated, "Deployment updated")
         )
 
-    def _placement(self, ctx: DeployContext) -> Placement:
-        places_on_a_listener = ctx.endpoints.is_cloud or self.placement.requested
-        if not places_on_a_listener:
+    def _resolve_placement(self, ctx: DeployContext) -> Placement:
+        if not (ctx.endpoints.is_cloud or self.requested_placement.requested):
             return Unplaced()
-        placement = self.placement.resolve(_available_listeners(ctx.client))
-        if placement.summary:
-            _get_emitter().info(placement.summary)
-        return placement
+        return self.requested_placement.resolve(_available_listeners(ctx.client))
+
+    def _announce(self, placement: Placement) -> None:
+        if isinstance(placement, OnListener):
+            _get_emitter().info(
+                placement.summary,
+                listener_id=placement.listener_id,
+                k8s_namespace=placement.k8s_namespace,
+            )
 
     def _create(self, ctx: DeployContext, name: str, step: int) -> DeployOutcome:
-        placement = self._placement(ctx)
+        placement = self._resolve_placement(ctx)
+        self._announce(placement)
         image_uri, step = self._publish(ctx, step)
         try:
             created, _ = _create_deployment(
@@ -1661,11 +1665,18 @@ def _select_source(
     tag: str | None,
     remote_build_flag: bool | None,
     placement: RequestedPlacement,
+    selector: DeploymentSelector,
 ) -> DeploymentSource:
     if push_to is None and placement.requested:
         raise click.UsageError(
             "--listener-id and --k8s-namespace only apply when creating a "
             "deployment with --push-to."
+        )
+    if placement.requested and isinstance(selector, ById):
+        raise click.UsageError(
+            "Listener and namespace are fixed when a deployment is created, so "
+            "they cannot be set for an existing --deployment-id. Drop them, or "
+            "create a new deployment with --name."
         )
     if push_to is not None:
         if remote_build_flag is True:
@@ -1674,7 +1685,9 @@ def _select_source(
         if image is None:
             _require_local_docker()
         return CustomerRegistrySource(
-            reference=reference, prebuilt_image=image, placement=placement
+            reference=reference,
+            prebuilt_image=image,
+            requested_placement=placement,
         )
     if image and remote_build_flag is True:
         raise click.UsageError("--image cannot be combined with --remote builds.")
@@ -1781,9 +1794,7 @@ def _call_host_backend_with_optional_tenant(
                 prompted_for_tenant = True
                 continue
             if err.status_code == 403 and "not enabled" in err.message.lower():
-                smith_base = ControlPlaneEndpoints.from_control_plane_url(
-                    client.base_url
-                ).dashboard_url
+                smith_base = client.endpoints.dashboard_url
                 raise HostBackendError(
                     "LangSmith Deployment is not enabled for this organization. "
                     f"Enable it at {smith_base}/host/deployments"
@@ -2144,6 +2155,7 @@ def _deploy_cmd(
 
     secrets = _secrets_from_env(_env_without_deployment_name(env_vars))
 
+    selector = deployment_selector(deployment_id, name)
     source = _select_source(
         push_to=push_to,
         image=image,
@@ -2151,10 +2163,10 @@ def _deploy_cmd(
         tag=tag,
         remote_build_flag=remote_build_flag,
         placement=RequestedPlacement(listener_id, k8s_namespace),
+        selector=selector,
     )
 
     client = _create_host_backend_client(host_url, api_key, env_vars=env_vars)
-    endpoints = ControlPlaneEndpoints.from_control_plane_url(client.base_url)
     try:
         tracked_packages = find_tracked_packages(config, config_json) or None
     except Exception as exc:
@@ -2164,7 +2176,7 @@ def _deploy_cmd(
     outcome = source.run(
         DeployContext(
             client=client,
-            endpoints=endpoints,
+            endpoints=client.endpoints,
             spec=BuildSpec(
                 config=config,
                 config_json=config_json,
@@ -2176,7 +2188,7 @@ def _deploy_cmd(
                 build_command=build_command,
             ),
             verbose=verbose,
-            selector=deployment_selector(deployment_id, name),
+            selector=selector,
             deployment_type=deployment_type,
             secrets=secrets,
             tracked_packages=tracked_packages,
@@ -2185,7 +2197,7 @@ def _deploy_cmd(
     dep_status_url = _emit_deployment_status_url(
         outcome.build_result.updated,
         outcome.deployment_id,
-        endpoints,
+        client.endpoints,
     )
 
     if no_wait:

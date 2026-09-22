@@ -142,7 +142,8 @@ class HostBackendClient:
         }
         if tenant_id:
             headers["X-Tenant-ID"] = tenant_id
-        self._base_url = base_url.rstrip("/")
+        self._endpoints = ControlPlaneEndpoints.from_control_plane_url(base_url)
+        self._base_url = self._endpoints.control_plane_url
         self._client = httpx.Client(
             base_url=self._base_url,
             headers=headers,
@@ -153,6 +154,10 @@ class HostBackendClient:
     @property
     def base_url(self) -> str:
         return self._base_url
+
+    @property
+    def endpoints(self) -> ControlPlaneEndpoints:
+        return self._endpoints
 
     def set_tenant(self, tenant_id: str) -> None:
         self._client.headers["X-Tenant-ID"] = tenant_id
