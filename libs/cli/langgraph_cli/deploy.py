@@ -156,6 +156,29 @@ DeploymentSelector = ById | ByName
 
 
 @dataclass(frozen=True, slots=True)
+class Listener:
+    id: str
+    compute_id: str
+    namespaces: tuple[str, ...]
+
+    @classmethod
+    def from_resource(cls, resource: Mapping[str, object]) -> "Listener":
+        compute_config = resource.get("compute_config")
+        namespaces = (
+            compute_config.get("k8s_namespaces")
+            if isinstance(compute_config, Mapping)
+            else None
+        )
+        return cls(
+            str(resource.get("id", "")),
+            str(resource.get("compute_id", "")),
+            tuple(str(namespace) for namespace in namespaces)
+            if isinstance(namespaces, list)
+            else (),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class ExistingDeployment:
     id: str
     source: str | None

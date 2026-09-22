@@ -15,6 +15,7 @@ import langgraph_cli.deploy as deploy_mod
 from langgraph_cli.deploy import (
     CustomerRegistrySource,
     DockerBuildCommand,
+    Listener,
     ManagedRegistrySource,
     RemoteBuildSource,
     _call_host_backend_with_optional_tenant,
@@ -892,3 +893,37 @@ class TestResolvePushedImageDigest:
         frame_locals = captured["coro"].cr_frame.f_locals
         assert "--config" not in frame_locals["args"]
         captured["coro"].close()
+
+
+class TestListener:
+    @pytest.mark.parametrize(
+        ("resource", "expected"),
+        [
+            pytest.param(
+                {
+                    "id": "listener-1",
+                    "compute_id": "prod-cluster",
+                    "compute_config": {"k8s_namespaces": ["agents", "agents-staging"]},
+                },
+                Listener("listener-1", "prod-cluster", ("agents", "agents-staging")),
+                id="reads_id_cluster_and_namespaces",
+            ),
+            pytest.param(
+                {"id": "listener-1", "compute_id": "c", "compute_config": {}},
+                Listener("listener-1", "c", ()),
+                id="missing_namespaces",
+            ),
+            pytest.param(
+                {"id": "listener-1", "compute_id": "c", "compute_config": None},
+                Listener("listener-1", "c", ()),
+                id="null_compute_config",
+            ),
+            pytest.param(
+                {"id": "listener-1"},
+                Listener("listener-1", "", ()),
+                id="only_an_id",
+            ),
+        ],
+    )
+    def test_from_resource_reads_the_control_plane_shape(self, resource, expected):
+        assert Listener.from_resource(resource) == expected

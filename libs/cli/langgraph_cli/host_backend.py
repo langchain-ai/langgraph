@@ -18,6 +18,7 @@ CLOUD_DASHBOARD_HOST = "smith.langchain.com"
 CONTROL_PLANE_PATH = "/api-host"
 LANGSMITH_API_PATHS = ("/api/v1", "/api")
 LOCAL_HOSTNAMES = ("localhost", "127.0.0.1")
+MAX_PAGE_SIZE = 100
 SourceName = Literal["internal_docker", "internal_source", "external_docker"]
 
 
@@ -188,6 +189,11 @@ class HostBackendClient:
                 "/v2/deployments",
                 params={"name_contains": name_contains},
             )
+        )
+
+    def list_listeners(self) -> list[dict[str, Any]]:
+        return _resources(
+            self._request("GET", "/v2/listeners", params={"limit": MAX_PAGE_SIZE})
         )
 
     def get_deployment(self, deployment_id: str) -> dict[str, Any]:

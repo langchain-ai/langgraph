@@ -573,3 +573,18 @@ def test_list_endpoints_return_resource_objects(payload, expected):
     )
 
     assert c.list_deployments() == expected
+
+
+def test_list_listeners_asks_for_a_full_page():
+    seen: dict = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["url"] = str(req.url)
+        return httpx.Response(200, json={"resources": [{"id": "listener-1"}]})
+
+    c = HostBackendClient(
+        "https://api.example.com", "key", transport=httpx.MockTransport(handler)
+    )
+
+    assert c.list_listeners() == [{"id": "listener-1"}]
+    assert seen["url"] == "https://api.example.com/v2/listeners?limit=100"
