@@ -2208,6 +2208,45 @@ def test_graph_error_handler_error_context_survives_checkpoint_resume():
     assert isinstance(captured["from_node_error"], BaseException)
 
 
+def test_graph_error_handler_does_not_rerun_committed_handler_on_resume():
+    class State(TypedDict):
+        log: Annotated[list[str], operator.add]
+
+    calls = {"handler": 0, "other": 0}
+
+    def failing_node(state: State) -> State:
+        raise ValueError("a failed")
+
+    def other_node(state: State) -> State:
+        calls["other"] += 1
+        if calls["other"] == 1:
+            raise RuntimeError("b transient failure")
+        return {"log": ["b ok"]}
+
+    def handler_node(state: State) -> State:
+        calls["handler"] += 1
+        return {"log": [f"h#{calls['handler']}"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("a", failing_node, error_handler=handler_node)
+        .add_node("b", other_node)
+        .add_edge(START, "a")
+        .add_edge(START, "b")
+        .compile(checkpointer=InMemorySaver())
+    )
+    config = {"configurable": {"thread_id": "t1"}}
+
+    with pytest.raises(RuntimeError, match="b transient failure"):
+        graph.invoke({"log": []}, config)
+
+    result = graph.invoke(None, config)
+
+    assert calls["handler"] == 1
+    assert calls["other"] == 2
+    assert result["log"] == ["h#1", "b ok"]
+
+
 def test_graph_error_handler_does_not_swallow_interrupt_concurrent():
     """When a graph error handler is configured and a node calls interrupt()
     concurrently with other nodes, the interrupt must still be raised — not
