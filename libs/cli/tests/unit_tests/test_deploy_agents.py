@@ -71,6 +71,7 @@ def test_agent_create(deployment_api, tmp_path, monkeypatch):
     _, requests, build = deployment_api
     result = CliRunner().invoke(cli, AGENT_ARGS)
     assert result.exit_code == 0, result.output
+    assert "--agent-id and --environment flags are in private beta" in result.output
     assert dict(requests[0].url.params) == {
         "name_contains": "",
         "agent_id": "customer-support",
@@ -103,3 +104,14 @@ def test_agent_rejects_explicit_name(deployment_api, monkeypatch):
     assert result.exit_code == 2
     assert "cannot be combined" in result.output
     assert not requests
+
+
+@pytest.mark.parametrize(
+    "args", [["--agent-id", "customer-support"], ["--environment", "staging"], []]
+)
+def test_agent_list_beta_notice(deployment_api, args):
+    result = CliRunner().invoke(cli, ["deploy", "list", *args])
+    assert result.exit_code == 0, result.output
+    assert (
+        "--agent-id and --environment flags are in private beta" in result.output
+    ) == bool(args)

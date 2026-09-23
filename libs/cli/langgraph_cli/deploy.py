@@ -1982,6 +1982,7 @@ def _deploy_cmd(
     validate_deploy_commands(install_command, build_command)
     agent = None
     if agent_id is not None or environment is not None:
+        em.note("--agent-id and --environment flags are in private beta")
         if not agent_id or not agent_id.strip() or not environment:
             raise click.UsageError(
                 "--agent-id and --environment are required together."
@@ -2138,6 +2139,10 @@ def deploy_list(
     agent_id: str | None,
     environment: str | None,
 ) -> None:
+    if agent_id is not None or environment is not None:
+        click.secho(
+            "--agent-id and --environment flags are in private beta", fg="yellow"
+        )
     if agent_id is not None and not agent_id.strip():
         raise click.UsageError("--agent-id must not be empty.")
     filters = {}
