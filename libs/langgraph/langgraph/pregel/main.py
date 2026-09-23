@@ -1639,13 +1639,10 @@ class Pregel(
             else:
                 raise ValueError(f"Subgraph {recast} not found")
 
-        # Delta channels still owed a fork snapshot. Mirrors
-        # `_delta_channels_awaiting_fork_snapshot` in `_loop.py`: a fork is only
-        # sealed once a checkpoint actually carries the blob. Several superstep
-        # paths (`as_node` of INPUT, END or `__copy__`) write a checkpoint and
-        # return before reaching the plan, so a flag cleared after the first
-        # superstep would leave the branch unsealed and the next superstep would
-        # reconstruct through the shared base.
+        # Read once from the caller's config: every later superstep receives
+        # the config of the checkpoint just written, which always names one.
+        # Cleared by the first checkpoint that carries the snapshots, which
+        # `__copy__` does not write.
         fork_pending: set[str] = (
             {k for k, v in self.channels.items() if isinstance(v, DeltaChannel)}
             if config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)
@@ -1907,8 +1904,6 @@ class Pregel(
                     return perform_superstep(
                         patch_checkpoint_map(next_config, saved.metadata),
                         [item for lst in user_group_by.values() for item in lst],
-                        # The checkpoint just written clears tasks and carries
-                        # no delta snapshot, so a fork is still unsealed here.
                         is_fork=is_fork,
                     )
 
@@ -2089,10 +2084,6 @@ class Pregel(
         current_config = patch_configurable(
             config, {CONFIG_KEY_THREAD_ID: str(config[CONF][CONFIG_KEY_THREAD_ID])}
         )
-        # The flag cannot be derived from `current_config`: `perform_superstep`
-        # returns the config of the checkpoint it just wrote and the loop feeds
-        # that back in, so from the second superstep on it always names a
-        # checkpoint whether or not the caller addressed one.
         for superstep in supersteps:
             current_config = perform_superstep(
                 current_config, superstep, is_fork=bool(fork_pending)
@@ -2149,13 +2140,10 @@ class Pregel(
             else:
                 raise ValueError(f"Subgraph {recast} not found")
 
-        # Delta channels still owed a fork snapshot. Mirrors
-        # `_delta_channels_awaiting_fork_snapshot` in `_loop.py`: a fork is only
-        # sealed once a checkpoint actually carries the blob. Several superstep
-        # paths (`as_node` of INPUT, END or `__copy__`) write a checkpoint and
-        # return before reaching the plan, so a flag cleared after the first
-        # superstep would leave the branch unsealed and the next superstep would
-        # reconstruct through the shared base.
+        # Read once from the caller's config: every later superstep receives
+        # the config of the checkpoint just written, which always names one.
+        # Cleared by the first checkpoint that carries the snapshots, which
+        # `__copy__` does not write.
         fork_pending: set[str] = (
             {k for k, v in self.channels.items() if isinstance(v, DeltaChannel)}
             if config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)
@@ -2414,8 +2402,6 @@ class Pregel(
                     return await aperform_superstep(
                         patch_checkpoint_map(next_config, saved.metadata),
                         [item for lst in user_group_by.values() for item in lst],
-                        # The checkpoint just written clears tasks and carries
-                        # no delta snapshot, so a fork is still unsealed here.
                         is_fork=is_fork,
                     )
 
@@ -2593,10 +2579,6 @@ class Pregel(
         current_config = patch_configurable(
             config, {CONFIG_KEY_THREAD_ID: str(config[CONF][CONFIG_KEY_THREAD_ID])}
         )
-        # The flag cannot be derived from `current_config`: `aperform_superstep`
-        # returns the config of the checkpoint it just wrote and the loop feeds
-        # that back in, so from the second superstep on it always names a
-        # checkpoint whether or not the caller addressed one.
         for superstep in supersteps:
             current_config = await aperform_superstep(
                 current_config, superstep, is_fork=bool(fork_pending)
