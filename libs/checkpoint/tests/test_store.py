@@ -1058,3 +1058,72 @@ def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
     assert result3[0].key == "3"
     assert result4[0].key == "4"
     assert result5[0].key == "5"
+
+def test_per_item_root_path_index_override() -> None:
+    """Regression test for GH-9059.
+
+    When a per-item ``index=["$"]`` override is passed to ``put()``, the whole
+    document must be embedded — not the literal field name ``"$"``.
+
+    Prior to the fix, ``_extract_texts`` called ``tokenize_path("$")`` which
+    returned the list ``["$"]``.  ``get_text_at_path`` only checked for the
+    string ``"$"`` and therefore fell through to a dict-key lookup for the key
+    ``"$"``, finding nothing and producing an empty embedding — so per-item root
+    overrides were silently ignored.
+    """
+    def embed(texts: list[str]) -> list[list[float]]:
+        return [[1.0, 0.0] if "special_token" in t else [0.0, 1.0] for t in texts]
+
+    store = InMemoryStore(
+        index={
+            "dims": 2,
+            "embed": embed,
+            "fields": ["text"],
+        }
+    )
+
+    store.put(("docs",), "other", {"text": "unrelated content"})
+    store.put(
+        ("docs",),
+        "target",
+        {"text": "hello world", "metadata": {"topic": "special_token"}},
+        index=["$"],
+    )
+
+    results = store.search(("docs",), query="special_token")
+    assert len(results) == 2
+    assert results[0].key == "target", (
+        "Expected 'target' (indexed via index=['$']) to be the top result. "
+        "Per-item root-path override '$' was not applied correctly."
+    )
+    assert results[0].score is not None and results[0].score > (results[1].score or 0)
+
+
+async def test_async_per_item_root_path_index_override() -> None:
+    """Async variant of test_per_item_root_path_index_override (GH-9059)."""
+
+    def embed(texts: list[str]) -> list[list[float]]:
+        return [[1.0, 0.0] if "special_token" in t else [0.0, 1.0] for t in texts]
+
+    store = InMemoryStore(
+        index={
+            "dims": 2,
+            "embed": embed,
+            "fields": ["text"],
+        }
+    )
+
+    await store.aput(("docs",), "other", {"text": "unrelated content"})
+    await store.aput(
+        ("docs",),
+        "target",
+        {"text": "hello world", "metadata": {"topic": "special_token"}},
+        index=["$"],
+    )
+
+    results = await store.asearch(("docs",), query="special_token")
+    assert len(results) == 2
+    assert results[0].key == "target", (
+        "Async: per-item root-path override '$' was not applied correctly."
+    )
+    assert results[0].score is not None and results[0].score > (results[1].score or 0)
