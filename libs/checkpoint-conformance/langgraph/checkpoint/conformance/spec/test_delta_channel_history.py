@@ -267,6 +267,61 @@ async def test_history_seed_ancestor_own_writes_are_replayed(
     )
 
 
+# Every uuid4 `build_delta_chain` tags its own writes with sorts between these
+# two, so task_id order is fixed and always disagrees with task_path order.
+TASK_ID_SORTS_FIRST = "00000000-0000-0000-0000-000000000000"
+TASK_ID_SORTS_LAST = "zzzzzzzz-0000-0000-0000-000000000000"
+
+
+async def test_history_orders_parallel_writes_by_task_path(
+    saver: BaseCheckpointSaver,
+) -> None:
+    """Writes from parallel tasks replay in task_path order, not task_id order."""
+    configs = await build_delta_chain(
+        saver,
+        thread_id=str(uuid4()),
+        channel="ch",
+        snapshots_at_steps=[0],
+        total_steps=3,
+    )
+    step_1, head = configs[1], configs[2]
+    await saver.aput_writes(
+        step_1, [("ch", "second")], TASK_ID_SORTS_FIRST, "~pull, 02"
+    )
+    await saver.aput_writes(step_1, [("ch", "first")], TASK_ID_SORTS_LAST, "~pull, 01")
+
+    result = await saver.aget_delta_channel_history(config=head, channels=["ch"])
+    values = [w[2] for w in result["ch"]["writes"]]
+    assert values == [1, "first", "second"], (
+        f"Expected task_path order [1, 'first', 'second'], got {values}. "
+        "Ordering by (task_id, idx) alone yields [1, 'second', 'first']."
+    )
+
+
+async def test_history_orders_pathless_writes_first(
+    saver: BaseCheckpointSaver,
+) -> None:
+    """Writes stored without a task_path (graph input) replay before task writes."""
+    configs = await build_delta_chain(
+        saver,
+        thread_id=str(uuid4()),
+        channel="ch",
+        snapshots_at_steps=[0],
+        total_steps=3,
+    )
+    step_1, head = configs[1], configs[2]
+    await saver.aput_writes(
+        step_1, [("ch", "from_node")], TASK_ID_SORTS_FIRST, "~pull, a"
+    )
+    await saver.aput_writes(step_1, [("ch", "from_input")], TASK_ID_SORTS_LAST)
+
+    result = await saver.aget_delta_channel_history(config=head, channels=["ch"])
+    values = [w[2] for w in result["ch"]["writes"]]
+    assert values == [1, "from_input", "from_node"], (
+        f"Expected pathless writes first, got {values}"
+    )
+
+
 ALL_DELTA_CHANNEL_HISTORY_TESTS = [
     test_history_returns_writes_oldest_first,
     test_history_seed_is_nearest_snapshot,
@@ -276,6 +331,8 @@ ALL_DELTA_CHANNEL_HISTORY_TESTS = [
     test_history_walk_to_root_no_seed,
     test_history_migration_plain_value_as_seed,
     test_history_seed_ancestor_own_writes_are_replayed,
+    test_history_orders_parallel_writes_by_task_path,
+    test_history_orders_pathless_writes_first,
 ]
 
 

@@ -199,8 +199,8 @@ class InMemorySaver(
                     terminated_here.add(ch)
 
             step_writes = self.writes.get((thread_id, checkpoint_ns, cp_id), {})
-            for (_task_id, _idx), (tid, ch, serialized, _) in sorted(
-                step_writes.items(), reverse=True
+            for _, (tid, ch, serialized, _) in sorted(
+                step_writes.items(), key=lambda kv: (kv[1][3], kv[0]), reverse=True
             ):
                 if ch not in remaining:
                     continue
