@@ -194,9 +194,10 @@ class InMemoryStore(BaseStore):
             self.embeddings: Embeddings | None = ensure_embeddings(
                 self.index_config.get("embed"),
             )
+            configured_fields = self.index_config.get("fields")
             self.index_config["__tokenized_fields"] = [
                 (p, tokenize_path(p)) if p != "$" else (p, p)
-                for p in (self.index_config.get("fields") or ["$"])
+                for p in (configured_fields if configured_fields is not None else ["$"])
             ]
 
         else:

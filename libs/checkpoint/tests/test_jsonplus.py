@@ -93,6 +93,12 @@ class MyDataclassWSlots:
         pass
 
 
+@dataclasses.dataclass
+class MyDataclassWithNonInitField:
+    foo: str
+    computed: int = dataclasses.field(init=False, default=0)
+
+
 class MyEnum(Enum):
     FOO = "foo"
     BAR = "bar"
@@ -1151,6 +1157,16 @@ def test_msgpack_pydantic_v1_allowlist(caplog: pytest.LogCaptureFixture) -> None
     assert "unregistered type" not in caplog.text.lower()
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+def test_msgpack_dataclass_init_false_field_roundtrips() -> None:
+    serde = JsonPlusSerializer()
+    obj = MyDataclassWithNonInitField(foo="alice")
+    obj.computed = 99
+
+    restored = serde.loads_typed(serde.dumps_typed(obj))
+
+    assert (restored.foo, restored.computed) == ("alice", 99)
 
 
 def test_msgpack_dataclass_allowlist(caplog: pytest.LogCaptureFixture) -> None:
