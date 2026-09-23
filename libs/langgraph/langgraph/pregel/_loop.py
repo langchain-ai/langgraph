@@ -814,6 +814,9 @@ class PregelLoop:
             )
             if handler_task is not None:
                 self.tasks[handler_task.id] = handler_task
+                # Restore any writes the handler committed in a previous run so
+                # resuming does not execute it a second time.
+                self._reapply_writes_to_succeeded_nodes({handler_task.id: handler_task})
 
     def _pending_interrupts(self) -> set[str]:
         """Return the set of interrupt ids that are pending without corresponding resume values."""

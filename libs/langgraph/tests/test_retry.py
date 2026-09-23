@@ -225,6 +225,19 @@ def test_should_retry_default_retry_on():
     req_error_4xx.response = response_req_4xx
     assert _should_retry_on(policy, req_error_4xx) is False
 
+    # requests.Response is falsy for 4xx, so use an identity check, not truthiness.
+    response_req_real_4xx = requests.Response()
+    response_req_real_4xx.status_code = 404
+    req_error_real_4xx = requests.HTTPError("not found")
+    req_error_real_4xx.response = response_req_real_4xx
+    assert _should_retry_on(policy, req_error_real_4xx) is False
+
+    response_req_real_5xx = requests.Response()
+    response_req_real_5xx.status_code = 503
+    req_error_real_5xx = requests.HTTPError("service unavailable")
+    req_error_real_5xx.response = response_req_real_5xx
+    assert _should_retry_on(policy, req_error_real_5xx) is True
+
     # Should retry on requests.HTTPError with no response
     req_error_no_resp = requests.HTTPError("connection error")
     req_error_no_resp.response = None
@@ -2193,6 +2206,45 @@ def test_graph_error_handler_error_context_survives_checkpoint_resume():
     assert result["foo"] == "handled_after_resume"
     assert captured["from_node_name"] == "always_failing"
     assert isinstance(captured["from_node_error"], BaseException)
+
+
+def test_graph_error_handler_does_not_rerun_committed_handler_on_resume():
+    class State(TypedDict):
+        log: Annotated[list[str], operator.add]
+
+    calls = {"handler": 0, "other": 0}
+
+    def failing_node(state: State) -> State:
+        raise ValueError("a failed")
+
+    def other_node(state: State) -> State:
+        calls["other"] += 1
+        if calls["other"] == 1:
+            raise RuntimeError("b transient failure")
+        return {"log": ["b ok"]}
+
+    def handler_node(state: State) -> State:
+        calls["handler"] += 1
+        return {"log": [f"h#{calls['handler']}"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("a", failing_node, error_handler=handler_node)
+        .add_node("b", other_node)
+        .add_edge(START, "a")
+        .add_edge(START, "b")
+        .compile(checkpointer=InMemorySaver())
+    )
+    config = {"configurable": {"thread_id": "t1"}}
+
+    with pytest.raises(RuntimeError, match="b transient failure"):
+        graph.invoke({"log": []}, config)
+
+    result = graph.invoke(None, config)
+
+    assert calls["handler"] == 1
+    assert calls["other"] == 2
+    assert result["log"] == ["h#1", "b ok"]
 
 
 def test_graph_error_handler_does_not_swallow_interrupt_concurrent():
