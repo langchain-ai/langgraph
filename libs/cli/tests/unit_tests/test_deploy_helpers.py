@@ -13,10 +13,17 @@ import pytest
 
 import langgraph_cli.deploy as deploy_mod
 from langgraph_cli.deploy import (
+    ById,
+    ByName,
     CustomerRegistrySource,
     DockerBuildCommand,
+    ExistingDeployment,
+    Listener,
     ManagedRegistrySource,
+    OnListener,
     RemoteBuildSource,
+    RequestedPlacement,
+    Unplaced,
     _call_host_backend_with_optional_tenant,
     _create_host_backend_client,
     _docker_config_for_token,
@@ -27,6 +34,7 @@ from langgraph_cli.deploy import (
     _resolve_pushed_image_digest,
     _select_source,
     _validate_prebuilt_image,
+    find_deployment_by_name,
     normalize_image_tag,
     normalize_name,
 )
@@ -280,11 +288,13 @@ class TestCallHostBackendWithOptionalTenant:
         return c
 
     def test_success_passes_through(self):
-        client = self._make_client(lambda req: httpx.Response(200, json={"ok": True}))
+        client = self._make_client(
+            lambda req: httpx.Response(200, json={"resources": [{"id": "dep-1"}]})
+        )
         result = _call_host_backend_with_optional_tenant(
             client, lambda c: c.list_deployments()
         )
-        assert result == {"ok": True}
+        assert result == [{"id": "dep-1"}]
 
     def test_403_not_enabled_gives_actionable_error(self):
         detail = (
@@ -607,6 +617,8 @@ class TestSelectSource:
         "image_name": None,
         "tag": None,
         "remote_build_flag": None,
+        "placement": RequestedPlacement(),
+        "selector": ByName("my-app"),
     }
     REPOSITORY = "registry.example.com/app"
 
@@ -617,7 +629,9 @@ class TestSelectSource:
                 {"push_to": REPOSITORY},
                 True,
                 CustomerRegistrySource(
-                    ImageReference(REPOSITORY, "latest"), prebuilt_image=None
+                    reference=ImageReference(REPOSITORY, "latest"),
+                    prebuilt_image=None,
+                    requested_placement=RequestedPlacement(),
                 ),
                 id="push_to_selects_the_external_source_with_the_default_tag",
             ),
@@ -625,7 +639,9 @@ class TestSelectSource:
                 {"push_to": f"{REPOSITORY}:v2"},
                 True,
                 CustomerRegistrySource(
-                    ImageReference(REPOSITORY, "v2"), prebuilt_image=None
+                    reference=ImageReference(REPOSITORY, "v2"),
+                    prebuilt_image=None,
+                    requested_placement=RequestedPlacement(),
                 ),
                 id="push_to_keeps_a_tag_given_in_the_reference",
             ),
@@ -633,7 +649,9 @@ class TestSelectSource:
                 {"push_to": REPOSITORY, "tag": "v3"},
                 True,
                 CustomerRegistrySource(
-                    ImageReference(REPOSITORY, "v3"), prebuilt_image=None
+                    reference=ImageReference(REPOSITORY, "v3"),
+                    prebuilt_image=None,
+                    requested_placement=RequestedPlacement(),
                 ),
                 id="tag_flag_composes_with_push_to",
             ),
@@ -641,9 +659,24 @@ class TestSelectSource:
                 {"push_to": REPOSITORY, "image": "app:dev"},
                 False,
                 CustomerRegistrySource(
-                    ImageReference(REPOSITORY, "latest"), prebuilt_image="app:dev"
+                    reference=ImageReference(REPOSITORY, "latest"),
+                    prebuilt_image="app:dev",
+                    requested_placement=RequestedPlacement(),
                 ),
                 id="prebuilt_image_is_retagged_for_push_to_without_docker_checks",
+            ),
+            pytest.param(
+                {
+                    "push_to": REPOSITORY,
+                    "placement": RequestedPlacement("listener-1", "agents"),
+                },
+                True,
+                CustomerRegistrySource(
+                    reference=ImageReference(REPOSITORY, "latest"),
+                    prebuilt_image=None,
+                    requested_placement=RequestedPlacement("listener-1", "agents"),
+                ),
+                id="push_to_carries_the_requested_placement",
             ),
             pytest.param(
                 {"remote_build_flag": True},
@@ -719,6 +752,16 @@ class TestSelectSource:
                 {"image": "app:dev", "remote_build_flag": True},
                 "--image cannot be combined with --remote builds.",
                 id="image_with_remote",
+            ),
+            pytest.param(
+                {"placement": RequestedPlacement(listener_id="listener-1")},
+                "only apply when creating a deployment with --push-to",
+                id="listener_without_push_to",
+            ),
+            pytest.param(
+                {"placement": RequestedPlacement(k8s_namespace="agents")},
+                "only apply when creating a deployment with --push-to",
+                id="namespace_without_push_to",
             ),
         ],
     )
@@ -890,3 +933,289 @@ class TestResolvePushedImageDigest:
         frame_locals = captured["coro"].cr_frame.f_locals
         assert "--config" not in frame_locals["args"]
         captured["coro"].close()
+
+
+class TestListener:
+    @pytest.mark.parametrize(
+        ("resource", "expected"),
+        [
+            pytest.param(
+                {
+                    "id": "listener-1",
+                    "compute_id": "prod-cluster",
+                    "compute_config": {"k8s_namespaces": ["agents", "agents-staging"]},
+                },
+                Listener("listener-1", "prod-cluster", ("agents", "agents-staging")),
+                id="reads_id_cluster_and_namespaces",
+            ),
+            pytest.param(
+                {"id": "listener-1", "compute_id": "c", "compute_config": {}},
+                Listener("listener-1", "c", ()),
+                id="missing_namespaces",
+            ),
+            pytest.param(
+                {"id": "listener-1", "compute_id": "c", "compute_config": None},
+                Listener("listener-1", "c", ()),
+                id="null_compute_config",
+            ),
+            pytest.param(
+                {"id": "listener-1"},
+                Listener("listener-1", "", ()),
+                id="only_an_id",
+            ),
+        ],
+    )
+    def test_from_resource_reads_the_control_plane_shape(self, resource, expected):
+        assert Listener.from_resource(resource) == expected
+
+
+ONE_NAMESPACE = Listener("listener-1", "prod-cluster", ("agents",))
+TWO_NAMESPACES = Listener("listener-2", "multi-cluster", ("agents", "agents-staging"))
+NO_NAMESPACE = Listener("listener-3", "broken-cluster", ())
+
+
+class TestRequestedPlacement:
+    @pytest.mark.parametrize(
+        ("request_", "listeners", "expected"),
+        [
+            pytest.param(
+                RequestedPlacement(), (), Unplaced(), id="no_listeners_no_request"
+            ),
+            pytest.param(
+                RequestedPlacement(),
+                (ONE_NAMESPACE,),
+                OnListener("listener-1", "agents"),
+                id="uses_the_only_possible_answer",
+            ),
+            pytest.param(
+                RequestedPlacement(k8s_namespace="agents-staging"),
+                (TWO_NAMESPACES,),
+                OnListener("listener-2", "agents-staging"),
+                id="namespace_alone_picks_the_only_listener",
+            ),
+        ],
+    )
+    def test_resolves_to_a_placement(self, request_, listeners, expected):
+        assert request_.among(listeners) == expected
+
+    @pytest.mark.parametrize(
+        ("request_", "listeners", "message"),
+        [
+            pytest.param(
+                RequestedPlacement(listener_id="listener-1"),
+                (),
+                "no listeners",
+                id="workspace_has_no_listeners",
+            ),
+            pytest.param(
+                RequestedPlacement(),
+                (ONE_NAMESPACE, TWO_NAMESPACES),
+                "--listener-id",
+                id="several_listeners_need_a_choice",
+            ),
+            pytest.param(
+                RequestedPlacement(k8s_namespace="agents"),
+                (ONE_NAMESPACE, TWO_NAMESPACES),
+                "--listener-id",
+                id="namespace_alone_is_ambiguous_with_several_listeners",
+            ),
+            pytest.param(
+                RequestedPlacement(k8s_namespace="agents"),
+                (),
+                "no listeners",
+                id="namespace_without_any_listener",
+            ),
+            pytest.param(
+                RequestedPlacement(),
+                (TWO_NAMESPACES,),
+                "--k8s-namespace",
+                id="several_namespaces_need_a_choice",
+            ),
+        ],
+    )
+    def test_refuses_and_names_the_choices(self, request_, listeners, message):
+        with pytest.raises(click.UsageError, match=message):
+            request_.among(listeners)
+
+    def test_the_error_lists_every_listener_with_its_cluster_and_namespaces(self):
+        with pytest.raises(click.UsageError) as error:
+            RequestedPlacement().among((ONE_NAMESPACE, TWO_NAMESPACES))
+
+        assert "listener-1" in error.value.message
+        assert "prod-cluster" in error.value.message
+        assert "agents-staging" in error.value.message
+
+    @pytest.mark.parametrize(
+        ("placement", "expected"),
+        [
+            pytest.param(Unplaced(), {}, id="unplaced_adds_nothing"),
+            pytest.param(
+                OnListener("listener-1", "agents"),
+                {
+                    "listener_id": "listener-1",
+                    "listener_config": {"k8s_namespace": "agents"},
+                },
+                id="placed_carries_listener_and_namespace",
+            ),
+        ],
+    )
+    def test_source_config_matches_the_control_plane_shape(self, placement, expected):
+        assert placement.source_config() == expected
+
+
+def test_finding_a_deployment_by_name_narrows_the_search_for_every_server_version():
+    seen: dict = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["params"] = dict(req.url.params)
+        return httpx.Response(
+            200,
+            json={"resources": [{"id": "dep-1", "name": "agent", "source": "github"}]},
+        )
+
+    client = HostBackendClient(
+        "https://api.example.com", "key", transport=httpx.MockTransport(handler)
+    )
+
+    found = find_deployment_by_name(client, "agent")
+
+    assert seen["params"] == {
+        "name": "agent",
+        "name_contains": "agent",
+        "limit": "100",
+    }
+    assert found == ExistingDeployment("dep-1", "github")
+
+
+def test_a_server_that_ignores_the_exact_name_filter_never_matches_another_deployment():
+    client = HostBackendClient(
+        "https://api.example.com",
+        "key",
+        transport=httpx.MockTransport(
+            lambda req: httpx.Response(
+                200,
+                json={
+                    "resources": [
+                        {
+                            "id": "dep-other",
+                            "name": "another-teams-agent",
+                            "source": "external_docker",
+                        }
+                    ]
+                },
+            )
+        ),
+    )
+
+    assert find_deployment_by_name(client, "brand-new-agent") is None
+
+
+def test_a_full_page_without_a_match_refuses_to_claim_the_name_is_free():
+    page = [
+        {"id": f"dep-{index}", "name": f"other-agent-{index}"} for index in range(100)
+    ]
+    client = HostBackendClient(
+        "https://api.example.com",
+        "key",
+        transport=httpx.MockTransport(
+            lambda req: httpx.Response(200, json={"resources": page})
+        ),
+    )
+
+    with pytest.raises(click.ClickException, match="--deployment-id"):
+        find_deployment_by_name(client, "brand-new-agent")
+
+
+def test_a_partial_page_without_a_match_means_the_name_is_free():
+    client = HostBackendClient(
+        "https://api.example.com",
+        "key",
+        transport=httpx.MockTransport(
+            lambda req: httpx.Response(
+                200, json={"resources": [{"id": "dep-1", "name": "other"}]}
+            )
+        ),
+    )
+
+    assert find_deployment_by_name(client, "brand-new-agent") is None
+
+
+@pytest.mark.parametrize(
+    "resource",
+    [
+        pytest.param({"compute_id": "c"}, id="no_id"),
+        pytest.param({"id": ""}, id="empty_id"),
+    ],
+)
+def test_a_listener_without_an_id_is_refused(resource):
+    with pytest.raises(HostBackendError, match="without an id"):
+        Listener.from_resource(resource)
+
+
+def test_a_deployment_id_with_listener_flags_is_refused_without_probing_docker(
+    monkeypatch,
+):
+    def explode() -> tuple[bool, str | None]:
+        raise AssertionError("docker must not be probed for an argv-only conflict")
+
+    monkeypatch.setattr(deploy_mod, "can_build_locally", explode)
+
+    with pytest.raises(click.UsageError, match="--deployment-id"):
+        _select_source(
+            push_to="registry.example.com/app",
+            image=None,
+            image_name=None,
+            tag=None,
+            remote_build_flag=None,
+            placement=RequestedPlacement(listener_id="listener-1"),
+            selector=ById("dep-1"),
+        )
+
+
+class TestPlacementOnAKnownListener:
+    @pytest.mark.parametrize(
+        ("request_", "listener", "expected"),
+        [
+            pytest.param(
+                RequestedPlacement(listener_id="listener-1"),
+                ONE_NAMESPACE,
+                OnListener("listener-1", "agents"),
+                id="the_only_namespace_is_used",
+            ),
+            pytest.param(
+                RequestedPlacement(listener_id="listener-2", k8s_namespace="agents"),
+                TWO_NAMESPACES,
+                OnListener("listener-2", "agents"),
+                id="the_chosen_namespace_is_used",
+            ),
+        ],
+    )
+    def test_places_on_the_listener(self, request_, listener, expected):
+        assert request_.on(listener) == expected
+
+    @pytest.mark.parametrize(
+        ("request_", "listener", "message"),
+        [
+            pytest.param(
+                RequestedPlacement(listener_id="listener-2"),
+                TWO_NAMESPACES,
+                "--k8s-namespace",
+                id="several_namespaces_need_a_choice",
+            ),
+            pytest.param(
+                RequestedPlacement(listener_id="listener-2", k8s_namespace="nope"),
+                TWO_NAMESPACES,
+                "does not serve namespace",
+                id="unknown_namespace",
+            ),
+            pytest.param(
+                RequestedPlacement(listener_id="listener-3"),
+                NO_NAMESPACE,
+                "serves no namespaces",
+                id="listener_without_namespaces",
+            ),
+        ],
+    )
+    def test_refuses_and_names_the_namespaces(self, request_, listener, message):
+        with pytest.raises(click.UsageError, match=message):
+            request_.on(listener)

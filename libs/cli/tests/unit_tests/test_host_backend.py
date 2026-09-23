@@ -79,19 +79,6 @@ def test_request_transport_error_raises():
         c._request("GET", "/test")
 
 
-def test_list_deployments_sends_query_params():
-    def handler(req: httpx.Request) -> httpx.Response:
-        assert req.url.path == "/v2/deployments"
-        assert req.url.params["name_contains"] == "my app"
-        return httpx.Response(200, json={"ok": True})
-
-    c = HostBackendClient(
-        "https://api.example.com", "test-key", transport=httpx.MockTransport(handler)
-    )
-    result = c.list_deployments("my app")
-    assert result == {"ok": True}
-
-
 def _capturing_client(captured: dict) -> HostBackendClient:
     def handler(req: httpx.Request) -> httpx.Response:
         captured["body"] = req.read()
@@ -421,7 +408,7 @@ def test_injected_transport_receives_requests_under_the_prefixed_base_url():
         transport=httpx.MockTransport(handler),
     )
 
-    assert c.list_revisions("dep-1", limit=2) == {"ok": True}
+    assert c.list_revisions("dep-1", limit=2) == []
     assert seen == {
         "url": "https://smith.example.com/api-host/v2/deployments/dep-1/revisions?limit=2",
         "api_key": "key",
@@ -546,3 +533,144 @@ def test_control_plane_endpoints_resolve(host_url, langsmith_endpoint, expected)
     endpoints = ControlPlaneEndpoints.resolve(host_url, langsmith_endpoint)
 
     assert (endpoints.control_plane_url, endpoints.dashboard_url) == expected
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        pytest.param(
+            {"resources": [{"id": "a"}, {"id": "b"}]},
+            [{"id": "a"}, {"id": "b"}],
+            id="list_returns_the_resources",
+        ),
+        pytest.param({"resources": []}, [], id="empty_list"),
+        pytest.param({}, [], id="missing_key"),
+        pytest.param({"resources": None}, [], id="null_resources"),
+        pytest.param(
+            {"resources": ["nope", {"id": "a"}]}, [{"id": "a"}], id="skips_non_objects"
+        ),
+        pytest.param([], [], id="unexpected_envelope"),
+    ],
+)
+def test_list_endpoints_return_resource_objects(payload, expected):
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload)
+
+    c = HostBackendClient(
+        "https://api.example.com", "key", transport=httpx.MockTransport(handler)
+    )
+
+    assert c.list_deployments() == expected
+
+
+def test_list_listeners_asks_for_a_full_page():
+    seen: dict = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["url"] = str(req.url)
+        return httpx.Response(200, json={"resources": [{"id": "listener-1"}]})
+
+    c = HostBackendClient(
+        "https://api.example.com", "key", transport=httpx.MockTransport(handler)
+    )
+
+    assert c.list_listeners() == [{"id": "listener-1"}]
+    assert seen["url"] == "https://api.example.com/v2/listeners?limit=100"
+
+
+@pytest.mark.parametrize(
+    ("control_plane_url", "expected"),
+    [
+        pytest.param("https://api.host.langchain.com", True, id="cloud"),
+        pytest.param("https://eu.api.host.langchain.com", True, id="cloud_region"),
+        pytest.param("https://dev.api.host.langchain.com", True, id="cloud_dev"),
+        pytest.param("https://smith.example.com/api-host", False, id="self_hosted"),
+        pytest.param(
+            "https://corp.example.com/langsmith/api-host",
+            False,
+            id="self_hosted_prefix",
+        ),
+        pytest.param("http://localhost:8080/api-host", False, id="local"),
+        pytest.param(
+            "https://evil-api.host.langchain.com", False, id="lookalike_needs_a_dot"
+        ),
+    ],
+)
+def test_is_cloud_recognises_the_managed_control_plane(control_plane_url, expected):
+    endpoints = ControlPlaneEndpoints.from_control_plane_url(control_plane_url)
+
+    assert endpoints.is_cloud is expected
+
+
+@pytest.mark.parametrize(
+    ("call", "expected_params"),
+    [
+        pytest.param(
+            lambda c: c.list_deployments(name="agent"),
+            {"name": "agent"},
+            id="exact_name_filters_server_side",
+        ),
+        pytest.param(
+            lambda c: c.list_deployments(name_contains="age"),
+            {"name_contains": "age"},
+            id="substring_search_keeps_its_own_parameter",
+        ),
+        pytest.param(
+            lambda c: c.list_deployments(),
+            {},
+            id="no_filter_sends_no_parameters",
+        ),
+        pytest.param(
+            lambda c: c.list_deployments(
+                name="agent", name_contains="agent", limit=100
+            ),
+            {"name": "agent", "name_contains": "agent", "limit": "100"},
+            id="both_filters_travel_together_for_older_servers",
+        ),
+    ],
+)
+def test_list_deployments_sends_one_name_filter(call, expected_params):
+    seen: dict = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.update(dict(req.url.params))
+        return httpx.Response(200, json={"resources": []})
+
+    call(
+        HostBackendClient(
+            "https://api.example.com", "key", transport=httpx.MockTransport(handler)
+        )
+    )
+
+    assert seen == expected_params
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        pytest.param(
+            {"detail": "Source configuration error: bad listener"},
+            "Source configuration error: bad listener",
+            id="fastapi_detail_is_unwrapped",
+        ),
+        pytest.param(
+            {"detail": {"loc": ["body"], "msg": "nope"}},
+            None,
+            id="a_structured_detail_is_left_alone",
+        ),
+        pytest.param({"other": "shape"}, None, id="an_unknown_shape_is_left_alone"),
+    ],
+)
+def test_error_detail_is_readable(body, expected):
+    c = HostBackendClient(
+        "https://api.example.com",
+        "key",
+        transport=httpx.MockTransport(lambda req: httpx.Response(400, json=body)),
+    )
+
+    with pytest.raises(HostBackendError) as error:
+        c.get_deployment("dep-1")
+
+    assert error.value.detail == expected
+    if expected is not None:
+        assert error.value.message.endswith(expected)

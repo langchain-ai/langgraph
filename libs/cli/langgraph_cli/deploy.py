@@ -26,6 +26,7 @@ from langgraph_cli.dependency_tracking import find_tracked_packages
 from langgraph_cli.docker import build_docker_image, can_build_locally
 from langgraph_cli.exec import CommandRunner, Runner, subp_exec
 from langgraph_cli.host_backend import (
+    MAX_PAGE_SIZE,
     ControlPlaneEndpoints,
     HostBackendClient,
     HostBackendError,
@@ -101,15 +102,15 @@ _NATIVE_AMD64_MACHINE = "x86_64"
 _PUSH_ATTEMPTS = 3
 _LOCAL_BUILD_TAG_PREFIX = "langgraph-deploy-tmp"
 _OPERATOR_DEFAULT_RESOURCE_SPEC: Mapping[str, object] = {}
-_LISTENER_REQUIRED_MARKER = "listener_id' is required"
-_HYBRID_LISTENER_GUIDANCE = (
-    "This workspace deploys through a listener in your own cluster, and the "
-    "control plane needs a listener ID to create a deployment. Create the "
-    "deployment once in the LangSmith UI, choosing the listener and namespace, "
-    "then re-run with --deployment-id <id>."
-)
-
 _CUSTOMER_REGISTRY_SOURCE: SourceName = "external_docker"
+_LISTENER_REQUIRED_MARKER = "listener_id' is required"
+_LISTENERS_SHOWN = 10
+_LISTENER_NOT_FOUND_STATUSES = frozenset({404, 422})
+_LISTENERS_DOCS_URL = "https://docs.langchain.com/langsmith/control-plane#listeners"
+_NO_LISTENERS = (
+    "This workspace has no listeners, so --listener-id and --k8s-namespace "
+    "do not apply."
+)
 
 
 _TERMINAL_STATUSES = frozenset(
@@ -159,6 +160,134 @@ class ByAgent:
 
 
 DeploymentSelector = ById | ByName | ByAgent
+
+
+@dataclass(frozen=True, slots=True)
+class Listener:
+    id: str
+    compute_id: str
+    namespaces: tuple[str, ...]
+
+    @classmethod
+    def from_resource(cls, resource: Mapping[str, object]) -> "Listener":
+        identifier = str(resource.get("id") or "")
+        if not identifier:
+            raise HostBackendError(
+                "The control plane returned a listener without an id."
+            )
+        compute_config = resource.get("compute_config")
+        namespaces = (
+            compute_config.get("k8s_namespaces")
+            if isinstance(compute_config, Mapping)
+            else None
+        )
+        return cls(
+            identifier,
+            str(resource.get("compute_id", "")),
+            tuple(str(namespace) for namespace in namespaces)
+            if isinstance(namespaces, list)
+            else (),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class Unplaced:
+    @property
+    def summary(self) -> str:
+        return ""
+
+    def source_config(self) -> dict[str, object]:
+        return {}
+
+
+@dataclass(frozen=True, slots=True)
+class OnListener:
+    listener_id: str
+    k8s_namespace: str
+
+    @property
+    def summary(self) -> str:
+        return (
+            f"Deploying through listener {self.listener_id} "
+            f"in namespace {self.k8s_namespace}"
+        )
+
+    def source_config(self) -> dict[str, object]:
+        return {
+            "listener_id": self.listener_id,
+            "listener_config": {"k8s_namespace": self.k8s_namespace},
+        }
+
+
+Placement = Unplaced | OnListener
+
+
+@dataclass(frozen=True, slots=True)
+class RequestedPlacement:
+    listener_id: str | None = None
+    k8s_namespace: str | None = None
+
+    @property
+    def requested(self) -> bool:
+        return self.listener_id is not None or self.k8s_namespace is not None
+
+    def ensure_not_requested(self, deployment_id: str) -> None:
+        if self.requested:
+            raise click.UsageError(
+                "Listener and namespace are fixed when a deployment is created. "
+                f"Deployment {deployment_id} already exists, so drop --listener-id "
+                "and --k8s-namespace, or create a new deployment with a different "
+                "--name."
+            )
+
+    def on(self, listener: Listener) -> Placement:
+        return OnListener(listener.id, self._namespace(listener))
+
+    def among(self, listeners: Sequence[Listener]) -> Placement:
+        if not listeners:
+            if self.requested:
+                raise click.UsageError(_NO_LISTENERS)
+            return Unplaced()
+        if len(listeners) > 1:
+            raise click.UsageError(
+                "This workspace has several listeners. Choose one with "
+                f"--listener-id:\n{_describe_listeners(listeners)}"
+            )
+        return self.on(listeners[0])
+
+    def _namespace(self, listener: Listener) -> str:
+        if not listener.namespaces:
+            raise click.UsageError(
+                f"Listener {listener.id} serves no namespaces. Check its configuration."
+            )
+        if self.k8s_namespace is None:
+            if len(listener.namespaces) == 1:
+                return listener.namespaces[0]
+            raise click.UsageError(
+                f"Listener {listener.id} serves several namespaces. Choose one with "
+                f"--k8s-namespace: {', '.join(listener.namespaces)}"
+            )
+        if self.k8s_namespace not in listener.namespaces:
+            raise click.UsageError(
+                f"Listener {listener.id} does not serve namespace "
+                f"'{self.k8s_namespace}'. Choose one of: "
+                f"{', '.join(listener.namespaces)}"
+            )
+        return self.k8s_namespace
+
+
+def _describe_listeners(listeners: Sequence[Listener]) -> str:
+    shown = listeners[:_LISTENERS_SHOWN]
+    lines = [
+        f"  {listener.id}  cluster {listener.compute_id}  "
+        f"namespaces: {', '.join(listener.namespaces)}"
+        for listener in shown
+    ]
+    if len(listeners) > len(shown):
+        lines.append(f"  ... and {len(listeners) - len(shown)} more")
+    if len(listeners) == MAX_PAGE_SIZE:
+        lines.append(f"  (only the first {MAX_PAGE_SIZE} listeners were read)")
+    return "\n".join(lines)
 
 
 @dataclass(frozen=True, slots=True)
@@ -379,15 +508,16 @@ def _source_of(resource: object) -> str | None:
 def find_deployment_by_name(
     client: HostBackendClient, name: str
 ) -> ExistingDeployment | None:
-    listed = client.list_deployments(name_contains=name)
-    resources = listed.get("resources", []) if isinstance(listed, dict) else []
-    for resource in resources:
-        if (
-            isinstance(resource, dict)
-            and resource.get("name") == name
-            and resource.get("id")
-        ):
+    listed = client.list_deployments(name=name, name_contains=name, limit=MAX_PAGE_SIZE)
+    for resource in listed:
+        if resource.get("name") == name and resource.get("id"):
             return ExistingDeployment(str(resource["id"]), _source_of(resource))
+    if len(listed) >= MAX_PAGE_SIZE:
+        raise click.ClickException(
+            "This workspace has more deployments than the CLI can search, so it "
+            f"cannot tell whether '{name}' already exists. Pass --deployment-id to "
+            "update an existing deployment."
+        )
     return None
 
 
@@ -683,14 +813,22 @@ def _find_deployment(
         existing = _call_host_backend_with_optional_tenant(
             client,
             lambda c: c.list_deployments(
-                agent_id=selector.agent_id, agent_environment=selector.environment
+                agent_id=selector.agent_id,
+                agent_environment=selector.environment,
+                limit=MAX_PAGE_SIZE,
             ),
         )
+        if len(existing) > 1:
+            raise click.ClickException(
+                "This control plane does not filter deployments by agent, so the "
+                f"CLI cannot tell which one belongs to '{selector.agent_id}' in "
+                f"{selector.environment}. Deploy by --name instead."
+            )
         found = next(
             (
                 ExistingDeployment(str(dep["id"]), _source_of(dep))
-                for dep in existing.get("resources", [])
-                if not dep.get("is_preview")
+                for dep in existing
+                if dep.get("id") and not dep.get("is_preview")
             ),
             None,
         )
@@ -758,21 +896,18 @@ def _create_deployment(
 
 
 def _get_deployment_status_url(
-    updated: object, deployment_id: str, host_url: str
+    updated: object, deployment_id: str, endpoints: ControlPlaneEndpoints
 ) -> str | None:
-    """Compute the LangSmith dashboard URL for a deployment, if possible."""
     tenant_id = updated.get("tenant_id") if isinstance(updated, dict) else None
     if not tenant_id:
         return None
-    base = ControlPlaneEndpoints.from_control_plane_url(host_url).dashboard_url
-    return f"{base}/o/{tenant_id}/host/deployments/{deployment_id}"
+    return f"{endpoints.dashboard_url}/o/{tenant_id}/host/deployments/{deployment_id}"
 
 
 def _emit_deployment_status_url(
-    updated: object, deployment_id: str, host_url: str
+    updated: object, deployment_id: str, endpoints: ControlPlaneEndpoints
 ) -> str | None:
-    """Emit the deployment status URL and return it."""
-    url = _get_deployment_status_url(updated, deployment_id, host_url)
+    url = _get_deployment_status_url(updated, deployment_id, endpoints)
     if url:
         _get_emitter().status_url(url)
     return url
@@ -790,14 +925,11 @@ def _poll_revision_status(
 ) -> tuple[str, str | None]:
     """Poll latest revision status until terminal status or timeout."""
     em = _get_emitter()
-    revisions_resp = client.list_revisions(deployment_id, limit=1)
-    resources = (
-        revisions_resp.get("resources", []) if isinstance(revisions_resp, dict) else []
-    )
-    if not resources:
+    revisions = client.list_revisions(deployment_id, limit=1)
+    if not revisions:
         return "", None
 
-    revision_id = str(resources[0]["id"])
+    revision_id = str(revisions[0]["id"])
     last_status = ""
     deadline = time.time() + timeout_seconds
     start_time = time.monotonic()
@@ -1318,6 +1450,7 @@ def _run_remote_build(
 @dataclass(frozen=True, slots=True)
 class DeployContext:
     client: HostBackendClient
+    endpoints: ControlPlaneEndpoints
     spec: BuildSpec
     verbose: bool
     selector: DeploymentSelector
@@ -1347,17 +1480,64 @@ def _resolve_or_create(
     )
     if found is not None:
         return found.id, step
-    created, step = _create_deployment(
-        ctx.client,
-        step,
-        name=ctx.selector.name if isinstance(ctx.selector, ByName) else None,
-        agent=asdict(ctx.selector) if isinstance(ctx.selector, ByAgent) else None,
-        source=source,
-        source_config={"deployment_type": ctx.deployment_type},
-        source_revision_config={},
-        secrets=ctx.secrets,
-    )
+    try:
+        created, step = _create_deployment(
+            ctx.client,
+            step,
+            name=ctx.selector.name if isinstance(ctx.selector, ByName) else None,
+            agent=asdict(ctx.selector) if isinstance(ctx.selector, ByAgent) else None,
+            source=source,
+            source_config={"deployment_type": ctx.deployment_type},
+            source_revision_config={},
+            secrets=ctx.secrets,
+        )
+    except HostBackendError as err:
+        if _needs_a_listener(err):
+            raise ListenerRequiredError(
+                "The image has to come from a registry you manage, so re-run with "
+                "--push-to <registry>/<repository>."
+            ) from None
+        raise
     return created.id, step
+
+
+class ListenerRequiredError(click.UsageError):
+    def __init__(self, remedy: str) -> None:
+        super().__init__(
+            "This workspace deploys through a listener in your own cluster. "
+            f"{remedy}\nLearn about listeners: {_LISTENERS_DOCS_URL}"
+        )
+
+
+def _needs_a_listener(err: HostBackendError) -> bool:
+    return err.status_code == 400 and _LISTENER_REQUIRED_MARKER in (
+        err.detail or err.message
+    )
+
+
+def _requested_listener(client: HostBackendClient, listener_id: str) -> Listener:
+    try:
+        resource = _call_host_backend_with_optional_tenant(
+            client, lambda c: c.get_listener(listener_id)
+        )
+    except HostBackendError as err:
+        if err.status_code not in _LISTENER_NOT_FOUND_STATUSES:
+            raise
+        available = _available_listeners(client)
+        if not available:
+            raise click.UsageError(_NO_LISTENERS) from None
+        raise click.UsageError(
+            f"Listener {listener_id} was not found in this workspace. "
+            f"Available listeners:\n{_describe_listeners(available)}"
+        ) from None
+    return Listener.from_resource(resource)
+
+
+def _available_listeners(client: HostBackendClient) -> tuple[Listener, ...]:
+    resources = _call_host_backend_with_optional_tenant(
+        client, lambda c: c.list_listeners()
+    )
+    return tuple(Listener.from_resource(resource) for resource in resources)
 
 
 def _ensure_customer_registry_source(existing: ExistingDeployment) -> None:
@@ -1422,6 +1602,7 @@ class RemoteBuildSource:
 class CustomerRegistrySource:
     reference: ImageReference
     prebuilt_image: str | None
+    requested_placement: RequestedPlacement
 
     def run(self, ctx: DeployContext) -> DeployOutcome:
         if isinstance(ctx.selector, ById):
@@ -1443,6 +1624,7 @@ class CustomerRegistrySource:
         self, ctx: DeployContext, existing: ExistingDeployment, step: int
     ) -> DeployOutcome:
         _ensure_customer_registry_source(existing)
+        self.requested_placement.ensure_not_requested(existing.id)
         image_uri, step = self._publish(ctx, step)
         _log_deploy_step(step, f"Updating deployment {existing.id}")
         updated = ctx.client.update_deployment(
@@ -1456,7 +1638,25 @@ class CustomerRegistrySource:
             existing.id, _image_revision_result(updated, "Deployment updated")
         )
 
+    def _resolve_placement(self, ctx: DeployContext) -> Placement:
+        requested = self.requested_placement
+        if requested.listener_id is not None:
+            return requested.on(_requested_listener(ctx.client, requested.listener_id))
+        if not (ctx.endpoints.is_cloud or requested.requested):
+            return Unplaced()
+        return requested.among(_available_listeners(ctx.client))
+
+    def _announce(self, placement: Placement) -> None:
+        if isinstance(placement, OnListener):
+            _get_emitter().info(
+                placement.summary,
+                listener_id=placement.listener_id,
+                k8s_namespace=placement.k8s_namespace,
+            )
+
     def _create(self, ctx: DeployContext, name: str | None, step: int) -> DeployOutcome:
+        placement = self._resolve_placement(ctx)
+        self._announce(placement)
         image_uri, step = self._publish(ctx, step)
         try:
             created, _ = _create_deployment(
@@ -1467,13 +1667,19 @@ class CustomerRegistrySource:
                 if isinstance(ctx.selector, ByAgent)
                 else None,
                 source=_CUSTOMER_REGISTRY_SOURCE,
-                source_config={"resource_spec": _OPERATOR_DEFAULT_RESOURCE_SPEC},
+                source_config={
+                    "resource_spec": _OPERATOR_DEFAULT_RESOURCE_SPEC,
+                    **placement.source_config(),
+                },
                 source_revision_config={"image_uri": image_uri},
                 secrets=ctx.secrets,
             )
         except HostBackendError as err:
-            if err.status_code == 400 and _LISTENER_REQUIRED_MARKER in err.message:
-                raise click.ClickException(_HYBRID_LISTENER_GUIDANCE) from None
+            if _needs_a_listener(err):
+                raise ListenerRequiredError(
+                    "Re-run with --listener-id and --k8s-namespace.\n"
+                    f"{err.detail or err.message}"
+                ) from None
             raise
         return DeployOutcome(
             created.id, _image_revision_result(created.resource, "Deployment created")
@@ -1534,14 +1740,31 @@ def _select_source(
     image_name: str | None,
     tag: str | None,
     remote_build_flag: bool | None,
+    placement: RequestedPlacement,
+    selector: DeploymentSelector,
 ) -> DeploymentSource:
+    if push_to is None and placement.requested:
+        raise click.UsageError(
+            "--listener-id and --k8s-namespace only apply when creating a "
+            "deployment with --push-to."
+        )
+    if placement.requested and isinstance(selector, ById):
+        raise click.UsageError(
+            "Listener and namespace are fixed when a deployment is created, so "
+            "they cannot be set for an existing --deployment-id. Drop them, or "
+            "create a new deployment with --name."
+        )
     if push_to is not None:
         if remote_build_flag is True:
             raise click.UsageError("--push-to cannot be combined with --remote.")
         reference = _push_reference(push_to, tag)
         if image is None:
             _require_local_docker()
-        return CustomerRegistrySource(reference, prebuilt_image=image)
+        return CustomerRegistrySource(
+            reference=reference,
+            prebuilt_image=image,
+            requested_placement=placement,
+        )
     if image and remote_build_flag is True:
         raise click.UsageError("--image cannot be combined with --remote builds.")
     use_remote_build, local_build_error = _resolve_build_mode(
@@ -1647,9 +1870,7 @@ def _call_host_backend_with_optional_tenant(
                 prompted_for_tenant = True
                 continue
             if err.status_code == 403 and "not enabled" in err.message.lower():
-                smith_base = ControlPlaneEndpoints.from_control_plane_url(
-                    client.base_url
-                ).dashboard_url
+                smith_base = client.endpoints.dashboard_url
                 raise HostBackendError(
                     "LangSmith Deployment is not enabled for this organization. "
                     f"Enable it at {smith_base}/host/deployments"
@@ -1855,6 +2076,21 @@ def _deploy_base_options(
                 ),
             ),
             click.option(
+                "--listener-id",
+                help=(
+                    "Listener that will run the deployment, for workspaces that "
+                    "deploy through a listener in your own cluster. Only used when "
+                    "creating a deployment with --push-to."
+                ),
+            ),
+            click.option(
+                "--k8s-namespace",
+                help=(
+                    "Kubernetes namespace the listener deploys into. Only used when "
+                    "creating a deployment with --push-to."
+                ),
+            ),
+            click.option(
                 "--config",
                 "-c",
                 default=DEFAULT_CONFIG,
@@ -1964,6 +2200,8 @@ def _deploy_cmd(
     image_name: str | None,
     image: str | None,
     push_to: str | None,
+    listener_id: str | None,
+    k8s_namespace: str | None,
     tag: str | None,
     base_image: str | None,
     install_command: str | None,
@@ -2031,12 +2269,15 @@ def _deploy_cmd(
 
     secrets = _secrets_from_env(_env_without_deployment_name(env_vars))
 
+    selector = ByAgent(**agent) if agent else deployment_selector(deployment_id, name)
     source = _select_source(
         push_to=push_to,
         image=image,
         image_name=image_name,
         tag=tag,
         remote_build_flag=remote_build_flag,
+        placement=RequestedPlacement(listener_id, k8s_namespace),
+        selector=selector,
     )
 
     client = _create_host_backend_client(host_url, api_key, env_vars=env_vars)
@@ -2049,6 +2290,7 @@ def _deploy_cmd(
     outcome = source.run(
         DeployContext(
             client=client,
+            endpoints=client.endpoints,
             spec=BuildSpec(
                 config=config,
                 config_json=config_json,
@@ -2060,9 +2302,7 @@ def _deploy_cmd(
                 build_command=build_command,
             ),
             verbose=verbose,
-            selector=ByAgent(**agent)
-            if agent
-            else deployment_selector(deployment_id, name),
+            selector=selector,
             deployment_type=deployment_type,
             secrets=secrets,
             tracked_packages=tracked_packages,
@@ -2071,7 +2311,7 @@ def _deploy_cmd(
     dep_status_url = _emit_deployment_status_url(
         outcome.build_result.updated,
         outcome.deployment_id,
-        client.base_url,
+        client.endpoints,
     )
 
     if no_wait:
@@ -2158,15 +2398,9 @@ def deploy_list(
     if environment is not None:
         filters["agent_environment"] = environment
     client = _create_host_backend_client(host_url, api_key)
-    response = _call_host_backend_with_optional_tenant(
+    deployments = _call_host_backend_with_optional_tenant(
         client,
         lambda c: c.list_deployments(name_contains=name_contains, **filters),
-    )
-    resources = response.get("resources") if isinstance(response, dict) else None
-    deployments = (
-        [item for item in resources if isinstance(item, dict)]
-        if isinstance(resources, list)
-        else []
     )
     if not deployments:
         click.echo("No deployments found.")
@@ -2207,15 +2441,9 @@ def deploy_revisions_list(
     api_key: str | None, host_url: str | None, limit: int, deployment_id: str
 ) -> None:
     client = _create_host_backend_client(host_url, api_key)
-    response = _call_host_backend_with_optional_tenant(
+    revisions = _call_host_backend_with_optional_tenant(
         client,
         lambda c: c.list_revisions(deployment_id, limit=limit),
-    )
-    resources = response.get("resources") if isinstance(response, dict) else None
-    revisions = (
-        [item for item in resources if isinstance(item, dict)]
-        if isinstance(resources, list)
-        else []
     )
     if not revisions:
         click.echo(f"No revisions found for deployment {deployment_id}.")
@@ -2366,17 +2594,12 @@ def deploy_logs(
         dep_id = found.id
 
     if log_type == "build" and not revision_id:
-        revisions_resp = client.list_revisions(dep_id, limit=1)
-        resources = (
-            revisions_resp.get("resources", [])
-            if isinstance(revisions_resp, dict)
-            else []
-        )
-        if not resources:
+        revisions = client.list_revisions(dep_id, limit=1)
+        if not revisions:
             raise click.ClickException(
                 "No revisions found for this deployment. Cannot fetch build logs."
             )
-        revision_id = str(resources[0]["id"])
+        revision_id = str(revisions[0]["id"])
         click.secho(f"Using latest revision: {revision_id}", fg="cyan")
 
     payload: dict = {"limit": limit, "order": "desc"}

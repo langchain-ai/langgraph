@@ -1,5 +1,6 @@
 import asyncio
 import json
+import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -17,6 +18,7 @@ from langgraph_cli.host_backend import HostBackendClient
 from langgraph_cli.image_reference import ImageReference
 
 CONTROL_PLANE_URL = "https://control-plane.example.com"
+CLOUD_CONTROL_PLANE_URL = "https://api.host.langchain.com"
 REGISTRY_URL = "https://registry.example.com/team"
 PUSH_TOKEN = "push-token"
 PUSHED_IMAGE = "registry.example.com/team/my-app:latest"
@@ -24,10 +26,25 @@ PUSHED_DIGEST = "registry.example.com/team/my-app@sha256:abc123"
 PUSH_REPOSITORY = "registry.example.com/team/agent"
 EXTERNAL_IMAGE = f"{PUSH_REPOSITORY}:latest"
 EXTERNAL_DIGEST = f"{PUSH_REPOSITORY}@sha256:abc123"
-LISTENER_REQUIRED = (
-    "Source configuration error: 'source_config.listener_id' is required for "
-    "workspace with available listener IDs: ['listener-1']"
-)
+LISTENER_ID = "11111111-1111-4111-8111-111111111111"
+OTHER_LISTENER_ID = "22222222-2222-4222-8222-222222222222"
+PAGE_TWO_LISTENER_ID = "33333333-3333-4333-8333-333333333333"
+UNKNOWN_LISTENER_ID = "99999999-9999-4999-8999-999999999999"
+LISTENER = {
+    "id": LISTENER_ID,
+    "compute_id": "prod-cluster",
+    "compute_config": {"k8s_namespaces": ["agents"]},
+}
+OTHER_LISTENER = {
+    "id": OTHER_LISTENER_ID,
+    "compute_id": "other-cluster",
+    "compute_config": {"k8s_namespaces": ["agents"]},
+}
+TWO_NAMESPACE_LISTENER = {
+    "id": LISTENER_ID,
+    "compute_id": "prod-cluster",
+    "compute_config": {"k8s_namespaces": ["agents", "agents-staging"]},
+}
 CREATED_ID = "dep-created"
 TRACKED_PACKAGES = ["langgraph:1.0.0"]
 SIGNED_UPLOAD_URL = "https://storage.example.com/signed"
@@ -38,7 +55,12 @@ DIGESTS_FORMAT = "{{json .RepoDigests}}"
 NOT_A_CLI_DEPLOYMENT = (
     "push token is only available for 'internal_docker' source deployments"
 )
+LISTENER_REQUIRED = (
+    "Source configuration error: 'source_config.listener_id' is required "
+    f"for workspace with available listener IDs: ['{LISTENER_ID}']"
+)
 LIST_DEPLOYMENTS = "GET /v2/deployments"
+LIST_LISTENERS = "GET /v2/listeners"
 CREATE_DEPLOYMENT = "POST /v2/deployments"
 
 
@@ -58,12 +80,22 @@ def _get(deployment_id: str) -> str:
     return f"GET /v2/deployments/{deployment_id}"
 
 
+def _looks_like_a_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(value)
+    except ValueError:
+        return False
+    return True
+
+
 @dataclass
 class ControlPlaneDouble:
     timeline: list[str]
     existing_deployments: list[dict] = field(default_factory=list)
     push_token_status: int = 200
     create_error: str | None = None
+    listeners: list[dict] = field(default_factory=list)
+    listeners_by_id: dict[str, dict] = field(default_factory=dict)
     bodies: dict[str, dict] = field(default_factory=dict)
 
     def handle(self, request: httpx.Request) -> httpx.Response:
@@ -71,14 +103,45 @@ class ControlPlaneDouble:
         self.timeline.append(route)
         if request.content:
             self.bodies[route] = json.loads(request.content)
-        return self._respond(request.method, request.url.path)
+        return self._respond(request)
 
-    def _respond(self, method: str, path: str) -> httpx.Response:
+    def _respond(self, request: httpx.Request) -> httpx.Response:
+        method, path = request.method, request.url.path
+        if (method, path) == ("GET", "/v2/listeners"):
+            return httpx.Response(200, json={"resources": self.listeners})
+        if method == "GET" and path.startswith("/v2/listeners/"):
+            listener_id = path.rsplit("/", 1)[-1]
+            if not _looks_like_a_uuid(listener_id):
+                return httpx.Response(
+                    422,
+                    json={
+                        "detail": [
+                            {"type": "uuid_parsing", "loc": ["path", "listener_id"]}
+                        ]
+                    },
+                )
+            known = {listener["id"]: listener for listener in self.listeners}
+            known.update(self.listeners_by_id)
+            if listener_id not in known:
+                return httpx.Response(
+                    404, json={"detail": f"Listener ID {listener_id} not found."}
+                )
+            return httpx.Response(200, json=known[listener_id])
         if (method, path) == ("GET", "/v2/deployments"):
-            return httpx.Response(200, json={"resources": self.existing_deployments})
+            name = request.url.params.get("name")
+            return httpx.Response(
+                200,
+                json={
+                    "resources": [
+                        deployment
+                        for deployment in self.existing_deployments
+                        if name is None or deployment.get("name") == name
+                    ]
+                },
+            )
         if (method, path) == ("POST", "/v2/deployments"):
             if self.create_error is not None:
-                return httpx.Response(400, text=self.create_error)
+                return httpx.Response(400, json={"detail": self.create_error})
             return httpx.Response(201, json={"id": CREATED_ID, "tenant_id": "tenant-1"})
         if path.endswith("/push-token"):
             if self.push_token_status != 200:
@@ -199,7 +262,7 @@ class DeployProject:
     timeline: list[str]
     uploads: list[tuple[str, str, int]]
 
-    def run(self, *args: str) -> Result:
+    def run(self, *args: str, host_url: str = CONTROL_PLANE_URL) -> Result:
         return CliRunner().invoke(
             cli,
             [
@@ -207,7 +270,7 @@ class DeployProject:
                 "--api-key",
                 "test-key",
                 "--host-url",
-                CONTROL_PLANE_URL,
+                host_url,
                 "--name",
                 "my-app",
                 "--no-input",
@@ -611,18 +674,6 @@ def test_push_to_rejects_a_non_external_deployment_before_any_docker_work(
     assert deploy_project.docker.verbs() == []
 
 
-def test_push_to_explains_the_listener_requirement_of_hybrid_workspaces(
-    deploy_project: DeployProject,
-) -> None:
-    deploy_project.control_plane.create_error = LISTENER_REQUIRED
-
-    result = deploy_project.run("--push-to", PUSH_REPOSITORY)
-
-    assert result.exit_code != 0
-    assert "listener" in result.output
-    assert "--deployment-id" in result.output
-
-
 def test_push_to_with_deployment_id_fetches_the_deployment_once(
     deploy_project: DeployProject,
 ) -> None:
@@ -652,3 +703,414 @@ def test_invalid_tag_fails_before_any_control_plane_call(
     assert result.exit_code != 0
     assert "Image tag may only contain" in result.output
     assert deploy_project.timeline == []
+
+
+def test_push_to_places_a_new_deployment_on_the_only_listener(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER]
+
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, host_url=CLOUD_CONTROL_PLANE_URL
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.timeline == [
+        LIST_DEPLOYMENTS,
+        LIST_LISTENERS,
+        "docker build",
+        "docker push",
+        "docker inspect-digest",
+        CREATE_DEPLOYMENT,
+    ]
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {},
+        "listener_id": LISTENER_ID,
+        "listener_config": {"k8s_namespace": "agents"},
+    }
+    assert f"Deploying through listener {LISTENER_ID} in namespace agents" in (
+        result.output
+    )
+
+
+def test_push_to_places_a_new_deployment_on_the_chosen_listener(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER, OTHER_LISTENER]
+
+    result = deploy_project.run(
+        "--push-to",
+        PUSH_REPOSITORY,
+        "--listener-id",
+        OTHER_LISTENER_ID,
+        "--k8s-namespace",
+        "agents",
+        host_url=CLOUD_CONTROL_PLANE_URL,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {},
+        "listener_id": OTHER_LISTENER_ID,
+        "listener_config": {"k8s_namespace": "agents"},
+    }
+
+
+@pytest.mark.parametrize(
+    ("listeners", "args", "message"),
+    [
+        pytest.param(
+            [LISTENER, OTHER_LISTENER], (), "--listener-id", id="two_listeners"
+        ),
+        pytest.param(
+            [TWO_NAMESPACE_LISTENER], (), "--k8s-namespace", id="two_namespaces"
+        ),
+        pytest.param(
+            [LISTENER],
+            ("--k8s-namespace", "nope"),
+            "does not serve namespace",
+            id="unknown_namespace",
+        ),
+    ],
+)
+def test_push_to_refuses_an_unresolved_placement_before_any_docker_work(
+    deploy_project: DeployProject, listeners, args, message
+) -> None:
+    deploy_project.control_plane.listeners = listeners
+
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, *args, host_url=CLOUD_CONTROL_PLANE_URL
+    )
+
+    assert result.exit_code != 0
+    assert message in result.output
+    assert deploy_project.docker.verbs() == []
+    assert CREATE_DEPLOYMENT not in deploy_project.timeline
+
+
+def test_self_hosted_control_plane_keeps_its_default_placement(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER]
+
+    result = deploy_project.run("--push-to", PUSH_REPOSITORY)
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {}
+    }
+
+
+def test_self_hosted_control_plane_places_when_asked(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER]
+
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, "--listener-id", LISTENER_ID
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {},
+        "listener_id": LISTENER_ID,
+        "listener_config": {"k8s_namespace": "agents"},
+    }
+
+
+def test_updating_a_deployment_never_looks_up_listeners(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER]
+    deploy_project.control_plane.existing_deployments = [
+        {"id": "dep-ext", "name": "my-app", "source": "external_docker"}
+    ]
+
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, host_url=CLOUD_CONTROL_PLANE_URL
+    )
+
+    assert result.exit_code == 0, result.output
+    assert LIST_LISTENERS not in deploy_project.timeline
+
+
+def test_listener_flags_are_refused_for_a_deployment_id_without_any_call(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run(
+        "--push-to",
+        PUSH_REPOSITORY,
+        "--deployment-id",
+        "dep-ext",
+        "--k8s-namespace",
+        "agents",
+        host_url=CLOUD_CONTROL_PLANE_URL,
+    )
+
+    assert result.exit_code != 0
+    assert "fixed when a deployment is created" in result.output
+    assert deploy_project.timeline == []
+
+
+def test_listener_flags_are_refused_on_an_existing_deployment(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER]
+    deploy_project.control_plane.existing_deployments = [
+        {"id": "dep-ext", "name": "my-app", "source": "external_docker"}
+    ]
+
+    result = deploy_project.run(
+        "--push-to",
+        PUSH_REPOSITORY,
+        "--listener-id",
+        LISTENER_ID,
+        host_url=CLOUD_CONTROL_PLANE_URL,
+    )
+
+    assert result.exit_code != 0
+    assert "fixed when a deployment is created" in result.output
+    assert deploy_project.docker.verbs() == []
+
+
+def test_a_deployment_without_a_listener_announces_nothing(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run("--push-to", PUSH_REPOSITORY)
+
+    assert result.exit_code == 0, result.output
+    assert "listener" not in result.output
+
+
+def test_a_self_hosted_create_without_flags_never_looks_up_listeners(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER]
+
+    result = deploy_project.run("--push-to", PUSH_REPOSITORY)
+
+    assert result.exit_code == 0, result.output
+    assert LIST_LISTENERS not in deploy_project.timeline
+
+
+def test_a_control_plane_that_demands_a_listener_names_the_flags(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.create_error = LISTENER_REQUIRED
+
+    result = deploy_project.run("--push-to", PUSH_REPOSITORY)
+
+    assert result.exit_code != 0
+    assert "--listener-id" in result.output
+    assert "--k8s-namespace" in result.output
+    assert LISTENER_ID in result.output
+    assert "{" not in result.output
+    assert "POST /v2/deployments failed" not in result.output
+
+
+def test_listener_flags_without_push_to_make_no_call_at_all(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run("--listener-id", LISTENER_ID)
+
+    assert result.exit_code != 0
+    assert "--push-to" in result.output
+    assert deploy_project.timeline == []
+
+
+def test_a_truncated_listener_page_says_so(deploy_project: DeployProject) -> None:
+    deploy_project.control_plane.listeners = [
+        {
+            "id": str(uuid.UUID(int=index)),
+            "compute_id": "cluster",
+            "compute_config": {"k8s_namespaces": ["agents"]},
+        }
+        for index in range(100)
+    ]
+
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, host_url=CLOUD_CONTROL_PLANE_URL
+    )
+
+    assert result.exit_code != 0
+    assert "first 100" in result.output
+
+
+def test_a_managed_build_in_a_listener_workspace_points_at_push_to(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.create_error = LISTENER_REQUIRED
+
+    result = deploy_project.run("--no-remote")
+
+    assert result.exit_code != 0
+    assert "--push-to" in result.output
+    assert deploy_project.docker.verbs() == []
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(("--no-remote",), id="managed_build"),
+        pytest.param(("--push-to", PUSH_REPOSITORY), id="push_to"),
+    ],
+)
+def test_a_listener_requirement_links_the_listener_docs(
+    deploy_project: DeployProject, args: tuple[str, ...]
+) -> None:
+    deploy_project.control_plane.create_error = LISTENER_REQUIRED
+
+    result = deploy_project.run(*args)
+
+    assert result.exit_code != 0
+    assert "https://docs.langchain.com/langsmith/control-plane#listeners" in (
+        result.output
+    )
+
+
+def test_a_managed_control_plane_without_listeners_creates_as_before(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, host_url=CLOUD_CONTROL_PLANE_URL
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {}
+    }
+    assert deploy_project.timeline.count(LIST_LISTENERS) == 1
+
+
+def test_a_listener_without_an_id_is_reported_rather_than_ignored(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [
+        {"compute_id": "broken", "compute_config": {"k8s_namespaces": ["agents"]}},
+        LISTENER,
+    ]
+
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, host_url=CLOUD_CONTROL_PLANE_URL
+    )
+
+    assert result.exit_code != 0
+    assert "without an id" in result.output
+    assert deploy_project.docker.verbs() == []
+
+
+def _listener_route(listener_id: str) -> str:
+    return f"GET /v2/listeners/{listener_id}"
+
+
+def test_an_explicit_listener_is_fetched_by_id_not_searched(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER, OTHER_LISTENER]
+
+    result = deploy_project.run(
+        "--push-to",
+        PUSH_REPOSITORY,
+        "--listener-id",
+        OTHER_LISTENER_ID,
+        host_url=CLOUD_CONTROL_PLANE_URL,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert _listener_route(OTHER_LISTENER_ID) in deploy_project.timeline
+    assert LIST_LISTENERS not in deploy_project.timeline
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {},
+        "listener_id": OTHER_LISTENER_ID,
+        "listener_config": {"k8s_namespace": "agents"},
+    }
+
+
+def test_an_explicit_listener_beyond_the_first_page_still_works(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [
+        {
+            "id": str(uuid.UUID(int=index)),
+            "compute_id": "cluster",
+            "compute_config": {"k8s_namespaces": ["agents"]},
+        }
+        for index in range(100)
+    ]
+    deploy_project.control_plane.listeners_by_id = {
+        PAGE_TWO_LISTENER_ID: {
+            "id": PAGE_TWO_LISTENER_ID,
+            "compute_id": "far-cluster",
+            "compute_config": {"k8s_namespaces": ["agents"]},
+        }
+    }
+
+    result = deploy_project.run(
+        "--push-to",
+        PUSH_REPOSITORY,
+        "--listener-id",
+        PAGE_TWO_LISTENER_ID,
+        host_url=CLOUD_CONTROL_PLANE_URL,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {},
+        "listener_id": PAGE_TWO_LISTENER_ID,
+        "listener_config": {"k8s_namespace": "agents"},
+    }
+
+
+def test_an_unknown_listener_names_the_ones_that_exist(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER]
+
+    result = deploy_project.run(
+        "--push-to",
+        PUSH_REPOSITORY,
+        "--listener-id",
+        UNKNOWN_LISTENER_ID,
+        host_url=CLOUD_CONTROL_PLANE_URL,
+    )
+
+    assert result.exit_code != 0
+    assert "was not found" in result.output
+    assert LISTENER_ID in result.output
+    assert "prod-cluster" in result.output
+    assert deploy_project.docker.verbs() == []
+
+
+def test_an_explicit_listener_in_a_workspace_without_any_is_refused(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run(
+        "--push-to",
+        PUSH_REPOSITORY,
+        "--listener-id",
+        LISTENER_ID,
+        host_url=CLOUD_CONTROL_PLANE_URL,
+    )
+
+    assert result.exit_code != 0
+    assert "no listeners" in result.output
+    assert deploy_project.docker.verbs() == []
+
+
+def test_a_listener_id_that_is_not_an_identifier_still_names_the_real_ones(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER]
+
+    result = deploy_project.run(
+        "--push-to",
+        PUSH_REPOSITORY,
+        "--listener-id",
+        "not-a-listener",
+        host_url=CLOUD_CONTROL_PLANE_URL,
+    )
+
+    assert result.exit_code != 0
+    assert "was not found" in result.output
+    assert LISTENER_ID in result.output
+    assert "uuid_parsing" not in result.output

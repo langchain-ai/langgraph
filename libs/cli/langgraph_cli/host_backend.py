@@ -18,6 +18,7 @@ CLOUD_DASHBOARD_HOST = "smith.langchain.com"
 CONTROL_PLANE_PATH = "/api-host"
 LANGSMITH_API_PATHS = ("/api/v1", "/api")
 LOCAL_HOSTNAMES = ("localhost", "127.0.0.1")
+MAX_PAGE_SIZE = 100
 SourceName = Literal["internal_docker", "internal_source", "external_docker"]
 
 
@@ -35,6 +36,13 @@ class ControlPlaneEndpoints:
         if langsmith_endpoint:
             return cls.from_langsmith_endpoint(langsmith_endpoint)
         return cls(CLOUD_CONTROL_PLANE_URL, CLOUD_DASHBOARD_URL)
+
+    @property
+    def is_cloud(self) -> bool:
+        hostname = urlparse(self.control_plane_url).hostname or ""
+        return hostname == CLOUD_CONTROL_PLANE_HOST or hostname.endswith(
+            f".{CLOUD_CONTROL_PLANE_HOST}"
+        )
 
     @classmethod
     def from_control_plane_url(cls, url: str) -> ControlPlaneEndpoints:
@@ -83,12 +91,36 @@ def _without_api_path(path: str) -> str:
     return path
 
 
+def _resources(payload: object) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    resources = payload.get("resources")
+    if not isinstance(resources, list):
+        return []
+    return [item for item in resources if isinstance(item, dict)]
+
+
 class HostBackendError(click.ClickException):
     """Raised when the host backend returns an error response."""
 
-    def __init__(self, message: str, status_code: int | None = None):
+    def __init__(
+        self,
+        message: str,
+        status_code: int | None = None,
+        detail: str | None = None,
+    ):
         super().__init__(message)
         self.status_code = status_code
+        self.detail = detail
+
+
+def _error_detail(response: httpx.Response) -> str | None:
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    detail = body.get("detail") if isinstance(body, dict) else None
+    return detail if isinstance(detail, str) else None
 
 
 class HostBackendClient:
@@ -110,7 +142,8 @@ class HostBackendClient:
         }
         if tenant_id:
             headers["X-Tenant-ID"] = tenant_id
-        self._base_url = base_url.rstrip("/")
+        self._endpoints = ControlPlaneEndpoints.from_control_plane_url(base_url)
+        self._base_url = self._endpoints.control_plane_url
         self._client = httpx.Client(
             base_url=self._base_url,
             headers=headers,
@@ -121,6 +154,10 @@ class HostBackendClient:
     @property
     def base_url(self) -> str:
         return self._base_url
+
+    @property
+    def endpoints(self) -> ControlPlaneEndpoints:
+        return self._endpoints
 
     def set_tenant(self, tenant_id: str) -> None:
         self._client.headers["X-Tenant-ID"] = tenant_id
@@ -136,10 +173,12 @@ class HostBackendClient:
             resp = self._client.request(method, path, json=payload, params=params)
             resp.raise_for_status()
         except httpx.HTTPStatusError as err:
-            detail = err.response.text or str(err.response.status_code)
+            detail = _error_detail(err.response)
+            reason = detail or err.response.text or str(err.response.status_code)
             raise HostBackendError(
-                f"{method} {path} failed with status {err.response.status_code}: {detail}",
+                f"{method} {path} failed with status {err.response.status_code}: {reason}",
                 status_code=err.response.status_code,
+                detail=detail,
             ) from None
         except httpx.TransportError as err:
             raise HostBackendError(str(err)) from None
@@ -178,20 +217,29 @@ class HostBackendClient:
 
     def list_deployments(
         self,
-        name_contains: str = "",
         *,
+        name: str | None = None,
+        name_contains: str | None = None,
+        limit: int | None = None,
         agent_id: str | None = None,
         agent_environment: str | None = None,
-    ) -> dict[str, Any]:
-        params = {"name_contains": name_contains}
-        if agent_id is not None:
-            params["agent_id"] = agent_id
-        if agent_environment is not None:
-            params["agent_environment"] = agent_environment
-        return self._request(
-            "GET",
-            "/v2/deployments",
-            params=params,
+    ) -> list[dict[str, Any]]:
+        given = (
+            ("name", name),
+            ("name_contains", name_contains),
+            ("limit", limit),
+            ("agent_id", agent_id),
+            ("agent_environment", agent_environment),
+        )
+        params = {key: value for key, value in given if value is not None}
+        return _resources(self._request("GET", "/v2/deployments", params=params))
+
+    def get_listener(self, listener_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/v2/listeners/{listener_id}")
+
+    def list_listeners(self) -> list[dict[str, Any]]:
+        return _resources(
+            self._request("GET", "/v2/listeners", params={"limit": MAX_PAGE_SIZE})
         )
 
     def get_deployment(self, deployment_id: str) -> dict[str, Any]:
@@ -266,10 +314,15 @@ class HostBackendClient:
             payload["secrets"] = secrets
         return self._request("PATCH", f"/v2/deployments/{deployment_id}", payload)
 
-    def list_revisions(self, deployment_id: str, limit: int = 1) -> dict[str, Any]:
-        return self._request(
-            "GET",
-            f"/v2/deployments/{deployment_id}/revisions?limit={limit}",
+    def list_revisions(
+        self, deployment_id: str, limit: int = 1
+    ) -> list[dict[str, Any]]:
+        return _resources(
+            self._request(
+                "GET",
+                f"/v2/deployments/{deployment_id}/revisions",
+                params={"limit": limit},
+            )
         )
 
     def get_revision(self, deployment_id: str, revision_id: str) -> dict[str, Any]:
