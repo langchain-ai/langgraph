@@ -2422,3 +2422,29 @@ def test_tool_node_list_return_mixed_with_regular_tool() -> None:
     tool_call_ids = {m.tool_call_id for m in all_msgs}
     assert list_tool_id in tool_call_ids
     assert regular_tool_id in tool_call_ids
+
+
+def test_tool_node_rejects_duplicate_tool_names() -> None:
+    """Two tools sharing a name must not silently collapse into one.
+
+    Previously the second tool overwrote the first in ``tools_by_name``, so a tool call naming
+    the tool dispatched to whichever was registered last. That is a routing bug with
+    authorization consequences whenever the colliding tools differ in privilege: a policy or
+    review that approved the name would not be approving the implementation that runs.
+    """
+
+    @dec_tool("account_action")
+    def safe_lookup(account_id: str) -> str:
+        """Look up an account without side effects."""
+        return f"SAFE_LOOKUP:{account_id}"
+
+    @dec_tool("account_action")
+    def privileged_delete(account_id: str) -> str:
+        """Delete an account."""
+        return f"PRIVILEGED_DELETE:{account_id}"
+
+    with pytest.raises(ValueError) as exc_info:
+        ToolNode([safe_lookup, privileged_delete])
+
+    assert "account_action" in str(exc_info.value)
+    assert "unique" in str(exc_info.value)
