@@ -534,7 +534,7 @@ class RemoteGraph(PregelProtocol):
 
         states = sync_client.threads.get_history(
             thread_id=merged_config["configurable"]["thread_id"],
-            limit=limit if limit else 10,
+            limit=10 if limit is None else limit,
             before=self._get_checkpoint(before),
             metadata=filter,
             checkpoint=self._get_checkpoint(merged_config),
@@ -575,7 +575,7 @@ class RemoteGraph(PregelProtocol):
 
         states = await client.threads.get_history(
             thread_id=merged_config["configurable"]["thread_id"],
-            limit=limit if limit else 10,
+            limit=10 if limit is None else limit,
             before=self._get_checkpoint(before),
             metadata=filter,
             checkpoint=self._get_checkpoint(merged_config),

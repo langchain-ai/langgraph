@@ -324,6 +324,33 @@ def test_get_state_history():
     )
 
 
+def test_get_state_history_preserves_zero_limit():
+    mock_sync_client = MagicMock()
+    mock_sync_client.threads.get_history.return_value = []
+    remote_pregel = RemoteGraph("test_graph_id", sync_client=mock_sync_client)
+
+    states = list(remote_pregel.get_state_history({"configurable": {"thread_id": "t"}}, limit=0))
+    assert states == []
+    assert mock_sync_client.threads.get_history.call_args.kwargs["limit"] == 0
+
+
+@pytest.mark.anyio
+async def test_aget_state_history_preserves_zero_limit():
+    mock_async_client = AsyncMock()
+    mock_async_client.threads.get_history.return_value = []
+    remote_pregel = RemoteGraph("test_graph_id", client=mock_async_client)
+
+    states = [
+        state
+        async for state in remote_pregel.aget_state_history(
+            {"configurable": {"thread_id": "t"}}, limit=0
+        )
+    ]
+
+    assert states == []
+    assert mock_async_client.threads.get_history.call_args.kwargs["limit"] == 0
+
+
 @pytest.mark.anyio
 async def test_aget_state_history():
     # set up test
