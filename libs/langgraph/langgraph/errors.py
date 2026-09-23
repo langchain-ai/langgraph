@@ -26,6 +26,7 @@ __all__ = (
     "NodeInterrupt",
     "NodeTimeoutError",
     "ParentCommand",
+    "QueueApplyError",
     "EmptyInputError",
     "TaskNotFound",
 )
@@ -131,6 +132,23 @@ class ParentCommand(GraphBubbleUp):
 
     def __init__(self, command: Command) -> None:
         super().__init__(command)
+
+
+class QueueApplyError(Exception):
+    """Raised when a queued state update (see `Pregel.queue_state`) is rejected
+    by a reducer at the boundary where the run applies it.
+
+    The run fails, as it would for an invalid `Command(update=...)`, and the
+    queued update is marked consumed with the error so it is not retried.
+    `__cause__` is the reducer's exception.
+    """
+
+    def __init__(self, update_id: str, error: BaseException) -> None:
+        super().__init__(f"Queued update {update_id} failed to apply: {error!r}")
+        self.update_id = update_id
+        """Id returned by `queue_state` for the rejected update."""
+        self.error = error
+        """The exception the reducer raised."""
 
 
 class EmptyInputError(Exception):
