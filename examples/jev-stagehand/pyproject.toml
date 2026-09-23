@@ -1,0 +1,24 @@
+[project]
+name = "langgraph-jev-stagehand-example"
+version = "0.1.0"
+description = "A Jev browser agent built with LangGraph and Stagehand"
+requires-python = ">=3.11"
+dependencies = [
+    "langchain-openai==1.6.3",
+    "langchain-typesafe==0.0.1a3",
+    "langgraph>=1.2.12,<2",
+    "stagehand==4.1.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.4,<9", "ruff>=0.15.7,<0.16"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
