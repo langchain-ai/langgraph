@@ -225,6 +225,19 @@ def test_should_retry_default_retry_on():
     req_error_4xx.response = response_req_4xx
     assert _should_retry_on(policy, req_error_4xx) is False
 
+    # requests.Response is falsy for 4xx, so use an identity check, not truthiness.
+    response_req_real_4xx = requests.Response()
+    response_req_real_4xx.status_code = 404
+    req_error_real_4xx = requests.HTTPError("not found")
+    req_error_real_4xx.response = response_req_real_4xx
+    assert _should_retry_on(policy, req_error_real_4xx) is False
+
+    response_req_real_5xx = requests.Response()
+    response_req_real_5xx.status_code = 503
+    req_error_real_5xx = requests.HTTPError("service unavailable")
+    req_error_real_5xx.response = response_req_real_5xx
+    assert _should_retry_on(policy, req_error_real_5xx) is True
+
     # Should retry on requests.HTTPError with no response
     req_error_no_resp = requests.HTTPError("connection error")
     req_error_no_resp.response = None
