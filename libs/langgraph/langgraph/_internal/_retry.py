@@ -7,7 +7,9 @@ def default_retry_on(exc: Exception) -> bool:
     if isinstance(exc, httpx.HTTPStatusError):
         return 500 <= exc.response.status_code < 600
     if isinstance(exc, requests.HTTPError):
-        return 500 <= exc.response.status_code < 600 if exc.response else True
+        if exc.response is None:
+            return True
+        return 500 <= exc.response.status_code < 600
     if isinstance(
         exc,
         (
