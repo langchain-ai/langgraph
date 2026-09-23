@@ -426,7 +426,10 @@ class InMemoryStore(BaseStore):
                     if op.index is None:
                         paths = self.index_config["__tokenized_fields"]
                     else:
-                        paths = [(ix, tokenize_path(ix)) for ix in op.index]
+                        paths = [
+                            (ix, tokenize_path(ix)) if ix != "$" else (ix, ix)
+                            for ix in op.index
+                        ]
                     for path, field in paths:
                         texts = get_text_at_path(op.value, field)
                         if texts:

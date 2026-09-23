@@ -1058,3 +1058,100 @@ def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
     assert result3[0].key == "3"
     assert result4[0].key == "4"
     assert result5[0].key == "5"
+
+
+def test_per_item_root_index_override() -> None:
+    """Per-item index=["$"] should embed the whole object, not a literal "$" field.
+
+    Regression for https://github.com/langchain-ai/langgraph/issues/9059
+    """
+
+    def embed(texts: list[str]) -> list[list[float]]:
+        return [[1.0, 0.0] if "memory" in text else [0.0, 1.0] for text in texts]
+
+    store = InMemoryStore(index={"dims": 2, "embed": embed, "fields": ["text"]})
+    store.put(("docs",), "other", {"text": "unrelated"})
+    store.put(
+        ("docs",),
+        "target",
+        {"text": "hello", "metadata": {"topic": "memory"}},
+        index=["$"],
+    )
+
+    results = store.search(("docs",), query="memory", limit=1)
+    assert len(results) == 1
+    assert results[0].key == "target"
+    assert results[0].score == pytest.approx(1.0)
+
+
+async def test_per_item_root_index_override_async() -> None:
+    """Async put path should honor per-item index=["$"] the same way as sync."""
+
+    def embed(texts: list[str]) -> list[list[float]]:
+        return [[1.0, 0.0] if "memory" in text else [0.0, 1.0] for text in texts]
+
+    store = InMemoryStore(index={"dims": 2, "embed": embed, "fields": ["text"]})
+    await store.aput(("docs",), "other", {"text": "unrelated"})
+    await store.aput(
+        ("docs",),
+        "target",
+        {"text": "hello", "metadata": {"topic": "memory"}},
+        index=["$"],
+    )
+
+    results = await store.asearch(("docs",), query="memory", limit=1)
+    assert len(results) == 1
+    assert results[0].key == "target"
+    assert results[0].score == pytest.approx(1.0)
+
+
+def test_per_item_root_index_mixed_with_field() -> None:
+    """index=["$", "text"] should embed both the whole object and the text field."""
+
+    def embed(texts: list[str]) -> list[list[float]]:
+        out = []
+        for text in texts:
+            if "memory" in text:
+                out.append([1.0, 0.0])
+            elif "alpha" in text:
+                out.append([0.0, 1.0])
+            else:
+                out.append([0.5, 0.5])
+        return out
+
+    store = InMemoryStore(index={"dims": 2, "embed": embed, "fields": ["missing"]})
+    store.put(
+        ("docs",),
+        "mixed",
+        {"text": "alpha", "metadata": {"topic": "memory"}},
+        index=["$", "text"],
+    )
+
+    # Whole-object embedding should match "memory"
+    results = store.search(("docs",), query="memory", limit=1)
+    assert results[0].key == "mixed"
+    assert results[0].score == pytest.approx(1.0)
+
+    # Field embedding should still be present and match "alpha"
+    results = store.search(("docs",), query="alpha", limit=1)
+    assert results[0].key == "mixed"
+    assert results[0].score == pytest.approx(1.0)
+
+
+def test_per_item_root_index_with_literal_dollar_key() -> None:
+    """index=["$"] embeds the whole object even when a literal "$" key exists."""
+
+    def embed(texts: list[str]) -> list[list[float]]:
+        return [[1.0, 0.0] if "nested-memory" in text else [0.0, 1.0] for text in texts]
+
+    store = InMemoryStore(index={"dims": 2, "embed": embed, "fields": ["text"]})
+    store.put(
+        ("docs",),
+        "with_dollar",
+        {"text": "plain", "$": "ignored-alone", "note": "nested-memory"},
+        index=["$"],
+    )
+
+    results = store.search(("docs",), query="nested-memory", limit=1)
+    assert results[0].key == "with_dollar"
+    assert results[0].score == pytest.approx(1.0)
