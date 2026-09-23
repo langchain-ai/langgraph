@@ -58,7 +58,7 @@ AGENT_ARGS = [
     "deploy",
     "--agent-id",
     "customer-support",
-    "--environment",
+    "--agent-environment",
     "staging",
     "--remote",
     "--no-wait",
@@ -66,14 +66,15 @@ AGENT_ARGS = [
 ]
 
 
-def test_agent_create(deployment_api, tmp_path):
+def test_agent_create(deployment_api, tmp_path, monkeypatch):
+    monkeypatch.setenv("LANGSMITH_DEPLOYMENT_NAME", "legacy")
     _, requests, build = deployment_api
     result = CliRunner().invoke(cli, AGENT_ARGS)
     assert result.exit_code == 0, result.output
     assert dict(requests[0].url.params) == {
-        "name_contains": "",
         "agent_id": "customer-support",
         "agent_environment": "staging",
+        "limit": "100",
     }
     payload = json.loads(requests[1].content)
     assert payload["agent"] == {
@@ -93,3 +94,26 @@ def test_agent_update(deployment_api):
     assert result.exit_code == 0, result.output
     assert len(requests) == 1
     assert build.call_args.kwargs["deployment_id"] == "existing-id"
+
+
+def test_agent_rejects_explicit_name(deployment_api, monkeypatch):
+    monkeypatch.setenv("LANGSMITH_DEPLOYMENT_NAME", "legacy")
+    _, requests, _ = deployment_api
+    result = CliRunner().invoke(cli, [*AGENT_ARGS, "--name", "legacy"])
+    assert result.exit_code == 2
+    assert "cannot be combined" in result.output
+    assert not requests
+
+
+def test_agent_lookup_refuses_a_control_plane_that_ignores_the_filter(deployment_api):
+    state, requests, _ = deployment_api
+    state["resources"] = [
+        {"id": "someone-elses", "is_preview": False},
+        {"id": "another", "is_preview": False},
+    ]
+
+    result = CliRunner().invoke(cli, AGENT_ARGS)
+
+    assert result.exit_code != 0
+    assert "does not filter deployments by agent" in result.output
+    assert len(requests) == 1
