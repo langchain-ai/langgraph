@@ -214,7 +214,7 @@ class BaseCheckpointSaver(Generic[V]):
         *,
         serde: SerializerProtocol | None = None,
     ) -> None:
-        self.serde = maybe_add_typed_methods(serde or self.serde)
+        self.serde = maybe_add_typed_methods(serde if serde is not None else self.serde)
 
     @property
     def config_specs(self) -> list:

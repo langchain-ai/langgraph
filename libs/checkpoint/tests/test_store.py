@@ -608,6 +608,19 @@ def test_vector_store_initialization(fake_embeddings: CharacterEmbeddings) -> No
     assert store.index_config["embed"] == fake_embeddings
 
 
+def test_empty_fields_are_not_replaced_with_root(
+    fake_embeddings: CharacterEmbeddings,
+) -> None:
+    store = InMemoryStore(
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings, "fields": []}
+    )
+    store.put(("docs",), "one", {"text": "alpha"})
+
+    assert store.index_config["__tokenized_fields"] == []
+    result = store.search(("docs",), query="alpha")[0]
+    assert result.score is None
+
+
 def test_vector_insert_with_auto_embedding(
     fake_embeddings: CharacterEmbeddings,
 ) -> None:

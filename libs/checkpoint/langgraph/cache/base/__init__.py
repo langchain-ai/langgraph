@@ -19,7 +19,7 @@ class BaseCache(ABC, Generic[ValueT]):
 
     def __init__(self, *, serde: SerializerProtocol | None = None) -> None:
         """Initialize the cache with a serializer."""
-        self.serde = serde or self.serde
+        self.serde = serde if serde is not None else self.serde
 
     @abstractmethod
     def get(self, keys: Sequence[FullKey]) -> dict[FullKey, ValueT]:
