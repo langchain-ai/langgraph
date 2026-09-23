@@ -1459,6 +1459,14 @@ class CompiledStateGraph(
             if input is None:
                 return None
             elif isinstance(input, dict):
+                unknown_keys = set(input) - set(output_keys)
+                if unknown_keys:
+                    warnings.warn(
+                        f"Node '{key}' returned unknown state key(s) "
+                        f"{sorted(unknown_keys)!r}; these values will be ignored.",
+                        UserWarning,
+                        stacklevel=5,
+                    )
                 return [(k, v) for k, v in input.items() if k in output_keys]
             elif isinstance(input, Command):
                 if input.graph == Command.PARENT:

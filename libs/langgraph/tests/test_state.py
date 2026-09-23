@@ -61,6 +61,19 @@ def test_doesnt_warn_valid_schema(schema: Any):
         _warn_invalid_state_schema(schema)
 
 
+def test_warns_when_node_returns_unknown_state_key():
+    class State(TypedDict):
+        value: int
+
+    graph = StateGraph(State)
+    graph.add_node("node", lambda _: {"value": 1, "unknown": "ignored"})
+    graph.set_entry_point("node")
+    graph.set_finish_point("node")
+
+    with pytest.warns(UserWarning, match="unknown.*ignored"):
+        assert graph.compile().invoke({"value": 0}) == {"value": 1}
+
+
 def test_state_schema_with_type_hint():
     class InputState(TypedDict):
         question: str
