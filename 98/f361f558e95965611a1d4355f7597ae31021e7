@@ -1,0 +1,40 @@
+libs/cli/tests/unit_tests/test_host_backend.py
+  s_47f1b7eee5f72d::t_f4c2826069d0d8 530-535
+  s_47f1b7eee5f72d::t_92b09bb980da1b 6-10,15,29-30,42-43,51,57,66,75-76,87-88,99,110,148-149,160-161,165-529,536-682
+libs/cli/tests/unit_tests/cli/test_deploy_command.py
+  s_47f1b7eee5f72d::t_92b09bb980da1b 1-1116
+libs/cli/langgraph_cli/host_backend.py
+  s_47f1b7eee5f72d::t_92b09bb980da1b 5-7,12-80,85-102,107-112,115-124,135-136,146-147,151,155-165,177-178,180,182,198,200-202,208-209,222-224,227-243,269-270,277-278,283,318-326
+  s_47f1b7eee5f72d::t_c4a470e5ac4087 81-84
+libs/cli/langgraph_cli/exec.py
+  s_47f1b7eee5f72d::t_92b09bb980da1b 4,6,10-14
+  s_47f1b7eee5f72d::t_a161141cee92c7 15
+libs/cli/tests/unit_tests/test_image_reference.py
+  s_47f1b7eee5f72d::t_92b09bb980da1b 1-71
+libs/cli/tests/unit_tests/cli/test_cli.py
+  s_47f1b7eee5f72d::t_92b09bb980da1b 385-396,436,469-480,521,554
+libs/cli/langgraph_cli/deploy.py
+  s_47f1b7eee5f72d::t_92b09bb980da1b 11,13,15,23,27-35,96-97,99-114,146-298,470,472-475,501-502,504-520,548,556-558,585,589-590,592,792-802,805,808-809,811,816-818,821-827,829-831,836-838,841,843-851,860-862,864,875-876,893,895,899,904,908,910,928-929,932,1106,1119-1131,1137,1146-1235,1241,1251,1260,1290-1296,1308,1315,1322,1324,1338,1343,1351,1361-1365,1387-1388,1445-1786,1824-1830,1835-1836,1869,1873,1909,1914-1917,1921-1924,2041-2044,2058-2059,2068-2092,2175-2180,2202-2205,2229,2232,2236,2272-2280,2290-2291,2293-2303,2305-2306,2310,2312-2314,2318,2323-2328,2331,2335,2343,2359,2388-2392,2401,2444,2578,2584-2586,2588,2590,2592-2594,2597-2598,2602
+libs/cli/tests/unit_tests/test_deploy_helpers.py
+  s_47f1b7eee5f72d::t_92b09bb980da1b 16-26,35,37,42,275-277,283-285,291-293,297,553-558,560-563,566,568-570,572-573,576-715,717-720,723,725-727,730-773,823-832,936-1221
+libs/cli/langgraph_cli/image_reference.py
+  s_47f1b7eee5f72d::t_92b09bb980da1b 1-35
+libs/cli/tests/unit_tests/test_deploy_agents.py
+  s_47f1b7eee5f72d::t_92b09bb980da1b 61,69-70,77,97-119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "98f361f558e95965611a1d4355f7597ae31021e7",
+  "prompts": {},
+  "sessions": {
+    "s_47f1b7eee5f72d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0d081-9341-7b10-9463-875735e73285",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  }
+}
