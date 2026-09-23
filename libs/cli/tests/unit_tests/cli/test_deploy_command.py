@@ -55,6 +55,10 @@ DIGESTS_FORMAT = "{{json .RepoDigests}}"
 NOT_A_CLI_DEPLOYMENT = (
     "push token is only available for 'internal_docker' source deployments"
 )
+LISTENER_REQUIRED = (
+    "Source configuration error: 'source_config.listener_id' is required "
+    f"for workspace with available listener IDs: ['{LISTENER_ID}']"
+)
 LIST_DEPLOYMENTS = "GET /v2/deployments"
 LIST_LISTENERS = "GET /v2/listeners"
 CREATE_DEPLOYMENT = "POST /v2/deployments"
@@ -892,17 +896,14 @@ def test_a_self_hosted_create_without_flags_never_looks_up_listeners(
 def test_a_control_plane_that_demands_a_listener_names_the_flags(
     deploy_project: DeployProject,
 ) -> None:
-    deploy_project.control_plane.create_error = (
-        "Source configuration error: 'source_config.listener_id' is required "
-        "for workspace with available listener IDs: ['listener-1']"
-    )
+    deploy_project.control_plane.create_error = LISTENER_REQUIRED
 
     result = deploy_project.run("--push-to", PUSH_REPOSITORY)
 
     assert result.exit_code != 0
     assert "--listener-id" in result.output
     assert "--k8s-namespace" in result.output
-    assert "listener-1" in result.output
+    assert LISTENER_ID in result.output
     assert "{" not in result.output
     assert "POST /v2/deployments failed" not in result.output
 
@@ -938,16 +939,33 @@ def test_a_truncated_listener_page_says_so(deploy_project: DeployProject) -> Non
 def test_a_managed_build_in_a_listener_workspace_points_at_push_to(
     deploy_project: DeployProject,
 ) -> None:
-    deploy_project.control_plane.create_error = (
-        "Source configuration error: 'source_config.listener_id' is required "
-        "for workspace with available listener IDs: ['listener-1']"
-    )
+    deploy_project.control_plane.create_error = LISTENER_REQUIRED
 
     result = deploy_project.run("--no-remote")
 
     assert result.exit_code != 0
     assert "--push-to" in result.output
     assert deploy_project.docker.verbs() == []
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(("--no-remote",), id="managed_build"),
+        pytest.param(("--push-to", PUSH_REPOSITORY), id="push_to"),
+    ],
+)
+def test_a_listener_requirement_links_the_listener_docs(
+    deploy_project: DeployProject, args: tuple[str, ...]
+) -> None:
+    deploy_project.control_plane.create_error = LISTENER_REQUIRED
+
+    result = deploy_project.run(*args)
+
+    assert result.exit_code != 0
+    assert "https://docs.langchain.com/langsmith/control-plane#listeners" in (
+        result.output
+    )
 
 
 def test_a_managed_control_plane_without_listeners_creates_as_before(

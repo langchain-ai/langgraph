@@ -106,6 +106,7 @@ _CUSTOMER_REGISTRY_SOURCE: SourceName = "external_docker"
 _LISTENER_REQUIRED_MARKER = "listener_id' is required"
 _LISTENERS_SHOWN = 10
 _LISTENER_NOT_FOUND_STATUSES = frozenset({404, 422})
+_LISTENERS_DOCS_URL = "https://docs.langchain.com/langsmith/control-plane#listeners"
 _NO_LISTENERS = (
     "This workspace has no listeners, so --listener-id and --k8s-namespace "
     "do not apply."
@@ -1492,13 +1493,20 @@ def _resolve_or_create(
         )
     except HostBackendError as err:
         if _needs_a_listener(err):
-            raise click.UsageError(
-                "This workspace deploys through a listener in your own cluster, so "
-                "the image has to come from a registry you manage. Re-run with "
+            raise ListenerRequiredError(
+                "The image has to come from a registry you manage, so re-run with "
                 "--push-to <registry>/<repository>."
             ) from None
         raise
     return created.id, step
+
+
+class ListenerRequiredError(click.UsageError):
+    def __init__(self, remedy: str) -> None:
+        super().__init__(
+            "This workspace deploys through a listener in your own cluster. "
+            f"{remedy}\nLearn about listeners: {_LISTENERS_DOCS_URL}"
+        )
 
 
 def _needs_a_listener(err: HostBackendError) -> bool:
@@ -1668,9 +1676,9 @@ class CustomerRegistrySource:
             )
         except HostBackendError as err:
             if _needs_a_listener(err):
-                raise click.UsageError(
-                    "This workspace deploys through a listener. Re-run with "
-                    f"--listener-id and --k8s-namespace.\n{err.detail or err.message}"
+                raise ListenerRequiredError(
+                    "Re-run with --listener-id and --k8s-namespace.\n"
+                    f"{err.detail or err.message}"
                 ) from None
             raise
         return DeployOutcome(
