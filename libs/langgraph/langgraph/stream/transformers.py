@@ -353,6 +353,23 @@ def _parse_ns_segment(segment: str) -> tuple[str, str | None]:
     return name, task_id if sep else None
 
 
+def _split_key_segment(ns: tuple[str, ...]) -> tuple[tuple[str, ...], str | None]:
+    """Split a trailing `:key` segment off `ns`.
+
+    A keyed subgraph instance (`Send(key=...)`) runs under `<frames>|:key`, so
+    its namespace is one segment longer than the frame it belongs to. Returns
+    the namespace without that segment and the key, or `(ns, None)`.
+    """
+    if len(ns) > 1 and ns[-1].startswith(":"):
+        return ns[:-1], ns[-1][1:]
+    return ns, None
+
+
+def _parent_ns(ns: tuple[str, ...]) -> tuple[str, ...]:
+    """Namespace of the task that invoked the graph running under `ns`."""
+    return _split_key_segment(ns)[0][:-1]
+
+
 class LifecyclePayload(TypedDict, total=False):
     """Payload of a lifecycle event surfaced on the `lifecycle` channel.
 
@@ -366,6 +383,7 @@ class LifecyclePayload(TypedDict, total=False):
     namespace: list[str]
     graph_name: NotRequired[str]
     trigger_call_id: NotRequired[str]
+    subgraph_key: NotRequired[str]
     cause: NotRequired[LifecycleCause]
     error: NotRequired[str]
 
@@ -407,6 +425,11 @@ class _TasksLifecycleBase(StreamTransformer):
         # Maps tracked namespace -> task_id of the parent task whose
         # `TaskResultPayload` will close it.
         self._open: dict[tuple[str, ...], str] = {}
+        # Maps (namespace, node, key) of a keyed push task (`Send(key=...)`)
+        # to its task id. A keyed subgraph instance runs under `<node>|:key`,
+        # a namespace without the task id, so this is how its parent task is
+        # found.
+        self._keyed_tasks: dict[tuple[tuple[str, ...], str, str], str] = {}
         # lc_agent_name observed at each namespace (first task event wins).
         # Not read by the base discriminator (which only checks whether the
         # current task carries an lc_agent_name); maintained as extension state
@@ -424,6 +447,7 @@ class _TasksLifecycleBase(StreamTransformer):
         # `_on_started` signature means overrides predating it (e.g. deepagents'
         # `SubagentTransformer`) don't break.
         self._pending_cause: LifecycleCause | None = None
+        self._pending_key: str | None = None
 
     # --- Template-method hooks (subclass overrides) ---
 
@@ -480,6 +504,8 @@ class _TasksLifecycleBase(StreamTransformer):
         child-namespace tasks, so under that ordering the parent's identity is
         recorded by the time a child event is evaluated in `_handle_task_start`.
         """
+        if (key := data.get("key")) is not None and (name := data.get("name")):
+            self._keyed_tasks[(ns, name, key)] = data["id"]
         if ns in self._lc_by_ns:
             return
         metadata = data.get("metadata") or {}
@@ -519,7 +545,15 @@ class _TasksLifecycleBase(StreamTransformer):
         if not self._should_track(ns) or ns in self._seen:
             return
         self._seen.add(ns)
-        parsed_name, trigger_call_id = _parse_ns_segment(ns[-1])
+        frame_ns, subgraph_key = _split_key_segment(ns)
+        parsed_name, trigger_call_id = _parse_ns_segment(frame_ns[-1])
+        if trigger_call_id is None and subgraph_key is not None:
+            # A keyed instance's frame carries no task id (its namespace is
+            # stable across invocations); the task that pushed it announced
+            # the key in its own start event.
+            trigger_call_id = self._keyed_tasks.pop(
+                (_parent_ns(ns), parsed_name, subgraph_key), None
+            )
         metadata = data.get("metadata") or {}
         child_lc = metadata.get("lc_agent_name")
         # A subagent boundary is any nested run carrying an lc_agent_name (set
@@ -541,6 +575,7 @@ class _TasksLifecycleBase(StreamTransformer):
         # Deliver `cause` via instance state, not the call signature, so
         # `_on_started` stays backward-compatible with overrides predating it.
         self._pending_cause = cause
+        self._pending_key = subgraph_key
         self._on_started(ns, graph_name, trigger_call_id)
         if trigger_call_id is not None:
             self._open[ns] = trigger_call_id
@@ -554,7 +589,7 @@ class _TasksLifecycleBase(StreamTransformer):
             return []
         transitions: list[tuple[tuple[str, ...], SubgraphStatus, str | None]] = []
         for child_ns, parent_task_id in list(self._open.items()):
-            if child_ns[:-1] != ns or parent_task_id != result_id:
+            if _parent_ns(child_ns) != ns or parent_task_id != result_id:
                 continue
             status, error = _terminal_from_result(data)
             transitions.append((child_ns, status, error))
@@ -650,6 +685,8 @@ class LifecycleTransformer(_TasksLifecycleBase):
         if graph_name:
             payload["graph_name"] = graph_name
         payload["trigger_call_id"] = trigger_call_id
+        if self._pending_key is not None:
+            payload["subgraph_key"] = self._pending_key
         cause = self._pending_cause
         if cause is not None:
             payload["cause"] = cause
@@ -706,9 +743,9 @@ class SubgraphTransformer(_TasksLifecycleBase):
 
     def _should_track(self, ns: tuple[str, ...]) -> bool:
         # Direct children only — grandchildren are picked up by the
-        # child mini-mux's own SubgraphTransformer.
-        depth = len(self.scope)
-        return len(ns) == depth + 1 and ns[:depth] == self.scope
+        # child mini-mux's own SubgraphTransformer. A keyed instance is a
+        # direct child although its namespace is one segment longer.
+        return len(ns) > len(self.scope) and _parent_ns(ns) == self.scope
 
     def _on_started(
         self,
@@ -805,7 +842,10 @@ class SubgraphTransformer(_TasksLifecycleBase):
         depth = len(self.scope)
         if len(ns) < depth + 1:
             return None
-        handle = self._handles.get(ns[: depth + 1])
+        child_ns = ns[: depth + 1]
+        if len(ns) > depth + 1 and ns[depth + 1].startswith(":"):
+            child_ns = ns[: depth + 2]  # keyed instance: `<frame>|:key`
+        handle = self._handles.get(child_ns)
         if handle is None or handle._mux is None or handle._mux._events._closed:
             return None
         return handle
