@@ -80,12 +80,14 @@ def get_updated_channels_from_tasks(
 
 def get_delta_channels_from_all_channels(
     channels: Mapping[str, BaseChannel],
+    *,
+    include_unavailable: bool = False,
 ) -> set[str]:
-    """DeltaChannels to snapshot on the first update_state of a fresh thread."""
+    """DeltaChannels to snapshot on the first update_state of a fresh thread or fork."""
     return {
         k
         for k, ch in channels.items()
-        if isinstance(ch, DeltaChannel) and ch.is_available()
+        if isinstance(ch, DeltaChannel) and (include_unavailable or ch.is_available())
     }
 
 
@@ -122,15 +124,22 @@ def create_checkpoint_plan_for_update_state_api(
     parents: dict[str, Any],
     saved_metadata: Mapping[str, Any] | None,
     is_fresh_thread: bool,
+    is_fork: bool,
 ) -> tuple[set[str], dict[str, Any]]:
-    """Return ``(channels_to_snapshot, metadata)`` for an update_state head."""
+    """Return ``(channels_to_snapshot, metadata)`` for an update_state head.
+
+    A fork snapshots everything, like a fresh thread: its base also holds the
+    writes of the branch it abandons, so the ancestor walk must stop here.
+    """
     metadata: dict[str, Any] = {
         "source": "update",
         "step": step,
         "parents": parents,
     }
-    if is_fresh_thread:
-        return get_delta_channels_from_all_channels(channels), metadata
+    if is_fresh_thread or is_fork:
+        return get_delta_channels_from_all_channels(
+            channels, include_unavailable=is_fork
+        ), metadata
 
     new_counters = create_metadata_for_update_state_api(
         channels,
@@ -144,6 +153,34 @@ def create_checkpoint_plan_for_update_state_api(
     if non_zero:
         metadata["counters_since_delta_snapshot"] = non_zero
     return channels_to_snapshot, metadata
+
+
+def create_fork_checkpoint(
+    checkpoint: Checkpoint,
+    channels: Mapping[str, BaseChannel],
+    step: int,
+    *,
+    is_fork: bool,
+    get_next_version: GetNextVersion,
+) -> Checkpoint:
+    """``create_checkpoint`` for the update_state paths that skip the plan.
+
+    The fork has to be sealed by its first checkpoint: any later superstep
+    has already rebuilt its delta channels through the shared base. These
+    paths never write the delta channel, so its version must be bumped here
+    or ``put`` drops the blob; derive ``new_versions`` from the result.
+    """
+    if not is_fork:
+        return create_checkpoint(checkpoint, channels, step)
+    return create_checkpoint(
+        checkpoint,
+        channels,
+        step,
+        get_next_version=get_next_version,
+        channels_to_snapshot=get_delta_channels_from_all_channels(
+            channels, include_unavailable=True
+        ),
+    )
 
 
 def create_checkpoint(
@@ -174,14 +211,23 @@ def create_checkpoint(
         values = {}
         channel_versions = dict(checkpoint["channel_versions"])
         for k in channels:
-            if k not in channel_versions:
-                continue
             ch = channels[k]
+            if k not in channel_versions:
+                # A forced snapshot of a never-written channel still has to
+                # land to stop the ancestor walk, and `put` only stores blobs
+                # for versioned channels.
+                if k in channels_to_snapshot and get_next_version is not None:
+                    channel_versions[k] = get_next_version(None, None)
+                    values[k] = _DeltaSnapshot(
+                        ch.get() if ch.is_available() else ch.typ()
+                    )
+                continue
             if k in channels_to_snapshot:
                 # Callers force a full snapshot blob here: exit mode when a
-                # delta channel reaches its snapshot cadence, and update_state
-                # on a fresh thread (no ancestor to replay writes from). The
-                # manual version-bump below only applies to the exit-mode case.
+                # delta channel reaches its snapshot cadence, update_state on
+                # a fresh thread (no ancestor to replay writes from), and a
+                # fork. The manual version-bump below only applies to the
+                # exit-mode case.
                 #
                 # In exit mode, the snapshot decision is deferred to exit
                 # time (intermediate steps have do_checkpoint=False). The
