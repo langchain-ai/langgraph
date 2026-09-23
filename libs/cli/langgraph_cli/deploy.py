@@ -1690,11 +1690,17 @@ OPT_HOST_URL = click.option(
 )
 
 OPT_AGENT_ID = click.option(
-    "--agent-id", help="Logical agent ID (requires agent mode enabled for the tenant)."
+    "--agent-id",
+    envvar="LANGSMITH_AGENT_ID",
+    show_envvar=True,
+    help="Logical agent ID (requires agent mode enabled for the tenant).",
 )
 
 OPT_AGENT_ENVIRONMENT = click.option(
-    "--environment",
+    "--agent-environment",
+    "environment",
+    envvar="LANGSMITH_AGENT_ENVIRONMENT",
+    show_envvar=True,
     type=click.Choice(["development", "staging", "production"]),
     help="Agent environment (requires agent mode enabled for the tenant).",
 )
@@ -1982,14 +1988,14 @@ def _deploy_cmd(
     validate_deploy_commands(install_command, build_command)
     agent = None
     if agent_id is not None or environment is not None:
-        em.note("Note: --agent-id and --environment flags are in private beta")
+        em.note("Note: --agent-id and --agent-environment flags are in private beta")
         if not agent_id or not agent_id.strip() or not environment:
             raise click.UsageError(
-                "--agent-id and --environment are required together."
+                "--agent-id and --agent-environment are required together."
             )
         if name is not None or deployment_id is not None:
             raise click.UsageError(
-                "--agent-id and --environment cannot be combined with --name or --deployment-id."
+                "--agent-id and --agent-environment cannot be combined with --name or --deployment-id."
             )
         agent = {"agent_id": agent_id, "environment": environment}
     if not config.exists():
@@ -2141,7 +2147,8 @@ def deploy_list(
 ) -> None:
     if agent_id is not None or environment is not None:
         click.secho(
-            "Note: --agent-id and --environment flags are in private beta", fg="yellow"
+            "Note: --agent-id and --agent-environment flags are in private beta",
+            fg="yellow",
         )
     if agent_id is not None and not agent_id.strip():
         raise click.UsageError("--agent-id must not be empty.")
