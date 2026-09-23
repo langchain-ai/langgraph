@@ -1,21 +1,7 @@
 """Forking a thread must not replay the abandoned branch into the fork.
 
-Regression suite for #8443. Addressing an older checkpoint creates a fork: the
-shared base ends up with two children, and it keeps the ``checkpoint_writes``
-of the branch the fork abandons. Nothing in the stored data records which child
-consumed which write, so the ``DeltaChannel`` ancestor walk used to collect the
-abandoned branch's writes as well.
-
-Every graph here carries a ``DeltaChannel`` and a plain reducer channel fed the
-same values. ``full`` channels store complete ``channel_values`` and need no
-replay, so the plain channel is the oracle: after a fork the two must agree.
-
-Coverage: fork by ``invoke`` with new input (sync/async, all durabilities),
-fork off the checkpoint that predates the thread's first input (sync/async),
-fork by ``update_state`` / ``aupdate_state``, fork before the delta channel
-ever had a value, and guards that neither an
-unaddressed run nor an unaddressed multi-superstep ``bulk_update_state``
-departs from the normal ``snapshot_frequency`` cadence.
+Every graph carries a ``DeltaChannel`` and a plain reducer channel fed the same
+values; the plain channel needs no replay, so it is the oracle.
 """
 
 from collections.abc import Sequence
@@ -37,7 +23,6 @@ pytestmark = pytest.mark.anyio
 
 
 def _append(current: list | None, writes: Sequence[Any]) -> list:
-    """DeltaChannel reducer: extend the list with every batched write."""
     out = list(current or [])
     for write in writes:
         out.extend(write if isinstance(write, list) else [write])
@@ -47,18 +32,10 @@ def _append(current: list | None, writes: Sequence[Any]) -> list:
 class _State(TypedDict):
     log: Annotated[list, DeltaChannel(_append, snapshot_frequency=1000)]
     plain: Annotated[list, add]
-    # Written only by the tests that fork before `log` ever has a value, so the
-    # fork advances without touching the delta channel.
     other: Annotated[list, add]
 
 
 def _build(checkpointer: BaseCheckpointSaver, tag: str) -> Any:
-    """Compile a one-node graph whose node appends ``{tag}-out`` to both channels.
-
-    ``snapshot_frequency=1000`` keeps the cadence from masking the bug: without
-    a forced snapshot the fork's ancestor walk always runs past the fork base.
-    """
-
     def node(state: _State) -> dict:
         return {"log": [f"{tag}-out"], "plain": [f"{tag}-out"]}
 
@@ -70,8 +47,6 @@ def _build(checkpointer: BaseCheckpointSaver, tag: str) -> Any:
 
 
 def _build_without_delta_writes(checkpointer: BaseCheckpointSaver, tag: str) -> Any:
-    """Compile a graph whose node writes only ``other``, never the delta channel."""
-
     def node(state: _State) -> dict:
         return {"other": [f"{tag}-other"]}
 
@@ -87,7 +62,6 @@ def _thread(thread_id: str) -> RunnableConfig:
 
 
 def _at(config: RunnableConfig, snapshot: StateSnapshot) -> RunnableConfig:
-    """Config addressing one specific checkpoint of ``config``'s thread."""
     return {
         "configurable": {
             **config["configurable"],
@@ -104,7 +78,6 @@ def _input(marker: str) -> dict:
 def _snapshotted_checkpoints(
     checkpointer: BaseCheckpointSaver, config: RunnableConfig
 ) -> list[str]:
-    """Ids of this thread's checkpoints carrying a ``log`` snapshot blob."""
     return [
         tuple_.config["configurable"]["checkpoint_id"]
         for tuple_ in checkpointer.list(config)
@@ -113,7 +86,6 @@ def _snapshotted_checkpoints(
 
 
 def _assert_fork_is_clean(state: StateSnapshot, abandoned: str) -> None:
-    """The delta channel must match the plain channel and drop ``abandoned``."""
     assert state.values["log"] == state.values["plain"], (
         f"delta channel diverged from the plain channel: "
         f"{state.values['log']} != {state.values['plain']}"
@@ -133,9 +105,8 @@ def test_fork_by_invoke(
     )
     graph = _build(sync_checkpointer, "second")
     graph.invoke(_input("in-2"), config, durability=durability)
+    abandoned_head = graph.get_state(config)
 
-    # The last checkpoint that predates "in-2" entering state: forking here
-    # abandons the "in-2" branch, whose writes still hang off this checkpoint.
     base = next(
         snapshot
         for snapshot in graph.get_state_history(config)
@@ -149,6 +120,9 @@ def test_fork_by_invoke(
     _assert_fork_is_clean(state, "in-2")
     assert state.values["log"] == [*base.values["log"], "in-3", "third-out"]
 
+    abandoned = graph.get_state(abandoned_head.config).values
+    assert abandoned["log"] == abandoned["plain"] == abandoned_head.values["log"]
+
 
 async def test_afork_by_invoke(
     async_checkpointer: BaseCheckpointSaver, durability: Durability
@@ -159,6 +133,7 @@ async def test_afork_by_invoke(
     )
     graph = _build(async_checkpointer, "second")
     await graph.ainvoke(_input("in-2"), config, durability=durability)
+    abandoned_head = await graph.aget_state(config)
 
     base = await anext(
         snapshot
@@ -173,17 +148,13 @@ async def test_afork_by_invoke(
     _assert_fork_is_clean(state, "in-2")
     assert state.values["log"] == [*base.values["log"], "in-3", "third-out"]
 
+    abandoned = (await graph.aget_state(abandoned_head.config)).values
+    assert abandoned["log"] == abandoned["plain"] == abandoned_head.values["log"]
+
 
 def test_fork_off_checkpoint_before_first_input(
     sync_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
-    """Fork off the root checkpoint, which predates any value for ``log``.
-
-    ``create_checkpoint`` drops a requested snapshot for a channel absent from
-    ``channel_versions``, so the fork's own first checkpoint cannot carry the
-    blob. The request has to stay queued until a superstep gives the channel a
-    value, otherwise the root's ``in-1`` write still leaks into the fork.
-    """
     config = _thread("t")
     graph = _build(sync_checkpointer, "first")
     graph.invoke(_input("in-1"), config, durability=durability)
@@ -203,7 +174,6 @@ def test_fork_off_checkpoint_before_first_input(
 async def test_afork_off_checkpoint_before_first_input(
     async_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
-    """Async twin of ``test_fork_off_checkpoint_before_first_input``."""
     config = _thread("t")
     graph = _build(async_checkpointer, "first")
     await graph.ainvoke(_input("in-1"), config, durability=durability)
@@ -261,11 +231,6 @@ async def test_afork_by_update_state(
 def test_unaddressed_run_keeps_snapshot_cadence(
     sync_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
-    """A run with no explicitly addressed checkpoint writes no snapshot blob.
-
-    Guards the cost of the fix: the forced snapshot is one per addressed run,
-    not a change to the normal ``snapshot_frequency`` cadence.
-    """
     config = _thread("t")
     graph = _build(sync_checkpointer, "first")
     graph.invoke(_input("in-1"), config, durability=durability)
@@ -277,13 +242,6 @@ def test_unaddressed_run_keeps_snapshot_cadence(
 def test_fork_before_first_value_when_fork_never_writes_the_channel(
     sync_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
-    """Seal the fork even when the channel has no value to snapshot.
-
-    Forking before ``log`` was ever written leaves nothing to copy into the
-    fork's first checkpoint, so without a minted version and an empty blob the
-    boundary goes unrecorded and the walk runs into the base. The fork here
-    never writes ``log`` at all, so no later superstep can seal it either.
-    """
     config = _thread("t")
     graph = _build(sync_checkpointer, "first")
     graph.invoke(_input("in-1"), config, durability=durability)
@@ -303,7 +261,6 @@ def test_fork_before_first_value_when_fork_never_writes_the_channel(
 async def test_afork_before_first_value_when_fork_never_writes_the_channel(
     async_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
-    """Async twin of ``test_fork_before_first_value_when_fork_never_writes_the_channel``."""
     config = _thread("t")
     graph = _build(async_checkpointer, "first")
     await graph.ainvoke(_input("in-1"), config, durability=durability)
@@ -323,12 +280,6 @@ async def test_afork_before_first_value_when_fork_never_writes_the_channel(
 def test_fork_before_first_value_by_bulk_update(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """The fork's first superstep touches another key, the delta key comes later.
-
-    The first checkpoint has to seal the boundary on its own. Deferring until
-    the superstep that finally writes ``log`` is too late, because that
-    superstep reconstructs through the unsealed checkpoint first.
-    """
     config = _thread("t")
     graph = _build(sync_checkpointer, "first")
     graph.invoke(_input("in-1"), config)
@@ -353,15 +304,6 @@ def test_fork_before_first_value_by_bulk_update(
 def test_fork_by_bulk_update_whose_first_superstep_skips_the_plan(
     sync_checkpointer: BaseCheckpointSaver, first_as_node: str
 ) -> None:
-    """The fork must be sealed by whichever checkpoint the fork writes first.
-
-    ``as_node`` of INPUT, END or ``__copy__`` writes a checkpoint and returns
-    before ``create_checkpoint_plan_for_update_state_api`` runs. If that
-    checkpoint carries no snapshot the branch is still unsealed, so the next
-    superstep reconstructs through the shared base, picks up the abandoned
-    writes, and bakes them into whatever it snapshots. Sealing later is too
-    late: by then the in-memory value is already wrong.
-    """
     config = _thread("t")
     _build(sync_checkpointer, "first").invoke(_input("in-1"), config)
     graph = _build(sync_checkpointer, "second")
@@ -383,8 +325,6 @@ def test_fork_by_bulk_update_whose_first_superstep_skips_the_plan(
     )
 
     state = graph.get_state(forked)
-    # END legitimately absorbs the base's already-run task writes, so "in-2"
-    # belongs there; the plain channel is the oracle for which is which.
     assert state.values["log"] == state.values["plain"], (
         f"delta channel diverged from the plain channel: "
         f"{state.values['log']} != {state.values['plain']}"
@@ -394,14 +334,6 @@ def test_fork_by_bulk_update_whose_first_superstep_skips_the_plan(
 def test_unaddressed_bulk_update_keeps_snapshot_cadence(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """A multi-superstep ``bulk_update_state`` forks at most once, at the head.
-
-    ``perform_superstep`` returns the config of the checkpoint it just wrote
-    and the driver feeds that back in, so every superstep after the first
-    receives a config naming a checkpoint even when the caller addressed none.
-    Deriving the fork flag from that config snapshots the whole growing value
-    once per superstep.
-    """
     config = _thread("t")
     graph = _build(sync_checkpointer, "first")
     graph.invoke(_input("in-1"), config)
