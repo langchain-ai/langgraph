@@ -1146,6 +1146,8 @@ class Pregel(
         self,
         config: RunnableConfig,
         saved: CheckpointTuple | None,
+        *,
+        saver: BaseCheckpointSaver,
         recurse: BaseCheckpointSaver | None = None,
         apply_pending_writes: bool = False,
     ) -> StateSnapshot:
@@ -1169,9 +1171,7 @@ class Pregel(
         channels, managed = channels_from_checkpoint(
             self.channels,
             saved.checkpoint,
-            saver=self.checkpointer
-            if isinstance(self.checkpointer, BaseCheckpointSaver)
-            else None,
+            saver=saver,
             config=saved.config,
         )
         # tasks for this checkpoint
@@ -1186,11 +1186,7 @@ class Pregel(
             stop,
             for_execution=True,
             store=self.store,
-            checkpointer=(
-                self.checkpointer
-                if isinstance(self.checkpointer, BaseCheckpointSaver)
-                else None
-            ),
+            checkpointer=saver,
             manager=None,
         )
         # get the subgraphs
@@ -1269,6 +1265,8 @@ class Pregel(
         self,
         config: RunnableConfig,
         saved: CheckpointTuple | None,
+        *,
+        saver: BaseCheckpointSaver,
         recurse: BaseCheckpointSaver | None = None,
         apply_pending_writes: bool = False,
     ) -> StateSnapshot:
@@ -1292,9 +1290,7 @@ class Pregel(
         channels, managed = await achannels_from_checkpoint(
             self.channels,
             saved.checkpoint,
-            saver=self.checkpointer
-            if isinstance(self.checkpointer, BaseCheckpointSaver)
-            else None,
+            saver=saver,
             config=saved.config,
         )
         # tasks for this checkpoint
@@ -1309,11 +1305,7 @@ class Pregel(
             stop,
             for_execution=True,
             store=self.store,
-            checkpointer=(
-                self.checkpointer
-                if isinstance(self.checkpointer, BaseCheckpointSaver)
-                else None
-            ),
+            checkpointer=saver,
             manager=None,
         )
         # get the subgraphs
@@ -1429,6 +1421,7 @@ class Pregel(
         return self._prepare_state_snapshot(
             config,
             saved,
+            saver=checkpointer,
             recurse=checkpointer if subgraphs else None,
             apply_pending_writes=CONFIG_KEY_CHECKPOINT_ID not in config[CONF],
         )
@@ -1473,6 +1466,7 @@ class Pregel(
         return await self._aprepare_state_snapshot(
             config,
             saved,
+            saver=checkpointer,
             recurse=checkpointer if subgraphs else None,
             apply_pending_writes=CONFIG_KEY_CHECKPOINT_ID not in config[CONF],
         )
@@ -1527,7 +1521,7 @@ class Pregel(
             checkpointer.list(config, before=before, limit=limit, filter=filter)
         ):
             yield self._prepare_state_snapshot(
-                checkpoint_tuple.config, checkpoint_tuple
+                checkpoint_tuple.config, checkpoint_tuple, saver=checkpointer
             )
 
     async def aget_state_history(
@@ -1584,7 +1578,7 @@ class Pregel(
             )
         ]:
             yield await self._aprepare_state_snapshot(
-                checkpoint_tuple.config, checkpoint_tuple
+                checkpoint_tuple.config, checkpoint_tuple, saver=checkpointer
             )
 
     def bulk_update_state(
@@ -1666,10 +1660,7 @@ class Pregel(
             channels, managed = channels_from_checkpoint(
                 self.channels,
                 checkpoint,
-                saver=self.checkpointer
-                if saved is not None
-                and isinstance(self.checkpointer, BaseCheckpointSaver)
-                else None,
+                saver=checkpointer if saved is not None else None,
                 config=saved.config if saved is not None else None,
             )
             values, as_node = updates[0][:2]
@@ -2132,10 +2123,7 @@ class Pregel(
             channels, managed = await achannels_from_checkpoint(
                 self.channels,
                 checkpoint,
-                saver=self.checkpointer
-                if saved is not None
-                and isinstance(self.checkpointer, BaseCheckpointSaver)
-                else None,
+                saver=checkpointer if saved is not None else None,
                 config=saved.config if saved is not None else None,
             )
             values, as_node = updates[0][:2]
