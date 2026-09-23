@@ -198,12 +198,13 @@ class BranchSpec(NamedTuple):
     ) -> Runnable | Any:
         if not isinstance(result, (list, tuple)):
             result = [result]
+        destinations: Sequence[Send | str]
         if self.ends:
-            destinations: Sequence[Send | str] = [
-                r if isinstance(r, Send) else self.ends[r] for r in result
-            ]
+            destinations = [self._resolve_destination(r) for r in result]
         else:
             destinations = cast(Sequence[Send | str], result)
+        # Routing to END is terminal and does not emit branch writes.
+        destinations = [dest for dest in destinations if dest != END]
         if any(dest is None or dest == START for dest in destinations):
             raise ValueError("Branch did not return a valid destination")
         if any(p.node == END for p in destinations if isinstance(p, Send)):
@@ -223,3 +224,18 @@ class BranchSpec(NamedTuple):
             else:
                 ChannelWrite.do_write(config, entries)
                 return input
+
+    def _resolve_destination(self, result: Hashable | Send) -> Send | str:
+        if isinstance(result, Send):
+            return result
+        if self.ends is None:
+            return cast(str, result)
+        if result == END:
+            return END
+        try:
+            return self.ends[result]
+        except KeyError as exc:
+            raise ValueError(
+                f"Branch returned unknown target '{result}'. "
+                "If using `path_map`, map this key or return a valid node name."
+            ) from exc
