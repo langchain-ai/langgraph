@@ -58,7 +58,7 @@ AGENT_ARGS = [
     "deploy",
     "--agent-id",
     "customer-support",
-    "--environment",
+    "--agent-environment",
     "staging",
     "--remote",
     "--no-wait",
