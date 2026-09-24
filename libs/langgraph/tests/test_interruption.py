@@ -242,3 +242,127 @@ def test_interrupt_response_schema_invalid_resume_after_earlier_interrupt(
     assert graph.invoke(resume({"approved": True}), config) == {
         "answer": ["ok", Decision(approved=True)]
     }
+
+
+def test_empty_interrupt_before_overrides_compile_time(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Passing interrupt_before=[] at invoke time must disable compile-time interrupts."""
+
+    class State(TypedDict):
+        count: int
+
+    def increment(state: State) -> State:
+        return {"count": state["count"] + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("increment", increment)
+    builder.add_edge(START, "increment")
+    builder.add_edge("increment", END)
+    graph = builder.compile(
+        checkpointer=sync_checkpointer,
+        interrupt_before=["increment"],
+    )
+
+    result = graph.invoke(
+        {"count": 0},
+        {"configurable": {"thread_id": "sync-before"}},
+        interrupt_before=[],
+    )
+    assert result == {"count": 1}, (
+        "interrupt_before=[] should disable compile-time interrupts and run to completion"
+    )
+
+
+async def test_empty_interrupt_before_overrides_compile_time_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Async: passing interrupt_before=[] at invoke time must disable compile-time interrupts."""
+
+    class State(TypedDict):
+        count: int
+
+    async def increment(state: State) -> State:
+        return {"count": state["count"] + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("increment", increment)
+    builder.add_edge(START, "increment")
+    builder.add_edge("increment", END)
+    graph = builder.compile(
+        checkpointer=async_checkpointer,
+        interrupt_before=["increment"],
+    )
+
+    result = await graph.ainvoke(
+        {"count": 0},
+        {"configurable": {"thread_id": "async-before"}},
+        interrupt_before=[],
+    )
+    assert result == {"count": 1}, (
+        "interrupt_before=[] should disable compile-time interrupts and run to completion"
+    )
+
+
+def test_empty_interrupt_after_overrides_compile_time(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Passing interrupt_after=[] at invoke time must disable compile-time interrupts."""
+
+    class State(TypedDict):
+        count: int
+
+    def increment(state: State) -> State:
+        return {"count": state["count"] + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("first", increment)
+    builder.add_node("second", increment)
+    builder.add_edge(START, "first")
+    builder.add_edge("first", "second")
+    builder.add_edge("second", END)
+    graph = builder.compile(
+        checkpointer=sync_checkpointer,
+        interrupt_after=["first"],
+    )
+
+    result = graph.invoke(
+        {"count": 0},
+        {"configurable": {"thread_id": "sync-after"}},
+        interrupt_after=[],
+    )
+    assert result == {"count": 2}, (
+        "interrupt_after=[] should disable compile-time interrupts and run to completion"
+    )
+
+
+async def test_empty_interrupt_after_overrides_compile_time_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Async: passing interrupt_after=[] at invoke time must disable compile-time interrupts."""
+
+    class State(TypedDict):
+        count: int
+
+    async def increment(state: State) -> State:
+        return {"count": state["count"] + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("first", increment)
+    builder.add_node("second", increment)
+    builder.add_edge(START, "first")
+    builder.add_edge("first", "second")
+    builder.add_edge("second", END)
+    graph = builder.compile(
+        checkpointer=async_checkpointer,
+        interrupt_after=["first"],
+    )
+
+    result = await graph.ainvoke(
+        {"count": 0},
+        {"configurable": {"thread_id": "async-after"}},
+        interrupt_after=[],
+    )
+    assert result == {"count": 2}, (
+        "interrupt_after=[] should disable compile-time interrupts and run to completion"
+    )
