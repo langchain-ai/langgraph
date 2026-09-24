@@ -33,6 +33,7 @@ from langgraph.checkpoint.serde.event_hooks import (
     register_serde_event_listener,
 )
 from langgraph.checkpoint.serde.jsonplus import (
+    EXT_CONSTRUCTOR_KW_ARGS,
     EXT_METHOD_SINGLE_ARG,
     InvalidModuleError,
     JsonPlusSerializer,
@@ -91,6 +92,18 @@ class MyDataclassWSlots:
 
     def something(self) -> None:
         pass
+
+
+@dataclasses.dataclass
+class DataclassWithInitFalse:
+    user: str
+    computed: int = dataclasses.field(init=False, default=0)
+
+
+@dataclasses.dataclass(frozen=True)
+class FrozenDataclassWithInitFalse:
+    user: str
+    computed: int = dataclasses.field(init=False, default=0)
 
 
 class MyEnum(Enum):
@@ -206,6 +219,47 @@ def test_serde_jsonplus() -> None:
     serde = JsonPlusSerializer(pickle_fallback=False)
 
     assert serde.loads_typed(serde.dumps_typed(surrogates)) == surrogates
+
+
+def test_msgpack_dataclass_init_false_roundtrip() -> None:
+    serde = JsonPlusSerializer()
+    value = DataclassWithInitFalse(user="alice")
+    value.computed = 99
+
+    restored = serde.loads_typed(serde.dumps_typed(value))
+
+    assert restored == value
+
+    legacy_payload = ormsgpack.packb(
+        ormsgpack.Ext(
+            EXT_CONSTRUCTOR_KW_ARGS,
+            _msgpack_enc(
+                (
+                    DataclassWithInitFalse.__module__,
+                    DataclassWithInitFalse.__name__,
+                    {"user": "alice", "computed": 99},
+                )
+            ),
+        ),
+        option=ormsgpack.OPT_NON_STR_KEYS,
+    )
+    assert serde.loads_typed(("msgpack", legacy_payload)) == value
+
+    json_serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+    assert json_serde.loads_typed(json_serde.dumps_typed(value)) == {
+        "user": "alice",
+        "computed": 99,
+    }
+
+
+def test_msgpack_frozen_dataclass_init_false_roundtrip() -> None:
+    serde = JsonPlusSerializer()
+    value = FrozenDataclassWithInitFalse(user="alice")
+    object.__setattr__(value, "computed", 99)
+
+    restored = serde.loads_typed(serde.dumps_typed(value))
+
+    assert restored == value
 
 
 def test_serde_jsonplus_json_mode() -> None:

@@ -488,18 +488,23 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
         )
     elif dataclasses.is_dataclass(obj):
         # doesn't use dataclasses.asdict to avoid deepcopy and recursion
+        fields = dataclasses.fields(obj)
+        kwargs = {
+            field.name: getattr(obj, field.name) for field in fields if field.init
+        }
+        post_init_fields = {
+            field.name: getattr(obj, field.name) for field in fields if not field.init
+        }
+        payload: tuple[Any, ...] = (
+            obj.__class__.__module__,
+            obj.__class__.__name__,
+            kwargs,
+        )
+        if post_init_fields:
+            payload += (post_init_fields,)
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_KW_ARGS,
-            _msgpack_enc(
-                (
-                    obj.__class__.__module__,
-                    obj.__class__.__name__,
-                    {
-                        field.name: getattr(obj, field.name)
-                        for field in dataclasses.fields(obj)
-                    },
-                ),
-            ),
+            _msgpack_enc(payload),
         )
     elif isinstance(obj, Item):
         return ormsgpack.Ext(
@@ -672,7 +677,27 @@ def _create_msgpack_ext_hook(
                 if not _check_allowed(tup[0], tup[1]):
                     return tup[2]
                 # module, name, kwargs
-                return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
+                cls = getattr(importlib.import_module(tup[0]), tup[1])
+                kwargs = tup[2]
+                post_init_fields = tup[3] if len(tup) == 4 else {}
+                if len(tup) == 3 and dataclasses.is_dataclass(cls):
+                    init_names = {
+                        field.name for field in dataclasses.fields(cls) if field.init
+                    }
+                    post_init_fields = {
+                        name: value
+                        for name, value in kwargs.items()
+                        if name not in init_names
+                    }
+                    kwargs = {
+                        name: value
+                        for name, value in kwargs.items()
+                        if name in init_names
+                    }
+                obj = cls(**kwargs)
+                for name, value in post_init_fields.items():
+                    object.__setattr__(obj, name, value)
+                return obj
             except Exception:
                 return None
         elif code == EXT_METHOD_SINGLE_ARG:
@@ -786,7 +811,10 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
                 option=ormsgpack.OPT_NON_STR_KEYS,
             )
             # module, name, args
-            return tup[2]
+            result = dict(tup[2])
+            if len(tup) == 4:
+                result.update(tup[3])
+            return result
         except Exception:
             return
     elif code == EXT_METHOD_SINGLE_ARG:
