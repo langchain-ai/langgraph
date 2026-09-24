@@ -173,8 +173,18 @@ class RunModule:
         config: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
         langsmith_tracing: LangSmithTracing | None = None,
+        context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Send `run.start` to the server. Returns the result (`{"run_id": ...}`)."""
+        """Send `run.start` to the server. Returns the result (`{"run_id": ...}`).
+
+        Args:
+            input: the run input; omitted from the wire payload when None.
+            config: the run config; omitted when None.
+            metadata: run metadata; omitted when None.
+            langsmith_tracing: tracing options; omitted when None.
+            context: per-run static context; omitted from the wire payload
+                when None (server applies its default context behavior).
+        """
         params: dict[str, Any] = {"assistant_id": self._owner.assistant_id}
         if input is not None:
             params["input"] = input
@@ -184,6 +194,8 @@ class RunModule:
             params["metadata"] = metadata
         if langsmith_tracing is not None:
             params["langsmith_tracer"] = langsmith_tracing
+        if context is not None:
+            params["context"] = context
         loop = asyncio.get_running_loop()
         gate: asyncio.Future[None] = loop.create_future()
         self._owner._run_start_ready = gate
@@ -216,6 +228,7 @@ class RunModule:
         response: Any,
         *,
         interrupt_id: str | None = None,
+        context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Reply to a server-side interrupt and resume the run.
 
@@ -224,6 +237,8 @@ class RunModule:
                 wire (protocol field name).
             interrupt_id: optional explicit id. When omitted, requires exactly
                 one outstanding interrupt and uses its id.
+            context: optional per-run static context for the resumed run;
+                forwarded with the `input.respond` command when non-None.
 
         Raises:
             RuntimeError: no outstanding interrupts; `interrupt_id` is None but
@@ -266,6 +281,8 @@ class RunModule:
                 "namespace": match["namespace"],
                 "response": response,
             }
+            if context is not None:
+                params["context"] = context
             return await self._owner._send_command("input.respond", params)
 
 

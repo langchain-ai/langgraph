@@ -439,6 +439,64 @@ def test_sync_run_start_sends_command():
     }
 
 
+def test_sync_run_start_forwards_context():
+    fake = SyncFakeServer()
+    fake.script([lifecycle_completed_event(seq=1)])
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={"x": 1}, context={"user_id": "u-1"})
+
+    assert fake.received_commands[0]["params"]["context"] == {"user_id": "u-1"}
+
+
+def test_sync_run_start_omits_context_when_not_provided():
+    fake = SyncFakeServer()
+    fake.script([lifecycle_completed_event(seq=1)])
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={"x": 1})
+
+    assert "context" not in fake.received_commands[0]["params"]
+
+
+def test_sync_run_respond_forwards_context():
+    fake = SyncFakeServer()
+    fake.script([lifecycle_completed_event(seq=1)])
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            thread.interrupts.append(
+                {"interrupt_id": "i-1", "value": None, "namespace": []}
+            )
+            thread.interrupted = True
+            thread.run.respond("yes", context={"user_id": "u-1"})
+
+    command = fake.received_commands[-1]
+    assert command["method"] == "input.respond"
+    assert command["params"]["context"] == {"user_id": "u-1"}
+
+
+def test_sync_run_respond_omits_context_when_not_provided():
+    fake = SyncFakeServer()
+    fake.script([lifecycle_completed_event(seq=1)])
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            thread.interrupts.append(
+                {"interrupt_id": "i-1", "value": None, "namespace": []}
+            )
+            thread.interrupted = True
+            thread.run.respond("yes")
+
+    command = fake.received_commands[-1]
+    assert command["method"] == "input.respond"
+    assert "context" not in command["params"]
+
+
 def test_sync_events_iterates_raw_events():
 
     fake = SyncFakeServer()
