@@ -413,6 +413,7 @@ def push_message(
     if message.id is None:
         raise ValueError("Message ID is required")
 
+    handlers: list[BaseCallbackHandler] = []
     if isinstance(config["callbacks"], BaseCallbackManager):
         manager = config["callbacks"]
         handlers = manager.handlers
