@@ -31,6 +31,11 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
     def __eq__(self, value: object) -> bool:
         return isinstance(value, LastValue)
 
+    def __repr__(self) -> str:
+        if self.value is MISSING:
+            return f"LastValue(typ={self.typ!r}, key={self.key!r}, value=MISSING)"
+        return f"LastValue(typ={self.typ!r}, key={self.key!r}, value={self.value!r})"
+
     @property
     def ValueType(self) -> type[Value]:
         """The type of the value stored in the channel."""
@@ -96,6 +101,11 @@ class LastValueAfterFinish(
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, LastValueAfterFinish)
+
+    def __repr__(self) -> str:
+        if self.value is MISSING:
+            return f"LastValueAfterFinish(typ={self.typ!r}, key={self.key!r}, value=MISSING, finished={self.finished})"
+        return f"LastValueAfterFinish(typ={self.typ!r}, key={self.key!r}, value={self.value!r}, finished={self.finished})"
 
     @property
     def ValueType(self) -> type[Value]:

@@ -43,6 +43,9 @@ class Topic(
     def __eq__(self, value: object) -> bool:
         return isinstance(value, Topic) and value.accumulate == self.accumulate
 
+    def __repr__(self) -> str:
+        return f"Topic(typ={self.typ!r}, key={self.key!r}, accumulate={self.accumulate}, len={len(self.values)})"
+
     @property
     def ValueType(self) -> Any:
         """The type of the value stored in the channel."""
