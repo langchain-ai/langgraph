@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
+from copy import deepcopy
 from dataclasses import fields, is_dataclass
 from typing import (
     Any,
@@ -405,7 +406,10 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
                 if msg_id:
                     self.seen.add(msg_id)
             v2_meta = {**meta[1], "run_id": str(run_id)}
-            self.stream((meta[0], "messages", (event, v2_meta)))
+            # Native event producers may reuse nested delta fields as cumulative
+            # buffers. Snapshot before queueing: the graph consumer can run after
+            # the producer has advanced and mutated those same objects.
+            self.stream((meta[0], "messages", (deepcopy(event), v2_meta)))
 
 
 # Known role values (OpenAI-style) and type values (LangChain serialisation)

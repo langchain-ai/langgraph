@@ -175,6 +175,13 @@ class TaskResultPayload(TypedDict):
     """List of interrupts that occurred during task execution."""
     result: dict[str, Any]
     """Mapping of channel names to the values written by this task."""
+    output_type: NotRequired[str]
+    """Original successful node return type, when available in a V3 run.
+
+    Unlike `result`, which contains channel writes, this preserves whether
+    the node returned a `dict`, a `Command`, or another carrier. Consumers
+    must tolerate absent or unfamiliar types.
+    """
 
 
 class CheckpointTask(TypedDict):

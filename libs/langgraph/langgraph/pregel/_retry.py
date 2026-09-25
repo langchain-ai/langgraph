@@ -30,7 +30,9 @@ from langgraph._internal._constants import (
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STREAM,
+    CONFIG_KEY_STREAM_MESSAGES_V2,
     CONFIG_KEY_TASK_ID,
+    CONFIG_KEY_TASK_OUTPUT_TYPE,
     CONFIG_KEY_THREAD_ID,
     CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
     NS_SEP,
@@ -570,6 +572,15 @@ def _checkpoint_ns_for_parent_command(ns: str) -> str:
     return NS_SEP.join(parts)
 
 
+def _record_output_type(task: PregelExecutableTask, output: Any) -> Any:
+    # Task writes have already erased the original return carrier. Keep its
+    # type separate so protocol consumers can distinguish Command routing
+    # from a plain state update. Legacy task payloads remain unchanged.
+    if task.config.get(CONF, {}).get(CONFIG_KEY_STREAM_MESSAGES_V2):
+        task.config[CONF][CONFIG_KEY_TASK_OUTPUT_TYPE] = type(output).__name__
+    return output
+
+
 def run_with_retry(
     task: PregelExecutableTask,
     retry_policy: Sequence[RetryPolicy] | None,
@@ -614,7 +625,7 @@ def run_with_retry(
             # clear any writes from previous attempts
             task.writes.clear()
             # run the task
-            return task.proc.invoke(task.input, config)
+            return _record_output_type(task, task.proc.invoke(task.input, config))
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
@@ -741,7 +752,9 @@ async def arun_with_retry(
                     async for _ in task.proc.astream(task.input, config):
                         pass
                     break
-                return await task.proc.ainvoke(task.input, config)
+                return _record_output_type(
+                    task, await task.proc.ainvoke(task.input, config)
+                )
             result = await _arun_with_timeout(
                 task, config, resolved_timeout, attempt_ctx, stream=stream
             )
@@ -749,7 +762,7 @@ async def arun_with_retry(
             if stream:
                 # if successful, end
                 break
-            return result
+            return _record_output_type(task, result)
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]

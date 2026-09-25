@@ -16,6 +16,7 @@ from langgraph._internal._config import filter_to_user_tags, patch_checkpoint_ma
 from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_TASK_OUTPUT_TYPE,
     ERROR,
     INTERRUPT,
     NS_END,
@@ -112,7 +113,7 @@ def map_debug_task_results(
         [stream_keys] if isinstance(stream_keys, str) else stream_keys
     )
     task, writes = task_tup
-    yield {
+    payload: TaskResultPayload = {
         "id": task.id,
         "name": task.name,
         "error": next((w[1] for w in writes if w[0] == ERROR), None),
@@ -126,6 +127,15 @@ def map_debug_task_results(
             for v in (w[1] if isinstance(w[1], Sequence) else [w[1]])
         ],
     }
+
+    output_type = task.config.get(CONF, {}).get(CONFIG_KEY_TASK_OUTPUT_TYPE)
+    if (
+        output_type is not None
+        and payload["error"] is None
+        and not payload["interrupts"]
+    ):
+        payload["output_type"] = output_type
+    yield payload
 
 
 def rm_pregel_keys(config: RunnableConfig | None) -> RunnableConfig | None:
