@@ -200,6 +200,8 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
         (
             Optional[BaseStore],  # noqa: UP045
             "Optional[BaseStore]",
+            BaseStore | None,
+            "BaseStore | None",
         ),
         "store",
         None,
@@ -410,6 +412,17 @@ class RunnableCallable(Runnable):
                     except AttributeError:
                         pass
 
+            # Runtime always exposes `store` (default None). For a non-optional
+            # BaseStore parameter that means "not configured", so treat None as
+            # missing and raise the clear missing-config error below.
+            if (
+                kw == "store"
+                and kw_value is not MISSING
+                and kw_value is None
+                and default is inspect.Parameter.empty
+            ):
+                kw_value = MISSING
+
             if kw_value is MISSING:
                 if default is inspect.Parameter.empty:
                     raise ValueError(
@@ -483,6 +496,17 @@ class RunnableCallable(Runnable):
                         kw_value = getattr(runtime, runtime_key)
                     except AttributeError:
                         pass
+            # Runtime always exposes `store` (default None). For a non-optional
+            # BaseStore parameter that means "not configured", so treat None as
+            # missing and raise the clear missing-config error below.
+            if (
+                kw == "store"
+                and kw_value is not MISSING
+                and kw_value is None
+                and default is inspect.Parameter.empty
+            ):
+                kw_value = MISSING
+
             if kw_value is MISSING:
                 if default is inspect.Parameter.empty:
                     raise ValueError(

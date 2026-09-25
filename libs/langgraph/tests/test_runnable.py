@@ -122,8 +122,9 @@ def test_runnable_callable_injectable_arguments() -> None:
     # Manually provide store
     assert RunnableCallable(func_required_store).invoke({}, store=None) == "success"
 
-    # Specify a value for store in the config
-    assert (
+    # Runtime.store defaults to None; required BaseStore must not treat that
+    # as a supplied value (would otherwise AttributeError on put inside the node).
+    with pytest.raises(ValueError, match="Missing required config key 'store'"):
         RunnableCallable(func_required_store).invoke(
             {},
             config={
@@ -137,8 +138,6 @@ def test_runnable_callable_injectable_arguments() -> None:
                 }
             },
         )
-        == "success"
-    )
 
     # Specify a value for store in config, but override with None
     assert (
@@ -274,8 +273,9 @@ async def test_runnable_callable_injectable_arguments_async() -> None:
         == "success"
     )
 
-    # Specify a value for store in the config
-    assert (
+    # Runtime.store defaults to None; required BaseStore must not treat that
+    # as a supplied value.
+    with pytest.raises(ValueError, match="Missing required config key 'store'"):
         await RunnableCallable(
             func=func_required_store, afunc=afunc_required_store
         ).ainvoke(
@@ -291,8 +291,6 @@ async def test_runnable_callable_injectable_arguments_async() -> None:
                 }
             },
         )
-        == "success"
-    )
 
     # Specify a value for store in config, but override with None
     assert (
@@ -412,3 +410,108 @@ async def test_config_ensured_async() -> None:
         assert config.get("configurable") is not None
 
     await RunnableCallable(func).ainvoke("test")
+
+
+def test_required_basestore_missing_on_compile_raises() -> None:
+    """Required store: BaseStore must error clearly when compile() has no store=.
+
+    Regression for https://github.com/langchain-ai/langgraph/issues/9077.
+    """
+    from typing import TypedDict
+
+    from langgraph.graph import END, START, StateGraph
+    from langgraph.store.memory import InMemoryStore
+
+    class S(TypedDict):
+        x: int
+
+    def write(state: S, *, store: BaseStore):
+        store.put(("ns",), "k", {"v": state["x"]})
+        return {"x": state["x"] + 1}
+
+    g = StateGraph(S)
+    g.add_node("write", write)
+    g.add_edge(START, "write")
+    g.add_edge("write", END)
+
+    app = g.compile()  # no store=
+    with pytest.raises(ValueError, match="Missing required config key 'store'"):
+        app.invoke({"x": 1})
+
+    # Optional annotation still accepts a missing store.
+    def write_optional(state: S, *, store: BaseStore | None = None):
+        assert store is None
+        return {"x": state["x"] + 1}
+
+    g2 = StateGraph(S)
+    g2.add_node("write", write_optional)
+    g2.add_edge(START, "write")
+    g2.add_edge("write", END)
+    assert g2.compile().invoke({"x": 1}) == {"x": 2}
+
+    # Configured store still injects a real BaseStore.
+    seen: dict[str, BaseStore] = {}
+
+    def write_configured(state: S, *, store: BaseStore):
+        seen["store"] = store
+        store.put(("ns",), "k", {"v": state["x"]})
+        return {"x": state["x"] + 1}
+
+    mem = InMemoryStore()
+    g3 = StateGraph(S)
+    g3.add_node("write", write_configured)
+    g3.add_edge(START, "write")
+    g3.add_edge("write", END)
+    assert g3.compile(store=mem).invoke({"x": 1}) == {"x": 2}
+    assert isinstance(seen["store"], BaseStore)
+    assert mem.get(("ns",), "k").value == {"v": 1}
+
+
+async def test_required_basestore_missing_on_compile_raises_async() -> None:
+    """Async variant of required BaseStore missing-config regression (#9077)."""
+    from typing import TypedDict
+
+    from langgraph.graph import END, START, StateGraph
+    from langgraph.store.memory import InMemoryStore
+
+    class S(TypedDict):
+        x: int
+
+    async def write(state: S, *, store: BaseStore):
+        await store.aput(("ns",), "k", {"v": state["x"]})
+        return {"x": state["x"] + 1}
+
+    g = StateGraph(S)
+    g.add_node("write", write)
+    g.add_edge(START, "write")
+    g.add_edge("write", END)
+
+    app = g.compile()  # no store=
+    with pytest.raises(ValueError, match="Missing required config key 'store'"):
+        await app.ainvoke({"x": 1})
+
+    async def write_optional(state: S, *, store: BaseStore | None = None):
+        assert store is None
+        return {"x": state["x"] + 1}
+
+    g2 = StateGraph(S)
+    g2.add_node("write", write_optional)
+    g2.add_edge(START, "write")
+    g2.add_edge("write", END)
+    assert await g2.compile().ainvoke({"x": 1}) == {"x": 2}
+
+    seen: dict[str, BaseStore] = {}
+
+    async def write_configured(state: S, *, store: BaseStore):
+        seen["store"] = store
+        await store.aput(("ns",), "k", {"v": state["x"]})
+        return {"x": state["x"] + 1}
+
+    mem = InMemoryStore()
+    g3 = StateGraph(S)
+    g3.add_node("write", write_configured)
+    g3.add_edge(START, "write")
+    g3.add_edge("write", END)
+    assert await g3.compile(store=mem).ainvoke({"x": 1}) == {"x": 2}
+    assert isinstance(seen["store"], BaseStore)
+    assert (await mem.aget(("ns",), "k")).value == {"v": 1}
