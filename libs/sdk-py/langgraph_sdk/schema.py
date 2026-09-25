@@ -380,6 +380,8 @@ class Run(TypedDict):
     """The run metadata."""
     multitask_strategy: MultitaskStrategy
     """Strategy to handle concurrent runs on the same thread."""
+    langsmith_session_name: NotRequired[str | None]
+    """The LangSmith session name associated with this run."""
 
 
 class Cron(TypedDict):
@@ -490,6 +492,7 @@ RunSelectField = Literal[
     "metadata",
     "kwargs",
     "multitask_strategy",
+    "langsmith_session_name",
 ]
 
 CronSelectField = Literal[
