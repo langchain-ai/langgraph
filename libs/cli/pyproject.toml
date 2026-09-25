@@ -23,8 +23,7 @@ dependencies = [
 path = "langgraph_cli/__init__.py"
 [project.optional-dependencies]
 inmem = [
-    "langgraph-api>=0.5.35,<1.0.0 ; python_version >= '3.11'",
-    "langgraph-runtime-inmem>=0.7 ; python_version >= '3.11'",
+    "langgraph-api[inmem]>=0.15.0.dev0,<1.0.0 ; python_version >= '3.11'",
 ]
 
 [project.urls]
@@ -57,6 +56,10 @@ dev = [
 
 [tool.uv]
 default-groups = ['dev']
+
+[tool.uv.sources]
+langgraph-api = { git = "https://github.com/langchain-ai/langgraph-api.git", branch = "cwlbraa/embed-core-local-dev", subdirectory = "api" }
+langgraph-core-bin = { git = "https://github.com/langchain-ai/langgraph-api.git", branch = "cwlbraa/embed-core-local-dev", subdirectory = "core_python" }
 
 [tool.hatch.build.targets.wheel]
 include = ["langgraph_cli"]
