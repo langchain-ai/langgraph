@@ -118,7 +118,7 @@ from langgraph.errors import (
     InvalidUpdateError,
     create_error_message,
 )
-from langgraph.managed.base import ManagedValueSpec
+from langgraph.managed.base import ManagedValueMapping, ManagedValueSpec
 from langgraph.pregel._algo import (
     PregelTaskWrites,
     _scratchpad,
@@ -445,6 +445,86 @@ def _normalize_stream_transformer_factories(
 
         factories.append(factory)
     return factories
+
+
+def _interrupt_writes_for_updated_checkpoint(
+    *,
+    channel_specs: Mapping[str, BaseChannel | ManagedValueSpec],
+    nodes: Mapping[str, PregelNode],
+    saved: CheckpointTuple,
+    next_config: RunnableConfig,
+    next_checkpoint: Checkpoint,
+    next_channels: Mapping[str, BaseChannel],
+    next_managed: ManagedValueMapping,
+    step: int,
+    store: BaseStore | None,
+    checkpointer: BaseCheckpointSaver | None,
+) -> list[tuple[str, list[tuple[str, Any]]]]:
+    """Rebind pending interrupt writes onto a checkpoint created by update_state.
+
+    `update_state` allocates a new checkpoint id, which changes deterministic
+    task ids. Interrupt pending-writes stay on the previous checkpoint, so
+    `StateSnapshot.interrupts` goes empty while `next` still names the
+    interrupted node, and resume-by-id silently fails. Copy those writes onto
+    the matching new tasks (same node name, in order), preserving Interrupt.id.
+    """
+    if not saved.pending_writes:
+        return []
+    interrupt_by_task = {
+        tid: val for tid, chan, val in saved.pending_writes if chan == INTERRUPT
+    }
+    if not interrupt_by_task:
+        return []
+
+    old_channels, old_managed = channels_from_checkpoint(
+        channel_specs,
+        saved.checkpoint,
+        saver=checkpointer
+        if isinstance(checkpointer, BaseCheckpointSaver)
+        else None,
+        config=saved.config,
+    )
+    old_tasks = prepare_next_tasks(
+        saved.checkpoint,
+        saved.pending_writes,
+        nodes,
+        old_channels,
+        old_managed,
+        saved.config,
+        step + 1,
+        step + 3,
+        for_execution=True,
+        store=store,
+        checkpointer=checkpointer,
+        manager=None,
+    )
+    by_name: dict[str, deque[Any]] = defaultdict(deque)
+    for tid, task in old_tasks.items():
+        if tid in interrupt_by_task:
+            by_name[task.name].append(interrupt_by_task[tid])
+    if not by_name:
+        return []
+
+    new_tasks = prepare_next_tasks(
+        next_checkpoint,
+        [],
+        nodes,
+        next_channels,
+        next_managed,
+        next_config,
+        step + 2,
+        step + 4,
+        for_execution=True,
+        store=store,
+        checkpointer=checkpointer,
+        manager=None,
+    )
+    writes: list[tuple[str, list[tuple[str, Any]]]] = []
+    for task in new_tasks.values():
+        pending = by_name.get(task.name)
+        if pending:
+            writes.append((task.id, [(INTERRUPT, pending.popleft())]))
+    return writes
 
 
 class Pregel(
@@ -2044,6 +2124,21 @@ class Pregel(
                 if push_writes := [w for w in task.writes if w[0] == PUSH]:
                     checkpointer.put_writes(next_config, push_writes, task_id)
 
+            if saved is not None:
+                for task_id, writes in _interrupt_writes_for_updated_checkpoint(
+                    channel_specs=self.channels,
+                    nodes=self.nodes,
+                    saved=saved,
+                    next_config=next_config,
+                    next_checkpoint=checkpoint,
+                    next_channels=channels,
+                    next_managed=managed,
+                    step=step,
+                    store=self.store,
+                    checkpointer=checkpointer,
+                ):
+                    checkpointer.put_writes(next_config, writes, task_id)
+
             return patch_checkpoint_map(next_config, saved.metadata if saved else None)
 
         current_config = patch_configurable(
@@ -2503,6 +2598,22 @@ class Pregel(
             for task_id, task in zip(run_task_ids, run_tasks):
                 if push_writes := [w for w in task.writes if w[0] == PUSH]:
                     await checkpointer.aput_writes(next_config, push_writes, task_id)
+
+            if saved is not None:
+                for task_id, writes in _interrupt_writes_for_updated_checkpoint(
+                    channel_specs=self.channels,
+                    nodes=self.nodes,
+                    saved=saved,
+                    next_config=next_config,
+                    next_checkpoint=checkpoint,
+                    next_channels=channels,
+                    next_managed=managed,
+                    step=step,
+                    store=self.store,
+                    checkpointer=checkpointer,
+                ):
+                    await checkpointer.aput_writes(next_config, writes, task_id)
+
             return patch_checkpoint_map(next_config, saved.metadata if saved else None)
 
         current_config = patch_configurable(

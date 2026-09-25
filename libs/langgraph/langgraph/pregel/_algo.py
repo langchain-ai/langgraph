@@ -1312,6 +1312,19 @@ def _scratchpad(
         if resume_map and namespace_hash in resume_map:
             mapped_resume_write = resume_map[namespace_hash]
             task_resume_write.append(mapped_resume_write)
+        elif resume_map:
+            # After update_state, pending interrupts are rebound onto new task
+            # ids while Interrupt.id keeps the original namespace hash. Match
+            # resume-by-id against those preserved ids as well as namespace_hash.
+            for w in pending_writes:
+                if w[0] == task_id and w[1] == INTERRUPT:
+                    interrupts = w[2] if isinstance(w[2], (list, tuple)) else [w[2]]
+                    for intr in interrupts:
+                        iid = getattr(intr, "id", None)
+                        if iid is not None and iid in resume_map:
+                            task_resume_write.append(resume_map[iid])
+                            break
+                    break
 
     else:
         null_resume_write = None

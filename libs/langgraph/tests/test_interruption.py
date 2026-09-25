@@ -242,3 +242,81 @@ def test_interrupt_response_schema_invalid_resume_after_earlier_interrupt(
     assert graph.invoke(resume({"approved": True}), config) == {
         "answer": ["ok", Decision(approved=True)]
     }
+
+
+def test_update_state_preserves_pending_interrupts(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """update_state during interrupt() must keep interrupts visible and resume-by-id working.
+
+    Regression for https://github.com/langchain-ai/langgraph/issues/9076
+    """
+
+    class State(TypedDict):
+        x: int
+        note: str
+
+    def gate(state: State) -> State:
+        ans = interrupt({"need": "approval", "x": state["x"]})
+        return {"x": state["x"] + 1, "note": f"approved:{ans}"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("gate", gate)
+        .add_edge(START, "gate")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = {"configurable": {"thread_id": "update-state-preserves-interrupts"}}
+
+    graph.invoke({"x": 1, "note": ""}, config)
+    before = graph.get_state(config)
+    assert before.next == ("gate",)
+    assert len(before.interrupts) == 1
+    old_id = before.interrupts[0].id
+
+    graph.update_state(config, {"note": "patched"})
+    after = graph.get_state(config)
+    assert after.values["note"] == "patched"
+    assert after.next == ("gate",)
+    assert after.interrupts == before.interrupts
+    assert after.interrupts[0].id == old_id
+
+    # Map resume by the pre-update id must complete (not re-pause with a new id).
+    assert graph.invoke(Command(resume={old_id: "yes"}), config) == {
+        "x": 2,
+        "note": "approved:yes",
+    }
+    assert graph.get_state(config).next == ()
+
+
+def test_update_state_preserves_interrupts_scalar_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Scalar Command(resume=...) after update_state must agree with resume-by-id."""
+
+    class State(TypedDict):
+        x: int
+        note: str
+
+    def gate(state: State) -> State:
+        ans = interrupt({"need": "approval", "x": state["x"]})
+        return {"x": state["x"] + 1, "note": f"approved:{ans}"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("gate", gate)
+        .add_edge(START, "gate")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = {"configurable": {"thread_id": "update-state-scalar-resume"}}
+
+    graph.invoke({"x": 1, "note": ""}, config)
+    old_id = graph.get_state(config).interrupts[0].id
+    graph.update_state(config, {"note": "patched"})
+    assert graph.get_state(config).interrupts[0].id == old_id
+
+    assert graph.invoke(Command(resume="yes"), config) == {
+        "x": 2,
+        "note": "approved:yes",
+    }
+    assert graph.get_state(config).next == ()
