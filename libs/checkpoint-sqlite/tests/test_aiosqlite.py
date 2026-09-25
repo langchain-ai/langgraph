@@ -130,6 +130,27 @@ class TestAsyncSqliteSaver:
             assert len(search_results_7) == 1
             assert search_results_7[0].config["configurable"]["thread_id"] == "thread-1"
 
+    @pytest.mark.parametrize(
+        "metadata",
+        [
+            {"user": {"name": "José"}},
+            {"tags": ["café"]},
+        ],
+    )
+    async def test_asearch_nested_unicode_metadata(
+        self, metadata: CheckpointMetadata
+    ) -> None:
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            config: RunnableConfig = {
+                "configurable": {"thread_id": "unicode", "checkpoint_ns": ""}
+            }
+            await saver.aput(config, self.chkpnt_1, metadata, {})
+
+            results = [c async for c in saver.alist(config, filter=metadata)]
+
+            assert len(results) == 1
+            assert results[0].metadata == metadata
+
     async def test_limit_parameter_sql_injection_prevention(self) -> None:
         """Test that the limit parameter properly uses parameterized queries to prevent SQL injection."""
         async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:

@@ -128,6 +128,25 @@ class TestSqliteSaver:
             assert len(search_results_7) == 1
             assert search_results_7[0].config["configurable"]["thread_id"] == "thread-2"
 
+    @pytest.mark.parametrize(
+        "metadata",
+        [
+            {"user": {"name": "José"}},
+            {"tags": ["café"]},
+        ],
+    )
+    def test_search_nested_unicode_metadata(self, metadata: CheckpointMetadata) -> None:
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            config: RunnableConfig = {
+                "configurable": {"thread_id": "unicode", "checkpoint_ns": ""}
+            }
+            saver.put(config, self.chkpnt_1, metadata, {})
+
+            results = list(saver.list(config, filter=metadata))
+
+            assert len(results) == 1
+            assert results[0].metadata == metadata
+
     def test_search_where(self) -> None:
         # call method / assertions
         expected_predicate_1 = "WHERE json_extract(CAST(metadata AS TEXT), '$.source') = ? AND json_extract(CAST(metadata AS TEXT), '$.step') = ? AND json_extract(CAST(metadata AS TEXT), '$.writes') = ? AND json_extract(CAST(metadata AS TEXT), '$.score') = ? AND checkpoint_id < ?"
