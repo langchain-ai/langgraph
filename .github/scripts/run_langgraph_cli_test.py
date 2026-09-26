@@ -32,8 +32,6 @@ def test(config: pathlib.Path, port: int, tag: str, verbose: bool):
             docker_compose=None,
             port=port,
             watch=False,
-            debugger_port=None,
-            debugger_base_url=f"http://127.0.0.1:{port}",
             postgres_uri=None,
             api_version=None,
             image=tag,
@@ -173,5 +171,5 @@ if __name__ == "__main__":
     except BaseException:
         logger.exception("Test failed")
         raise
-    
+
     logger.info("Test execution finished")
