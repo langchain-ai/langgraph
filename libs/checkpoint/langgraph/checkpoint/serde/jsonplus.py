@@ -302,21 +302,52 @@ EXT_NUMPY_ARRAY = 6
 EXT_DELTA_SNAPSHOT = 7
 
 
+# Builtin types that may appear as generic type args (``Page[int]``). Resolved
+# from this table rather than via getattr on ``builtins``.
+_GENERIC_ARG_BUILTINS: dict[tuple[str, str], type] = {
+    ("builtins", t.__name__): t
+    for t in (int, float, str, bool, bytes, list, dict, tuple, set, frozenset)
+}
+
+
+def _pydantic_generic_spec(cls: Any) -> list[Any] | None:
+    """Describe a parametrized pydantic v2 generic as nested ``[module, name]`` refs.
+
+    ``Box[Inner]`` becomes ``["mod", "Box", [["mod", "Inner"]]]``. Returns None
+    for non-generic classes, or when a type arg is not a plain class (e.g.
+    ``Literal`` or unions), in which case callers keep the legacy encoding.
+    """
+    meta = getattr(cls, "__pydantic_generic_metadata__", None)
+    if not meta or meta.get("origin") is None or not meta.get("args"):
+        return None
+    args: list[Any] = []
+    for arg in meta["args"]:
+        if (nested := _pydantic_generic_spec(arg)) is not None:
+            args.append(nested)
+        elif isclass(arg):
+            args.append([arg.__module__, arg.__name__])
+        else:
+            return None
+    origin = meta["origin"]
+    return [origin.__module__, origin.__name__, args]
+
+
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
     if isinstance(obj, _DeltaSnapshot):
         return ormsgpack.Ext(EXT_DELTA_SNAPSHOT, _msgpack_enc(obj.value))
     elif hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
-        return ormsgpack.Ext(
-            EXT_PYDANTIC_V2,
-            _msgpack_enc(
-                (
-                    obj.__class__.__module__,
-                    obj.__class__.__name__,
-                    obj.model_dump(),
-                    "model_validate_json",
-                ),
-            ),
+        payload: tuple[Any, ...] = (
+            obj.__class__.__module__,
+            obj.__class__.__name__,
+            obj.model_dump(),
+            "model_validate_json",
         )
+        # Parametrized generics (``Box[Inner]``) are not module attributes, so
+        # the name alone can't be resolved on load. Append the origin + args;
+        # older readers only look at the first four fields and ignore this.
+        if (spec := _pydantic_generic_spec(obj.__class__)) is not None:
+            payload += (spec,)
+        return ormsgpack.Ext(EXT_PYDANTIC_V2, _msgpack_enc(payload))
     elif hasattr(obj, "get_secret_value") and callable(obj.get_secret_value):
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
@@ -630,6 +661,29 @@ def _create_msgpack_ext_hook(
         )
         return False
 
+    def _resolve_generic(spec: list[Any], *, is_arg: bool = False) -> Any:
+        """Rebuild a generic from its spec, or return None if any part is blocked.
+
+        Every type arg goes through the allowlist, not just the origin, so a
+        generic can't be used to import a class the allowlist would reject.
+        Primitive builtins are accepted as type args only; they are never
+        instantiated from here.
+        """
+        module, name, *rest = spec
+        if is_arg and not rest and (module, name) in _GENERIC_ARG_BUILTINS:
+            return _GENERIC_ARG_BUILTINS[(module, name)]
+        if not _check_allowed(module, name):
+            return None
+        cls = getattr(importlib.import_module(module), name)
+        if not isclass(cls):
+            return None
+        if not rest:
+            return cls
+        args = [_resolve_generic(arg, is_arg=True) for arg in rest[0]]
+        if any(arg is None for arg in args):
+            return None
+        return cls[tuple(args)] if len(args) > 1 else cls[args[0]]
+
     def ext_hook(code: int, data: bytes) -> Any:
         if code == EXT_DELTA_SNAPSHOT:
             return _DeltaSnapshot(
@@ -713,10 +767,16 @@ def _create_msgpack_ext_hook(
                 tup = ormsgpack.unpackb(
                     data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
                 )
-                if not _check_allowed(tup[0], tup[1]):
-                    return tup[2]
-                # module, name, kwargs, method
-                cls = getattr(importlib.import_module(tup[0]), tup[1])
+                if len(tup) > 4 and tup[4]:
+                    # module, name, kwargs, method, generic spec
+                    cls = _resolve_generic(tup[4])
+                    if cls is None:
+                        return tup[2]
+                else:
+                    if not _check_allowed(tup[0], tup[1]):
+                        return tup[2]
+                    # module, name, kwargs, method
+                    cls = getattr(importlib.import_module(tup[0]), tup[1])
                 try:
                     return cls(**tup[2])
                 except Exception:
