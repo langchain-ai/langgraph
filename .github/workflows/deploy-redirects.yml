@@ -7,6 +7,10 @@ on:
     paths:
       - 'docs/**'
       - '.github/workflows/deploy-redirects.yml'
+  # llms.txt is fetched from docs.langchain.com at build time, so redeploy on a
+  # schedule to pick up docs changes that never touch this repo.
+  schedule:
+    - cron: '17 6 * * 1'
   workflow_dispatch:
 
 permissions:

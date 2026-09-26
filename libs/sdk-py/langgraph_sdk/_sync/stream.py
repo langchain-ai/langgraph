@@ -23,7 +23,7 @@ from langchain_core.language_models.chat_model_stream import ChatModelStream
 from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk._sync.http import SyncHttpClient
-from langgraph_sdk.schema import QueryParamTypes
+from langgraph_sdk.schema import LangSmithTracing, QueryParamTypes
 from langgraph_sdk.stream.decoders import (
     DataDecoder,
     Decoder,
@@ -215,6 +215,7 @@ class SyncRunModule:
         input: Any = None,
         config: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
+        langsmith_tracing: LangSmithTracing | None = None,
     ) -> dict[str, Any]:
         """Send `run.start` to the server. Returns the result (`{"run_id": ...}`)."""
         params: dict[str, Any] = {"assistant_id": self._owner.assistant_id}
@@ -224,6 +225,8 @@ class SyncRunModule:
             params["config"] = config
         if metadata is not None:
             params["metadata"] = metadata
+        if langsmith_tracing is not None:
+            params["langsmith_tracer"] = langsmith_tracing
         result = self._owner._send_command("run.start", params)
         self._owner._run_seen = True
         controller = self._owner._controller

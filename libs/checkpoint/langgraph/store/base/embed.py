@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import json
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any
 
 from langchain_core.embeddings import Embeddings
@@ -244,6 +244,9 @@ def get_text_at_path(obj: Any, path: str | list[str]) -> list[str]:
         - Multi-field selection: "{field1,field2}"
         - Nested paths in multi-field: "{field1,nested.field2}"
     """
+    if isinstance(obj, Mapping) and not isinstance(obj, dict):
+        obj = dict(obj)
+
     if not path or path == "$":
         return [json.dumps(obj, sort_keys=True, ensure_ascii=False)]
 

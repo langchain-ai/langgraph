@@ -2,6 +2,14 @@
 
 This repository is a monorepo. Each library lives in a subdirectory under `libs/`.
 
+<corridor>
+
+## Corridor security analysis
+
+When Corridor's `analyzePlan` tool is available, create a plan and use the tool to analyze it before generating or modifying code. Apply the resulting security guidance before writing code.
+
+</corridor>
+
 When you modify code in any library, run the following commands in that library's directory before creating a pull request:
 
 - `make format` – run code formatters

@@ -287,7 +287,7 @@ async def test_command_ids_are_monotonic():
     assert [c["id"] for c in fake.received_commands] == [1, 2]
 
 
-async def test_run_start_forwards_config_and_metadata():
+async def test_run_start_forwards_config_metadata_and_langsmith_tracing():
     fake = FakeServer()
     transport = httpx.ASGITransport(app=fake.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
@@ -297,10 +297,18 @@ async def test_run_start_forwards_config_and_metadata():
                 input={"x": 1},
                 config={"recursion_limit": 5},
                 metadata={"trace": "abc"},
+                langsmith_tracing={
+                    "project_name": "replica-project",
+                    "example_id": "example-1",
+                },
             )
     params = fake.received_commands[0]["params"]
     assert params["config"] == {"recursion_limit": 5}
     assert params["metadata"] == {"trace": "abc"}
+    assert params["langsmith_tracer"] == {
+        "project_name": "replica-project",
+        "example_id": "example-1",
+    }
 
 
 async def test_run_start_raises_outside_context_manager():

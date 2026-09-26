@@ -12,12 +12,25 @@ which is SEO-friendly and treated similarly to 301 redirects by Google.
 To add new redirects, simply edit redirects.json and re-run this script.
 """
 
+import http.client
 import json
 import os
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 # Default fallback URL for any path not in the redirect map
 DEFAULT_REDIRECT = "https://docs.langchain.com/oss/python/langgraph/overview"
+
+# The docs site regenerates this index on every deploy, so fetching it here
+# keeps the published llms.txt from drifting. The URL is a hardcoded constant,
+# never built from input, and both it and the post-redirect URL are checked
+# against ALLOWED_LLMS_HOST before anything is read.
+CANONICAL_LLMS_URL = "https://docs.langchain.com/oss/python/langgraph/llms.txt"
+ALLOWED_LLMS_HOST = "docs.langchain.com"
+LLMS_FETCH_TIMEOUT = 30
+LLMS_MAX_BYTES = 1_000_000
 
 HTML_TEMPLATE = """<!doctype html>
 <html lang="en">
@@ -75,6 +88,64 @@ CATCHALL_404_TEMPLATE = """<!doctype html>
 """
 
 
+def is_allowed_llms_url(url):
+    """Return True if url is HTTPS on the one host we accept content from."""
+    parsed = urllib.parse.urlsplit(url)
+    return parsed.scheme == "https" and parsed.hostname == ALLOWED_LLMS_HOST
+
+
+def fetch_canonical_llms_txt():
+    """Return the published LangGraph index, or None if it cannot be used.
+
+    Returning None leaves the caller on the committed docs/llms.txt, so a
+    docs.langchain.com outage degrades to a stale file rather than a broken
+    deploy or a published error page.
+    """
+    if not is_allowed_llms_url(CANONICAL_LLMS_URL):
+        print(f"Refusing to fetch {CANONICAL_LLMS_URL}: host not allowed")
+        return None
+
+    try:
+        with urllib.request.urlopen(  # noqa: S310 - constant, allowlisted URL
+            CANONICAL_LLMS_URL, timeout=LLMS_FETCH_TIMEOUT
+        ) as response:
+            # urlopen follows redirects, so re-check where it actually landed.
+            if not is_allowed_llms_url(response.url):
+                print(f"Refusing {CANONICAL_LLMS_URL}: redirected to {response.url}")
+                return None
+            body = response.read(LLMS_MAX_BYTES + 1)
+    # A connection dropped mid-body raises http.client.IncompleteRead, which
+    # descends from HTTPException rather than OSError, so catching only the
+    # urllib and OS errors would let it escape and fail the whole deploy.
+    except (
+        urllib.error.URLError,
+        http.client.HTTPException,
+        TimeoutError,
+        OSError,
+    ) as exc:
+        print(f"Could not fetch {CANONICAL_LLMS_URL}: {type(exc).__name__}: {exc}")
+        return None
+
+    if len(body) > LLMS_MAX_BYTES:
+        print(f"Refusing {CANONICAL_LLMS_URL}: larger than {LLMS_MAX_BYTES} bytes")
+        return None
+
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        print(f"Refusing {CANONICAL_LLMS_URL}: not valid UTF-8: {exc}")
+        return None
+
+    # An index opens with a markdown heading and links to the docs site. A
+    # body that does not is an error page or a truncated response, not content
+    # worth publishing.
+    if not text.startswith("# ") or f"https://{ALLOWED_LLMS_HOST}/" not in text:
+        print(f"Refusing {CANONICAL_LLMS_URL}: does not look like an llms.txt index")
+        return None
+
+    return text
+
+
 def generate_redirects():
     script_dir = Path(__file__).parent
     output_dir = script_dir / "_site"
@@ -126,14 +197,19 @@ def generate_redirects():
     catchall_404.write_text(CATCHALL_404_TEMPLATE.format(default_url=DEFAULT_REDIRECT))
     print(f"Created: {catchall_404}")
 
-    # Copy static files (like llms.txt) that can't be redirected via HTML
-    static_files = ["llms.txt"]
-    for static_file in static_files:
-        src = script_dir / static_file
+    # llms.txt can't be redirected via HTML, so publish the docs site's own
+    # generated index. The committed copy is only a fallback.
+    llms_txt = fetch_canonical_llms_txt()
+    if llms_txt is not None:
+        (output_dir / "llms.txt").write_text(llms_txt)
+        print(f"Fetched: {output_dir / 'llms.txt'} (from {CANONICAL_LLMS_URL})")
+    else:
+        src = script_dir / "llms.txt"
         if src.exists():
-            dst = output_dir / static_file
-            dst.write_text(src.read_text())
-            print(f"Copied: {dst}")
+            (output_dir / "llms.txt").write_text(src.read_text())
+            print(f"Copied: {output_dir / 'llms.txt'} (fallback, may be stale)")
+        else:
+            print("No llms.txt fetched and no committed fallback; skipping")
 
     print(f"\nGenerated {len(redirects)} redirect files in {output_dir}")
 

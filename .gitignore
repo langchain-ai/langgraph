@@ -76,6 +76,7 @@ __pypackages__/
 
 # Environments
 .env
+.env.*
 .envrc
 *.crt
 *.key

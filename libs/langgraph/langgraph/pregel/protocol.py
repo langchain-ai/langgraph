@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
-from typing import Any, Generic, Literal, cast, overload
+from typing import Any, Generic, Literal, overload
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
@@ -277,12 +277,12 @@ class StreamProtocol:
 
     modes: set[StreamMode]
 
-    __call__: Callable[[Self, StreamChunk], None]
+    __call__: Callable[[StreamChunk], None]
 
     def __init__(
         self,
         __call__: Callable[[StreamChunk], None],
         modes: set[StreamMode],
     ) -> None:
-        self.__call__ = cast(Callable[[Self, StreamChunk], None], __call__)
+        self.__call__ = __call__
         self.modes = modes
