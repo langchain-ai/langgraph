@@ -134,7 +134,6 @@ from langgraph.pregel._checkpoint import (
     create_checkpoint,
     create_checkpoint_plan_for_update_state_api,
     empty_checkpoint,
-    get_updated_channels_from_tasks,
 )
 from langgraph.pregel._draw import draw_graph
 from langgraph.pregel._io import map_input, read_channels
@@ -1997,7 +1996,6 @@ class Pregel(
                         },
                     ),
                 )
-            updated_channels = get_updated_channels_from_tasks(run_tasks)
             if saved is not None:
                 for task_id, task in zip(run_task_ids, run_tasks):
                     channel_writes = [w for w in task.writes if w[0] != PUSH]
@@ -2005,7 +2003,11 @@ class Pregel(
                         checkpointer.put_writes(
                             checkpoint_config, channel_writes, task_id
                         )
-            apply_writes(
+            # Record what apply_writes actually updated — beyond the channels
+            # the tasks wrote, it also finishes channels when the writes trigger
+            # no node, which is what makes deferred nodes' barriers available on
+            # resume (#9089).
+            updated_channels = apply_writes(
                 checkpoint,
                 channels,
                 run_tasks,
@@ -2457,7 +2459,6 @@ class Pregel(
                         },
                     ),
                 )
-            updated_channels = get_updated_channels_from_tasks(run_tasks)
             if saved is not None:
                 for task_id, task in zip(run_task_ids, run_tasks):
                     channel_writes = [w for w in task.writes if w[0] != PUSH]
@@ -2465,7 +2466,11 @@ class Pregel(
                         await checkpointer.aput_writes(
                             checkpoint_config, channel_writes, task_id
                         )
-            apply_writes(
+            # Record what apply_writes actually updated — beyond the channels
+            # the tasks wrote, it also finishes channels when the writes trigger
+            # no node, which is what makes deferred nodes' barriers available on
+            # resume (#9089).
+            updated_channels = apply_writes(
                 checkpoint,
                 channels,
                 run_tasks,
