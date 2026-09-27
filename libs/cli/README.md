@@ -105,6 +105,24 @@ The CLI uses a `langgraph.json` configuration file with these key settings:
 
 See the [full documentation](https://reference.langchain.com/python/langgraph-cli) for detailed configuration options.
 
+## 🛠️ Troubleshooting
+
+### Base image dependency conflicts (e.g. OpenTelemetry)
+
+`langgraph build`/`langgraph up` pull a pre-built `langchain/langgraph-api` base image, referenced by tag (e.g. `langchain/langgraph-api:0.13.4-py3.11`). That base image's own dependency set is resolved and published independently of this repo. If a coordinated upstream release changes a transitive dependency pair the image had resolved loosely — this has happened with `opentelemetry-api`/`opentelemetry-sdk` (see [#9082](https://github.com/langchain-ai/langgraph/issues/9082)) — a previously-working tag can start crash-looping on startup with an `ImportError`, before any of your own graph code runs.
+
+Since the base image's build isn't controlled by `langgraph.json`, you can't fix this from your config directly, but you can pin the offending package(s) back to a known-good set as an extra install step layered right on top of the base image:
+
+```json
+{
+  "dockerfile_lines": [
+    "RUN pip install --no-cache-dir 'opentelemetry-api==1.44.0' 'opentelemetry-sdk==1.44.0' 'opentelemetry-exporter-otlp-proto-http==1.44.0' 'opentelemetry-exporter-otlp-proto-common==1.44.0' 'opentelemetry-semantic-conventions==0.65b0'"
+  ]
+}
+```
+
+Adjust the pinned versions to whatever the last mutually-consistent set was before the break. If you hit a startup crash like this, check [existing issues](https://github.com/langchain-ai/langgraph/issues) first — this failure mode tends to affect every deployment on a given base-image tag at once, so it's likely already reported.
+
 ## Development
 
 To develop the CLI itself:
