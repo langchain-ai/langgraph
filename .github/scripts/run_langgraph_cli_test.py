@@ -41,7 +41,7 @@ def test(config: pathlib.Path, port: int, tag: str, verbose: bool):
         )
 
         # Compose up with wait (implies detach), similar to `langgraph up --wait`
-        args_up = [*args, "up", "--remove-orphans", "--wait"]
+        args_up = [*args, "up", "--remove-orphans", "--wait", "--wait-timeout", "180"]
 
         compose_cmd = ["docker", "compose"]
         if capabilities.compose_type == "standalone":

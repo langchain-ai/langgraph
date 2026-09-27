@@ -1,7 +1,9 @@
 import asyncio
 import json
-from collections.abc import Iterable
+from collections import UserDict
+from collections.abc import Iterable, Mapping
 from datetime import datetime
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -135,6 +137,18 @@ def test_get_text_at_path() -> None:
     assert get_text_at_path(nested_data, "items[abc].value") == []
     assert get_text_at_path(nested_data, "{unclosed") == []
     assert get_text_at_path(nested_data, "nested[{invalid}]") == []
+
+
+@pytest.mark.parametrize(
+    "mapping",
+    [
+        UserDict({"text": "searchable"}),
+        MappingProxyType({"text": "searchable"}),
+    ],
+)
+def test_get_text_at_path_with_non_dict_mapping(mapping: Mapping[str, str]) -> None:
+    assert get_text_at_path(mapping, "$") == ['{"text": "searchable"}']
+    assert get_text_at_path(mapping, "text") == ["searchable"]
 
 
 async def test_async_batch_store(mocker: MockerFixture) -> None:

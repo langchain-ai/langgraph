@@ -426,11 +426,17 @@ def test_sync_run_start_sends_command():
     with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
         threads = SyncThreadsClient(SyncHttpClient(raw))
         with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
-            result = thread.run.start(input={"x": 1})
+            result = thread.run.start(
+                input={"x": 1},
+                langsmith_tracing={"project_name": "replica-project"},
+            )
 
     assert result == {"run_id": "run-1"}
     assert fake.received_commands[0]["method"] == "run.start"
     assert fake.received_commands[0]["params"]["assistant_id"] == "agent"
+    assert fake.received_commands[0]["params"]["langsmith_tracer"] == {
+        "project_name": "replica-project"
+    }
 
 
 def test_sync_events_iterates_raw_events():
@@ -584,10 +590,10 @@ def test_v3_streaming_sync_surface_smoke():
     assert results["values"] == fake.state["values"]
     messages_result = results["messages"]
     assert isinstance(messages_result, list)
-    assert [str(m.text) for m in messages_result] == ["hi"]  # ty: ignore[unresolved-attribute]
+    assert [str(m.text) for m in messages_result] == ["hi"]
     tools_result = results["tools"]
     assert isinstance(tools_result, list)
-    assert tools_result[0].name == "search"  # ty: ignore[unresolved-attribute]
+    assert tools_result[0].name == "search"
     assert results["progress"] == [{"name": "progress", "step": 1}]
     assert final == {"final": True}
 

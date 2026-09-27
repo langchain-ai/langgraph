@@ -341,9 +341,15 @@ VUpdate = typing.TypeVar("VUpdate", covariant=True)
 VRead = typing.TypeVar("VRead", covariant=True)
 VDelete = typing.TypeVar("VDelete", covariant=True)
 VSearch = typing.TypeVar("VSearch", covariant=True)
+ResourceActionT = typing.TypeVar("ResourceActionT", bound=str)
+
+_ResourceAction = typing.Literal["create", "read", "update", "delete", "search"]
+_ThreadAction = _ResourceAction | typing.Literal["create_run"]
 
 
-class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
+class _ResourceOn(
+    typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch, ResourceActionT]
+):
     """
     Generic base class for resource-specific handlers.
     """
@@ -392,8 +398,8 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
     def __call__(
         self,
         *,
-        resources: str | Sequence[str],
-        actions: str | Sequence[str] | None = None,
+        resources: str | Sequence[str] | None = None,
+        actions: ResourceActionT | Sequence[ResourceActionT] | None = None,
     ) -> Callable[
         [_ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]],
         _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch],
@@ -408,7 +414,7 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
         ) = None,
         *,
         resources: str | Sequence[str] | None = None,
-        actions: str | Sequence[str] | None = None,
+        actions: ResourceActionT | Sequence[ResourceActionT] | None = None,
     ) -> (
         _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]
         | Callable[
@@ -416,24 +422,66 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
             _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch],
         ]
     ):
-        if fn is not None:
-            _validate_handler(fn)
-            return typing.cast(
-                "_ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]",
-                _register_handler(self.auth, self.resource, "*", fn),
-            )
-
         def decorator(
             handler: _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch],
         ) -> _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]:
             _validate_handler(handler)
-            return typing.cast(
-                "_ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]",
-                _register_handler(self.auth, self.resource, "*", handler),
+            if resources is None:
+                resource_list = [self.resource]
+            elif isinstance(resources, str):
+                resource_list = [resources]
+            elif isinstance(resources, Sequence):
+                resource_list = list(resources)
+            else:
+                raise TypeError("resources must be a string or sequence of strings")
+            if resource_list != [self.resource]:
+                raise ValueError(
+                    f"Resource-specific decorator for {self.resource!r} cannot "
+                    f"register handlers for {resource_list!r}. Use @auth.on(...) "
+                    "for other or multiple resources."
+                )
+            if actions is None:
+                action_list = ["*"]
+            elif isinstance(actions, str):
+                action_list = [actions]
+            elif isinstance(actions, Sequence):
+                action_list = list(actions)
+            else:
+                raise TypeError("actions must be a string or sequence of strings")
+            if not action_list:
+                raise ValueError("actions must not be empty")
+            if not all(isinstance(action, str) for action in action_list):
+                raise TypeError("actions must be a string or sequence of strings")
+            valid_actions = {
+                value.action
+                for value in vars(self).values()
+                if isinstance(value, _ResourceActionOn)
+            }
+            invalid_actions = (
+                sorted(set(action_list) - valid_actions) if actions is not None else []
             )
+            if invalid_actions:
+                raise ValueError(
+                    f"Invalid action(s) for {self.resource}: {', '.join(invalid_actions)}"
+                )
+            if len(action_list) != len(set(action_list)):
+                raise ValueError("actions must not contain duplicates")
+            for action in action_list:
+                if (self.resource, action) in self.auth._handlers:
+                    raise ValueError(
+                        f"types.Handler already set for {self.resource}, {action}."
+                    )
+            for action in action_list:
+                _register_handler(self.auth, self.resource, action, handler)
+            return handler
 
-        # Accept keyword-only parameters for future filtering behavior; referenced to satisfy linters.
-        _ = resources, actions
+        if fn is not None:
+            return decorator(
+                typing.cast(
+                    "_ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]",
+                    fn,
+                )
+            )
         return decorator
 
 
@@ -444,6 +492,7 @@ class _AssistantsOn(
         types.AssistantsUpdate,
         types.AssistantsDelete,
         types.AssistantsSearch,
+        _ResourceAction,
     ]
 ):
     value = (
@@ -467,6 +516,7 @@ class _ThreadsOn(
         types.ThreadsUpdate,
         types.ThreadsDelete,
         types.ThreadsSearch,
+        _ThreadAction,
     ]
 ):
     value = (
@@ -502,6 +552,7 @@ class _CronsOn(
         types.CronsUpdate,
         types.CronsDelete,
         types.CronsSearch,
+        _ResourceAction,
     ]
 ):
     value = type[

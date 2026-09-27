@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import weakref
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any, Literal, TypeVar
 
 from langgraph.store.base import (
@@ -132,7 +132,7 @@ class AsyncBatchedBaseStore(BaseStore):
         self,
         namespace: tuple[str, ...],
         key: str,
-        value: dict[str, Any],
+        value: Mapping[str, Any],
         index: Literal[False] | list[str] | None = None,
         *,
         ttl: float | None | NotProvided = NOT_PROVIDED,
@@ -231,7 +231,7 @@ class AsyncBatchedBaseStore(BaseStore):
         self,
         namespace: tuple[str, ...],
         key: str,
-        value: dict[str, Any],
+        value: Mapping[str, Any],
         index: Literal[False] | list[str] | None = None,
         *,
         ttl: float | None | NotProvided = NOT_PROVIDED,

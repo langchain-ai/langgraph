@@ -6,6 +6,7 @@ Type-narrowing is validated via `assert_type` calls in `_check_type_narrowing`.
 
 from __future__ import annotations
 
+import copy
 import operator
 import sys
 from dataclasses import dataclass
@@ -34,8 +35,10 @@ from langgraph.stream import (
     GraphRunStream,
     LifecyclePayload,
     StreamChannel,
+    StreamTransformer,
     SubgraphRunStream,
 )
+from langgraph.stream._types import ProtocolEvent
 from langgraph.types import (
     CheckpointPayload,
     CheckpointStreamPart,
@@ -1199,6 +1202,29 @@ def _check_type_narrowing(part: StreamPart[_StateT, _OutputT]) -> None:
 # type and the always-registered native projections.
 
 
+class _MarkerTransformer(StreamTransformer):
+    """Native transformer contributing a key this module doesn't declare.
+
+    Stands in for any transformer defined outside this package — projections
+    whose names `GraphRunStream` can't enumerate, so they resolve through
+    `__getattr__` instead of a class annotation.
+    """
+
+    _native = True
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
+        self._log: StreamChannel[str] = StreamChannel()
+
+    def init(self) -> dict[str, Any]:
+        return {"marker": self._log}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        if event["method"] == "values":
+            self._log.push("saw_values")
+        return True
+
+
 def _check_stream_events_v3_typing() -> None:
     """Compile-time checks for sync v3 typing — never called at runtime."""
     graph = _make_simple_graph().compile()
@@ -1208,6 +1234,16 @@ def _check_stream_events_v3_typing() -> None:
     assert_type(run.messages, StreamChannel[ChatModelStream])
     assert_type(run.lifecycle, StreamChannel[LifecyclePayload])
     assert_type(run.subgraphs, StreamChannel[SubgraphRunStream])
+    # Opt-in projections from transformers this package ships carry their real
+    # item type even though they are only present once registered.
+    assert_type(run.updates, StreamChannel[dict[str, Any]])
+    assert_type(run.custom, StreamChannel[Any])
+    assert_type(run.checkpoints, StreamChannel[dict[str, Any]])
+    assert_type(run.debug, StreamChannel[dict[str, Any]])
+    assert_type(run.tasks, StreamChannel[dict[str, Any]])
+    # Projections this module can't enumerate resolve through `__getattr__`
+    # as `StreamChannel[Any]` rather than failing with attr-defined.
+    assert_type(run.marker, StreamChannel[Any])
 
 
 async def _check_astream_events_v3_typing() -> None:
@@ -1219,3 +1255,66 @@ async def _check_astream_events_v3_typing() -> None:
     assert_type(run.messages, StreamChannel[AsyncChatModelStream])
     assert_type(run.lifecycle, StreamChannel[LifecyclePayload])
     assert_type(run.subgraphs, StreamChannel[AsyncSubgraphRunStream])
+    assert_type(run.updates, StreamChannel[dict[str, Any]])
+    assert_type(run.custom, StreamChannel[Any])
+    assert_type(run.checkpoints, StreamChannel[dict[str, Any]])
+    assert_type(run.debug, StreamChannel[dict[str, Any]])
+    assert_type(run.tasks, StreamChannel[dict[str, Any]])
+    assert_type(run.marker, StreamChannel[Any])
+
+
+def test_undeclared_native_projection_is_attached() -> None:
+    """A native projection this module doesn't declare still works at runtime.
+
+    `__getattr__` is a type-checker fallback only — it must not shadow the
+    `setattr` loop that attaches registered native projections.
+    """
+    graph = _make_simple_graph().compile()
+    run = graph.stream_events(
+        _SIMPLE_INPUT, version="v3", transformers=[_MarkerTransformer]
+    )
+
+    marker_iter = iter(run.marker)
+    assert run.output is not None
+    assert run.marker is run.extensions["marker"]
+    assert "saw_values" in list(marker_iter)
+
+
+def test_unregistered_projection_raises_attribute_error() -> None:
+    """An unregistered projection name still fails at runtime.
+
+    The `__getattr__` fallback exists to satisfy type checkers; it must not
+    make unknown names resolve to anything. The message lists what *is*
+    registered so a typo is diagnosable from the traceback alone.
+    """
+    graph = _make_simple_graph().compile()
+    run = graph.stream_events(_SIMPLE_INPUT, version="v3")
+
+    # `marker` type-checks via `__getattr__` but was never registered here.
+    with pytest.raises(AttributeError) as exc_info:
+        run.marker
+
+    message = str(exc_info.value)
+    assert "marker" in message
+    # The always-registered natives are listed as the alternatives.
+    assert "messages" in message
+
+    # Registered projections still resolve, and the run is unaffected.
+    assert isinstance(run.messages, StreamChannel)
+    assert run.output is not None
+
+
+def test_getattr_fallback_does_not_recurse_before_init() -> None:
+    """`__getattr__` reads the mux from `__dict__`, so it is safe pre-init.
+
+    `self._mux` would re-enter `__getattr__` and overflow the stack when the
+    attribute is missing, which is reachable via `hasattr` / `copy` / pickle
+    probing on a partially constructed instance.
+    """
+    bare = GraphRunStream.__new__(GraphRunStream)
+
+    with pytest.raises(AttributeError, match="anything"):
+        bare.anything
+
+    assert hasattr(bare, "anything") is False
+    assert copy.copy(bare) is not None

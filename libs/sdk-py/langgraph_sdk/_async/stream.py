@@ -24,7 +24,7 @@ from langchain_core.language_models.chat_model_stream import AsyncChatModelStrea
 from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk._async.http import HttpClient
-from langgraph_sdk.schema import QueryParamTypes
+from langgraph_sdk.schema import LangSmithTracing, QueryParamTypes
 from langgraph_sdk.stream.controller import _SeenEventIds
 from langgraph_sdk.stream.decoders import (
     DataDecoder,
@@ -172,6 +172,7 @@ class RunModule:
         input: Any = None,
         config: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
+        langsmith_tracing: LangSmithTracing | None = None,
     ) -> dict[str, Any]:
         """Send `run.start` to the server. Returns the result (`{"run_id": ...}`)."""
         params: dict[str, Any] = {"assistant_id": self._owner.assistant_id}
@@ -181,6 +182,8 @@ class RunModule:
             params["config"] = config
         if metadata is not None:
             params["metadata"] = metadata
+        if langsmith_tracing is not None:
+            params["langsmith_tracer"] = langsmith_tracing
         loop = asyncio.get_running_loop()
         gate: asyncio.Future[None] = loop.create_future()
         self._owner._run_start_ready = gate

@@ -12,5 +12,5 @@ def disable_analytics_env() -> None:
     if "LANGGRAPH_CLI_NO_ANALYTICS" in os.environ:
         print("⚠️ LANGGRAPH_CLI_NO_ANALYTICS is set. Overriding it for the test.")
 
-    with patch.dict(os.environ, {"LANGGRAPH_CLI_NO_ANALYTICS": "0"}):
+    with patch.dict(os.environ, {"LANGGRAPH_CLI_NO_ANALYTICS": "1"}):
         yield

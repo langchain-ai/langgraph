@@ -320,6 +320,31 @@ def test_top_level_help_truncates_command_descriptions_to_single_line() -> None:
     assert "[Beta] List LangSmith Deployments." in deploy_list_line
 
 
+def test_deploy_missing_config_shows_actionable_error(tmp_path, monkeypatch) -> None:
+    runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(cli, ["deploy"])
+
+    assert result.exit_code == 1
+    assert "We couldn't find a langgraph.json file." in result.output
+    assert "Run `langgraph deploy` from the root" in result.output
+    assert "https://docs.langchain.com/langsmith/deployment-quickstart" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_deploy_missing_config_emits_json_error(tmp_path, monkeypatch) -> None:
+    runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(cli, ["deploy", "--json"])
+
+    assert result.exit_code == 1
+    events = [json.loads(line) for line in result.output.splitlines()]
+    assert events[-1]["event"] == "error"
+    assert "We couldn't find a langgraph.json file." in events[-1]["message"]
+
+
 def test_dev_command_requires_ssl_certfile_and_keyfile_together(tmp_path) -> None:
     config_path = tmp_path / "langgraph.json"
     config_path.write_text(
@@ -357,20 +382,18 @@ def test_deploy_list_command(monkeypatch) -> None:
 
         def list_deployments(self, name_contains: str = ""):
             captured["name_contains"] = name_contains
-            return {
-                "resources": [
-                    {
-                        "id": "dep-123",
-                        "name": "alpha",
-                        "source_config": {"custom_url": "https://alpha.example.com"},
-                    },
-                    {
-                        "id": "dep-456",
-                        "name": "beta",
-                        "source_config": {"custom_url": "https://beta.example.com"},
-                    },
-                ]
-            }
+            return [
+                {
+                    "id": "dep-123",
+                    "name": "alpha",
+                    "source_config": {"custom_url": "https://alpha.example.com"},
+                },
+                {
+                    "id": "dep-456",
+                    "name": "beta",
+                    "source_config": {"custom_url": "https://beta.example.com"},
+                },
+            ]
 
     monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
@@ -410,7 +433,7 @@ def test_deploy_list_command_no_results(monkeypatch) -> None:
             pass
 
         def list_deployments(self, name_contains: str = ""):
-            return {"resources": []}
+            return []
 
     monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
@@ -443,20 +466,18 @@ def test_deploy_revisions_list_command(monkeypatch) -> None:
         def list_revisions(self, deployment_id: str, limit: int = 1):
             captured["deployment_id"] = deployment_id
             captured["limit"] = str(limit)
-            return {
-                "resources": [
-                    {
-                        "id": "rev-123",
-                        "status": "CREATING",
-                        "created_at": "2023-11-07T05:31:56Z",
-                    },
-                    {
-                        "id": "rev-456",
-                        "status": "DEPLOYED",
-                        "created_at": "2023-11-08T10:00:00Z",
-                    },
-                ]
-            }
+            return [
+                {
+                    "id": "rev-123",
+                    "status": "CREATING",
+                    "created_at": "2023-11-07T05:31:56Z",
+                },
+                {
+                    "id": "rev-456",
+                    "status": "DEPLOYED",
+                    "created_at": "2023-11-08T10:00:00Z",
+                },
+            ]
 
     monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
@@ -497,7 +518,7 @@ def test_deploy_revisions_list_command_no_results(monkeypatch) -> None:
             pass
 
         def list_revisions(self, deployment_id: str, limit: int = 1):
-            return {"resources": []}
+            return []
 
     monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
@@ -530,7 +551,7 @@ def test_deploy_revisions_list_command_with_explicit_limit(monkeypatch) -> None:
         def list_revisions(self, deployment_id: str, limit: int = 1):
             captured["deployment_id"] = deployment_id
             captured["limit"] = str(limit)
-            return {"resources": []}
+            return []
 
     monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 

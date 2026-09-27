@@ -12,7 +12,7 @@ Core types:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import (
     Any,
@@ -473,10 +473,10 @@ class PutOp(NamedTuple):
         the full path would effectively be `"documents/user123/report1"`
     """
 
-    value: dict[str, Any] | None
+    value: Mapping[str, Any] | None
     """The data to store, or `None` to mark the item for deletion.
 
-    The value must be a dictionary with string keys and JSON-serializable values.
+    The value must be a mapping with string keys and JSON-serializable values.
     Setting this to `None` signals that the item should be deleted.
 
     Example:
@@ -857,7 +857,7 @@ class BaseStore(ABC):
         self,
         namespace: tuple[str, ...],
         key: str,
-        value: dict[str, Any],
+        value: Mapping[str, Any],
         index: Literal[False] | list[str] | None = None,
         *,
         ttl: float | None | NotProvided = NOT_PROVIDED,
@@ -869,7 +869,7 @@ class BaseStore(ABC):
                 Example: `("documents", "user123")`
             key: Unique identifier within the namespace. Together with namespace forms
                 the complete path to the item.
-            value: Dictionary containing the item's data. Must contain string keys
+            value: Mapping containing the item's data. Must contain string keys
                 and JSON-serializable values.
             index: Controls how the item's fields are indexed for search:
 
@@ -1110,7 +1110,7 @@ class BaseStore(ABC):
         self,
         namespace: tuple[str, ...],
         key: str,
-        value: dict[str, Any],
+        value: Mapping[str, Any],
         index: Literal[False] | list[str] | None = None,
         *,
         ttl: float | None | NotProvided = NOT_PROVIDED,
@@ -1122,7 +1122,7 @@ class BaseStore(ABC):
                 Example: `("documents", "user123")`
             key: Unique identifier within the namespace. Together with namespace forms
                 the complete path to the item.
-            value: Dictionary containing the item's data. Must contain string keys
+            value: Mapping containing the item's data. Must contain string keys
                 and JSON-serializable values.
             index: Controls how the item's fields are indexed for search:
 

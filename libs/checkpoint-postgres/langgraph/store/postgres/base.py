@@ -7,7 +7,7 @@ import logging
 import re
 import threading
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from typing import (
@@ -354,7 +354,7 @@ class BasePostgresStore(Generic[C]):
                     (
                         _namespace_to_text(op.namespace),
                         op.key,
-                        Jsonb(cast(dict, op.value)),
+                        Jsonb(dict(cast(Mapping[str, Any], op.value))),
                     )
                 )
                 if op.ttl is not None:
