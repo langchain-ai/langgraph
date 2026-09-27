@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import sqlite3
+import sys
 import threading
 from collections.abc import Mapping, Sequence
 
@@ -43,32 +44,42 @@ class SqliteCache(BaseCache[ValueT]):
         )
         self._conn.commit()
 
+    def _batch_size(self, parameters_per_item: int) -> int:
+        if sys.version_info >= (3, 11):
+            limit = self._conn.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER)
+        else:
+            limit = 999
+        return max(1, limit // parameters_per_item)
+
     def get(self, keys: Sequence[FullKey]) -> dict[FullKey, ValueT]:
         """Get the cached values for the given keys."""
         with self._lock, self._conn:
             now = datetime.datetime.now(datetime.timezone.utc).timestamp()
             if not keys:
                 return {}
-            placeholders = ",".join("(?, ?)" for _ in keys)
-            params: list[str] = []
-            for ns_tuple, key in keys:
-                params.extend((",".join(ns_tuple), key))
-            cursor = self._conn.execute(
-                f"SELECT ns, key, expiry, encoding, val FROM cache WHERE (ns, key) IN ({placeholders})",
-                tuple(params),
-            )
             values: dict[FullKey, ValueT] = {}
-            rows = cursor.fetchall()
-            for ns, key, expiry, encoding, raw in rows:
-                if expiry is not None and now > expiry:
-                    # purge expired entry
-                    self._conn.execute(
-                        "DELETE FROM cache WHERE (ns, key) = (?, ?)", (ns, key)
-                    )
-                    continue
-                values[(tuple(ns.split(",")), key)] = self.serde.loads_typed(
-                    (encoding, raw)
+            batch_size = self._batch_size(2)
+            for start in range(0, len(keys), batch_size):
+                batch = keys[start : start + batch_size]
+                placeholders = ",".join("(?, ?)" for _ in batch)
+                params: list[str] = []
+                for ns_tuple, key in batch:
+                    params.extend((",".join(ns_tuple), key))
+                cursor = self._conn.execute(
+                    f"SELECT ns, key, expiry, encoding, val FROM cache WHERE (ns, key) IN ({placeholders})",
+                    tuple(params),
                 )
+                rows = cursor.fetchall()
+                for ns, key, expiry, encoding, raw in rows:
+                    if expiry is not None and now > expiry:
+                        # purge expired entry
+                        self._conn.execute(
+                            "DELETE FROM cache WHERE (ns, key) = (?, ?)", (ns, key)
+                        )
+                        continue
+                    values[(tuple(ns.split(",")), key)] = self.serde.loads_typed(
+                        (encoding, raw)
+                    )
             return values
 
     async def aget(self, keys: Sequence[FullKey]) -> dict[FullKey, ValueT]:
@@ -102,11 +113,14 @@ class SqliteCache(BaseCache[ValueT]):
             if namespaces is None:
                 self._conn.execute("DELETE FROM cache")
             else:
-                placeholders = ",".join("?" for _ in namespaces)
-                self._conn.execute(
-                    f"DELETE FROM cache WHERE (ns) IN ({placeholders})",
-                    tuple(",".join(key) for key in namespaces),
-                )
+                batch_size = self._batch_size(1)
+                for start in range(0, len(namespaces), batch_size):
+                    batch = namespaces[start : start + batch_size]
+                    placeholders = ",".join("?" for _ in batch)
+                    self._conn.execute(
+                        f"DELETE FROM cache WHERE (ns) IN ({placeholders})",
+                        tuple(",".join(key) for key in batch),
+                    )
 
     async def aclear(self, namespaces: Sequence[Namespace] | None = None) -> None:
         """Asynchronously delete the cached values for the given namespaces.
