@@ -1036,7 +1036,12 @@ class Overwrite:
     Receiving multiple `Overwrite` values for the same channel in a single super-step
     will raise an `InvalidUpdateError`.
 
-    !!! example
+    An `Overwrite` in a super-step discards all other writes to that channel in the
+    same super-step: regular updates written before the `Overwrite` are replaced,
+    and regular updates written after it are ignored. The channel ends the super-step
+    holding exactly the wrapped `Overwrite` value.
+
+    !!! example "Sequential updates"
 
         ```python
         from typing import Annotated
@@ -1064,6 +1069,39 @@ class Overwrite:
 
         # Without Overwrite in node_b, messages would be ["START", "a", "b"]
         # With Overwrite, messages is just ["b"]
+        result = graph.invoke({"messages": ["START"]})
+        assert result == {"messages": ["b"]}
+        ```
+
+    !!! example "Parallel updates in the same super-step"
+
+        ```python
+        from typing import Annotated
+        import operator
+        from langgraph.graph import StateGraph, START
+        from langgraph.types import Overwrite
+
+        class State(TypedDict):
+            messages: Annotated[list, operator.add]
+
+        def node_a(state: State):
+            # Normal update: uses the reducer (operator.add)
+            return {"messages": ["a"]}
+
+        def node_b(state: State):
+            # Overwrite: bypasses the reducer and replaces the entire value
+            return {"messages": Overwrite(value=["b"])}
+
+        builder = StateGraph(State)
+        builder.add_node("node_a", node_a)
+        builder.add_node("node_b", node_b)
+        # Both nodes run in the same super-step
+        builder.add_edge(START, "node_a")
+        builder.add_edge(START, "node_b")
+
+        graph = builder.compile()
+        # The regular update ["a"] is discarded: an Overwrite discards all other
+        # writes to the channel in the same super-step
         result = graph.invoke({"messages": ["START"]})
         assert result == {"messages": ["b"]}
         ```
