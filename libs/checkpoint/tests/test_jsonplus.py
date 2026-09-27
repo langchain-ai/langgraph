@@ -9,10 +9,12 @@ import sys
 import tempfile
 import uuid
 from collections import deque
+from collections.abc import Callable
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from enum import Enum
 from ipaddress import IPv4Address
+from typing import Generic, TypeVar
 from zoneinfo import ZoneInfo
 
 import dataclasses_json
@@ -34,6 +36,7 @@ from langgraph.checkpoint.serde.event_hooks import (
 )
 from langgraph.checkpoint.serde.jsonplus import (
     EXT_METHOD_SINGLE_ARG,
+    EXT_PYDANTIC_V2,
     InvalidModuleError,
     JsonPlusSerializer,
     _msgpack_enc,
@@ -56,6 +59,24 @@ class MyPydantic(BaseModel):
 
 class AnotherPydantic(BaseModel):
     foo: str
+
+
+TInner = TypeVar("TInner", bound=BaseModel)
+TValue = TypeVar("TValue")
+
+
+class GenericPydantic(BaseModel, Generic[TInner]):
+    foo: str
+    bar: int
+    inner: TInner
+
+
+class GenericScalar(BaseModel, Generic[TValue]):
+    value: TValue
+
+
+class GenericWrapper(BaseModel, Generic[TInner]):
+    wrapped: TInner
 
 
 class InnerPydanticV1(BaseModelV1):
@@ -1230,3 +1251,158 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     # No blocking should occur - inner is serialized as dict, not ext
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+# Parametrizing at module level makes pydantic register ``GenericPydantic[InnerPydantic]``
+# as a module attribute, which is the one case the old ``getattr`` lookup handled.
+GENERIC_SIMPLE = GenericPydantic[InnerPydantic](
+    foo="foo", bar=1, inner=InnerPydantic(hello="hello")
+)
+GENERIC_NESTED = GenericPydantic[GenericPydantic[InnerPydantic]](
+    foo="foo",
+    bar=1,
+    inner=GenericPydantic[InnerPydantic](
+        foo="inner-foo", bar=2, inner=InnerPydantic(hello="hello")
+    ),
+)
+GENERIC_SCALAR = GenericScalar[int](value=42)
+# inner and outer are different generic classes
+GENERIC_MIXED_NESTED = GenericWrapper[GenericPydantic[InnerPydantic]](
+    wrapped=GenericPydantic[InnerPydantic](
+        foo="foo", bar=1, inner=InnerPydantic(hello="hello")
+    )
+)
+
+
+def _generic_parametrized_in_function() -> BaseModel:
+    """The failing case from #6102: the parametrized class isn't a module attribute."""
+    return GenericPydantic[AnotherPydantic](
+        foo="foo", bar=1, inner=AnotherPydantic(foo="x")
+    )
+
+
+@pytest.mark.parametrize(
+    "make_instance",
+    [
+        lambda: GENERIC_SIMPLE,
+        lambda: GENERIC_NESTED,
+        lambda: GENERIC_MIXED_NESTED,
+        lambda: GENERIC_SCALAR,
+        _generic_parametrized_in_function,
+    ],
+    ids=["simple", "nested", "mixed-nested", "builtin-arg", "parametrized-in-function"],
+)
+def test_serde_jsonplus_pydantic_generic_roundtrip(make_instance: Callable) -> None:
+    """Parametrized generics come back as the exact parametrized type."""
+    instance = make_instance()
+    serde = JsonPlusSerializer()
+    dumped = serde.dumps_typed(instance)
+    assert dumped[0] == "msgpack"
+
+    result = serde.loads_typed(dumped)
+    assert result == instance
+    assert type(result) is type(instance)
+
+    # json mode is unaffected and keeps returning the plain dict
+    json_serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+    assert json_serde.loads_typed(dumped) == instance.model_dump()
+
+
+@pytest.mark.parametrize(
+    ("instance", "allowed", "expect_model"),
+    [
+        # origin and every type arg allowed -> real model
+        (GENERIC_SIMPLE, [GenericPydantic, InnerPydantic], True),
+        (GENERIC_NESTED, [GenericPydantic, InnerPydantic], True),
+        (GENERIC_MIXED_NESTED, [GenericWrapper, GenericPydantic, InnerPydantic], True),
+        # a type arg is only used to parametrize the origin; builtins need no entry
+        (GENERIC_SCALAR, [GenericScalar], True),
+        # origin allowed but a type arg is blocked -> dict
+        (GENERIC_SIMPLE, [GenericPydantic], False),
+        (GENERIC_NESTED, [GenericPydantic], False),
+        # the innermost class of a mixed nesting is blocked -> dict
+        (GENERIC_MIXED_NESTED, [GenericWrapper, GenericPydantic], False),
+        # type arg allowed but origin blocked -> dict
+        (GENERIC_SIMPLE, [InnerPydantic], False),
+        # the mangled parametrized name is not a valid allowlist entry
+        (GENERIC_SIMPLE, [GenericPydantic[InnerPydantic]], False),
+        # nothing allowed -> dict
+        (GENERIC_SIMPLE, None, False),
+    ],
+    ids=[
+        "all-allowed",
+        "nested-all-allowed",
+        "mixed-nested-all-allowed",
+        "builtin-arg-allowed",
+        "arg-blocked",
+        "nested-arg-blocked",
+        "mixed-nested-inner-blocked",
+        "origin-blocked",
+        "mangled-name-not-enough",
+        "none-allowed",
+    ],
+)
+def test_serde_jsonplus_pydantic_generic_allowlist(
+    instance: BaseModel,
+    allowed: AllowedMsgpackModules | None,
+    expect_model: bool,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Strict mode checks the origin class and every type argument."""
+    serde = JsonPlusSerializer(allowed_msgpack_modules=allowed)
+
+    caplog.clear()
+    result = serde.loads_typed(serde.dumps_typed(instance))
+
+    if expect_model:
+        assert result == instance
+        assert type(result) is type(instance)
+        assert "blocked" not in caplog.text.lower()
+    else:
+        assert result == instance.model_dump()
+        assert "blocked" in caplog.text.lower()
+
+
+@pytest.mark.parametrize(
+    ("make_instance", "expect_model"),
+    [
+        # module attribute exists -> old lookup succeeded and still does
+        (lambda: GENERIC_SIMPLE, True),
+        # not a module attribute -> old lookup fell back to dict and still does
+        (_generic_parametrized_in_function, False),
+    ],
+    ids=["module-level", "parametrized-in-function"],
+)
+def test_serde_jsonplus_pydantic_generic_legacy_payload(
+    make_instance: Callable, expect_model: bool
+) -> None:
+    """Payloads written before generic support keep loading as they did."""
+    instance = make_instance()
+    # module, name, kwargs, method -- no generic info, mangled name
+    legacy = ormsgpack.packb(
+        ormsgpack.Ext(
+            EXT_PYDANTIC_V2,
+            _msgpack_enc(
+                (
+                    instance.__class__.__module__,
+                    instance.__class__.__name__,
+                    instance.model_dump(),
+                    "model_validate_json",
+                )
+            ),
+        )
+    )
+    assert "[" in instance.__class__.__name__
+
+    serde = JsonPlusSerializer()
+    result = serde.loads_typed(("msgpack", legacy))
+    assert result == (instance if expect_model else instance.model_dump())
+
+
+def test_serde_jsonplus_pydantic_generic_non_class_arg() -> None:
+    """Type args that aren't classes fall back to the pre-existing behaviour."""
+    instance = GenericScalar[list[int]](value=[1, 2, 3])
+
+    serde = JsonPlusSerializer()
+    dumped = serde.dumps_typed(instance)  # must not raise
+    assert serde.loads_typed(dumped) == instance.model_dump()

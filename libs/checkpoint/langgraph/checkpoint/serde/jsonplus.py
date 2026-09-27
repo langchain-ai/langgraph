@@ -11,7 +11,7 @@ import pickle
 import re
 import sys
 from collections import deque
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
 from inspect import isclass
@@ -302,21 +302,108 @@ EXT_NUMPY_ARRAY = 6
 EXT_DELTA_SNAPSHOT = 7
 
 
+# Builtin scalar/container types that are harmless as *type arguments* of a
+# parametrized pydantic generic (e.g. ``Box[int]``). They are only ever used to
+# parametrize an already-allowed origin class, never constructed from payload
+# data, so they don't need an explicit ``allowed_msgpack_modules`` entry.
+_SAFE_GENERIC_TYPE_ARGS: frozenset[tuple[str, str]] = frozenset(
+    ("builtins", name)
+    for name in (
+        "bool",
+        "bytes",
+        "dict",
+        "float",
+        "frozenset",
+        "int",
+        "list",
+        "set",
+        "str",
+        "tuple",
+    )
+)
+
+
+def _try_get_pydantic_v2_generic_type_info(
+    pydantic_type: Any,
+) -> tuple[str, str, tuple[Any, ...]] | None:
+    """Try to describe a parametrized pydantic v2 generic as importable names.
+
+    For ``Box[Inner]`` this returns ``(origin_module, origin_name, type_args)``
+    where each type arg is a ``(module, name)`` pair for a plain class, or a
+    nested 3-tuple for a nested generic such as ``Wrap[Box[Inner]]``.
+
+    Returns ``None`` when no usable type info can be found: ``pydantic_type``
+    is not a parametrized generic, or one of its type args is not a class
+    (``Box[list[Inner]]``, ``Box[Inner | None]``). The caller then keeps the
+    plain ``(module, name)`` encoding, matching the pre-existing behaviour.
+    """
+    generics = getattr(pydantic_type, "__pydantic_generic_metadata__", None)
+    if not generics:
+        return None
+    origin_class = generics.get("origin")
+    type_args = generics.get("args") or ()
+    if origin_class is None or not type_args:
+        return None
+    encoded_args: list[Any] = []
+    for arg in type_args:
+        nested = _try_get_pydantic_v2_generic_type_info(arg)
+        if nested is not None:
+            encoded_args.append(nested)
+        elif isclass(arg):
+            encoded_args.append((arg.__module__, arg.__name__))
+        else:
+            return None
+    return (origin_class.__module__, origin_class.__name__, tuple(encoded_args))
+
+
+def _iter_pydantic_v2_generic_type_keys(type_info: Any) -> Iterator[tuple[str, str]]:
+    """Yield every ``(module, name)`` referenced by a generic type description.
+
+    The origin class comes first, then every type arg, recursively. Each of
+    them must pass the allowlist before the type is rebuilt.
+    """
+    module_name, origin_cls_name, type_args = type_info
+    yield (module_name, origin_cls_name)
+    for arg_info in type_args:
+        if len(arg_info) == 3:
+            yield from _iter_pydantic_v2_generic_type_keys(arg_info)
+        else:
+            yield (arg_info[0], arg_info[1])
+
+
+def _build_generic_pydantic_v2_type(type_info: Any) -> Any:
+    """Rebuild ``Origin[Arg, ...]`` from the description written by the encoder."""
+    module_name, origin_cls_name, type_args = type_info
+    origin_cls = getattr(importlib.import_module(module_name), origin_cls_name)
+    generic_type_args = tuple(
+        _build_generic_pydantic_v2_type(arg_info)
+        if len(arg_info) == 3
+        else getattr(importlib.import_module(arg_info[0]), arg_info[1])
+        for arg_info in type_args
+    )
+    # ``Origin[A]`` and ``Origin[A, B]`` both end up in ``__class_getitem__``,
+    # which normalizes a non-tuple argument to a 1-tuple, so always pass a tuple.
+    return origin_cls.__class_getitem__(generic_type_args)
+
+
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
     if isinstance(obj, _DeltaSnapshot):
         return ormsgpack.Ext(EXT_DELTA_SNAPSHOT, _msgpack_enc(obj.value))
     elif hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
-        return ormsgpack.Ext(
-            EXT_PYDANTIC_V2,
-            _msgpack_enc(
-                (
-                    obj.__class__.__module__,
-                    obj.__class__.__name__,
-                    obj.model_dump(),
-                    "model_validate_json",
-                ),
-            ),
+        # module, name, kwargs, method[, generic_type_info]
+        # ``name`` is kept even for parametrized generics (where it is the
+        # unimportable ``"Box[Inner]"``) so that older readers keep falling
+        # back to the kwargs dict exactly as they do today.
+        payload: tuple[Any, ...] = (
+            obj.__class__.__module__,
+            obj.__class__.__name__,
+            obj.model_dump(),
+            "model_validate_json",
         )
+        generic_type_info = _try_get_pydantic_v2_generic_type_info(obj.__class__)
+        if generic_type_info is not None:
+            payload = (*payload, generic_type_info)
+        return ormsgpack.Ext(EXT_PYDANTIC_V2, _msgpack_enc(payload))
     elif hasattr(obj, "get_secret_value") and callable(obj.get_secret_value):
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
@@ -608,6 +695,13 @@ def _create_msgpack_ext_hook(
         )
         return False
 
+    def _check_allowed_generic(type_info: Any) -> bool:
+        """Check the origin class and every type arg of a parametrized generic."""
+        return all(
+            key in _SAFE_GENERIC_TYPE_ARGS or _check_allowed(*key)
+            for key in _iter_pydantic_v2_generic_type_keys(type_info)
+        )
+
     def _check_allowed_method(module: str, name: str, method: str) -> bool:
         """Check if a method invocation is allowed."""
         key = (module, name, method)
@@ -713,10 +807,19 @@ def _create_msgpack_ext_hook(
                 tup = ormsgpack.unpackb(
                     data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
                 )
-                if not _check_allowed(tup[0], tup[1]):
-                    return tup[2]
-                # module, name, kwargs, method
-                cls = getattr(importlib.import_module(tup[0]), tup[1])
+                # module, name, kwargs, method[, generic_type_info]
+                generic_type_info = tup[4] if len(tup) > 4 else None
+                if generic_type_info:
+                    # A parametrized generic: the origin class and every type
+                    # argument must each pass the allowlist, so a generic can't
+                    # smuggle a blocked class in as a type parameter.
+                    if not _check_allowed_generic(generic_type_info):
+                        return tup[2]
+                    cls = _build_generic_pydantic_v2_type(generic_type_info)
+                else:
+                    if not _check_allowed(tup[0], tup[1]):
+                        return tup[2]
+                    cls = getattr(importlib.import_module(tup[0]), tup[1])
                 try:
                     return cls(**tup[2])
                 except Exception:
