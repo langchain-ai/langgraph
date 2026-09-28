@@ -41,6 +41,7 @@ from langchain_core.runnables.config import (
     var_child_runnable_config,
 )
 from langchain_core.runnables.utils import Input, Output
+from langchain_core.tracers.base import BaseTracer
 from langchain_core.tracers.langchain import LangChainTracer
 from langgraph.store.base import BaseStore
 
@@ -84,6 +85,83 @@ def _trace_payload(value: Any, transform: Callable[[Any], Any] | None) -> Any:
         )
         return value
 
+
+
+def _set_tracer_run_field(run_manager: Any, field: str, value: Any) -> None:
+    """Overwrite ``inputs`` / ``outputs`` on any ``BaseTracer`` run for this manager.
+
+    Used so ``TracePolicy`` can scrub what tracers record without rewriting the
+    payload that LangGraph's own callback handlers (e.g. ``StreamMessagesHandler``)
+    see on ``on_chain_start`` / ``on_chain_end``.
+    """
+    run_id = str(run_manager.run_id)
+    for handler in run_manager.handlers:
+        if isinstance(handler, BaseTracer):
+            run = handler.run_map.get(run_id)
+            if run is not None:
+                setattr(run, field, value)
+
+
+def _chain_end_with_trace_policy(
+    run_manager: Any,
+    real_output: Any,
+    transform: Callable[[Any], Any] | None,
+) -> Any:
+    """Finish a chain run, scrubbing tracer payloads without starving stream handlers.
+
+    Non-tracer handlers (message streaming, ``astream_events``, etc.) receive the
+    real node output. ``BaseTracer`` handlers receive the ``TracePolicy``-transformed
+    value so LangSmith / FakeTracer still record the scrubbed payload.
+    """
+    if transform is None:
+        return run_manager.on_chain_end(real_output)
+
+    scrubbed = _trace_payload(real_output, transform)
+    tracers = [h for h in run_manager.handlers if isinstance(h, BaseTracer)]
+    others = [h for h in run_manager.handlers if not isinstance(h, BaseTracer)]
+    if not tracers:
+        return run_manager.on_chain_end(real_output)
+    if not others:
+        return run_manager.on_chain_end(scrubbed)
+
+    original = run_manager.handlers
+    try:
+        run_manager.handlers = others
+        first = run_manager.on_chain_end(real_output)
+        run_manager.handlers = tracers
+        second = run_manager.on_chain_end(scrubbed)
+        return second if second is not None else first
+    finally:
+        run_manager.handlers = original
+
+
+async def _achain_end_with_trace_policy(
+    run_manager: Any,
+    real_output: Any,
+    transform: Callable[[Any], Any] | None,
+) -> None:
+    if transform is None:
+        await run_manager.on_chain_end(real_output)
+        return
+
+    scrubbed = _trace_payload(real_output, transform)
+    tracers = [h for h in run_manager.handlers if isinstance(h, BaseTracer)]
+    others = [h for h in run_manager.handlers if not isinstance(h, BaseTracer)]
+    if not tracers:
+        await run_manager.on_chain_end(real_output)
+        return
+    if not others:
+        await run_manager.on_chain_end(scrubbed)
+        return
+
+    original = run_manager.handlers
+    try:
+        run_manager.handlers = others
+        await run_manager.on_chain_end(real_output)
+        run_manager.handlers = tracers
+        await run_manager.on_chain_end(scrubbed)
+    finally:
+        run_manager.handlers = original
 
 def _set_config_context(
     config: RunnableConfig, run: Any = None
@@ -681,10 +759,14 @@ class RunnableSeq(Runnable):
         # start the root run
         run_manager = callback_manager.on_chain_start(
             None,
-            _trace_payload(input, self.trace_inputs),
+            input,
             name=config.get("run_name") or self.get_name(),
             run_id=config.pop("run_id", None),
         )
+        if self.trace_inputs is not None:
+            _set_tracer_run_field(
+                run_manager, "inputs", _trace_payload(input, self.trace_inputs)
+            )
         # invoke all steps in sequence
         try:
             for i, step in enumerate(self.steps):
@@ -712,7 +794,7 @@ class RunnableSeq(Runnable):
             run_manager.on_chain_error(e)
             raise
         else:
-            run_manager.on_chain_end(_trace_payload(input, self.trace_outputs))
+            _chain_end_with_trace_policy(run_manager, input, self.trace_outputs)
             return input
 
     async def ainvoke(
@@ -728,10 +810,14 @@ class RunnableSeq(Runnable):
         # start the root run
         run_manager = await callback_manager.on_chain_start(
             None,
-            _trace_payload(input, self.trace_inputs),
+            input,
             name=config.get("run_name") or self.get_name(),
             run_id=config.pop("run_id", None),
         )
+        if self.trace_inputs is not None:
+            _set_tracer_run_field(
+                run_manager, "inputs", _trace_payload(input, self.trace_inputs)
+            )
 
         # invoke all steps in sequence
         try:
@@ -765,7 +851,9 @@ class RunnableSeq(Runnable):
             await run_manager.on_chain_error(e)
             raise
         else:
-            await run_manager.on_chain_end(_trace_payload(input, self.trace_outputs))
+            await _achain_end_with_trace_policy(
+                run_manager, input, self.trace_outputs
+            )
             return input
 
     def stream(
@@ -781,10 +869,14 @@ class RunnableSeq(Runnable):
         # start the root run
         run_manager = callback_manager.on_chain_start(
             None,
-            _trace_payload(input, self.trace_inputs),
+            input,
             name=config.get("run_name") or self.get_name(),
             run_id=config.pop("run_id", None),
         )
+        if self.trace_inputs is not None:
+            _set_tracer_run_field(
+                run_manager, "inputs", _trace_payload(input, self.trace_inputs)
+            )
         # get the run object
         for h in run_manager.handlers:
             if isinstance(h, LangChainTracer):
@@ -826,7 +918,9 @@ class RunnableSeq(Runnable):
                 run_manager.on_chain_error(e)
                 raise
             else:
-                run_manager.on_chain_end(_trace_payload(output, self.trace_outputs))
+                _chain_end_with_trace_policy(
+                    run_manager, output, self.trace_outputs
+                )
 
     async def astream(
         self,
@@ -841,10 +935,14 @@ class RunnableSeq(Runnable):
         # start the root run
         run_manager = await callback_manager.on_chain_start(
             None,
-            _trace_payload(input, self.trace_inputs),
+            input,
             name=config.get("run_name") or self.get_name(),
             run_id=config.pop("run_id", None),
         )
+        if self.trace_inputs is not None:
+            _set_tracer_run_field(
+                run_manager, "inputs", _trace_payload(input, self.trace_inputs)
+            )
         # stream the last steps
         # transform the input stream of each step with the next
         # steps that don't natively support transforming an input stream will
@@ -896,8 +994,8 @@ class RunnableSeq(Runnable):
                     await run_manager.on_chain_error(e)
                     raise
                 else:
-                    await run_manager.on_chain_end(
-                        _trace_payload(output, self.trace_outputs)
+                    await _achain_end_with_trace_policy(
+                        run_manager, output, self.trace_outputs
                     )
         else:
             try:
@@ -928,8 +1026,8 @@ class RunnableSeq(Runnable):
                 await run_manager.on_chain_error(e)
                 raise
             else:
-                await run_manager.on_chain_end(
-                    _trace_payload(output, self.trace_outputs)
+                await _achain_end_with_trace_policy(
+                    run_manager, output, self.trace_outputs
                 )
 
 

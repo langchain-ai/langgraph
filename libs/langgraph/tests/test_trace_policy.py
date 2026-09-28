@@ -147,3 +147,77 @@ async def test_trace_policy_transforms_recorded_inputs_async() -> None:
     run = _node_run(tracer, "n")
     assert run.inputs == {"scrubbed_in": True}
     assert run.outputs == {"value": 6}
+
+
+def test_trace_policy_omit_outputs_keeps_messages_stream() -> None:
+    """process_outputs must scrub traces without starving stream_mode='messages' (#9090)."""
+    from typing import Annotated
+
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.graph.message import add_messages
+    from langgraph.types import omit_payload
+    from typing_extensions import TypedDict
+
+    class MsgState(TypedDict):
+        messages: Annotated[list, add_messages]
+
+    def node(state: MsgState) -> dict:
+        return {"messages": [AIMessage("from node", id="ai-1")]}
+
+    graph = (
+        StateGraph(MsgState)
+        .add_node("node", node, trace_policy=TracePolicy(process_outputs=omit_payload))
+        .add_edge(START, "node")
+        .add_edge("node", END)
+        .compile()
+    )
+
+    tracer = FakeTracer()
+    seen = [
+        msg.content
+        for msg, _meta in graph.stream(
+            {"messages": [HumanMessage("hello", id="h-1")]},
+            {"callbacks": [tracer]},
+            stream_mode="messages",
+        )
+    ]
+    assert seen == ["from node"]
+    run = _node_run(tracer, "node")
+    assert run.outputs == {}
+
+
+def test_trace_policy_omit_inputs_keeps_message_dedupe() -> None:
+    """process_inputs must scrub traces without re-emitting pass-through inputs (#9090)."""
+    from typing import Annotated
+
+    from langchain_core.messages import HumanMessage
+    from langgraph.graph.message import add_messages
+    from langgraph.types import omit_payload
+    from typing_extensions import TypedDict
+
+    class MsgState(TypedDict):
+        messages: Annotated[list, add_messages]
+
+    def node(state: MsgState) -> dict:
+        return {"messages": state["messages"]}
+
+    graph = (
+        StateGraph(MsgState)
+        .add_node("node", node, trace_policy=TracePolicy(process_inputs=omit_payload))
+        .add_edge(START, "node")
+        .add_edge("node", END)
+        .compile()
+    )
+
+    tracer = FakeTracer()
+    seen = [
+        msg.content
+        for msg, _meta in graph.stream(
+            {"messages": [HumanMessage("hello", id="h-1")]},
+            {"callbacks": [tracer]},
+            stream_mode="messages",
+        )
+    ]
+    assert seen == []
+    run = _node_run(tracer, "node")
+    assert run.inputs == {}
