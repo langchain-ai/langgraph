@@ -1148,7 +1148,7 @@ class Pregel(
         saved: CheckpointTuple | None,
         *,
         saver: BaseCheckpointSaver,
-        recurse: BaseCheckpointSaver | None = None,
+        recurse: bool = False,
         apply_pending_writes: bool = False,
     ) -> StateSnapshot:
         if not saved:
@@ -1213,7 +1213,7 @@ class Pregel(
                 # get the state of the subgraph
                 config = {
                     CONF: {
-                        CONFIG_KEY_CHECKPOINTER: recurse,
+                        CONFIG_KEY_CHECKPOINTER: saver,
                         "thread_id": saved.config[CONF]["thread_id"],
                         CONFIG_KEY_CHECKPOINT_NS: task_ns,
                     }
@@ -1267,7 +1267,7 @@ class Pregel(
         saved: CheckpointTuple | None,
         *,
         saver: BaseCheckpointSaver,
-        recurse: BaseCheckpointSaver | None = None,
+        recurse: bool = False,
         apply_pending_writes: bool = False,
     ) -> StateSnapshot:
         if not saved:
@@ -1332,7 +1332,7 @@ class Pregel(
                 # get the state of the subgraph
                 config = {
                     CONF: {
-                        CONFIG_KEY_CHECKPOINTER: recurse,
+                        CONFIG_KEY_CHECKPOINTER: saver,
                         "thread_id": saved.config[CONF]["thread_id"],
                         CONFIG_KEY_CHECKPOINT_NS: task_ns,
                     }
@@ -1422,7 +1422,7 @@ class Pregel(
             config,
             saved,
             saver=checkpointer,
-            recurse=checkpointer if subgraphs else None,
+            recurse=subgraphs,
             apply_pending_writes=CONFIG_KEY_CHECKPOINT_ID not in config[CONF],
         )
 
@@ -1467,7 +1467,7 @@ class Pregel(
             config,
             saved,
             saver=checkpointer,
-            recurse=checkpointer if subgraphs else None,
+            recurse=subgraphs,
             apply_pending_writes=CONFIG_KEY_CHECKPOINT_ID not in config[CONF],
         )
 
