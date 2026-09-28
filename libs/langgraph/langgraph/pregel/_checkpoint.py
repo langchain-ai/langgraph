@@ -8,13 +8,15 @@ from typing import Any, cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
+    ChannelVersions,
     Checkpoint,
+    PendingWrite,
 )
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 
 from langgraph._internal._config import DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT
-from langgraph._internal._constants import PUSH
+from langgraph._internal._constants import INTERRUPT, PUSH
 from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.delta import DeltaChannel
@@ -80,14 +82,29 @@ def get_updated_channels_from_tasks(
 
 def get_delta_channels_from_all_channels(
     channels: Mapping[str, BaseChannel],
-    *,
-    include_unavailable: bool = False,
 ) -> set[str]:
-    """DeltaChannels to snapshot on the first update_state of a fresh thread or fork."""
+    """DeltaChannels to snapshot on the first update_state of a fresh thread."""
     return {
         k
         for k, ch in channels.items()
-        if isinstance(ch, DeltaChannel) and (include_unavailable or ch.is_available())
+        if isinstance(ch, DeltaChannel) and ch.is_available()
+    }
+
+
+def delta_channels_with_pending_writes(
+    specs: Mapping[str, Any],
+    pending_writes: Iterable[PendingWrite] | None,
+) -> set[str]:
+    """DeltaChannels a branch starting from this checkpoint must snapshot.
+
+    A checkpoint's pending writes belong to the child that consumed them, and
+    nothing records which child that was. A new branch snapshots every delta
+    channel they touch, so its ancestor walk never replays them.
+    """
+    return {
+        ch
+        for _, ch, _ in pending_writes or ()
+        if isinstance(specs.get(ch), DeltaChannel)
     }
 
 
@@ -124,29 +141,25 @@ def create_checkpoint_plan_for_update_state_api(
     parents: dict[str, Any],
     saved_metadata: Mapping[str, Any] | None,
     is_fresh_thread: bool,
-    is_fork: bool,
+    fork_channels: set[str],
 ) -> tuple[set[str], dict[str, Any]]:
-    """Return ``(channels_to_snapshot, metadata)`` for an update_state head.
-
-    A fork snapshots everything, like a fresh thread: its base also holds the
-    writes of the branch it abandons, so the ancestor walk must stop here.
-    """
+    """Return ``(channels_to_snapshot, metadata)`` for an update_state head."""
     metadata: dict[str, Any] = {
         "source": "update",
         "step": step,
         "parents": parents,
     }
-    if is_fresh_thread or is_fork:
-        return get_delta_channels_from_all_channels(
-            channels, include_unavailable=is_fork
-        ), metadata
+    if is_fresh_thread:
+        return get_delta_channels_from_all_channels(channels), metadata
 
     new_counters = create_metadata_for_update_state_api(
         channels,
         updated_channels,
         prev_metadata=saved_metadata,
     )
-    channels_to_snapshot = delta_channels_to_snapshot(channels, new_counters)
+    channels_to_snapshot = (
+        delta_channels_to_snapshot(channels, new_counters) | fork_channels
+    )
     for k in channels_to_snapshot:
         new_counters[k] = (0, 0)
     non_zero = {k: v for k, v in new_counters.items() if v != (0, 0)}
@@ -160,7 +173,7 @@ def create_fork_checkpoint(
     channels: Mapping[str, BaseChannel],
     step: int,
     *,
-    is_fork: bool,
+    fork_channels: set[str],
     get_next_version: GetNextVersion,
 ) -> Checkpoint:
     """``create_checkpoint`` for the update_state paths that skip the plan.
@@ -170,16 +183,14 @@ def create_fork_checkpoint(
     paths never write the delta channel, so its version must be bumped here
     or ``put`` drops the blob; derive ``new_versions`` from the result.
     """
-    if not is_fork:
+    if not fork_channels:
         return create_checkpoint(checkpoint, channels, step)
     return create_checkpoint(
         checkpoint,
         channels,
         step,
         get_next_version=get_next_version,
-        channels_to_snapshot=get_delta_channels_from_all_channels(
-            channels, include_unavailable=True
-        ),
+        channels_to_snapshot=fork_channels,
     )
 
 
@@ -204,6 +215,7 @@ def create_checkpoint(
     """
     ts = datetime.now(timezone.utc).isoformat()
     channels_to_snapshot = channels_to_snapshot or set()
+    bumped: dict[str, tuple[Any, Any]] = {}
     if channels is None:
         values = checkpoint["channel_values"]
         channel_versions = checkpoint["channel_versions"]
@@ -218,32 +230,22 @@ def create_checkpoint(
                 # for versioned channels.
                 if k in channels_to_snapshot and get_next_version is not None:
                     channel_versions[k] = get_next_version(None, None)
+                    bumped[k] = (None, channel_versions[k])
                     values[k] = _DeltaSnapshot(
                         ch.get() if ch.is_available() else ch.typ()
                     )
                 continue
             if k in channels_to_snapshot:
-                # Callers force a full snapshot blob here: exit mode when a
-                # delta channel reaches its snapshot cadence, update_state on
-                # a fresh thread (no ancestor to replay writes from), and a
-                # fork. The manual version-bump below only applies to the
-                # exit-mode case.
-                #
-                # In exit mode, the snapshot decision is deferred to exit
-                # time (intermediate steps have do_checkpoint=False). The
-                # channel's count may have reached snapshot_frequency over
-                # several supersteps, but the LAST superstep may not have
-                # written to this channel. In that case apply_writes()
-                # (in _algo.py) didn't bump this channel's version, so
-                # saver.put() wouldn't include it in new_versions and
-                # the snapshot blob would be silently dropped. The manual
-                # bump below closes the gap. In sync/async durability this
-                # branch is effectively dead code (the step that pushes
-                # the count to freq always writes the channel).
+                # `put` only stores a blob for a channel whose version moved,
+                # so snapshotting a channel this step did not write needs a
+                # bump: exit mode reaching the cadence on a superstep that
+                # skipped the channel, and a fork's first checkpoint.
                 if get_next_version is not None and (
                     updated_channels is None or k not in updated_channels
                 ):
-                    channel_versions[k] = get_next_version(channel_versions[k], None)
+                    old = channel_versions[k]
+                    channel_versions[k] = get_next_version(old, None)
+                    bumped[k] = (old, channel_versions[k])
                 values[k] = _DeltaSnapshot(ch.get())
             else:
                 v = ch.checkpoint()
@@ -255,9 +257,28 @@ def create_checkpoint(
         id=id or str(uuid6(clock_seq=step)),
         channel_values=values,
         channel_versions=channel_versions,
-        versions_seen=checkpoint["versions_seen"],
+        versions_seen=_mark_bumps_seen(checkpoint["versions_seen"], bumped),
         updated_channels=None if updated_channels is None else sorted(updated_channels),
     )
+
+
+def _mark_bumps_seen(
+    versions_seen: dict[str, ChannelVersions],
+    bumped: Mapping[str, tuple[Any, Any]],
+) -> dict[str, ChannelVersions]:
+    """Advance whoever had seen a bumped channel's old version to the new one.
+
+    A bump that only stores a snapshot is not a write. Left unseen, it would
+    re-fire `interrupt_before` and rerun the channel's subscribers.
+    """
+    if not bumped:
+        return versions_seen
+    out: dict[str, ChannelVersions] = {}
+    for node, seen in {INTERRUPT: {}, **versions_seen}.items():
+        advanced = {k: new for k, (old, new) in bumped.items() if seen.get(k) == old}
+        if advanced or node in versions_seen:
+            out[node] = {**seen, **advanced}
+    return out
 
 
 def _needs_replay(spec: BaseChannel, stored: object) -> bool:

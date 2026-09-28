@@ -16,8 +16,8 @@ from typing_extensions import TypedDict
 
 from langgraph._internal._constants import INPUT
 from langgraph.channels.delta import DeltaChannel
-from langgraph.graph import END, StateGraph
-from langgraph.types import Durability, StateSnapshot, StateUpdate
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import Durability, StateSnapshot, StateUpdate, interrupt
 
 pytestmark = pytest.mark.anyio
 
@@ -344,3 +344,149 @@ def test_unaddressed_bulk_update_keeps_snapshot_cadence(
     )
 
     assert not _snapshotted_checkpoints(sync_checkpointer, config)
+
+
+def _both(marker: str) -> dict:
+    return {"log": [marker], "plain": [marker]}
+
+
+def _build_paused_before_b(checkpointer: BaseCheckpointSaver) -> Any:
+    builder = StateGraph(_State)
+    builder.add_node("a", lambda state: _both("a"))
+    builder.add_node("b", lambda state: _both("b"))
+    builder.add_edge(START, "a")
+    builder.add_edge("a", "b")
+    builder.add_edge("b", END)
+    return builder.compile(checkpointer=checkpointer, interrupt_before=["b"])
+
+
+def _build_parallel_interrupt(checkpointer: BaseCheckpointSaver) -> Any:
+    def ask(state: _State) -> dict:
+        interrupt("approve?")
+        return _both("q")
+
+    builder = StateGraph(_State)
+    builder.add_node("p", lambda state: _both("p"))
+    builder.add_node("q", ask)
+    builder.add_edge(START, "p")
+    builder.add_edge(START, "q")
+    return builder.compile(checkpointer=checkpointer)
+
+
+def test_resume_at_interrupt_before_with_the_head_checkpoint_id_runs_the_node(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    config = _thread("t")
+    graph = _build_paused_before_b(sync_checkpointer)
+    graph.invoke(_both("in"), config, durability=durability)
+
+    graph.invoke(None, graph.get_state(config).config, durability=durability)
+
+    state = graph.get_state(config)
+    assert state.next == (), f"resume paused again before {state.next}"
+    assert state.values["log"] == state.values["plain"] == ["in", "a", "b"]
+
+
+async def test_aresume_at_interrupt_before_with_the_head_checkpoint_id_runs_the_node(
+    async_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    config = _thread("t")
+    graph = _build_paused_before_b(async_checkpointer)
+    await graph.ainvoke(_both("in"), config, durability=durability)
+
+    await graph.ainvoke(
+        None, (await graph.aget_state(config)).config, durability=durability
+    )
+
+    state = await graph.aget_state(config)
+    assert state.next == (), f"resume paused again before {state.next}"
+    assert state.values["log"] == state.values["plain"] == ["in", "a", "b"]
+
+
+def test_replay_from_a_paused_checkpoint_runs_the_node_once(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    config = _thread("t")
+    graph = _build_paused_before_b(sync_checkpointer)
+    graph.invoke(_both("in"), config)
+    paused = graph.get_state(config).config
+    graph.invoke(None, config)
+
+    graph.invoke(None, paused)
+
+    state = graph.get_state(config)
+    assert state.next == (), f"replay paused again before {state.next}"
+    assert state.values["log"] == state.values["plain"] == ["in", "a", "b"]
+
+
+@pytest.mark.parametrize("addressed", [False, True])
+def test_new_input_on_an_interrupted_head_does_not_replay_its_pending_writes(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability, addressed: bool
+) -> None:
+    config = _thread("t")
+    graph = _build_parallel_interrupt(sync_checkpointer)
+    graph.invoke(_both("in-1"), config, durability=durability)
+    head = graph.get_state(config).config
+
+    graph.invoke(_both("in-2"), head if addressed else config, durability=durability)
+
+    state = graph.get_state(config)
+    assert state.values["log"] == state.values["plain"] == ["in-1", "in-2", "p"]
+
+
+def _build_deferred_after_interrupt(checkpointer: BaseCheckpointSaver) -> Any:
+    builder = StateGraph(_State)
+    builder.add_node("a", lambda state: _both("a"))
+    builder.add_node("b", lambda state: _both("b"), defer=True)
+    builder.add_node("c", lambda state: {})
+    builder.add_edge(START, "a")
+    builder.add_edge("a", "b")
+    builder.add_edge("a", "c")
+    return builder.compile(checkpointer=checkpointer, interrupt_after=["a"])
+
+
+def test_update_state_with_the_head_checkpoint_id_keeps_a_deferred_node(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = _build_deferred_after_interrupt(sync_checkpointer)
+    config = _thread("t")
+    graph.invoke(_both("in"), config)
+
+    graph.update_state(graph.get_state(config).config, _both("u"), as_node="c")
+    graph.invoke(None, config)
+
+    state = graph.get_state(config)
+    assert state.next == (), f"deferred node never ran, still pending: {state.next}"
+    assert state.values["log"] == state.values["plain"] == ["in", "a", "u", "b"]
+
+
+async def test_aupdate_state_with_the_head_checkpoint_id_keeps_a_deferred_node(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = _build_deferred_after_interrupt(async_checkpointer)
+    config = _thread("t")
+    await graph.ainvoke(_both("in"), config)
+
+    await graph.aupdate_state(
+        (await graph.aget_state(config)).config, _both("u"), as_node="c"
+    )
+    await graph.ainvoke(None, config)
+
+    state = await graph.aget_state(config)
+    assert state.next == (), f"deferred node never ran, still pending: {state.next}"
+    assert state.values["log"] == state.values["plain"] == ["in", "a", "u", "b"]
+
+
+def test_turns_addressed_at_the_head_store_no_snapshot(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    config = _thread("t")
+    graph = _build(sync_checkpointer, "turn")
+    graph.invoke(_input("in-1"), config)
+    for turn in range(2, 5):
+        graph.invoke(_input(f"in-{turn}"), graph.get_state(config).config)
+
+    assert not _snapshotted_checkpoints(sync_checkpointer, config)
+    assert (
+        graph.get_state(config).values["log"] == graph.get_state(config).values["plain"]
+    )

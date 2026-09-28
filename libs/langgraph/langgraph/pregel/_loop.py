@@ -102,6 +102,7 @@ from langgraph.pregel._checkpoint import (
     copy_checkpoint,
     create_checkpoint,
     delta_channels_to_snapshot,
+    delta_channels_with_pending_writes,
     empty_checkpoint,
     exit_delta_task_id,
 )
@@ -226,11 +227,8 @@ class PregelLoop:
     # cadence counters say:
     # * an Overwrite arrived since the last checkpoint, so sparse replay has to
     #   start from the post-overwrite value;
-    # * this run forked off an explicitly addressed checkpoint. That base also
-    #   holds the writes of the branch the fork abandons, and nothing records
-    #   which child consumed which, so the ancestor walk must stop inside the
-    #   fork. Any addressed checkpoint counts, because telling a real fork
-    #   apart would mean trusting the base's `pending_writes` to be complete.
+    # * the checkpoint this run starts from has pending writes to them; see
+    #   `delta_channels_with_pending_writes`.
     _delta_channels_forced_snapshot: set[str]
 
     # The checkpoint_config that points at the parent loaded at `__enter__`
@@ -374,13 +372,6 @@ class PregelLoop:
             tuple(cast(str, self.config[CONF][CONFIG_KEY_CHECKPOINT_NS]).split(NS_SEP))
             if self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS)
             else ()
-        )
-        # Value, not key presence like `is_replaying`: subgraph task configs
-        # always carry an explicit `None` checkpoint_id.
-        self._delta_channels_forced_snapshot = (
-            {k for k, spec in specs.items() if isinstance(spec, DeltaChannel)}
-            if self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)
-            else set()
         )
         self.prev_checkpoint_config = None
         runtime = self.config[CONF].get(CONFIG_KEY_RUNTIME)
@@ -1695,6 +1686,9 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             if saved.pending_writes is not None
             else []
         )
+        self._delta_channels_forced_snapshot = delta_channels_with_pending_writes(
+            self.specs, saved.pending_writes
+        )
         self._delta_write_futs = []
         self._error_handler_write_futs = []
         self._exit_delta_writes = (
@@ -1951,6 +1945,9 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             [(str(tid), k, v) for tid, k, v in saved.pending_writes]
             if saved.pending_writes is not None
             else []
+        )
+        self._delta_channels_forced_snapshot = delta_channels_with_pending_writes(
+            self.specs, saved.pending_writes
         )
         self._delta_write_futs = []
         self._error_handler_write_futs = []
