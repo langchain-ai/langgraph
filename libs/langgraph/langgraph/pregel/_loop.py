@@ -119,6 +119,7 @@ from langgraph.pregel._io import (
 )
 from langgraph.pregel._messages import ensure_message_ids
 from langgraph.pregel._read import PregelNode
+from langgraph.pregel._task_status import read_task_statuses
 from langgraph.pregel._utils import get_new_channel_versions, is_xxh3_128_hexdigest
 from langgraph.pregel.debug import (
     map_debug_checkpoint,
@@ -736,17 +737,14 @@ class PregelLoop:
     def _reapply_writes_to_succeeded_nodes(
         self, tasks: Mapping[str, PregelExecutableTask]
     ) -> None:
-        """Restore successful channel writes from checkpoint to in-memory tasks.
+        """Restore the output of finished tasks from checkpoint to in-memory tasks.
 
-        Skips control signals (ERROR, ERROR_SOURCE_NODE, INTERRUPT, RESUME)
-        so that failed/interrupted tasks remain with empty writes and will be
-        re-executed (or routed to error handlers) by the runner.
+        Unfinished (failed or interrupted) tasks keep empty writes, so the
+        runner re-executes them or routes them to error handlers.
         """
-        for tid, k, v in self.checkpoint_pending_writes:
-            if k in (ERROR, ERROR_SOURCE_NODE, INTERRUPT, RESUME):
-                continue
+        for tid, status in read_task_statuses(self.checkpoint_pending_writes).items():
             if task := tasks.get(tid):
-                task.writes.append((k, v))
+                task.writes.extend(status.output)
 
     def _resume_error_handlers_if_applicable(self) -> None:
         """On resume, schedule error handlers for tasks that failed in a prior run.
@@ -816,34 +814,12 @@ class PregelLoop:
                 self.tasks[handler_task.id] = handler_task
 
     def _pending_interrupts(self) -> set[str]:
-        """Return the set of interrupt ids that are pending without corresponding resume values."""
-        # mapping of task ids to interrupt ids
-        pending_interrupts: dict[str, str] = {}
-
-        # set of resume task ids
-        pending_resumes: set[str] = set()
-
-        for task_id, write_type, value in self.checkpoint_pending_writes:
-            if write_type == INTERRUPT:
-                # interrupts is always a list, but there should only be one element
-                pending_interrupts[task_id] = value[0].id
-            elif write_type == RESUME:
-                pending_resumes.add(task_id)
-
-        resumed_interrupt_ids = {
-            pending_interrupts[task_id]
-            for task_id in pending_resumes
-            if task_id in pending_interrupts
+        """Return the ids of interrupts that are still waiting for an answer."""
+        return {
+            interrupt.id
+            for status in read_task_statuses(self.checkpoint_pending_writes).values()
+            for interrupt in status.pending_interrupts
         }
-
-        # Keep only interrupts whose interrupt_id is not resumed
-        hanging_interrupts: set[str] = {
-            interrupt_id
-            for interrupt_id in pending_interrupts.values()
-            if interrupt_id not in resumed_interrupt_ids
-        }
-
-        return hanging_interrupts
 
     def _first(
         self, *, input_keys: str | Sequence[str], updated_channels: set[str] | None
