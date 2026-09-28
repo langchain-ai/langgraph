@@ -1304,6 +1304,41 @@ def test_unregistered_projection_raises_attribute_error() -> None:
     assert run.output is not None
 
 
+def test_stream_events_v3_output_preserves_node_attribute_error() -> None:
+    """`run.output` surfaces a node's AttributeError, not the fallback message.
+
+    When a node raises an `AttributeError`, the `output` property re-raises the
+    stored error. Because the property getter itself raises an `AttributeError`,
+    Python's descriptor protocol would otherwise fall through to `__getattr__`
+    and report "'GraphRunStream' object has no attribute 'output'" with the
+    original exception (and its traceback) lost. The node's exception must be
+    preserved (#9091).
+    """
+
+    class State(TypedDict):
+        value: int
+
+    def node(state: State) -> dict[str, Any]:
+        # A typo / missing attribute anywhere inside a node stands in for the
+        # general case.
+        return {"value": None.real_attr}  # noqa: F841  (raises AttributeError)
+
+    graph = (
+        StateGraph(State).add_node("node", node).add_edge(START, "node").compile()
+    )
+
+    run = graph.stream_events({"value": 1}, version="v3")
+    with pytest.raises(AttributeError) as exc_info:
+        run.output
+
+    message = str(exc_info.value)
+    # The misleading "registered projections" message must not appear.
+    assert "GraphRunStream" not in message
+    assert "registered projections" not in message
+    # The original node exception is preserved.
+    assert "real_attr" in message
+
+
 def test_getattr_fallback_does_not_recurse_before_init() -> None:
     """`__getattr__` reads the mux from `__dict__`, so it is safe pre-init.
 

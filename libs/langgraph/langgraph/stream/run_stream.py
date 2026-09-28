@@ -99,6 +99,20 @@ class GraphRunStream:
         them all. The cost is that a misspelling type-checks too, and fails at
         runtime instead.
         """
+        # `output`/`interrupted`/`interrupts` are properties that drive the run
+        # to completion and then re-raise any stored error. When that stored
+        # error is an `AttributeError`, Python's descriptor protocol treats the
+        # property getter raising `AttributeError` as "attribute not found" and
+        # falls through to this `__getattr__`, which would mask the original
+        # exception with the "registered projections" message and drop its
+        # traceback. Re-raise the real error so the caller sees the node's
+        # exception (#9091).
+        if name in ("output", "interrupted", "interrupts"):
+            mux = self.__dict__.get("_mux")
+            if mux is not None:
+                err = mux._events._error
+                if err is not None:
+                    raise err
         _raise_missing_projection(self, name)
 
     def __init__(
