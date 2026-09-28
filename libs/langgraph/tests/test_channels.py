@@ -1,6 +1,6 @@
 import operator
 from collections.abc import Sequence
-from typing import Annotated
+from typing import Annotated, Any, TypedDict
 
 import orjson
 import pytest
@@ -105,6 +105,57 @@ def test_binop() -> None:
     checkpoint = channel.checkpoint()
     channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(checkpoint)
     assert channel.get() == 10
+
+
+def test_binop_from_checkpoint_preserves_tuple_type() -> None:
+    # A `tuple` reducer channel must keep its value a tuple across a checkpoint:
+    # msgpack has no tuple type, so a tuple written into a checkpoint comes back
+    # as a list and would otherwise corrupt the channel's type on resume (#9086).
+    channel = BinaryOperatorAggregate(
+        Annotated[tuple[str, ...], operator.add], operator.add
+    )
+    channel.update([("a",)])
+    checkpoint = channel.checkpoint()
+    assert isinstance(checkpoint, tuple)
+
+    restored = BinaryOperatorAggregate(
+        Annotated[tuple[str, ...], operator.add], operator.add
+    ).from_checkpoint(checkpoint)
+    assert isinstance(restored.get(), tuple)
+    assert restored.get() == ("a",)
+
+    # Directly simulate the post-serialization shape (list, not tuple).
+    restored_from_list = BinaryOperatorAggregate(
+        Annotated[tuple[str, ...], operator.add], operator.add
+    ).from_checkpoint(["b", "c"])
+    assert isinstance(restored_from_list.get(), tuple)
+    # Without the fix this next update raises `TypeError: can only concatenate
+    # list (not "tuple") to list`.
+    restored_from_list.update([("d",)])
+    assert restored_from_list.get() == ("b", "c", "d")
+
+
+def test_binop_tuple_reducer_survives_resume() -> None:
+    # End-to-end: a tuple reducer channel must round-trip a tuple through a
+    # checkpointer and not corrupt the type on resume (#9086).
+
+    class State(TypedDict):
+        items: Annotated[tuple[str, ...], operator.add]
+
+    def node(state: State) -> dict[str, Any]:
+        return {"items": ("x",)}
+
+    builder = StateGraph(State)
+    builder.add_node("n", node)
+    builder.add_edge(START, "n")
+    app = builder.compile(checkpointer=InMemorySaver())
+    cfg = {"configurable": {"thread_id": "t1"}}
+    app.invoke({"items": ("a",)}, cfg)
+    # Second invoke on the resumed thread must not raise TypeError and must
+    # keep the value a tuple (the checkpoint restores as a tuple, not a list).
+    result = app.invoke({"items": ("b",)}, cfg)
+    assert isinstance(result["items"], tuple)
+    assert result["items"] == ("a", "x", "b", "x")
 
 
 def test_untracked_value() -> None:

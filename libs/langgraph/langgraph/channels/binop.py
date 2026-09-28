@@ -117,6 +117,21 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
         empty = self.__class__(self.typ, self.operator)
         empty.key = self.key
         if checkpoint is not MISSING:
+            # msgpack has no tuple type, so a tuple written into a checkpoint
+            # comes back as a list. A `tuple` reducer channel would then hold a
+            # `list` across the checkpoint boundary, and the next `operator`
+            # update raises (e.g. `tuple + tuple` -> `list + tuple`). Reconcile
+            # the deserialized value against the channel's own declared type,
+            # reusing `_strip_extras`, which already maps `tuple` /
+            # `tuple[...]` / `Annotated[tuple[...], op]` to `tuple`.
+            # `frozenset` round-trips exactly via the serde's ext allowlist and
+            # is left untouched; `set` and other members are out of scope here
+            # (#8388).
+            typ = _strip_extras(self.typ)
+            if isinstance(typ, type) and issubclass(typ, tuple) and isinstance(
+                checkpoint, list
+            ):
+                checkpoint = typ(checkpoint)
             empty.value = checkpoint
         return empty
 
