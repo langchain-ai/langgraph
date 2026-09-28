@@ -431,9 +431,11 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
           (a) it found a stored value for its channel — a blob or an inline
               primitive (channel becomes seeded),
           (b) it reached a real root (parent_of[cid] is None — fully
-              materialized at this point), or
+              materialized at this point),
           (c) the next ancestor cid isn't in `parent_of` yet (waiting for
-              a later page; the cursor stays put).
+              a later page; the cursor stays put), or
+          (d) the target's own row isn't in `parent_of` yet (the walk has
+              not started; no cursor is set, so a later page retries).
 
         Mutates `chain_by_ch`, `seed_ver_by_ch`, `seed_inline_by_ch`,
         `walk_cursor_by_ch`, and `seeded` in place.
