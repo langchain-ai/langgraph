@@ -8,6 +8,7 @@ still need an answer.
 """
 
 import operator
+import sys
 import uuid
 from collections import Counter
 from typing import Annotated, Any
@@ -30,6 +31,11 @@ from langgraph.pregel._task_status import read_task_statuses
 from langgraph.types import Command, Durability, Interrupt, Send, interrupt
 
 pytestmark = pytest.mark.anyio
+
+NEEDS_CONTEXTVARS = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 
 
 class State(TypedDict, total=False):
@@ -146,6 +152,7 @@ def test_finished_task_does_not_report_answered_interrupt(
         assert asked == [["A1", "B"]]
 
 
+@NEEDS_CONTEXTVARS
 async def test_finished_task_does_not_report_answered_interrupt_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -217,6 +224,7 @@ def test_task_paused_at_second_question_stays_pending(
     assert snapshot.interrupts == ()
 
 
+@NEEDS_CONTEXTVARS
 async def test_task_paused_at_second_question_stays_pending_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -355,6 +363,7 @@ def test_task_finished_with_falsy_result(
 
 
 @pytest.mark.parametrize("a_returns", [None, {"count": 0}], ids=["none", "zero"])
+@NEEDS_CONTEXTVARS
 async def test_task_finished_with_falsy_result_async(
     async_checkpointer: BaseCheckpointSaver, a_returns: Any
 ) -> None:
