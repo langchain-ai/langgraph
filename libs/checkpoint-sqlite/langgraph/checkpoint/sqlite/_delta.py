@@ -36,6 +36,10 @@ from langgraph.checkpoint.base import DeltaChannelHistory, PendingWrite
 # descendant's config makes the chain a loop. `step_walk_with_row` stops on a
 # repeated id; sqlite yields recursive rows lazily, so abandoning the cursor
 # ends the recursion.
+#
+# `CROSS JOIN` pins `ancestors` as the outer loop, so each step is one primary
+# key lookup. With a plain `JOIN` and no `ANALYZE` stats, sqlite can put
+# `checkpoints` outside and scan the whole thread per step.
 DELTA_STAGE1_SQL = (
     "WITH RECURSIVE ancestors(checkpoint_id, parent_checkpoint_id, type, "
     "checkpoint) AS ("
@@ -44,7 +48,7 @@ DELTA_STAGE1_SQL = (
     "WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? "
     "UNION ALL "
     "SELECT c.checkpoint_id, c.parent_checkpoint_id, c.type, c.checkpoint "
-    "FROM checkpoints c JOIN ancestors a "
+    "FROM ancestors a CROSS JOIN checkpoints c "
     "ON c.checkpoint_id = a.parent_checkpoint_id "
     "WHERE c.thread_id = ? AND c.checkpoint_ns = ?"
     ") "

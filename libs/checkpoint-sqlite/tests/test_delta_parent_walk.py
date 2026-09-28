@@ -11,6 +11,7 @@ from langgraph.checkpoint.base import (
 )
 
 from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite._delta import DELTA_STAGE1_SQL
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 CHANNEL = "ch"
@@ -87,3 +88,17 @@ def test_walk_terminates_when_put_makes_the_parent_chain_cycle() -> None:
 
         got = saver.get_delta_channel_history(config=b, channels=[CHANNEL])
         assert got[CHANNEL] == {"writes": []}
+
+
+def test_walk_step_looks_up_the_parent_by_primary_key() -> None:
+    with SqliteSaver.from_conn_string(":memory:") as saver:
+        saver.setup()
+        plan = [
+            row[3]
+            for row in saver.conn.execute(
+                f"EXPLAIN QUERY PLAN {DELTA_STAGE1_SQL}", ("t", "", "id", "t", "")
+            )
+        ]
+    assert any(
+        step.startswith("SEARCH c ") and "checkpoint_id=?" in step for step in plan
+    ), f"recursive step should look up the parent by key, got {plan}"
