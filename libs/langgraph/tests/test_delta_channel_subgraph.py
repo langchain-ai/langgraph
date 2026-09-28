@@ -7,6 +7,11 @@ from typing_extensions import TypedDict
 
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import END, START, StateGraph
+from langgraph.pregel._checkpoint import (
+    achannels_from_checkpoint,
+    channels_from_checkpoint,
+    empty_checkpoint,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -251,3 +256,30 @@ def test_completed_subgraph_exposes_no_task_state(
     app.invoke({}, config)
 
     assert app.get_state(config, subgraphs=True).tasks == ()
+
+
+def _written_delta_checkpoint() -> Any:
+    checkpoint = empty_checkpoint()
+    checkpoint["channel_versions"]["delta"] = 1
+    return checkpoint
+
+
+def test_hydrating_written_delta_channel_without_saver_raises() -> None:
+    with pytest.raises(ValueError, match="no checkpointer"):
+        channels_from_checkpoint(
+            {"delta": DeltaChannel(_extend)}, _written_delta_checkpoint()
+        )
+
+
+async def test_ahydrating_written_delta_channel_without_saver_raises() -> None:
+    with pytest.raises(ValueError, match="no checkpointer"):
+        await achannels_from_checkpoint(
+            {"delta": DeltaChannel(_extend)}, _written_delta_checkpoint()
+        )
+
+
+def test_hydrating_unwritten_delta_channel_without_saver_is_empty() -> None:
+    channels, _ = channels_from_checkpoint(
+        {"delta": DeltaChannel(_extend)}, empty_checkpoint()
+    )
+    assert channels["delta"].get() == []
