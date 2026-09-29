@@ -894,6 +894,11 @@ class PregelLoop:
                 or configurable.get(CONFIG_KEY_RESUMING, False)
             )
         )
+        if self.is_nested and not is_time_traveling:
+            # Nested graphs carry a checkpoint id in their task config even
+            # during a normal resume. That marks them as replaying, but a
+            # normal resume must reapply completed sibling writes.
+            self.is_replaying = False
         if is_time_traveling:
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
