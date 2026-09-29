@@ -6,6 +6,15 @@ from typing import Any
 from langgraph.cache.base import BaseCache, FullKey, Namespace, ValueT
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
+_GLOB_METACHARS = ("\\", "*", "?", "[", "]")
+
+
+def _escape_glob(text: str) -> str:
+    """Escape Redis glob metacharacters so pattern literals match themselves."""
+    for char in _GLOB_METACHARS:
+        text = text.replace(char, f"\\{char}")
+    return text
+
 
 class RedisCache(BaseCache[ValueT]):
     """Redis-based cache implementation with TTL support."""
@@ -117,7 +126,7 @@ class RedisCache(BaseCache[ValueT]):
         try:
             if namespaces is None:
                 # Clear all keys with our prefix
-                pattern = f"{self.prefix}*"
+                pattern = f"{_escape_glob(self.prefix)}*"
                 keys = self.redis.keys(pattern)
                 if keys:
                     self.redis.delete(*keys)
@@ -127,7 +136,9 @@ class RedisCache(BaseCache[ValueT]):
                 for ns in namespaces:
                     ns_str = ":".join(ns) if ns else ""
                     pattern = (
-                        f"{self.prefix}{ns_str}:*" if ns_str else f"{self.prefix}*"
+                        f"{_escape_glob(self.prefix)}{_escape_glob(ns_str)}:*"
+                        if ns_str
+                        else f"{_escape_glob(self.prefix)}*"
                     )
                     keys = self.redis.keys(pattern)
                     keys_to_delete.extend(keys)

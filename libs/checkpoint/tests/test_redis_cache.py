@@ -2,6 +2,7 @@
 
 import time
 
+import fakeredis
 import pytest
 import redis
 
@@ -314,3 +315,65 @@ class TestRedisCache:
 
         assert len(result) == 1
         assert result[key] == large_data
+
+
+class TestRedisCacheGlobMetacharacters:
+    """`clear()` must treat the prefix and namespace segments as literals.
+
+    Redis interprets ``*``, ``?`` and ``[...]`` in ``KEYS`` patterns, so an
+    unescaped namespace like ``("team*",)`` used to delete entries from
+    unrelated namespaces such as ``("teamB",)``.
+    """
+
+    @pytest.fixture(autouse=True)
+    def setup(self) -> None:
+        self.client = fakeredis.FakeRedis()
+
+    @pytest.mark.parametrize(
+        ("literal", "unrelated"),
+        [
+            ("team*", "teamB"),
+            ("team?", "teamA"),
+            ("te[am]", "team"),
+            ("te\am", "team"),
+            ("*", "anything"),
+        ],
+        ids=["star", "question", "brackets", "backslash", "bare-star"],
+    )
+    def test_clear_only_deletes_the_literal_namespace(
+        self, literal: str, unrelated: str
+    ) -> None:
+        cache: RedisCache = RedisCache(self.client, prefix="test:cache:")
+        selected: FullKey = ((literal,), "job")
+        other: FullKey = ((unrelated,), "job")
+        cache.set({selected: ("selected", None), other: ("other", None)})
+
+        cache.clear([(literal,)])
+
+        assert cache.get([selected]) == {}
+        assert cache.get([other]) == {other: "other"}
+
+    def test_clear_all_prefix_glob_chars_do_not_cross_prefixes(self) -> None:
+        star_cache: RedisCache = RedisCache(self.client, prefix="pre*fix:")
+        other_cache: RedisCache = RedisCache(self.client, prefix="preXfix:")
+        star_key: FullKey = (("ns",), "k")
+        other_key: FullKey = (("ns",), "k")
+        star_cache.set({star_key: ("mine", None)})
+        other_cache.set({other_key: ("theirs", None)})
+
+        star_cache.clear()
+
+        assert star_cache.get([star_key]) == {}
+        assert other_cache.get([other_key]) == {other_key: "theirs"}
+
+    @pytest.mark.asyncio
+    async def test_aclear_only_deletes_the_literal_namespace(self) -> None:
+        cache: RedisCache = RedisCache(self.client, prefix="test:cache:")
+        selected: FullKey = (("team*",), "job")
+        other: FullKey = (("teamB",), "job")
+        cache.set({selected: ("selected", None), other: ("other", None)})
+
+        await cache.aclear([("team*",)])
+
+        assert cache.get([selected]) == {}
+        assert cache.get([other]) == {other: "other"}

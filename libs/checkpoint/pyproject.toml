@@ -33,6 +33,7 @@ test = [
   "pandas",
   "pandas-stubs>=2.2.2.240807",
   "redis",
+  "fakeredis",
 ]
 lint = [
   "ruff",
