@@ -8,11 +8,13 @@ from typing_extensions import TypedDict
 
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import Send
 
 pytestmark = pytest.mark.anyio
 
 # Sorted, because live execution applies PULL tasks in node-name order.
 FAN_OUT_NAMES = ["a", "b", "c", "d", "e", "f", "g", "h"]
+SEND_ARGS = [f"send-{i:02d}" for i in range(12)]
 
 
 def _append_reducer(current: list, updates: list) -> list:
@@ -34,6 +36,34 @@ def _build_fan_out_graph(checkpointer: BaseCheckpointSaver) -> Any:
         builder.add_edge(START, name)
         builder.add_edge(name, END)
     return builder.compile(checkpointer=checkpointer)
+
+
+def _build_send_fan_out_graph(checkpointer: BaseCheckpointSaver) -> Any:
+    class State(TypedDict):
+        items: Annotated[
+            list, DeltaChannel(_append_reducer, list, snapshot_frequency=10_000)
+        ]
+
+    builder = StateGraph(State)
+    builder.add_node("worker", lambda arg: {"items": [arg]})
+    builder.add_conditional_edges(
+        START, lambda state: [Send("worker", n) for n in SEND_ARGS]
+    )
+    builder.add_edge("worker", END)
+    return builder.compile(checkpointer=checkpointer)
+
+
+async def test_get_state_matches_live_send_order(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = _build_send_fan_out_graph(async_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    live = (await graph.ainvoke({"items": []}, config))["items"]
+    replayed = (await graph.aget_state(config)).values["items"]
+
+    assert live == SEND_ARGS
+    assert replayed == live
 
 
 async def test_get_state_matches_live_invoke_order(

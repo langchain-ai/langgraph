@@ -85,3 +85,44 @@ async def test_async_setup_migrates_legacy_writes_table_repeatably(
                 ("old-task", ""),
                 ("task-1", "~__pregel_pull, node"),
             ]
+
+
+def _legacy_database_with_history(db: Path) -> dict:
+    root = empty_checkpoint()
+    root["channel_values"] = {"ch": "seed"}
+    root["channel_versions"] = {"ch": 1}
+    with SqliteSaver.from_conn_string(str(db)) as saver:
+        root_config = saver.put(
+            {"configurable": {"thread_id": "t", "checkpoint_ns": ""}},
+            root,
+            {},
+            {"ch": 1},
+        )
+        saver.put_writes(root_config, [("ch", "write")], "task", "~__pregel_pull, n")
+        child = saver.put(root_config, empty_checkpoint(), {}, {})
+        saver.conn.execute("ALTER TABLE writes DROP COLUMN task_path")
+        saver.conn.commit()
+    return child
+
+
+def test_read_only_legacy_database_still_reads_delta_history(tmp_path: Path) -> None:
+    db = tmp_path / "legacy.sqlite"
+    child = _legacy_database_with_history(db)
+
+    saver = SqliteSaver(sqlite3.connect(f"file:{db}?mode=ro", uri=True))
+    got = saver.get_delta_channel_history(config=child, channels=["ch"])
+
+    assert got["ch"] == {"seed": "seed", "writes": [("task", "ch", "write")]}
+
+
+async def test_async_read_only_legacy_database_still_reads_delta_history(
+    tmp_path: Path,
+) -> None:
+    db = tmp_path / "legacy.sqlite"
+    child = _legacy_database_with_history(db)
+
+    async with aiosqlite.connect(f"file:{db}?mode=ro", uri=True) as conn:
+        saver = AsyncSqliteSaver(conn)
+        got = await saver.aget_delta_channel_history(config=child, channels=["ch"])
+
+    assert got["ch"] == {"seed": "seed", "writes": [("task", "ch", "write")]}

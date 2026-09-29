@@ -39,7 +39,9 @@ DELTA_STAGE1_SQL = (
 )
 
 
-def build_delta_stage2_sql(*, chain_lens: Sequence[int]) -> str:
+def build_delta_stage2_sql(
+    *, chain_lens: Sequence[int], has_task_path: bool = True
+) -> str:
     """Stage-2 per-channel UNION ALL fetching writes from `writes`.
 
     One branch per channel with a non-empty chain. Each branch inlines its
@@ -53,11 +55,12 @@ def build_delta_stage2_sql(*, chain_lens: Sequence[int]) -> str:
     of a single `channel = ANY(channels)` filter when channels have
     different chain depths — same rationale as postgres.
     """
+    task_path = "task_path" if has_task_path else "''"
     branches: list[str] = []
     for n in chain_lens:
         cid_placeholders = ",".join("?" * n)
         branches.append(
-            "SELECT checkpoint_id, channel, task_id, idx, type, value, task_path "
+            f"SELECT checkpoint_id, channel, task_id, idx, type, value, {task_path} "
             "FROM writes "
             "WHERE thread_id = ? AND checkpoint_ns = ? AND channel = ? "
             f"AND checkpoint_id IN ({cid_placeholders})"

@@ -270,7 +270,7 @@ async def test_history_seed_ancestor_own_writes_are_replayed(
 # Every uuid4 `build_delta_chain` tags its own writes with sorts between these
 # two, so task_id order is fixed and always disagrees with task_path order.
 TASK_ID_SORTS_FIRST = "00000000-0000-0000-0000-000000000000"
-TASK_ID_SORTS_LAST = "zzzzzzzz-0000-0000-0000-000000000000"
+TASK_ID_SORTS_LAST = "ffffffff-ffff-ffff-ffff-ffffffffffff"
 
 
 async def test_history_orders_parallel_writes_by_task_path(

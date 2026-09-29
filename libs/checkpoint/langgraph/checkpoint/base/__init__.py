@@ -164,11 +164,12 @@ class DeltaChannelHistory(TypedDict):
       next super-step and are excluded.
 
       Within a single checkpoint, writes are ordered by
-      `(task_path, task_id, idx)`: the order `apply_writes` applied them in
-      live. `task_id` is a hash of the path, so ordering by it permutes
-      parallel tasks writing one channel, and reducers need not be
-      order-invariant. Writes stored without a `task_path` (graph input, or
-      rows predating the column) sort first.
+      `(task_path, task_id, idx)`, which is the order live execution applies
+      a super-step's task writes in. `task_id` is a hash of the path, so
+      ordering by it permutes parallel tasks writing one channel, and
+      reducers need not be order-invariant. Writes stored without a
+      `task_path` (graph input, `update_state` updates, exit-durability runs,
+      rows predating the column) sort first, by `task_id`.
     * `seed` — the stored value at the nearest ancestor whose
       `channel_values[ch]` is populated. Omitted if the walk reached the
       root without finding any stored value (consumer treats absence as

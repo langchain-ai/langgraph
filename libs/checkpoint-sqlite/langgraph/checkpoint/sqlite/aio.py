@@ -114,6 +114,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
 
     lock: asyncio.Lock
     is_setup: bool
+    _has_task_path: bool = True
 
     def __init__(
         self,
@@ -350,7 +351,11 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                 )
                 await self.conn.commit()
             except aiosqlite.OperationalError as e:
-                if "duplicate column name" not in str(e):
+                # A read-only database from before the column can still be read;
+                # its rows would all read back as '' anyway.
+                if "readonly database" in str(e):
+                    self._has_task_path = False
+                elif "duplicate column name" not in str(e):
                     raise
 
             self.is_setup = True
@@ -684,6 +689,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
 
             channels_with_chain = [ch for ch in channels if chain_by_ch[ch]]
             stage2_sql = build_delta_stage2_sql(
+                has_task_path=self._has_task_path,
                 chain_lens=[len(chain_by_ch[ch]) for ch in channels_with_chain],
             )
             if stage2_sql:
