@@ -27,10 +27,10 @@ from typing import Any
 from langgraph.checkpoint.base import DeltaChannelHistory, PendingWrite
 
 # Stage 1 streams target, then its ancestors nearest-first, by following
-# `parent_checkpoint_id`. Ids carry no ordering guarantee, so a range scan by
-# id can miss a parent whose id sorts above its child's. Target is the anchor
-# row; its own writes/seed are skipped (matches the `BaseCheckpointSaver`
-# contract).
+# `parent_checkpoint_id` rather than id order: ids are only monotonic within
+# one process, so a range scan by id can miss a parent whose id sorts above
+# its child's. Target is the anchor row; its own writes/seed are skipped
+# (matches the `BaseCheckpointSaver` contract).
 #
 # `put` is `INSERT OR REPLACE`, so re-putting an existing id under a
 # descendant's config makes the chain a loop. `step_walk_with_row` stops on a
