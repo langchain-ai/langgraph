@@ -120,6 +120,24 @@ def _filter_graph_handlers(
     return [h for h in handlers if isinstance(h, GraphCallbackHandler)]
 
 
+def _all_handlers(
+    manager: _GraphCallbackManager | _AsyncGraphCallbackManager,
+) -> list[GraphCallbackHandler]:
+    """Returns handlers and inheritable_handlers, deduplicated by identity.
+
+    inheritable_handlers propagate to child runs but must also fire at the
+    level they are attached to, so both lists need to be included when
+    dispatching a lifecycle event.
+    """
+    seen: set[int] = set()
+    combined: list[GraphCallbackHandler] = []
+    for h in (*manager.handlers, *manager.inheritable_handlers):
+        if id(h) not in seen:
+            seen.add(id(h))
+            combined.append(h)
+    return combined
+
+
 def _init_base_manager(
     manager: BaseCallbackManager,
     handlers: Sequence[GraphCallbackHandler] | None,
@@ -263,7 +281,7 @@ class _GraphCallbackManager(BaseCallbackManager):
 
     def on_interrupt(self, event: GraphInterruptEvent) -> None:
         handle_event(
-            self.handlers,
+            _all_handlers(self),
             "on_interrupt",
             None,
             event,
@@ -271,7 +289,7 @@ class _GraphCallbackManager(BaseCallbackManager):
 
     def on_resume(self, event: GraphResumeEvent) -> None:
         handle_event(
-            self.handlers,
+            _all_handlers(self),
             "on_resume",
             None,
             event,
@@ -330,7 +348,7 @@ class _AsyncGraphCallbackManager(BaseCallbackManager):
 
     async def on_interrupt(self, event: GraphInterruptEvent) -> None:
         await ahandle_event(
-            self.handlers,
+            _all_handlers(self),
             "on_interrupt",
             None,
             event,
@@ -338,7 +356,7 @@ class _AsyncGraphCallbackManager(BaseCallbackManager):
 
     async def on_resume(self, event: GraphResumeEvent) -> None:
         await ahandle_event(
-            self.handlers,
+            _all_handlers(self),
             "on_resume",
             None,
             event,
