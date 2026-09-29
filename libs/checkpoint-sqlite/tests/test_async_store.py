@@ -17,7 +17,11 @@ from langgraph.store.base import (
 
 from langgraph.store.sqlite import AsyncSqliteStore
 from langgraph.store.sqlite.base import SqliteIndexConfig
-from tests.test_store import CharacterEmbeddings
+from tests.test_store import (
+    _EXPECTED_RANKINGS,
+    CharacterEmbeddings,
+    _FixedVectorEmbeddings,
+)
 
 
 @pytest.fixture(scope="function", params=["memory", "file"])
@@ -745,3 +749,29 @@ async def test_async_namespace_segment_boundary(store: AsyncSqliteStore) -> None
     assert set(await store.alist_namespaces(suffix=["alice"], limit=100)) == {
         ("uid", "users", "alice"),
     }
+
+
+@pytest.mark.parametrize("distance_type", ["cosine", "l2", "inner_product"])
+async def test_vector_search_ranks_closest_first(distance_type: str) -> None:
+    """Each distance type must return the most similar item first."""
+    index_config: SqliteIndexConfig = {
+        "dims": _FixedVectorEmbeddings.dims,
+        "embed": _FixedVectorEmbeddings(),
+        "distance_type": distance_type,  # type: ignore[typeddict-item]
+    }
+    async with AsyncSqliteStore.from_conn_string(
+        ":memory:", index=index_config
+    ) as store:
+        await store.setup()
+        for key in ("a", "b", "c"):
+            await store.aput(("docs",), key, {"text": key})
+
+        results = await store.asearch(("docs",), query="a")
+
+        assert [r.key for r in results] == [
+            key for key, _ in _EXPECTED_RANKINGS[distance_type]
+        ]
+        for result, (_, expected_score) in zip(
+            results, _EXPECTED_RANKINGS[distance_type], strict=True
+        ):
+            assert result.score == pytest.approx(expected_score, abs=1e-5)

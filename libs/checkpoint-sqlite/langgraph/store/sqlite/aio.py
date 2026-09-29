@@ -23,10 +23,10 @@ from langgraph.store.base import (
 from langgraph.store.base.batch import AsyncBatchedBaseStore
 
 from langgraph.store.sqlite.base import (
-    _PLACEHOLDER,
     NS_MATCH_FUNCTION,
     BaseSqliteStore,
     SqliteIndexConfig,
+    _bind_query_embedding,
     _decode_ns_text,
     _ensure_index_config,
     _group_ops,
@@ -532,10 +532,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
                 # Find the corresponding query in prepared_queries
                 # The embed_req_idx is the original index in search_ops, which should map to prepared_queries
                 if embed_req_idx < len(prepared_queries):
-                    _params_list: list = prepared_queries[embed_req_idx][1]
-                    for i, param in enumerate(_params_list):
-                        if param is _PLACEHOLDER:
-                            _params_list[i] = sqlite_vec.serialize_float32(embedding)
+                    _bind_query_embedding(prepared_queries[embed_req_idx][1], embedding)
                 else:
                     logger.warning(
                         f"Embedding request index {embed_req_idx} out of bounds for prepared_queries."

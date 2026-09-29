@@ -3,6 +3,7 @@ from __future__ import annotations
 import concurrent.futures
 import datetime
 import logging
+import math
 import re
 import sqlite3
 import threading
@@ -505,17 +506,30 @@ class BaseSqliteStore:
                 # Choose the similarity function and score expression based on distance type
                 distance_type = self.index_config.get("distance_type", "cosine")
 
-                if distance_type == "cosine":
-                    score_expr = "1.0 - vec_distance_cosine(sv.embedding, ?)"
-                elif distance_type == "l2":
-                    score_expr = "vec_distance_L2(sv.embedding, ?)"
+                # Scores are sorted descending, so every branch must yield a
+                # value where higher means more similar (matching PostgresStore).
+                if distance_type == "l2":
+                    # Negate the distance so the closest match ranks first.
+                    score_expr = "-vec_distance_L2(sv.embedding, ?)"
+                    score_params: list[Any] = [_PLACEHOLDER]
                 elif distance_type == "inner_product":
-                    # For inner product, we want higher values to be better, so negate the result
-                    # since inner product similarity is higher when vectors are more similar
-                    score_expr = "-1 * vec_distance_L1(sv.embedding, ?)"
+                    # sqlite-vec has no dot product, so recover it from the
+                    # cosine distance and the vector norms:
+                    # a . b = (1 - cos_dist(a, b)) * |a| * |b|, with |a| taken
+                    # as the L2 distance from the origin and |b| bound below.
+                    score_expr = (
+                        "(1.0 - vec_distance_cosine(sv.embedding, ?))"
+                        " * vec_distance_L2(sv.embedding, ?) * ?"
+                    )
+                    score_params = [
+                        _PLACEHOLDER,
+                        sqlite_vec.serialize_float32([0.0] * self.index_config["dims"]),
+                        _NORM_PLACEHOLDER,
+                    ]
                 else:
                     # Default to cosine similarity
                     score_expr = "1.0 - vec_distance_cosine(sv.embedding, ?)"
+                    score_params = [_PLACEHOLDER]
 
                 filter_str = (
                     ""
@@ -559,7 +573,7 @@ class BaseSqliteStore:
                     OFFSET ?
                     """
                 params = [
-                    _PLACEHOLDER,  # Vector placeholder
+                    *score_params,
                     *ns_args,
                     *filter_params,
                     op.limit * 2,  # Expanded limit for better results
@@ -1385,10 +1399,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                 embedding_requests, embeddings, strict=False
             ):
                 if embed_req_idx < len(prepared_queries):
-                    _params_list: list = prepared_queries[embed_req_idx][1]
-                    for i, param in enumerate(_params_list):
-                        if param is _PLACEHOLDER:
-                            _params_list[i] = sqlite_vec.serialize_float32(embedding)
+                    _bind_query_embedding(prepared_queries[embed_req_idx][1], embedding)
                 else:
                     logger.warning(
                         f"Embedding request index {embed_req_idx} out of bounds for prepared_queries."
@@ -1512,3 +1523,16 @@ def _ensure_index_config(
 
 
 _PLACEHOLDER = object()
+"""Sentinel replaced with the serialized query embedding once it is computed."""
+
+_NORM_PLACEHOLDER = object()
+"""Sentinel replaced with the L2 norm of the query embedding."""
+
+
+def _bind_query_embedding(params: list, embedding: Sequence[float]) -> None:
+    """Replace the embedding sentinels in `params` with values for `embedding`."""
+    for i, param in enumerate(params):
+        if param is _PLACEHOLDER:
+            params[i] = sqlite_vec.serialize_float32(embedding)
+        elif param is _NORM_PLACEHOLDER:
+            params[i] = math.sqrt(sum(x * x for x in embedding))

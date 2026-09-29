@@ -10,6 +10,7 @@ from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from typing import Any, Literal, cast
 
+import orjson
 import pytest
 from langchain_core.embeddings import Embeddings
 from langgraph.store.base import (
@@ -106,7 +107,9 @@ def fake_embeddings() -> CharacterEmbeddings:
 
 
 # Define vector types and distance types for parametrized tests
-VECTOR_TYPES = ["cosine"]  # SQLite only supports cosine similarity
+# Most vector tests assert cosine-scale scores; ranking across all distance
+# types is covered by test_vector_search_ranks_closest_first.
+VECTOR_TYPES = ["cosine"]
 
 
 @contextmanager
@@ -121,7 +124,7 @@ def create_vector_store(
         "dims": fake_embeddings.dims,
         "embed": fake_embeddings,
         "text_fields": text_fields,
-        "distance_type": distance_type,  # This is for API consistency but SQLite only supports cosine
+        "distance_type": distance_type,
     }
     if conn_type == "memory":
         conn_str = ":memory:"
@@ -1435,3 +1438,58 @@ def test_list_namespaces_metacharacter_labels(store: SqliteStore) -> None:
         assert set(store.list_namespaces(prefix=[label, "child"], limit=100)) == {
             (label, "child"),
         }
+
+
+class _FixedVectorEmbeddings(Embeddings):
+    """Embeddings that map known texts to hand-picked vectors."""
+
+    dims = 3
+    vectors = {
+        "a": [1.0, 0.0, 0.0],
+        "b": [2.0, 0.1, 0.0],
+        "c": [0.0, 0.0, 1.0],
+    }
+
+    def _embed_one(self, text: str) -> list[float]:
+        # Stored values arrive as the JSON-encoded item; queries arrive as-is.
+        key = orjson.loads(text)["text"] if text.startswith("{") else text
+        return list(self.vectors[key])
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self._embed_one(t) for t in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._embed_one(text)
+
+
+# Expected (key, score) ranking for a query of "a" under each distance type.
+# Higher scores must always rank first, matching PostgresStore semantics.
+_EXPECTED_RANKINGS = {
+    "cosine": [("a", 1.0), ("b", 2.0 / math.sqrt(4.01)), ("c", 0.0)],
+    "l2": [("a", 0.0), ("b", -math.sqrt(1.01)), ("c", -math.sqrt(2.0))],
+    "inner_product": [("b", 2.0), ("a", 1.0), ("c", 0.0)],
+}
+
+
+@pytest.mark.parametrize("distance_type", ["cosine", "l2", "inner_product"])
+def test_vector_search_ranks_closest_first(distance_type: str) -> None:
+    """Each distance type must return the most similar item first."""
+    index_config: SqliteIndexConfig = {
+        "dims": _FixedVectorEmbeddings.dims,
+        "embed": _FixedVectorEmbeddings(),
+        "distance_type": distance_type,  # type: ignore[typeddict-item]
+    }
+    with SqliteStore.from_conn_string(":memory:", index=index_config) as store:
+        store.setup()
+        for key in ("a", "b", "c"):
+            store.put(("docs",), key, {"text": key})
+
+        results = store.search(("docs",), query="a")
+
+        assert [r.key for r in results] == [
+            key for key, _ in _EXPECTED_RANKINGS[distance_type]
+        ]
+        for result, (_, expected_score) in zip(
+            results, _EXPECTED_RANKINGS[distance_type], strict=True
+        ):
+            assert result.score == pytest.approx(expected_score, abs=1e-5)
