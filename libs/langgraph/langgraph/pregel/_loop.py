@@ -945,10 +945,13 @@ class PregelLoop:
         # proceed past previous checkpoint
         if is_resuming:
             self.checkpoint["versions_seen"].setdefault(INTERRUPT, {})
-            for k in self.channels:
-                if k in self.checkpoint["channel_versions"]:
-                    version = self.checkpoint["channel_versions"][k]
-                    self.checkpoint["versions_seen"][INTERRUPT][k] = version
+            # Mark every stored channel as seen, not only the ones the current
+            # graph declares. A channel that was removed from the graph keeps
+            # its version in the checkpoint but can never be updated again, so
+            # leaving it unseen makes `should_interrupt` report a pending
+            # update forever and `interrupt_before` re-fires on every resume.
+            for k, version in self.checkpoint["channel_versions"].items():
+                self.checkpoint["versions_seen"][INTERRUPT][k] = version
             # When time-traveling (replaying from a specific checkpoint),
             # save a fork checkpoint so the replayed execution creates a
             # new branch. Without this, if the execution hits an interrupt

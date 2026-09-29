@@ -1,5 +1,6 @@
+import operator
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated, Any
 
 import pytest
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -242,3 +243,72 @@ def test_interrupt_response_schema_invalid_resume_after_earlier_interrupt(
     assert graph.invoke(resume({"approved": True}), config) == {
         "answer": ["ok", Decision(approved=True)]
     }
+
+
+def _build_removed_key_graph(
+    schema: type, first: Any, checkpointer: BaseCheckpointSaver
+) -> Any:
+    builder = StateGraph(schema)
+    builder.add_node("first", first)
+    builder.add_node("last", lambda state: {"log": ["last"]})
+    builder.add_edge(START, "first")
+    builder.add_edge("first", "last")
+    return builder.compile(checkpointer=checkpointer, interrupt_before=["last"])
+
+
+class _RemovedKeyBefore(TypedDict, total=False):
+    log: Annotated[list[str], operator.add]
+    note: str
+
+
+class _RemovedKeyAfter(TypedDict, total=False):
+    log: Annotated[list[str], operator.add]
+
+
+def test_interrupt_before_resumes_after_state_key_removed(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """A channel dropped from the graph must not keep `interrupt_before` firing.
+
+    The stale channel stays in the checkpoint's `channel_versions` but the
+    graph no longer knows about it, so it was never marked as seen on resume
+    and every resume re-interrupted before the same node.
+    """
+    thread = {"configurable": {"thread_id": "1"}}
+
+    old_graph = _build_removed_key_graph(
+        _RemovedKeyBefore,
+        lambda state: {"log": ["first"], "note": "x"},
+        sync_checkpointer,
+    )
+    old_graph.invoke({"log": []}, thread)
+    assert old_graph.get_state(thread).next == ("last",)
+
+    # Redeploy the same thread with `note` removed from the state schema.
+    new_graph = _build_removed_key_graph(
+        _RemovedKeyAfter, lambda state: {"log": ["first"]}, sync_checkpointer
+    )
+    result = new_graph.invoke(None, thread)
+    assert result["log"] == ["first", "last"]
+    assert new_graph.get_state(thread).next == ()
+
+
+async def test_interrupt_before_resumes_after_state_key_removed_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    thread = {"configurable": {"thread_id": "1"}}
+
+    old_graph = _build_removed_key_graph(
+        _RemovedKeyBefore,
+        lambda state: {"log": ["first"], "note": "x"},
+        async_checkpointer,
+    )
+    await old_graph.ainvoke({"log": []}, thread)
+    assert (await old_graph.aget_state(thread)).next == ("last",)
+
+    new_graph = _build_removed_key_graph(
+        _RemovedKeyAfter, lambda state: {"log": ["first"]}, async_checkpointer
+    )
+    result = await new_graph.ainvoke(None, thread)
+    assert result["log"] == ["first", "last"]
+    assert (await new_graph.aget_state(thread)).next == ()
