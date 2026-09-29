@@ -6,11 +6,13 @@ channel), lazy stub creation when no parent exists, and proper read-path
 reconstruction via ancestor walks.
 """
 
+import operator
 import uuid
 from typing import Annotated, Any
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from typing_extensions import TypedDict
@@ -19,6 +21,7 @@ from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import _messages_delta_reducer
 from langgraph.pregel._checkpoint import exit_delta_task_id
+from langgraph.types import Command, Durability, interrupt
 
 pytestmark = pytest.mark.anyio
 
@@ -389,3 +392,70 @@ async def test_exit_snapshot_then_tail_deltas() -> None:
     assert "seed-msg" in contents
     assert "tail-msg" in contents
     assert contents.index("seed-msg") < contents.index("tail-msg")
+
+
+def _append(current: list, writes: list) -> list:
+    out = list(current)
+    for write in writes:
+        out.extend(write)
+    return out
+
+
+class _ResumeState(TypedDict):
+    log: Annotated[list, DeltaChannel(_append)]
+    plain: Annotated[list, operator.add]
+
+
+def _both(marker: str) -> dict:
+    return {"log": [marker], "plain": [marker]}
+
+
+def _ask(marker: str) -> Any:
+    def ask(state: _ResumeState) -> dict:
+        interrupt("approve?")
+        return _both(marker)
+
+    return ask
+
+
+@pytest.mark.parametrize("addressed", [False, True])
+def test_resume_after_a_parallel_interrupt_replays_in_live_order(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability, addressed: bool
+) -> None:
+    builder = StateGraph(_ResumeState)
+    builder.add_node("done", lambda state: _both("done"))
+    builder.add_node("ask", _ask("ask"))
+    builder.add_node("after", lambda state: _both("after"))
+    builder.add_edge(START, "done")
+    builder.add_edge(START, "ask")
+    builder.add_edge("ask", "after")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke(_both("in"), config, durability=durability)
+    head = graph.get_state(config).config
+
+    graph.invoke(
+        Command(resume="yes"), head if addressed else config, durability=durability
+    )
+
+    state = graph.get_state(config)
+    assert state.values["log"] == state.values["plain"]
+    assert sorted(state.values["log"]) == ["after", "ask", "done", "in"]
+
+
+def test_resume_interleaves_the_resumed_superstep_by_task_path(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    builder = StateGraph(_ResumeState)
+    builder.add_node("z_done", lambda state: _both("z"))
+    builder.add_node("a_asks", _ask("a"))
+    builder.add_edge(START, "z_done")
+    builder.add_edge(START, "a_asks")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke(_both("in"), config, durability=durability)
+
+    graph.invoke(Command(resume="yes"), config, durability=durability)
+
+    state = graph.get_state(config)
+    assert state.values["log"] == state.values["plain"] == ["in", "a", "z"]

@@ -220,7 +220,12 @@ class PregelLoop:
     # Each tuple is `(step, task_id, channel, value)` — `step` drives the
     # synthetic step-prefixed task_id used to preserve chronological order
     # under the saver's `ORDER BY task_id, idx` sorting.
-    _exit_delta_writes: list[tuple[int, str, str, Any]] | None = None
+    _exit_delta_writes: list[tuple[int, str, str, str, Any]] | None = None
+
+    # The pending writes loaded with the checkpoint are already stored on it,
+    # and the first superstep that captured writes is the checkpoint's own.
+    _loaded_write_ids: set[int]
+    _exit_first_step: int | None = None
 
     # Delta channels that saw an Overwrite since the last checkpoint. These
     # channels must snapshot after live update applies overwrite semantics so
@@ -707,9 +712,21 @@ class PregelLoop:
             )
         # capture delta-channel writes for exit-mode accumulator before clearing
         if self._exit_delta_writes is not None:
-            for tid, ch, v in self.checkpoint_pending_writes:
-                if isinstance(self.specs.get(ch), DeltaChannel):
-                    self._exit_delta_writes.append((self.step, tid, ch, v))
+            if self._exit_first_step is None:
+                self._exit_first_step = self.step
+            for w in self.checkpoint_pending_writes:
+                tid, ch, v = w
+                if not isinstance(self.specs.get(ch), DeltaChannel):
+                    continue
+                if (
+                    self.checkpointer_put_writes_accepts_task_path
+                    and id(w) in self._loaded_write_ids
+                ):
+                    continue
+                task = self.tasks.get(tid)
+                path = task_path_str(task.path) if task else ""
+                self._exit_delta_writes.append((self.step, tid, path, ch, v))
+        self._loaded_write_ids = set()
         # clear pending writes
         self.checkpoint_pending_writes.clear()
         # only replay (re-execute) done tasks on the first tick
@@ -848,6 +865,7 @@ class PregelLoop:
     def _first(
         self, *, input_keys: str | Sequence[str], updated_channels: set[str] | None
     ) -> set[str] | None:
+        self._loaded_write_ids = {id(w) for w in self.checkpoint_pending_writes}
         # Resuming from a previous checkpoint requires two things:
         # 1. A prior checkpoint exists (channel_versions is non-empty)
         # 2. The input signals continuation (not a fresh run with new input)
@@ -1017,7 +1035,9 @@ class PregelLoop:
             if self._exit_delta_writes is not None:
                 for c, v in input_writes:
                     if isinstance(self.specs.get(c), DeltaChannel):
-                        self._exit_delta_writes.append((self.step, NULL_TASK_ID, c, v))
+                        self._exit_delta_writes.append(
+                            (self.step, NULL_TASK_ID, "", c, v)
+                        )
             # Persist delta-channel input writes so sub-freq inputs are
             # recoverable via ancestor walk (mirrors the Command input path).
             if self.durability != "exit":
@@ -1243,9 +1263,7 @@ class PregelLoop:
         )
 
         pending = [
-            (step, tid, ch, v)
-            for (step, tid, ch, v) in self._exit_delta_writes
-            if ch not in channels_to_snapshot
+            w for w in self._exit_delta_writes if w[3] not in channels_to_snapshot
         ]
         if not pending:
             return
@@ -1280,11 +1298,23 @@ class PregelLoop:
             # sees the stub as its parent.
             self.checkpoint_config = anchor_config
 
-        # Step-prefixed synthetic task_id preserves chronological superstep
-        # order under the saver's ORDER BY task_id, idx sorting.
-        grouped: dict[tuple[int, str], list[tuple[str, Any]]] = {}
-        for step, tid, ch, v in pending:
-            grouped.setdefault((step, tid), []).append((ch, v))
+        # Replay orders a checkpoint's writes by task path, then task id. The
+        # checkpoint's own superstep is stored as sync durability stores it, so
+        # it interleaves with the writes a resume loaded from it; later
+        # supersteps sort after every real task path, in step order. A saver
+        # that takes no task path orders by task id alone, so it gets the
+        # step-prefixed id for every write.
+        grouped: dict[tuple[str, str], list[tuple[str, Any]]] = {}
+        for step, tid, path, ch, v in pending:
+            if not self.checkpointer_put_writes_accepts_task_path:
+                key = (exit_delta_task_id(step, tid), "")
+            elif tid == NULL_TASK_ID:
+                key = (exit_delta_task_id(step, tid), "")
+            elif step == self._exit_first_step:
+                key = (tid, path)
+            else:
+                key = (exit_delta_task_id(step, tid), f"~~{step:010d}{path}")
+            grouped.setdefault(key, []).append((ch, v))
         anchor_write_config = patch_configurable(
             anchor_config,
             {
@@ -1294,22 +1324,21 @@ class PregelLoop:
                 CONFIG_KEY_CHECKPOINT_ID: anchor_config[CONF][CONFIG_KEY_CHECKPOINT_ID],
             },
         )
-        for (step, tid), entries in grouped.items():
-            synth_tid = exit_delta_task_id(step, tid)
+        for (tid, path), entries in grouped.items():
             if self.checkpointer_put_writes_accepts_task_path:
                 fut = self.submit(
                     self.checkpointer_put_writes,
                     anchor_write_config,
                     entries,
-                    synth_tid,
-                    "",
+                    tid,
+                    path,
                 )
             else:
                 fut = self.submit(
                     self.checkpointer_put_writes,
                     anchor_write_config,
                     entries,
-                    synth_tid,
+                    tid,
                 )
             if self._delta_write_futs is not None:
                 self._delta_write_futs.append(fut)
