@@ -66,3 +66,7 @@ test:
 			$(MAKE) -C $$dir test; \
 		fi; \
 	done
+
+.PHONY: ci-checks-classify
+ci-checks-classify:
+	python3 scripts/ci_checks_classifier.py $(ARGS)
