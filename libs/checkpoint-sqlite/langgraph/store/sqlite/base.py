@@ -1490,7 +1490,10 @@ def _ensure_index_config(
     index_config = index_config.copy()
     tokenized: list[tuple[str, Literal["$"] | list[str]]] = []
     tot = 0
-    text_fields = index_config.get("text_fields") or ["$"]
+    # `fields` is the documented key (`IndexConfig.fields`) and the one the in-memory
+    # and Postgres stores read. `text_fields` is what this store read first, so it
+    # stays accepted; an explicit `fields` wins when both are present.
+    text_fields = index_config.get("fields") or index_config.get("text_fields") or ["$"]
     if isinstance(text_fields, str):
         text_fields = [text_fields]
     if not isinstance(text_fields, list):

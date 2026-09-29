@@ -17,7 +17,7 @@ from langgraph.store.base import (
 
 from langgraph.store.sqlite import AsyncSqliteStore
 from langgraph.store.sqlite.base import SqliteIndexConfig
-from tests.test_store import CharacterEmbeddings
+from tests.test_store import CharacterEmbeddings, RecordingCharacterEmbeddings
 
 
 @pytest.fixture(scope="function", params=["memory", "file"])
@@ -298,6 +298,28 @@ async def test_vector_store_initialization(
         assert store.index_config["dims"] == fake_embeddings.dims
         if hasattr(store.index_config.get("embed"), "embed_documents"):
             assert store.index_config["embed"] == fake_embeddings
+
+
+async def test_index_fields_key_selects_embedded_fields() -> None:
+    """The documented `fields` key selects which parts of an item are embedded.
+
+    The async store read only `text_fields`, so a documented `fields` config was
+    ignored and the whole item was embedded and sent to the embedding provider.
+    """
+    embeddings = RecordingCharacterEmbeddings()
+    index_config = cast(
+        "SqliteIndexConfig",
+        {"dims": embeddings.dims, "embed": embeddings, "fields": ["text"]},
+    )
+    async with AsyncSqliteStore.from_conn_string(
+        ":memory:", index=index_config
+    ) as store:
+        await store.setup()
+        await store.aput(("docs",), "doc", {"text": "indexed", "secret": "not indexed"})
+
+        assert embeddings.embedded == [["indexed"]]
+        cursor = await store.conn.execute("SELECT field_name FROM store_vectors")
+        assert [row[0] for row in await cursor.fetchall()] == ["text"]
 
 
 async def test_vector_insert_with_auto_embedding(

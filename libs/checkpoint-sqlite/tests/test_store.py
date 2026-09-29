@@ -79,6 +79,18 @@ class CharacterEmbeddings(Embeddings):
         return isinstance(other, CharacterEmbeddings) and self.dims == other.dims
 
 
+class RecordingCharacterEmbeddings(CharacterEmbeddings):
+    """`CharacterEmbeddings` that records the text it was asked to embed."""
+
+    def __init__(self, dims: int = 8, seed: int = 42):
+        super().__init__(dims=dims, seed=seed)
+        self.embedded: list[list[str]] = []
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        self.embedded.append(list(texts))
+        return super().embed_documents(texts)
+
+
 @pytest.fixture(scope="function", params=["memory", "file"])
 def store(request: Any) -> Generator[SqliteStore, None, None]:
     """Create a SqliteStore for testing."""
@@ -475,6 +487,60 @@ def test_vector_store_initialization(fake_embeddings: CharacterEmbeddings) -> No
         )
         tables = cursor.fetchall()
         assert len(tables) >= 1, "Vector tables were not created"
+
+
+def test_index_fields_key_selects_embedded_fields() -> None:
+    """The documented `fields` key selects which parts of an item are embedded.
+
+    `SqliteStore` read only `text_fields`, so a documented `fields` config was
+    ignored and the whole item was embedded and sent to the embedding provider.
+    """
+    embeddings = RecordingCharacterEmbeddings()
+    index_config = cast(
+        "SqliteIndexConfig",
+        {"dims": embeddings.dims, "embed": embeddings, "fields": ["text"]},
+    )
+    with SqliteStore.from_conn_string(":memory:", index=index_config) as store:
+        store.setup()
+        store.put(("docs",), "doc", {"text": "indexed", "secret": "not indexed"})
+
+        assert embeddings.embedded == [["indexed"]]
+        assert [
+            row[0] for row in store.conn.execute("SELECT field_name FROM store_vectors")
+        ] == ["text"]
+
+
+def test_index_text_fields_key_still_supported() -> None:
+    """`text_fields` keeps working: it was the only key accepted until now."""
+    embeddings = RecordingCharacterEmbeddings()
+    index_config = cast(
+        "SqliteIndexConfig",
+        {"dims": embeddings.dims, "embed": embeddings, "text_fields": ["text"]},
+    )
+    with SqliteStore.from_conn_string(":memory:", index=index_config) as store:
+        store.setup()
+        store.put(("docs",), "doc", {"text": "indexed", "secret": "not indexed"})
+
+        assert embeddings.embedded == [["indexed"]]
+
+
+def test_index_fields_key_wins_over_text_fields() -> None:
+    """When both keys are given, the documented `fields` takes precedence."""
+    embeddings = RecordingCharacterEmbeddings()
+    index_config = cast(
+        "SqliteIndexConfig",
+        {
+            "dims": embeddings.dims,
+            "embed": embeddings,
+            "fields": ["text"],
+            "text_fields": ["secret"],
+        },
+    )
+    with SqliteStore.from_conn_string(":memory:", index=index_config) as store:
+        store.setup()
+        store.put(("docs",), "doc", {"text": "indexed", "secret": "not indexed"})
+
+        assert embeddings.embedded == [["indexed"]]
 
 
 @pytest.mark.parametrize("distance_type", VECTOR_TYPES)
