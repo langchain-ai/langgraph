@@ -3,6 +3,7 @@ from typing import Annotated, Any, Literal
 
 import pytest
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import InMemorySaver
 from typing_extensions import TypedDict
 
 from langgraph.channels.delta import DeltaChannel
@@ -204,6 +205,84 @@ async def test_interrupted_subgraph_task_state_async(
     assert task.state.values == _both("a1")
 
 
+@pytest.mark.parametrize("persistence", ["per-invocation", "per-thread"])
+def test_interrupted_subgraph_history_from_its_task_config(
+    sync_checkpointer: BaseCheckpointSaver,
+    persistence: Literal["per-invocation", "per-thread"],
+) -> None:
+    app = _nested_app(
+        sync_checkpointer,
+        pause_before_b=True,
+        subgraph_checkpointer=True if persistence == "per-thread" else None,
+    )
+    config = {"configurable": {"thread_id": "1"}}
+    app.invoke({}, config)
+    (task,) = app.get_state(config).tasks
+
+    history = list(app.get_state_history(task.state))
+
+    assert [snapshot.values for snapshot in history][:1] == [_both("a1")]
+
+
+@pytest.mark.parametrize("persistence", ["per-invocation", "per-thread"])
+async def test_interrupted_subgraph_ahistory_from_its_task_config(
+    async_checkpointer: BaseCheckpointSaver,
+    persistence: Literal["per-invocation", "per-thread"],
+) -> None:
+    app = _nested_app(
+        async_checkpointer,
+        pause_before_b=True,
+        subgraph_checkpointer=True if persistence == "per-thread" else None,
+    )
+    config = {"configurable": {"thread_id": "1"}}
+    await app.ainvoke({}, config)
+    (task,) = (await app.aget_state(config)).tasks
+
+    history = [snapshot async for snapshot in app.aget_state_history(task.state)]
+
+    assert [snapshot.values for snapshot in history][:1] == [_both("a1")]
+
+
+@pytest.mark.parametrize("persistence", ["per-invocation", "per-thread"])
+def test_interrupted_subgraph_update_state_from_its_task_config(
+    sync_checkpointer: BaseCheckpointSaver,
+    persistence: Literal["per-invocation", "per-thread"],
+) -> None:
+    app = _nested_app(
+        sync_checkpointer,
+        pause_before_b=True,
+        subgraph_checkpointer=True if persistence == "per-thread" else None,
+    )
+    config = {"configurable": {"thread_id": "1"}}
+    app.invoke({}, config)
+    (task,) = app.get_state(config).tasks
+
+    app.update_state(task.state, _both("edit"), as_node="a")
+
+    (task,) = app.get_state(config, subgraphs=True).tasks
+    assert task.state.values == _both("a1", "edit")
+
+
+@pytest.mark.parametrize("persistence", ["per-invocation", "per-thread"])
+async def test_interrupted_subgraph_aupdate_state_from_its_task_config(
+    async_checkpointer: BaseCheckpointSaver,
+    persistence: Literal["per-invocation", "per-thread"],
+) -> None:
+    app = _nested_app(
+        async_checkpointer,
+        pause_before_b=True,
+        subgraph_checkpointer=True if persistence == "per-thread" else None,
+    )
+    config = {"configurable": {"thread_id": "1"}}
+    await app.ainvoke({}, config)
+    (task,) = (await app.aget_state(config)).tasks
+
+    await app.aupdate_state(task.state, _both("edit"), as_node="a")
+
+    (task,) = (await app.aget_state(config, subgraphs=True)).tasks
+    assert task.state.values == _both("a1", "edit")
+
+
 def test_subgraph_update_state_keeps_history(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -275,6 +354,15 @@ async def test_ahydrating_written_delta_channel_without_saver_raises() -> None:
     with pytest.raises(ValueError, match="no checkpointer"):
         await achannels_from_checkpoint(
             {"delta": DeltaChannel(_extend)}, _written_delta_checkpoint()
+        )
+
+
+def test_hydrating_written_delta_channel_without_config_raises() -> None:
+    with pytest.raises(ValueError, match="no checkpointer"):
+        channels_from_checkpoint(
+            {"delta": DeltaChannel(_extend)},
+            _written_delta_checkpoint(),
+            saver=InMemorySaver(),
         )
 
 
