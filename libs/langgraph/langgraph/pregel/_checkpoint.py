@@ -47,6 +47,16 @@ def exit_delta_task_id(step: int, task_id: str) -> str:
     return f"{step:08d}-{parts[1]}-{parts[2]}-{parts[3]}-{parts[4]}"
 
 
+def exit_delta_late_task_id(step: int, task_id: str) -> str:
+    """Synthetic task id for exit-mode writes of a superstep after the anchor's own.
+
+    Sorts after every real task id, in step order, so replay keeps them after
+    the anchor's own superstep whether a saver orders by task path or task id.
+    """
+    parts = str(uuid.UUID(task_id)).split("-")
+    return f"ffffffff-{step >> 16:04x}-{step & 0xFFFF:04x}-{parts[3]}-{parts[4]}"
+
+
 def delta_channels_to_snapshot(
     channels: Mapping[str, BaseChannel],
     counters_since_delta_snapshot: Mapping[str, tuple[int, int]],

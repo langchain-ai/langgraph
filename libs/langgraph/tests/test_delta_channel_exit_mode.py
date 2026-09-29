@@ -459,3 +459,45 @@ def test_resume_interleaves_the_resumed_superstep_by_task_path(
 
     state = graph.get_state(config)
     assert state.values["log"] == state.values["plain"] == ["in", "a", "z"]
+
+
+class _TaskIdOrderSaver(InMemorySaver):
+    """Replays each checkpoint's writes by task id, as savers without task path
+    ordering do."""
+
+    def get_tuple(self, config: Any) -> Any:
+        tup = super().get_tuple(config)
+        if tup and tup.pending_writes:
+            tup = tup._replace(pending_writes=sorted(tup.pending_writes))
+        return tup
+
+    get_delta_channel_history = BaseCheckpointSaver.get_delta_channel_history
+
+
+def test_exit_run_replays_supersteps_in_order_on_a_task_id_ordered_saver() -> None:
+    builder = StateGraph(_ResumeState)
+    builder.add_node("a", lambda state: _both("a"))
+    builder.add_node("b", lambda state: _both("b"))
+    builder.add_edge(START, "a")
+    builder.add_edge("a", "b")
+    graph = builder.compile(checkpointer=_TaskIdOrderSaver())
+    config = {"configurable": {"thread_id": "t"}}
+
+    graph.invoke(_both("in"), config, durability="exit")
+
+    assert graph.get_state(config).values["log"] == ["in", "a", "b"]
+
+
+def test_exit_resume_replays_supersteps_in_order_on_a_task_id_ordered_saver() -> None:
+    builder = StateGraph(_ResumeState)
+    builder.add_node("ask", _ask("ask"))
+    builder.add_node("after", lambda state: _both("after"))
+    builder.add_edge(START, "ask")
+    builder.add_edge("ask", "after")
+    graph = builder.compile(checkpointer=_TaskIdOrderSaver())
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke(_both("in"), config, durability="exit")
+
+    graph.invoke(Command(resume="yes"), config, durability="exit")
+
+    assert graph.get_state(config).values["log"] == ["in", "ask", "after"]
