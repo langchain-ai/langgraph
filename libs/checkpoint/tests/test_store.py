@@ -635,6 +635,77 @@ def test_vector_insert_with_auto_embedding(
     assert "doc3" in doc_order
 
 
+def test_batch_embeds_repeated_text_once(
+    fake_embeddings: CharacterEmbeddings, mocker: MockerFixture
+) -> None:
+    """Items quoting the same text in one batch share a single embedding."""
+    store = InMemoryStore(
+        index={
+            "dims": fake_embeddings.dims,
+            "embed": fake_embeddings,
+            "fields": ["text"],
+        }
+    )
+    spy = mocker.spy(fake_embeddings, "embed_documents")
+
+    store.batch(
+        [
+            PutOp(("docs",), "doc-a", {"text": "same text"}),
+            PutOp(("docs",), "doc-b", {"text": "same text"}),
+            PutOp(("docs",), "doc-c", {"text": "other text"}),
+        ]
+    )
+
+    assert spy.call_args_list[0].args[0] == ["same text", "other text"]
+    results = store.search(("docs",), query="same text", limit=3)
+    assert {r.key for r in results} == {"doc-a", "doc-b", "doc-c"}
+    scores = {r.key: r.score for r in results}
+    assert scores["doc-a"] == scores["doc-b"]
+
+
+async def test_async_batch_embeds_repeated_text_once(
+    fake_embeddings: CharacterEmbeddings, mocker: MockerFixture
+) -> None:
+    """The async path deduplicates and fans out the same way."""
+    store = InMemoryStore(
+        index={
+            "dims": fake_embeddings.dims,
+            "embed": fake_embeddings,
+            "fields": ["text"],
+        }
+    )
+    spy = mocker.spy(fake_embeddings, "aembed_documents")
+
+    await store.abatch(
+        [
+            PutOp(("docs",), "doc-a", {"text": "same text"}),
+            PutOp(("docs",), "doc-b", {"text": "same text"}),
+        ]
+    )
+
+    assert spy.call_args_list[0].args[0] == ["same text"]
+    results = await store.asearch(("docs",), query="same text", limit=2)
+    assert {r.key for r in results} == {"doc-a", "doc-b"}
+
+
+def test_batch_rejects_wrong_embedding_count(
+    fake_embeddings: CharacterEmbeddings,
+) -> None:
+    """An embedder returning the wrong number of vectors is still reported."""
+
+    class OverEagerEmbeddings(CharacterEmbeddings):
+        def embed_documents(self, texts: list[str]) -> list[list[float]]:
+            return super().embed_documents(texts * 2)
+
+    embeddings = OverEagerEmbeddings(dims=fake_embeddings.dims)
+    store = InMemoryStore(
+        index={"dims": embeddings.dims, "embed": embeddings, "fields": ["text"]}
+    )
+
+    with pytest.raises(ValueError, match="Number of embeddings"):
+        store.batch([PutOp(("docs",), "doc-a", {"text": "some text"})])
+
+
 async def test_async_vector_insert_with_auto_embedding(
     fake_embeddings: CharacterEmbeddings,
 ) -> None:

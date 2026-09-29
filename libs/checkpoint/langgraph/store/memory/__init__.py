@@ -448,14 +448,16 @@ class InMemoryStore(BaseStore):
         to_embed: dict[str, list[tuple[tuple[str, ...], str, str]]],
         embeddings: list[list[float]],
     ) -> None:
-        indices = [index for indices in to_embed.values() for index in indices]
-        if len(indices) != len(embeddings):
+        # `to_embed` is keyed by text, so text repeated across index slots is
+        # embedded once and every slot that quoted it shares that vector.
+        if len(to_embed) != len(embeddings):
             raise ValueError(
                 f"Number of embeddings ({len(embeddings)}) does not"
-                f" match number of indices ({len(indices)})"
+                f" match number of unique texts ({len(to_embed)})"
             )
-        for embedding, (ns, key, path) in zip(embeddings, indices, strict=False):
-            self._vectors[ns][key][path] = embedding
+        for targets, embedding in zip(to_embed.values(), embeddings, strict=False):
+            for ns, key, path in targets:
+                self._vectors[ns][key][path] = embedding
 
     def _handle_list_namespaces(self, op: ListNamespacesOp) -> list[tuple[str, ...]]:
         all_namespaces = list(
