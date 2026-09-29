@@ -772,6 +772,31 @@ def test_ensure_config_tags_concat_preserves_order_and_duplicates() -> None:
     assert merged["tags"] == ["shared", "alpha", "shared", "beta"]
 
 
+def test_ensure_config_skips_tags_already_inherited_from_ambient() -> None:
+    # The config passed to a subgraph carries the same tags as the ambient
+    # config (RunnableSeq sets it as the context and passes it explicitly), so
+    # tags inherited from the ambient config must not be appended again.
+    token = var_child_runnable_config.set({"tags": ["my-tag"]})
+    try:
+        merged = ensure_config({"tags": ["my-tag", "extra"]})
+    finally:
+        var_child_runnable_config.reset(token)
+    assert merged["tags"] == ["my-tag", "extra"]
+
+
+def test_ensure_config_explicit_tags_still_concat_over_ambient() -> None:
+    # Explicit configs still concatenate with each other (including their own
+    # duplicates); only tags already present in the ambient config are skipped.
+    token = var_child_runnable_config.set({"tags": ["ambient"]})
+    try:
+        merged = ensure_config(
+            {"tags": ["ambient", "shared", "alpha"]}, {"tags": ["shared", "beta"]}
+        )
+    finally:
+        var_child_runnable_config.reset(token)
+    assert merged["tags"] == ["ambient", "shared", "alpha", "shared", "beta"]
+
+
 def test_ensure_config_merges_callbacks_across_configs() -> None:
     a_cb = _TrackingCB("a")
     b_cb = _TrackingCB("b")
@@ -791,3 +816,27 @@ def test_ensure_config_empty_inputs() -> None:
     assert merged["tags"] == []
     assert merged["configurable"] == {}
     assert merged["callbacks"] is None
+
+
+@pytest.mark.parametrize("depth", [0, 1, 2, 3])
+def test_invoke_tags_not_duplicated_across_subgraph_levels(depth: int) -> None:
+    """Tags passed at invoke time must reach a nested node exactly once."""
+
+    class State(TypedDict):
+        copies: int
+
+    def leaf(state: State, config: RunnableConfig) -> State:
+        return {"copies": config["tags"].count("my-tag")}
+
+    builder = StateGraph(State)
+    builder.add_node("leaf", leaf)
+    builder.add_edge("__start__", "leaf")
+    graph = builder.compile()
+    for _ in range(depth):
+        builder = StateGraph(State)
+        builder.add_node("sub", graph)
+        builder.add_edge("__start__", "sub")
+        graph = builder.compile()
+
+    out = graph.invoke({"copies": 0}, {"tags": ["my-tag"]})
+    assert out["copies"] == 1
