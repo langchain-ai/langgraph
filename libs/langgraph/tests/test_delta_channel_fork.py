@@ -17,7 +17,7 @@ from typing_extensions import TypedDict
 from langgraph._internal._constants import INPUT
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import Durability, StateSnapshot, StateUpdate, interrupt
+from langgraph.types import Command, Durability, StateSnapshot, StateUpdate, interrupt
 
 pytestmark = pytest.mark.anyio
 
@@ -363,7 +363,7 @@ def _build_paused_before_b(checkpointer: BaseCheckpointSaver) -> Any:
 def _build_parallel_interrupt(checkpointer: BaseCheckpointSaver) -> Any:
     def ask(state: _State) -> dict:
         interrupt("approve?")
-        return _both("q")
+        return {"other": ["q"]}
 
     builder = StateGraph(_State)
     builder.add_node("p", lambda state: _both("p"))
@@ -443,6 +443,37 @@ def _build_deferred_after_interrupt(checkpointer: BaseCheckpointSaver) -> Any:
     builder.add_edge("a", "b")
     builder.add_edge("a", "c")
     return builder.compile(checkpointer=checkpointer, interrupt_after=["a"])
+
+
+def test_resume_on_an_interrupted_head_consumes_its_writes_without_a_snapshot(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    config = _thread("t")
+    graph = _build_parallel_interrupt(sync_checkpointer)
+    graph.invoke(_both("in-1"), config, durability=durability)
+
+    graph.invoke(Command(resume="yes"), config, durability=durability)
+
+    state = graph.get_state(config)
+    assert state.next == ()
+    assert state.values["log"] == state.values["plain"] == ["in-1", "p"]
+    assert not _snapshotted_checkpoints(sync_checkpointer, config)
+
+
+def test_resume_addressed_at_an_interrupted_head_reruns_its_tasks_once(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    config = _thread("t")
+    graph = _build_parallel_interrupt(sync_checkpointer)
+    graph.invoke(_both("in-1"), config, durability=durability)
+
+    graph.invoke(
+        Command(resume="yes"), graph.get_state(config).config, durability=durability
+    )
+
+    state = graph.get_state(config)
+    assert state.next == ()
+    assert state.values["log"] == state.values["plain"] == ["in-1", "p"]
 
 
 def test_update_state_with_the_head_checkpoint_id_keeps_a_deferred_node(

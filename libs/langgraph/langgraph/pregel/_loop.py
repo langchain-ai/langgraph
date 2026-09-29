@@ -223,6 +223,10 @@ class PregelLoop:
     # under the saver's `ORDER BY task_id, idx` sorting.
     _exit_delta_writes: list[tuple[int, str, str, Any]] | None = None
 
+    # ids of the pending writes loaded with the checkpoint. They are already
+    # stored on it, so the exit accumulator must not store them again.
+    _loaded_write_ids: set[int]
+
     # Delta channels that must snapshot at the next checkpoint, whatever their
     # cadence counters say:
     # * an Overwrite arrived since the last checkpoint, so sparse replay has to
@@ -711,9 +715,14 @@ class PregelLoop:
             )
         # capture delta-channel writes for exit-mode accumulator before clearing
         if self._exit_delta_writes is not None:
-            for tid, ch, v in self.checkpoint_pending_writes:
-                if isinstance(self.specs.get(ch), DeltaChannel):
+            for w in self.checkpoint_pending_writes:
+                tid, ch, v = w
+                if (
+                    isinstance(self.specs.get(ch), DeltaChannel)
+                    and id(w) not in self._loaded_write_ids
+                ):
                     self._exit_delta_writes.append((self.step, tid, ch, v))
+        self._loaded_write_ids = set()
         # clear pending writes
         self.checkpoint_pending_writes.clear()
         # only replay (re-execute) done tasks on the first tick
@@ -860,6 +869,7 @@ class PregelLoop:
         #   - None input: resume after interrupt (invoke(None, config))
         #   - Command input: any Command operates on existing state
         #   - Same run_id: re-entry into an ongoing run (e.g. stream reconnect)
+        self._loaded_write_ids = {id(w) for w in self.checkpoint_pending_writes}
         configurable = self.config.get(CONF, {})
         input_is_command = isinstance(self.input, Command)
         is_resuming = bool(self.checkpoint["channel_versions"]) and bool(
@@ -902,6 +912,15 @@ class PregelLoop:
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
             ]
+        # A resume that is not replaying reuses the head's pending writes
+        # instead of rerunning their tasks, so none of them can leak.
+        self._delta_channels_forced_snapshot = (
+            set()
+            if is_resuming and not self.is_replaying
+            else delta_channels_with_pending_writes(
+                self.specs, self.checkpoint_pending_writes
+            )
+        )
 
         # map command to writes
         if input_is_command:
@@ -1686,9 +1705,6 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             if saved.pending_writes is not None
             else []
         )
-        self._delta_channels_forced_snapshot = delta_channels_with_pending_writes(
-            self.specs, saved.pending_writes
-        )
         self._delta_write_futs = []
         self._error_handler_write_futs = []
         self._exit_delta_writes = (
@@ -1945,9 +1961,6 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             [(str(tid), k, v) for tid, k, v in saved.pending_writes]
             if saved.pending_writes is not None
             else []
-        )
-        self._delta_channels_forced_snapshot = delta_channels_with_pending_writes(
-            self.specs, saved.pending_writes
         )
         self._delta_write_futs = []
         self._error_handler_write_futs = []
