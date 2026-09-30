@@ -1950,7 +1950,7 @@ class Pregel(
             run_tasks: list[PregelTaskWrites] = []
             run_task_ids: list[str] = []
 
-            for as_node, values, provided_task_id in valid_updates:
+            for i, (as_node, values, provided_task_id) in enumerate(valid_updates):
                 # create task to run all writers of the chosen node
                 writers = self.nodes[as_node].flat_writers
                 if not writers:
@@ -1964,7 +1964,7 @@ class Pregel(
                 task_id = provided_task_id or (
                     prepared_task_ids.popleft()
                     if prepared_task_ids
-                    else str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
+                    else _update_task_id(checkpoint["id"], i)
                 )
                 run_tasks.append(task)
                 run_task_ids.append(task_id)
@@ -2410,7 +2410,7 @@ class Pregel(
             run_tasks: list[PregelTaskWrites] = []
             run_task_ids: list[str] = []
 
-            for as_node, values, provided_task_id in valid_updates:
+            for i, (as_node, values, provided_task_id) in enumerate(valid_updates):
                 # create task to run all writers of the chosen node
                 writers = self.nodes[as_node].flat_writers
                 if not writers:
@@ -2424,7 +2424,7 @@ class Pregel(
                 task_id = provided_task_id or (
                     prepared_task_ids.popleft()
                     if prepared_task_ids
-                    else str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
+                    else _update_task_id(checkpoint["id"], i)
                 )
                 run_tasks.append(task)
                 run_task_ids.append(task_id)
@@ -4170,6 +4170,16 @@ class Pregel(
                 )
         # clear cache
         await self.cache.aclear(namespaces)
+
+
+def _update_task_id(checkpoint_id: str, i: int) -> str:
+    """Task id for the `i`th update of a superstep that has no task to reuse.
+
+    Savers keep one write per `(task_id, idx)`, so updates sharing an id lose
+    all but the first one's writes, which a `DeltaChannel` replays from. The
+    first update keeps the id a lone update has always had.
+    """
+    return str(uuid5(UUID(checkpoint_id), INTERRUPT if i == 0 else f"{INTERRUPT}:{i}"))
 
 
 def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> Mapping[str, Sequence[str]]:
