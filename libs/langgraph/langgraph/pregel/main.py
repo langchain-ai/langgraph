@@ -133,7 +133,6 @@ from langgraph.pregel._checkpoint import (
     copy_checkpoint,
     create_checkpoint,
     create_checkpoint_plan_for_update_state_api,
-    create_fork_checkpoint,
     delta_channels_with_pending_writes,
     empty_checkpoint,
     get_updated_channels_from_tasks,
@@ -1737,12 +1736,12 @@ class Pregel(
                         self.trigger_to_nodes,
                     )
                 # save checkpoint
-                next_checkpoint = create_fork_checkpoint(
+                next_checkpoint = create_checkpoint(
                     checkpoint,
                     channels,
                     step,
-                    fork_channels=fork_pending,
                     get_next_version=checkpointer.get_next_version,
+                    channels_to_snapshot=fork_pending,
                 )
                 fork_pending.difference_update(next_checkpoint["channel_values"])
                 next_config = checkpointer.put(
@@ -1784,12 +1783,12 @@ class Pregel(
                         if saved and saved.metadata.get("step") is not None
                         else -1
                     )
-                    next_checkpoint = create_fork_checkpoint(
+                    next_checkpoint = create_checkpoint(
                         checkpoint,
                         channels,
                         next_step,
-                        fork_channels=fork_pending,
                         get_next_version=checkpointer.get_next_version,
+                        channels_to_snapshot=fork_pending,
                     )
                     fork_pending.difference_update(next_checkpoint["channel_values"])
                     next_config = checkpointer.put(
@@ -2227,12 +2226,12 @@ class Pregel(
                         self.trigger_to_nodes,
                     )
                 # save checkpoint
-                next_checkpoint = create_fork_checkpoint(
+                next_checkpoint = create_checkpoint(
                     checkpoint,
                     channels,
                     step,
-                    fork_channels=fork_pending,
                     get_next_version=checkpointer.get_next_version,
+                    channels_to_snapshot=fork_pending,
                 )
                 fork_pending.difference_update(next_checkpoint["channel_values"])
                 next_config = await checkpointer.aput(
@@ -2274,12 +2273,12 @@ class Pregel(
                         if saved and saved.metadata.get("step") is not None
                         else -1
                     )
-                    next_checkpoint = create_fork_checkpoint(
+                    next_checkpoint = create_checkpoint(
                         checkpoint,
                         channels,
                         next_step,
-                        fork_channels=fork_pending,
                         get_next_version=checkpointer.get_next_version,
+                        channels_to_snapshot=fork_pending,
                     )
                     fork_pending.difference_update(next_checkpoint["channel_values"])
                     next_config = await checkpointer.aput(

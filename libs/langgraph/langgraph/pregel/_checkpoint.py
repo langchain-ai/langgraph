@@ -168,32 +168,6 @@ def create_checkpoint_plan_for_update_state_api(
     return channels_to_snapshot, metadata
 
 
-def create_fork_checkpoint(
-    checkpoint: Checkpoint,
-    channels: Mapping[str, BaseChannel],
-    step: int,
-    *,
-    fork_channels: set[str],
-    get_next_version: GetNextVersion,
-) -> Checkpoint:
-    """``create_checkpoint`` for the update_state paths that skip the plan.
-
-    The fork has to be sealed by its first checkpoint: any later superstep
-    has already rebuilt its delta channels through the shared base. These
-    paths never write the delta channel, so its version must be bumped here
-    or ``put`` drops the blob; derive ``new_versions`` from the result.
-    """
-    if not fork_channels:
-        return create_checkpoint(checkpoint, channels, step)
-    return create_checkpoint(
-        checkpoint,
-        channels,
-        step,
-        get_next_version=get_next_version,
-        channels_to_snapshot=fork_channels,
-    )
-
-
 def create_checkpoint(
     checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel] | None,
