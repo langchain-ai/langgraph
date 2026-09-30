@@ -33,6 +33,7 @@ from langgraph.checkpoint.serde.event_hooks import (
     register_serde_event_listener,
 )
 from langgraph.checkpoint.serde.jsonplus import (
+    EXT_CONSTRUCTOR_SINGLE_ARG,
     EXT_METHOD_SINGLE_ARG,
     InvalidModuleError,
     JsonPlusSerializer,
@@ -96,6 +97,23 @@ class MyDataclassWSlots:
 class MyEnum(Enum):
     FOO = "foo"
     BAR = "bar"
+
+
+class OuterWithNestedEnum(BaseModel):
+    class PhaseEnum(Enum):
+        QUERY = "query_ready"
+        READY = "ready"
+
+    phase: PhaseEnum
+
+
+@dataclasses.dataclass
+class OuterWithNestedDataclass:
+    @dataclasses.dataclass
+    class Inner:
+        hello: str
+
+    inner: Inner
 
 
 @dataclasses_json.dataclass_json
@@ -206,6 +224,47 @@ def test_serde_jsonplus() -> None:
     serde = JsonPlusSerializer(pickle_fallback=False)
 
     assert serde.loads_typed(serde.dumps_typed(surrogates)) == surrogates
+
+
+def test_serde_jsonplus_nested_enum() -> None:
+    serde = JsonPlusSerializer()
+
+    nested = OuterWithNestedEnum.PhaseEnum.QUERY
+    assert serde.loads_typed(serde.dumps_typed(nested)) is nested
+
+    model = OuterWithNestedEnum(phase=nested)
+    restored = serde.loads_typed(serde.dumps_typed(model))
+    assert restored == model
+    assert type(restored.phase) is OuterWithNestedEnum.PhaseEnum
+
+
+def test_serde_jsonplus_nested_dataclass() -> None:
+    serde = JsonPlusSerializer()
+
+    obj = OuterWithNestedDataclass(inner=OuterWithNestedDataclass.Inner(hello="hi"))
+    assert serde.loads_typed(serde.dumps_typed(obj)) == obj
+
+
+def test_serde_jsonplus_legacy_nested_class_name_falls_back_to_raw_value() -> None:
+    # Payloads written before nested classes were serialized with
+    # __qualname__ carry the bare class name, which cannot be resolved at
+    # module level. Deserialization must fall back to the raw value instead
+    # of None so surrounding validation (e.g. pydantic) can reconstruct.
+    serde = JsonPlusSerializer()
+    payload = ormsgpack.packb(
+        ormsgpack.Ext(
+            EXT_CONSTRUCTOR_SINGLE_ARG,
+            _msgpack_enc(
+                (
+                    OuterWithNestedEnum.__module__,
+                    "PhaseEnum",
+                    OuterWithNestedEnum.PhaseEnum.QUERY.value,
+                )
+            ),
+        ),
+        option=ormsgpack.OPT_NON_STR_KEYS,
+    )
+    assert serde.loads_typed(("msgpack", payload)) == "query_ready"
 
 
 def test_serde_jsonplus_json_mode() -> None:

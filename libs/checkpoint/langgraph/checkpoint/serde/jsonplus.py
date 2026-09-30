@@ -311,7 +311,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
-                    obj.__class__.__name__,
+                    _type_name(obj.__class__),
                     obj.model_dump(),
                     "model_validate_json",
                 ),
@@ -323,7 +323,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
-                    obj.__class__.__name__,
+                    _type_name(obj.__class__),
                     obj.get_secret_value(),
                 ),
             ),
@@ -334,7 +334,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
-                    obj.__class__.__name__,
+                    _type_name(obj.__class__),
                     obj.dict(),
                 ),
             ),
@@ -345,7 +345,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
-                    obj.__class__.__name__,
+                    _type_name(obj.__class__),
                     obj._asdict(),
                 ),
             ),
@@ -354,7 +354,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
-                (obj.__class__.__module__, obj.__class__.__name__, obj.parts),
+                (obj.__class__.__module__, _type_name(obj.__class__), obj.parts),
             ),
         )
     elif isinstance(obj, re.Pattern):
@@ -368,35 +368,35 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
-                (obj.__class__.__module__, obj.__class__.__name__, obj.hex),
+                (obj.__class__.__module__, _type_name(obj.__class__), obj.hex),
             ),
         )
     elif isinstance(obj, decimal.Decimal):
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
-                (obj.__class__.__module__, obj.__class__.__name__, str(obj)),
+                (obj.__class__.__module__, _type_name(obj.__class__), str(obj)),
             ),
         )
     elif isinstance(obj, (set, frozenset, deque)):
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
-                (obj.__class__.__module__, obj.__class__.__name__, tuple(obj)),
+                (obj.__class__.__module__, _type_name(obj.__class__), tuple(obj)),
             ),
         )
     elif isinstance(obj, (IPv4Address, IPv4Interface, IPv4Network)):
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
-                (obj.__class__.__module__, obj.__class__.__name__, str(obj)),
+                (obj.__class__.__module__, _type_name(obj.__class__), str(obj)),
             ),
         )
     elif isinstance(obj, (IPv6Address, IPv6Interface, IPv6Network)):
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
-                (obj.__class__.__module__, obj.__class__.__name__, str(obj)),
+                (obj.__class__.__module__, _type_name(obj.__class__), str(obj)),
             ),
         )
     elif isinstance(obj, datetime):
@@ -405,7 +405,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
-                    obj.__class__.__name__,
+                    _type_name(obj.__class__),
                     obj.isoformat(),
                     "fromisoformat",
                 ),
@@ -417,7 +417,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
-                    obj.__class__.__name__,
+                    _type_name(obj.__class__),
                     (obj.days, obj.seconds, obj.microseconds),
                 ),
             ),
@@ -428,7 +428,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
-                    obj.__class__.__name__,
+                    _type_name(obj.__class__),
                     (obj.year, obj.month, obj.day),
                 ),
             ),
@@ -439,7 +439,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
-                    obj.__class__.__name__,
+                    _type_name(obj.__class__),
                     {
                         "hour": obj.hour,
                         "minute": obj.minute,
@@ -457,7 +457,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
-                    obj.__class__.__name__,
+                    _type_name(obj.__class__),
                     obj.__getinitargs__(),  # type: ignore[attr-defined]
                 ),
             ),
@@ -466,14 +466,14 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
-                (obj.__class__.__module__, obj.__class__.__name__, obj.key),
+                (obj.__class__.__module__, _type_name(obj.__class__), obj.key),
             ),
         )
     elif isinstance(obj, Enum):
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
-                (obj.__class__.__module__, obj.__class__.__name__, obj.value),
+                (obj.__class__.__module__, _type_name(obj.__class__), obj.value),
             ),
         )
     elif isinstance(obj, SendProtocol):
@@ -483,7 +483,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
-                (obj.__class__.__module__, obj.__class__.__name__, args),
+                (obj.__class__.__module__, _type_name(obj.__class__), args),
             ),
         )
     elif dataclasses.is_dataclass(obj):
@@ -493,7 +493,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
-                    obj.__class__.__name__,
+                    _type_name(obj.__class__),
                     {
                         field.name: getattr(obj, field.name)
                         for field in dataclasses.fields(obj)
@@ -507,7 +507,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
-                    obj.__class__.__name__,
+                    _type_name(obj.__class__),
                     {k: getattr(obj, k) for k in obj.__slots__},
                 ),
             ),
@@ -532,6 +532,24 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
         return repr(obj)
     else:
         raise TypeError(f"Object of type {obj.__class__.__name__} is not serializable")
+
+
+def _type_name(cls: type) -> str:
+    """Class name as recorded in msgpack payloads.
+
+    ``__qualname__`` preserves nesting (``Outer.Inner``) so classes defined
+    inside another class survive a round-trip; for top-level classes it is
+    identical to ``__name__``, so existing payloads are unaffected.
+    """
+    return cls.__qualname__
+
+
+def _resolve_module_attr(module: str, name: str) -> Any:
+    """Resolve a possibly dotted attribute path (e.g. ``Outer.Inner``) on a module."""
+    obj: Any = importlib.import_module(module)
+    for part in name.split("."):
+        obj = getattr(obj, part)
+    return obj
 
 
 def _send_from_args(args: Sequence[Any]) -> Any:
@@ -647,8 +665,15 @@ def _create_msgpack_ext_hook(
                     # is using this in the context of a pydantic state, etc., then
                     # it would be validated upon construction.
                     return tup[2]
+                try:
+                    cls = _resolve_module_attr(tup[0], tup[1])
+                except Exception:
+                    # Class no longer resolvable (code moved, or a nested class
+                    # recorded before `__qualname__` was used). Return the raw
+                    # value so surrounding validation can still reconstruct.
+                    return tup[2]
                 # module, name, arg
-                return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
+                return cls(tup[2])
             except Exception:
                 return None
         elif code == EXT_CONSTRUCTOR_POS_ARGS:
@@ -660,8 +685,12 @@ def _create_msgpack_ext_hook(
                     return tup[2]
                 if tup[0] == "langgraph.types" and tup[1] == "Send":
                     return _send_from_args(tup[2])
+                try:
+                    cls = _resolve_module_attr(tup[0], tup[1])
+                except Exception:
+                    return tup[2]
                 # module, name, args
-                return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
+                return cls(*tup[2])
             except Exception:
                 return None
         elif code == EXT_CONSTRUCTOR_KW_ARGS:
@@ -671,8 +700,12 @@ def _create_msgpack_ext_hook(
                 )
                 if not _check_allowed(tup[0], tup[1]):
                     return tup[2]
+                try:
+                    cls = _resolve_module_attr(tup[0], tup[1])
+                except Exception:
+                    return tup[2]
                 # module, name, kwargs
-                return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
+                return cls(**tup[2])
             except Exception:
                 return None
         elif code == EXT_METHOD_SINGLE_ARG:
@@ -682,10 +715,12 @@ def _create_msgpack_ext_hook(
                 )
                 if not _check_allowed_method(tup[0], tup[1], tup[3]):
                     return tup[2]
+                try:
+                    owner = _resolve_module_attr(tup[0], tup[1])
+                except Exception:
+                    return tup[2]
                 # module, name, arg, method
-                return getattr(
-                    getattr(importlib.import_module(tup[0]), tup[1]), tup[3]
-                )(tup[2])
+                return getattr(owner, tup[3])(tup[2])
             except Exception:
                 return None
         elif code == EXT_PYDANTIC_V1:
