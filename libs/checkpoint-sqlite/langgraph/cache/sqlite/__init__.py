@@ -2,12 +2,38 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import json
 import sqlite3
 import threading
 from collections.abc import Mapping, Sequence
 
 from langgraph.cache.base import BaseCache, FullKey, Namespace, ValueT
 from langgraph.checkpoint.serde.base import SerializerProtocol
+
+
+def _encode_ns(ns: Namespace) -> str:
+    """Encode a namespace for the SQL `ns` column.
+
+    JSON is used instead of a delimiter-joined string: node/checkpoint names
+    may legally contain the delimiter itself (e.g. a node named `foo,bar`),
+    which made `",".join()`/`split(",")` round-trip lossy and broke cache
+    lookups with a KeyError (#8660).
+    """
+    return json.dumps(ns)
+
+
+def _decode_ns(ns: str) -> Namespace:
+    """Decode a namespace read from the SQL `ns` column.
+
+    Falls back to comma-splitting for rows written by older versions.
+    """
+    try:
+        decoded = json.loads(ns)
+        if isinstance(decoded, list) and all(isinstance(part, str) for part in decoded):
+            return tuple(decoded)
+    except json.JSONDecodeError:
+        pass
+    return tuple(ns.split(","))
 
 
 class SqliteCache(BaseCache[ValueT]):
@@ -52,7 +78,7 @@ class SqliteCache(BaseCache[ValueT]):
             placeholders = ",".join("(?, ?)" for _ in keys)
             params: list[str] = []
             for ns_tuple, key in keys:
-                params.extend((",".join(ns_tuple), key))
+                params.extend((_encode_ns(ns_tuple), key))
             cursor = self._conn.execute(
                 f"SELECT ns, key, expiry, encoding, val FROM cache WHERE (ns, key) IN ({placeholders})",
                 tuple(params),
@@ -66,7 +92,7 @@ class SqliteCache(BaseCache[ValueT]):
                         "DELETE FROM cache WHERE (ns, key) = (?, ?)", (ns, key)
                     )
                     continue
-                values[(tuple(ns.split(",")), key)] = self.serde.loads_typed(
+                values[(_decode_ns(ns), key)] = self.serde.loads_typed(
                     (encoding, raw)
                 )
             return values
@@ -88,7 +114,7 @@ class SqliteCache(BaseCache[ValueT]):
                 encoding, raw = self.serde.dumps_typed(value)
                 self._conn.execute(
                     "INSERT OR REPLACE INTO cache (ns, key, expiry, encoding, val) VALUES (?, ?, ?, ?, ?)",
-                    (",".join(key[0]), key[1], expiry, encoding, raw),
+                    (_encode_ns(key[0]), key[1], expiry, encoding, raw),
                 )
 
     async def aset(self, mapping: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
@@ -105,7 +131,7 @@ class SqliteCache(BaseCache[ValueT]):
                 placeholders = ",".join("?" for _ in namespaces)
                 self._conn.execute(
                     f"DELETE FROM cache WHERE (ns) IN ({placeholders})",
-                    tuple(",".join(key) for key in namespaces),
+                    tuple(_encode_ns(key) for key in namespaces),
                 )
 
     async def aclear(self, namespaces: Sequence[Namespace] | None = None) -> None:
