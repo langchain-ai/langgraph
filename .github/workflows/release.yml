@@ -139,23 +139,10 @@ jobs:
             echo EOF
           } >> "$GITHUB_OUTPUT"
 
-  test-pypi-publish:
-    needs:
-      - build
-      - release-notes
-    permissions:
-      contents: read
-      id-token: write
-    uses: ./.github/workflows/_test_release.yml
-    with:
-      working-directory: ${{ inputs.working-directory }}
-    secrets: inherit
-
   pre-release-checks:
     needs:
       - build
       - release-notes
-      - test-pypi-publish
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -180,31 +167,20 @@ jobs:
           enable-cache: false
           working-directory: ${{ inputs.working-directory }}
 
-      - name: Import published package
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: ${{ inputs.working-directory }}/dist/
+
+      - name: Import dist package
         shell: bash
         working-directory: ${{ inputs.working-directory }}
         env:
           PKG_NAME: ${{ needs.build.outputs.pkg-name }}
           VERSION: ${{ needs.build.outputs.version }}
-        # Here we use:
-        # - The default regular PyPI index as the *primary* index, meaning
-        #   that it takes priority (https://pypi.org/simple)
-        # - The test PyPI index as an extra index, so that any dependencies that
-        #   are not found on test PyPI can be resolved and installed anyway.
-        #   (https://test.pypi.org/simple). This will include the PKG_NAME==VERSION
-        #   package because VERSION will not have been uploaded to regular PyPI yet.
-        # - attempt install again after 5 seconds if it fails because there is
-        #   sometimes a delay in availability on test pypi
+        # Install directly from the locally-built wheel (no index resolution needed).
         run: |
-          uv run pip install \
-            --extra-index-url https://test.pypi.org/simple/ \
-            "$PKG_NAME==$VERSION" || \
-          ( \
-            sleep 5 && \
-            uv run pip install \
-              --extra-index-url https://test.pypi.org/simple/ \
-              "$PKG_NAME==$VERSION" \
-          )
+          uv run pip install dist/*.whl
 
           if [[ "$PKG_NAME" == *prebuilt* ]]; then
             uv run pip install langgraph
@@ -226,7 +202,7 @@ jobs:
         run: uv sync --group test
         working-directory: ${{ inputs.working-directory }}
 
-      # Overwrite the local version of the package with the test PyPI version.
+      # Overwrite the local version of the package with the built version
       - name: Import published package (again)
         working-directory: ${{ inputs.working-directory }}
         shell: bash
@@ -234,13 +210,24 @@ jobs:
           PKG_NAME: ${{ needs.build.outputs.pkg-name }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          uv run pip install \
-            --extra-index-url https://test.pypi.org/simple/ \
-            "$PKG_NAME==$VERSION"
+          uv run pip install dist/*.whl
 
       - name: Run unit tests
         run: make test
         working-directory: ${{ inputs.working-directory }}
+
+  test-pypi-publish:
+    needs:
+      - build
+      - release-notes
+      - pre-release-checks
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/_test_release.yml
+    with:
+      working-directory: ${{ inputs.working-directory }}
+    secrets: inherit
 
   publish:
     needs:
