@@ -236,7 +236,7 @@ def _require_saver_for_history(
     if written and (saver is None or config is None):
         raise ValueError(
             f"DeltaChannel {written} has history to replay but no checkpointer "
-            "and config were passed to read it"
+            "or config was passed to read it"
         )
 
 

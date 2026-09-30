@@ -6,6 +6,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from typing_extensions import TypedDict
 
+from langgraph._internal._constants import CONFIG_KEY_CHECKPOINTER
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import END, START, StateGraph
 from langgraph.pregel._checkpoint import (
@@ -371,3 +372,24 @@ def test_hydrating_unwritten_delta_channel_without_saver_is_empty() -> None:
         {"delta": DeltaChannel(_extend)}, empty_checkpoint()
     )
     assert channels["delta"].get() == []
+
+
+def test_root_checkpointer_true_graph_state_read_raises() -> None:
+    app = _child_builder().compile(checkpointer=True)
+    with pytest.raises(RuntimeError, match="checkpointer=True cannot be used"):
+        app.get_state({"configurable": {"thread_id": "1"}})
+
+
+def test_stateless_graph_update_state_ignores_lent_saver() -> None:
+    saver = InMemorySaver()
+    app = _child_builder().compile(checkpointer=False)
+    config = {
+        "configurable": {
+            "thread_id": "1",
+            "checkpoint_ns": "child:1",
+            CONFIG_KEY_CHECKPOINTER: saver,
+        }
+    }
+    with pytest.raises(ValueError, match="No checkpointer set"):
+        app.update_state(config, _both("x"), as_node="a")
+    assert list(saver.list(None)) == []

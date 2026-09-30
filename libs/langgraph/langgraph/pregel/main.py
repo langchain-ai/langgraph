@@ -835,15 +835,28 @@ class Pregel(
         if auto_validate:
             self.validate()
 
-    def _state_checkpointer(self, config: RunnableConfig) -> BaseCheckpointSaver:
-        """The checkpointer state reads and writes use: the one a parent lends a
-        subgraph through the config, else this graph's own."""
-        checkpointer = ensure_config(config)[CONF].get(
-            CONFIG_KEY_CHECKPOINTER, self.checkpointer
-        )
+    def _resolve_checkpointer(
+        self, config: RunnableConfig
+    ) -> BaseCheckpointSaver | None:
+        """The saver runs and state methods use: none for `checkpointer=False`,
+        else the one a parent lends a subgraph through the config, else this
+        graph's own."""
+        if self.checkpointer is False:
+            return None
+        conf = config.get(CONF, {})
+        if CONFIG_KEY_CHECKPOINTER in conf:
+            checkpointer = conf[CONFIG_KEY_CHECKPOINTER]
+        elif self.checkpointer is True:
+            raise RuntimeError("checkpointer=True cannot be used for root graphs.")
+        else:
+            checkpointer = self.checkpointer
         if isinstance(checkpointer, BaseCheckpointSaver):
             checkpointer = self._apply_checkpointer_allowlist(checkpointer)
-        if not checkpointer:
+        return checkpointer
+
+    def _state_checkpointer(self, config: RunnableConfig) -> BaseCheckpointSaver:
+        checkpointer = self._resolve_checkpointer(ensure_config(config))
+        if not isinstance(checkpointer, BaseCheckpointSaver):
             raise ValueError("No checkpointer set")
         return checkpointer
 
@@ -1648,7 +1661,7 @@ class Pregel(
             channels, managed = channels_from_checkpoint(
                 self.channels,
                 checkpoint,
-                saver=checkpointer if saved is not None else None,
+                saver=checkpointer,
                 config=saved.config if saved is not None else None,
             )
             values, as_node = updates[0][:2]
@@ -2107,7 +2120,7 @@ class Pregel(
             channels, managed = await achannels_from_checkpoint(
                 self.channels,
                 checkpoint,
-                saver=checkpointer if saved is not None else None,
+                saver=checkpointer,
                 config=saved.config if saved is not None else None,
             )
             values, as_node = updates[0][:2]
@@ -2548,16 +2561,7 @@ class Pregel(
             stream_modes.add(print_mode)
         else:
             stream_modes.update(print_mode)
-        if self.checkpointer is False:
-            checkpointer: BaseCheckpointSaver | None = None
-        elif CONFIG_KEY_CHECKPOINTER in config.get(CONF, {}):
-            checkpointer = config[CONF][CONFIG_KEY_CHECKPOINTER]
-        elif self.checkpointer is True:
-            raise RuntimeError("checkpointer=True cannot be used for root graphs.")
-        else:
-            checkpointer = self.checkpointer
-        if isinstance(checkpointer, BaseCheckpointSaver):
-            checkpointer = self._apply_checkpointer_allowlist(checkpointer)
+        checkpointer = self._resolve_checkpointer(config)
         if checkpointer and not config.get(CONF):
             raise ValueError(
                 "Checkpointer requires one or more of the following 'configurable' "
