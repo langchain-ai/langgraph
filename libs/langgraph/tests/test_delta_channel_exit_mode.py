@@ -501,3 +501,38 @@ def test_exit_resume_replays_supersteps_in_order_on_a_task_id_ordered_saver() ->
     graph.invoke(Command(resume="yes"), config, durability="exit")
 
     assert graph.get_state(config).values["log"] == ["in", "ask", "after"]
+
+
+class _FailingPutSaver(InMemorySaver):
+    fail = False
+
+    def put(
+        self, config: Any, checkpoint: Any, metadata: Any, new_versions: Any
+    ) -> Any:
+        if self.fail:
+            raise RuntimeError("final checkpoint lost")
+        return super().put(config, checkpoint, metadata, new_versions)
+
+
+def test_exit_resume_retried_after_its_final_checkpoint_fails_reruns_the_resumed_task() -> (
+    None
+):
+    saver = _FailingPutSaver()
+    builder = StateGraph(_ResumeState)
+    builder.add_node("done", lambda state: _both("done"))
+    builder.add_node("ask", _ask("ask"))
+    builder.add_edge(START, "done")
+    builder.add_edge(START, "ask")
+    graph = builder.compile(checkpointer=saver)
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke(_both("in"), config, durability="exit")
+    saver.fail = True
+    with pytest.raises(RuntimeError, match="final checkpoint lost"):
+        graph.invoke(Command(resume="yes"), config, durability="exit")
+    saver.fail = False
+
+    graph.invoke(Command(resume="yes"), config, durability="exit")
+
+    state = graph.get_state(config)
+    assert state.values["log"] == state.values["plain"]
+    assert sorted(state.values["plain"]) == ["ask", "done", "in"]
