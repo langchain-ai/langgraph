@@ -6,11 +6,13 @@ channel), lazy stub creation when no parent exists, and proper read-path
 reconstruction via ancestor walks.
 """
 
+import operator
 import uuid
 from typing import Annotated, Any
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from typing_extensions import TypedDict
@@ -19,6 +21,7 @@ from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import _messages_delta_reducer
 from langgraph.pregel._checkpoint import exit_delta_task_id
+from langgraph.types import Command, Durability, interrupt
 
 pytestmark = pytest.mark.anyio
 
@@ -389,3 +392,147 @@ async def test_exit_snapshot_then_tail_deltas() -> None:
     assert "seed-msg" in contents
     assert "tail-msg" in contents
     assert contents.index("seed-msg") < contents.index("tail-msg")
+
+
+def _append(current: list, writes: list) -> list:
+    out = list(current)
+    for write in writes:
+        out.extend(write)
+    return out
+
+
+class _ResumeState(TypedDict):
+    log: Annotated[list, DeltaChannel(_append)]
+    plain: Annotated[list, operator.add]
+
+
+def _both(marker: str) -> dict:
+    return {"log": [marker], "plain": [marker]}
+
+
+def _ask(marker: str) -> Any:
+    def ask(state: _ResumeState) -> dict:
+        interrupt("approve?")
+        return _both(marker)
+
+    return ask
+
+
+@pytest.mark.parametrize("addressed", [False, True])
+def test_resume_after_a_parallel_interrupt_replays_in_live_order(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability, addressed: bool
+) -> None:
+    builder = StateGraph(_ResumeState)
+    builder.add_node("done", lambda state: _both("done"))
+    builder.add_node("ask", _ask("ask"))
+    builder.add_node("after", lambda state: _both("after"))
+    builder.add_edge(START, "done")
+    builder.add_edge(START, "ask")
+    builder.add_edge("ask", "after")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke(_both("in"), config, durability=durability)
+    head = graph.get_state(config).config
+
+    graph.invoke(
+        Command(resume="yes"), head if addressed else config, durability=durability
+    )
+
+    state = graph.get_state(config)
+    assert state.values["log"] == state.values["plain"]
+    assert sorted(state.values["log"]) == ["after", "ask", "done", "in"]
+
+
+def test_resume_interleaves_the_resumed_superstep_by_task_path(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    builder = StateGraph(_ResumeState)
+    builder.add_node("z_done", lambda state: _both("z"))
+    builder.add_node("a_asks", _ask("a"))
+    builder.add_edge(START, "z_done")
+    builder.add_edge(START, "a_asks")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke(_both("in"), config, durability=durability)
+
+    graph.invoke(Command(resume="yes"), config, durability=durability)
+
+    state = graph.get_state(config)
+    assert state.values["log"] == state.values["plain"] == ["in", "a", "z"]
+
+
+class _TaskIdOrderSaver(InMemorySaver):
+    """Replays each checkpoint's writes by task id, as savers without task path
+    ordering do."""
+
+    def get_tuple(self, config: Any) -> Any:
+        tup = super().get_tuple(config)
+        if tup and tup.pending_writes:
+            tup = tup._replace(pending_writes=sorted(tup.pending_writes))
+        return tup
+
+    get_delta_channel_history = BaseCheckpointSaver.get_delta_channel_history
+
+
+def test_exit_run_replays_supersteps_in_order_on_a_task_id_ordered_saver() -> None:
+    builder = StateGraph(_ResumeState)
+    builder.add_node("a", lambda state: _both("a"))
+    builder.add_node("b", lambda state: _both("b"))
+    builder.add_edge(START, "a")
+    builder.add_edge("a", "b")
+    graph = builder.compile(checkpointer=_TaskIdOrderSaver())
+    config = {"configurable": {"thread_id": "t"}}
+
+    graph.invoke(_both("in"), config, durability="exit")
+
+    assert graph.get_state(config).values["log"] == ["in", "a", "b"]
+
+
+def test_exit_resume_replays_supersteps_in_order_on_a_task_id_ordered_saver() -> None:
+    builder = StateGraph(_ResumeState)
+    builder.add_node("ask", _ask("ask"))
+    builder.add_node("after", lambda state: _both("after"))
+    builder.add_edge(START, "ask")
+    builder.add_edge("ask", "after")
+    graph = builder.compile(checkpointer=_TaskIdOrderSaver())
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke(_both("in"), config, durability="exit")
+
+    graph.invoke(Command(resume="yes"), config, durability="exit")
+
+    assert graph.get_state(config).values["log"] == ["in", "ask", "after"]
+
+
+class _FailingPutSaver(InMemorySaver):
+    fail = False
+
+    def put(
+        self, config: Any, checkpoint: Any, metadata: Any, new_versions: Any
+    ) -> Any:
+        if self.fail:
+            raise RuntimeError("final checkpoint lost")
+        return super().put(config, checkpoint, metadata, new_versions)
+
+
+def test_exit_resume_retried_after_its_final_checkpoint_fails_reruns_the_resumed_task() -> (
+    None
+):
+    saver = _FailingPutSaver()
+    builder = StateGraph(_ResumeState)
+    builder.add_node("done", lambda state: _both("done"))
+    builder.add_node("ask", _ask("ask"))
+    builder.add_edge(START, "done")
+    builder.add_edge(START, "ask")
+    graph = builder.compile(checkpointer=saver)
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke(_both("in"), config, durability="exit")
+    saver.fail = True
+    with pytest.raises(RuntimeError, match="final checkpoint lost"):
+        graph.invoke(Command(resume="yes"), config, durability="exit")
+    saver.fail = False
+
+    graph.invoke(Command(resume="yes"), config, durability="exit")
+
+    state = graph.get_state(config)
+    assert state.values["log"] == state.values["plain"]
+    assert sorted(state.values["plain"]) == ["ask", "done", "in"]
