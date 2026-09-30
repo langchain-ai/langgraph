@@ -1391,9 +1391,9 @@ def python_config_to_docker(
     if local_deps.pip_reqs:
         pip_reqs_str = os.linesep.join(
             (
-                f"COPY --from=outer-{reqpath.name} requirements.txt {destpath}"
+                f"COPY --from=outer-{reqpath.parent.name} requirements.txt {destpath}"
                 if reqpath.parent in local_deps.additional_contexts
-                else f"ADD {reqpath.relative_to(config_path.parent)} {destpath}"
+                else f"ADD {reqpath.relative_to(config_path.parent).as_posix()} {destpath}"
             )
             for reqpath, destpath in local_deps.pip_reqs
         )

@@ -908,7 +908,7 @@ def test_config_to_docker_simple():
 # syntax=docker/dockerfile:1.4
 FROM langchain/langgraph-api:3.11
 # -- Installing local requirements --
-COPY --from=outer-requirements.txt requirements.txt /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
+COPY --from=outer-graphs_reqs_a requirements.txt /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
 RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
 # -- End of local requirements install --
 # -- Adding local package ../../examples --
@@ -958,6 +958,40 @@ WORKDIR /deps/outer-unit_tests/unit_tests\
         ),
         "examples": str((pathlib.Path(__file__).parent / "../../examples").resolve()),
     }
+
+
+def test_config_to_docker_local_requirements_posix_path(tmp_path: pathlib.Path):
+    pkg = tmp_path / "my_agent"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("")
+    (pkg / "agent.py").write_text("graph = None\n")
+    (pkg / "requirements.txt").write_text("httpx\n")
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text("{}\n")
+    config = validate_config(
+        {
+            "dependencies": ["./my_agent"],
+            "graphs": {"agent": "./my_agent/agent.py:graph"},
+        }
+    )
+
+    relative_to = pathlib.Path.relative_to
+
+    def windows_relative_to(self, *args, **kwargs):
+        # Render relative paths the way Windows does, so this runs on any OS.
+        return pathlib.PureWindowsPath(relative_to(self, *args, **kwargs))
+
+    with patch.object(pathlib.Path, "relative_to", windows_relative_to):
+        docker, _ = config_to_docker(
+            config_path, config, base_image="langchain/langgraph-api"
+        )
+
+    # `\` is Docker's escape character: `ADD my_agent\requirements.txt` would
+    # look for `my_agentrequirements.txt` and fail the build.
+    assert (
+        "ADD my_agent/requirements.txt /deps/outer-my_agent/my_agent/requirements.txt"
+        in docker
+    )
 
 
 def test_config_to_docker_outside_path():
