@@ -571,13 +571,25 @@ def _compare_values(item_value: Any, filter_value: Any) -> bool:
             )
         )
     else:
-        return item_value == filter_value
+        return _scalar_equal(item_value, filter_value)
+
+
+def _scalar_equal(a: Any, b: Any) -> bool:
+    """Compare two scalars, distinguishing JSON booleans from numbers.
+
+    In Python ``True == 1 == 1.0``, but JSON treats booleans and numbers as
+    distinct types (as does PostgreSQL JSONB), so a boolean only ever equals
+    the other boolean with the same value.
+    """
+    if isinstance(a, bool) or isinstance(b, bool):
+        return isinstance(a, bool) and isinstance(b, bool) and a == b
+    return a == b
 
 
 def _apply_operator(value: Any, operator: str, op_value: Any) -> bool:
     """Apply a comparison operator, matching PostgreSQL's JSONB behavior."""
     if operator == "$eq":
-        return value == op_value
+        return _scalar_equal(value, op_value)
     elif operator == "$gt":
         return float(value) > float(op_value)
     elif operator == "$gte":
@@ -587,6 +599,6 @@ def _apply_operator(value: Any, operator: str, op_value: Any) -> bool:
     elif operator == "$lte":
         return float(value) <= float(op_value)
     elif operator == "$ne":
-        return value != op_value
+        return not _scalar_equal(value, op_value)
     else:
         raise ValueError(f"Unsupported operator: {operator}")

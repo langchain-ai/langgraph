@@ -1058,3 +1058,74 @@ def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
     assert result3[0].key == "3"
     assert result4[0].key == "4"
     assert result5[0].key == "5"
+
+
+def test_boolean_filter_not_matched_by_numbers(
+    fake_embeddings: CharacterEmbeddings,
+) -> None:
+    """Boolean filter values must not match numeric items (and vice versa).
+
+    Python treats ``True == 1 == 1.0``, but JSON (and PostgreSQL JSONB) treat
+    booleans and numbers as distinct types.
+    """
+    store = InMemoryStore(
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
+    )
+    store.put(("prefs",), "boolean", {"enabled": True, "text": "boolean"})
+    store.put(("prefs",), "integer", {"enabled": 1, "text": "integer"})
+    store.put(("prefs",), "float", {"enabled": 1.0, "text": "float"})
+    store.put(("prefs",), "string", {"enabled": "true", "text": "string"})
+
+    # Direct scalar predicate.
+    assert {r.key for r in store.search(("prefs",), filter={"enabled": True})} == {
+        "boolean"
+    }
+    assert {r.key for r in store.search(("prefs",), filter={"enabled": False})} == set()
+
+    # $eq operator.
+    assert {
+        r.key for r in store.search(("prefs",), filter={"enabled": {"$eq": True}})
+    } == {"boolean"}
+
+    # $ne excludes only the boolean, not the numerically-equal values.
+    assert {
+        r.key for r in store.search(("prefs",), filter={"enabled": {"$ne": True}})
+    } == {"integer", "float", "string"}
+
+    # Numbers remain mutually equal, but never match booleans.
+    assert {r.key for r in store.search(("prefs",), filter={"enabled": 1})} == {
+        "integer",
+        "float",
+    }
+    assert {
+        r.key for r in store.search(("prefs",), filter={"enabled": {"$eq": 0}})
+    } == set()
+
+
+async def test_async_boolean_filter_not_matched_by_numbers(
+    fake_embeddings: CharacterEmbeddings,
+) -> None:
+    """Async variant: boolean filters must not match numeric items."""
+    store = InMemoryStore(
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
+    )
+    for key, value in [
+        ("boolean", {"enabled": True}),
+        ("integer", {"enabled": 1}),
+        ("float", {"enabled": 1.0}),
+        ("false_bool", {"enabled": False}),
+        ("zero", {"enabled": 0}),
+    ]:
+        await store.aput(("prefs",), key, value)
+
+    results = await store.asearch(("prefs",), filter={"enabled": True})
+    assert {r.key for r in results} == {"boolean"}
+
+    results = await store.asearch(("prefs",), filter={"enabled": {"$eq": False}})
+    assert {r.key for r in results} == {"false_bool"}
+
+    results = await store.asearch(("prefs",), filter={"enabled": {"$ne": True}})
+    assert {r.key for r in results} == {"integer", "float", "false_bool", "zero"}
+
+    results = await store.asearch(("prefs",), filter={"enabled": 0})
+    assert {r.key for r in results} == {"zero"}
