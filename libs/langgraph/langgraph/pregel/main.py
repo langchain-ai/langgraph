@@ -108,6 +108,7 @@ from langgraph.callbacks import (
     get_sync_graph_callback_manager_for_config,
 )
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.topic import Topic
 from langgraph.config import get_config
 from langgraph.constants import END
@@ -2005,7 +2006,23 @@ class Pregel(
                     ),
                 )
             updated_channels = get_updated_channels_from_tasks(run_tasks)
-            if saved is not None:
+            edited_delta_channels = {
+                ch
+                for ch in updated_channels
+                if isinstance(self.channels.get(ch), DeltaChannel)
+            }
+            # The base's other children replay whatever is stored on it, so an
+            # edit of an older checkpoint stores none of its writes there: the
+            # checkpoint written here carries them, its delta channels
+            # snapshotted. Later supersteps address the checkpoint just written.
+            if (
+                is_first
+                and saved is not None
+                and edited_delta_channels
+                and _is_older_checkpoint(checkpointer, config, saved)
+            ):
+                fork_pending.update(edited_delta_channels)
+            elif saved is not None:
                 for task_id, task in zip(run_task_ids, run_tasks):
                     channel_writes = [w for w in task.writes if w[0] != PUSH]
                     if channel_writes:
@@ -2455,7 +2472,23 @@ class Pregel(
                     ),
                 )
             updated_channels = get_updated_channels_from_tasks(run_tasks)
-            if saved is not None:
+            edited_delta_channels = {
+                ch
+                for ch in updated_channels
+                if isinstance(self.channels.get(ch), DeltaChannel)
+            }
+            # The base's other children replay whatever is stored on it, so an
+            # edit of an older checkpoint stores none of its writes there: the
+            # checkpoint written here carries them, its delta channels
+            # snapshotted. Later supersteps address the checkpoint just written.
+            if (
+                is_first
+                and saved is not None
+                and edited_delta_channels
+                and await _ais_older_checkpoint(checkpointer, config, saved)
+            ):
+                fork_pending.update(edited_delta_channels)
+            elif saved is not None:
                 for task_id, task in zip(run_task_ids, run_tasks):
                     channel_writes = [w for w in task.writes if w[0] != PUSH]
                     if channel_writes:
@@ -4165,6 +4198,30 @@ def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> Mapping[str, Sequence[str
         for trigger in node.triggers:
             trigger_to_nodes[trigger].append(name)
     return dict(trigger_to_nodes)
+
+
+def _is_older_checkpoint(
+    checkpointer: BaseCheckpointSaver, config: RunnableConfig, saved: CheckpointTuple
+) -> bool:
+    """Whether `config` addressed a checkpoint the thread has moved past."""
+    if not config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
+        return False
+    latest = checkpointer.get_tuple(
+        patch_configurable(config, {CONFIG_KEY_CHECKPOINT_ID: None})
+    )
+    return latest is not None and latest.checkpoint["id"] != saved.checkpoint["id"]
+
+
+async def _ais_older_checkpoint(
+    checkpointer: BaseCheckpointSaver, config: RunnableConfig, saved: CheckpointTuple
+) -> bool:
+    """Whether `config` addressed a checkpoint the thread has moved past."""
+    if not config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
+        return False
+    latest = await checkpointer.aget_tuple(
+        patch_configurable(config, {CONFIG_KEY_CHECKPOINT_ID: None})
+    )
+    return latest is not None and latest.checkpoint["id"] != saved.checkpoint["id"]
 
 
 def _output(
