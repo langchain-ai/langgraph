@@ -9410,6 +9410,61 @@ def test_fork_does_not_apply_pending_writes(
     assert result == {"value": 121}
 
 
+def _extend(state: list, writes: list[list]) -> list:
+    return [*state, *(v for write in writes for v in write)]
+
+
+class _IntVersionSaver(InMemorySaver):
+    """Integer versions tie exactly where `InMemorySaver`'s break at random."""
+
+    get_next_version = BaseCheckpointSaver.get_next_version
+
+
+def _build_chain_after_a_delta_channel() -> Pregel:
+    return Pregel(
+        nodes={
+            "a": NodeBuilder().subscribe_only("inp").do(lambda _: ["a"]).write_to("d"),
+            "b": NodeBuilder().subscribe_only("d").do(lambda _: "b").write_to("x"),
+            "c": NodeBuilder().subscribe_only("x").do(lambda _: "c").write_to("out"),
+        },
+        channels={
+            "inp": LastValue(str),
+            "d": DeltaChannel(_extend, snapshot_frequency=1),
+            "x": LastValue(str),
+            "out": LastValue(str),
+        },
+        input_channels=["inp"],
+        output_channels=["out"],
+        checkpointer=_IntVersionSaver(),
+    )
+
+
+def test_update_state_after_an_exit_snapshot_infers_the_last_writer() -> None:
+    graph = _build_chain_after_a_delta_channel()
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"inp": "go"}, config, durability="exit")
+
+    graph.update_state(config, "u")
+
+    values = graph.get_state(config).values
+    assert values["out"] == "u", (
+        f"the update should apply as c, the last node to write, but state is {values}"
+    )
+
+
+async def test_aupdate_state_after_an_exit_snapshot_infers_the_last_writer() -> None:
+    graph = _build_chain_after_a_delta_channel()
+    config = {"configurable": {"thread_id": "t"}}
+    await graph.ainvoke({"inp": "go"}, config, durability="exit")
+
+    await graph.aupdate_state(config, "u")
+
+    values = (await graph.aget_state(config)).values
+    assert values["out"] == "u", (
+        f"the update should apply as c, the last node to write, but state is {values}"
+    )
+
+
 async def test_delta_channel_end_to_end_inmemory() -> None:
     """Full graph run: DeltaChannel accumulates correctly across multiple turns."""
 

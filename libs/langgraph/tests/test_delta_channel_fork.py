@@ -17,7 +17,14 @@ from typing_extensions import TypedDict
 from langgraph._internal._constants import INPUT
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import Command, Durability, StateSnapshot, StateUpdate, interrupt
+from langgraph.types import (
+    Command,
+    Durability,
+    Send,
+    StateSnapshot,
+    StateUpdate,
+    interrupt,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -468,6 +475,60 @@ def test_resume_on_an_interrupted_head_consumes_its_writes_without_a_snapshot(
     assert state.next == ()
     assert state.values["log"] == state.values["plain"] == ["in-1", "p"]
     assert not _snapshotted_checkpoints(sync_checkpointer, config)
+
+
+def _build_send_fan_out(checkpointer: BaseCheckpointSaver) -> Any:
+    def q(state: _State) -> dict:
+        interrupt("continue?")
+        return _both("q")
+
+    builder = StateGraph(_State)
+    builder.add_node("p", lambda state: _both("p"))
+    builder.add_node("q", q)
+    builder.add_conditional_edges(
+        START, lambda state: [Send("p", state), Send("q", state)], ["p", "q"]
+    )
+    return builder.compile(checkpointer=checkpointer)
+
+
+def test_resume_that_replaces_the_pending_sends_drops_the_finished_task(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    graph = _build_send_fan_out(sync_checkpointer)
+    config = _thread("t")
+    graph.invoke(_both("in"), config, durability=durability)
+
+    live = graph.invoke(
+        Command(resume="yes", goto=[Send("q", _both("unused"))]),
+        config,
+        durability=durability,
+    )
+
+    state = graph.get_state(config)
+    assert state.values["log"] == state.values["plain"] == live["log"], (
+        f"'p' ran in the fan-out the resume replaced, but the reload reads "
+        f"{state.values['log']} against the live {live['log']}"
+    )
+
+
+async def test_aresume_that_replaces_the_pending_sends_drops_the_finished_task(
+    async_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    graph = _build_send_fan_out(async_checkpointer)
+    config = _thread("t")
+    await graph.ainvoke(_both("in"), config, durability=durability)
+
+    live = await graph.ainvoke(
+        Command(resume="yes", goto=[Send("q", _both("unused"))]),
+        config,
+        durability=durability,
+    )
+
+    state = await graph.aget_state(config)
+    assert state.values["log"] == state.values["plain"] == live["log"], (
+        f"'p' ran in the fan-out the resume replaced, but the reload reads "
+        f"{state.values['log']} against the live {live['log']}"
+    )
 
 
 def test_resume_addressed_at_an_interrupted_head_reruns_its_tasks_once(

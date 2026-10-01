@@ -16,7 +16,7 @@ from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 
 from langgraph._internal._config import DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT
-from langgraph._internal._constants import INTERRUPT, PUSH
+from langgraph._internal._constants import PUSH, SNAPSHOT_BUMPS
 from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.delta import DeltaChannel
@@ -52,17 +52,23 @@ def exit_delta_task_id(step: int, task_id: str) -> str:
 def delta_channels_to_snapshot(
     channels: Mapping[str, BaseChannel],
     counters_since_delta_snapshot: Mapping[str, tuple[int, int]],
+    channel_versions: ChannelVersions,
 ) -> set[str]:
     """Return the set of DeltaChannel names that should snapshot now.
 
     A channel snapshots when EITHER its accumulated update count reaches
     `snapshot_frequency` OR the total supersteps since its last snapshot
-    reaches `DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT`. This is a pure
-    predicate — no mutation.
+    reaches `DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT`. A channel without a version
+    was never written on this branch, so it has nothing to snapshot. This is a
+    pure predicate — no mutation.
     """
     result: set[str] = set()
     for name, ch in channels.items():
-        if not isinstance(ch, DeltaChannel) or not ch.is_available():
+        if (
+            not isinstance(ch, DeltaChannel)
+            or not ch.is_available()
+            or name not in channel_versions
+        ):
             continue
         updates, supersteps = counters_since_delta_snapshot.get(name, (0, 0))
         if (
@@ -142,6 +148,7 @@ def create_checkpoint_plan_for_update_state_api(
     saved_metadata: Mapping[str, Any] | None,
     is_fresh_thread: bool,
     fork_channels: set[str],
+    channel_versions: ChannelVersions,
 ) -> tuple[set[str], dict[str, Any]]:
     """Return ``(channels_to_snapshot, metadata)`` for an update_state head."""
     metadata: dict[str, Any] = {
@@ -158,7 +165,8 @@ def create_checkpoint_plan_for_update_state_api(
         prev_metadata=saved_metadata,
     )
     channels_to_snapshot = (
-        delta_channels_to_snapshot(channels, new_counters) | fork_channels
+        delta_channels_to_snapshot(channels, new_counters, channel_versions)
+        | fork_channels
     )
     for k in channels_to_snapshot:
         new_counters[k] = (0, 0)
@@ -205,9 +213,7 @@ def create_checkpoint(
                 if k in channels_to_snapshot and get_next_version is not None:
                     channel_versions[k] = get_next_version(None, None)
                     bumped[k] = (None, channel_versions[k])
-                    values[k] = _DeltaSnapshot(
-                        ch.get() if ch.is_available() else ch.typ()
-                    )
+                    values[k] = _DeltaSnapshot(ch.get())
                 continue
             if k in channels_to_snapshot:
                 # `put` only stores a blob for a channel whose version moved,
@@ -243,16 +249,37 @@ def _mark_bumps_seen(
     """Advance whoever had seen a bumped channel's old version to the new one.
 
     A bump that only stores a snapshot is not a write. Left unseen, it would
-    re-fire `interrupt_before` and rerun the channel's subscribers.
+    re-fire `interrupt_before` and rerun the channel's subscribers. The bumped
+    versions are also kept under `SNAPSHOT_BUMPS`, so inferring which node
+    wrote last can skip them.
     """
     if not bumped:
         return versions_seen
-    out: dict[str, ChannelVersions] = {}
-    for node, seen in {INTERRUPT: {}, **versions_seen}.items():
-        advanced = {k: new for k, (old, new) in bumped.items() if seen.get(k) == old}
-        if advanced or node in versions_seen:
-            out[node] = {**seen, **advanced}
+    out = {
+        node: {
+            **seen,
+            **{k: new for k, (old, new) in bumped.items() if seen.get(k) == old},
+        }
+        for node, seen in versions_seen.items()
+    }
+    out[SNAPSHOT_BUMPS] = {
+        **versions_seen.get(SNAPSHOT_BUMPS, {}),
+        **{k: new for k, (_, new) in bumped.items()},
+    }
     return out
+
+
+def versions_seen_without_bumps(
+    versions_seen: dict[str, ChannelVersions],
+) -> dict[str, ChannelVersions]:
+    """`versions_seen` without the versions minted only to store a snapshot."""
+    if not (bumps := versions_seen.get(SNAPSHOT_BUMPS)):
+        return versions_seen
+    return {
+        node: {k: v for k, v in seen.items() if bumps.get(k) != v}
+        for node, seen in versions_seen.items()
+        if node != SNAPSHOT_BUMPS
+    }
 
 
 def _needs_replay(spec: BaseChannel, stored: object) -> bool:

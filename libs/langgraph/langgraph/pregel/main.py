@@ -136,6 +136,7 @@ from langgraph.pregel._checkpoint import (
     delta_channels_with_pending_writes,
     empty_checkpoint,
     get_updated_channels_from_tasks,
+    versions_seen_without_bumps,
 )
 from langgraph.pregel._draw import draw_graph
 from langgraph.pregel._io import map_input, read_channels
@@ -1936,7 +1937,9 @@ class Pregel(
                     as_node = tuple(self.nodes)[0]
                 elif as_node is None and not any(
                     v
-                    for vv in checkpoint["versions_seen"].values()
+                    for vv in versions_seen_without_bumps(
+                        checkpoint["versions_seen"]
+                    ).values()
                     for v in vv.values()
                 ):
                     if (
@@ -1947,7 +1950,9 @@ class Pregel(
                 elif as_node is None:
                     last_seen_by_node = sorted(
                         (v, n)
-                        for n, seen in checkpoint["versions_seen"].items()
+                        for n, seen in versions_seen_without_bumps(
+                            checkpoint["versions_seen"]
+                        ).items()
                         if n in self.nodes
                         for v in seen.values()
                     )
@@ -2047,6 +2052,7 @@ class Pregel(
                     saved_metadata=saved.metadata if saved else None,
                     is_fresh_thread=saved is None,
                     fork_channels=fork_pending,
+                    channel_versions=checkpoint["channel_versions"],
                 )
             )
             checkpoint = create_checkpoint(
@@ -2434,7 +2440,9 @@ class Pregel(
                 elif as_node is None:
                     last_seen_by_node = sorted(
                         (v, n)
-                        for n, seen in checkpoint["versions_seen"].items()
+                        for n, seen in versions_seen_without_bumps(
+                            checkpoint["versions_seen"]
+                        ).items()
                         if n in self.nodes
                         for v in seen.values()
                     )
@@ -2534,6 +2542,7 @@ class Pregel(
                     saved_metadata=saved.metadata if saved else None,
                     is_fresh_thread=saved is None,
                     fork_channels=fork_pending,
+                    channel_versions=checkpoint["channel_versions"],
                 )
             )
             checkpoint = create_checkpoint(

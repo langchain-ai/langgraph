@@ -230,6 +230,9 @@ class PregelLoop:
     # * the checkpoint this run starts from has pending writes to them; see
     #   `delta_channels_with_pending_writes`.
     _delta_channels_forced_snapshot: set[str]
+    # Set by `_first` for a resume whose loaded writes `after_tick` still has
+    # to check against the tasks that ran.
+    _seal_unclaimed_writes: bool = False
 
     # The checkpoint_config that points at the parent loaded at `__enter__`
     # (or the synthetic-empty checkpoint, on first run). We capture it
@@ -585,7 +588,7 @@ class PregelLoop:
             # save the new task
             self.tasks[pushed.id] = pushed
             # match any pending writes to the new task
-            if not self.is_replaying:
+            if self._reapplies_pending_writes:
                 self._reapply_writes_to_succeeded_nodes({pushed.id: pushed})
             # return the new task, to be started if not run before
             return pushed
@@ -663,7 +666,7 @@ class PregelLoop:
             return False
 
         # if there are pending writes from a previous loop, apply them
-        if not self.is_replaying and self.checkpoint_pending_writes:
+        if self._reapplies_pending_writes and self.checkpoint_pending_writes:
             self._reapply_writes_to_succeeded_nodes(self.tasks)
             self._resume_error_handlers_if_applicable()
 
@@ -692,6 +695,20 @@ class PregelLoop:
             for ch, v in writes
             if isinstance(self.specs.get(ch), DeltaChannel) and _get_overwrite(v)[0]
         )
+        if self._seal_unclaimed_writes:
+            # A loaded write no task of this run claimed belongs to a task the
+            # resume dropped, such as a `Send` that `Command(goto=...)` replaced.
+            self._delta_channels_forced_snapshot.update(
+                delta_channels_with_pending_writes(
+                    self.specs,
+                    [
+                        w
+                        for w in self.checkpoint_pending_writes
+                        if w[0] != NULL_TASK_ID and w[0] not in self.tasks
+                    ],
+                )
+            )
+            self._seal_unclaimed_writes = False
         # all tasks have finished
         self.updated_channels = apply_writes(
             self.checkpoint,
@@ -736,6 +753,12 @@ class PregelLoop:
         raise NotImplementedError
 
     # private
+
+    @property
+    def _reapplies_pending_writes(self) -> bool:
+        """Whether the writes loaded with the checkpoint go back to the tasks
+        that made them, instead of those tasks rerunning."""
+        return not self.is_replaying
 
     def _reapply_writes_to_succeeded_nodes(
         self, tasks: Mapping[str, PregelExecutableTask]
@@ -902,11 +925,13 @@ class PregelLoop:
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
             ]
-        # A resume that is not replaying reuses the head's pending writes
-        # instead of rerunning their tasks, so none of them can leak.
+        # A resume that reapplies the head's pending writes only learns which
+        # of them its tasks claim once they are scheduled, so `after_tick`
+        # seals the rest.
+        self._seal_unclaimed_writes = is_resuming and self._reapplies_pending_writes
         self._delta_channels_forced_snapshot = (
             set()
-            if is_resuming and not self.is_replaying
+            if self._seal_unclaimed_writes
             else delta_channels_with_pending_writes(
                 self.specs, self.checkpoint_pending_writes
             )
@@ -1148,7 +1173,9 @@ class PregelLoop:
         )
         # create new checkpoint
         channels_to_snapshot = (
-            delta_channels_to_snapshot(self.channels, new_counters)
+            delta_channels_to_snapshot(
+                self.channels, new_counters, self.checkpoint["channel_versions"]
+            )
             | self._delta_channels_forced_snapshot
             if do_checkpoint
             else set()
@@ -1251,7 +1278,9 @@ class PregelLoop:
             self.checkpoint_metadata.get("counters_since_delta_snapshot") or {}
         )
         channels_to_snapshot = (
-            delta_channels_to_snapshot(self.channels, counters)
+            delta_channels_to_snapshot(
+                self.channels, counters, self.checkpoint["channel_versions"]
+            )
             | self._delta_channels_forced_snapshot
         )
 
@@ -1613,7 +1642,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         if handler_task is None:
             return None
         self.tasks[handler_task.id] = handler_task
-        if not self.is_replaying:
+        if self._reapplies_pending_writes:
             self._reapply_writes_to_succeeded_nodes({handler_task.id: handler_task})
         for task in self.match_cached_writes():
             self.output_writes(task.id, task.writes, cached=True)
@@ -1867,7 +1896,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         if handler_task is None:
             return None
         self.tasks[handler_task.id] = handler_task
-        if not self.is_replaying:
+        if self._reapplies_pending_writes:
             self._reapply_writes_to_succeeded_nodes({handler_task.id: handler_task})
         for task in await self.amatch_cached_writes():
             self.output_writes(task.id, task.writes, cached=True)
