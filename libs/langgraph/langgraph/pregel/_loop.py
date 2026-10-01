@@ -1190,6 +1190,9 @@ class PregelLoop:
             if do_checkpoint
             else None,
             channels_to_snapshot=channels_to_snapshot,
+            # An exit-mode run that stops in its first tick still carries the
+            # loaded checkpoint's `updated_channels`, though nothing moved.
+            stored_versions=self.checkpoint_previous_versions,
         )
         for k in channels_to_snapshot:
             new_counters[k] = (0, 0)

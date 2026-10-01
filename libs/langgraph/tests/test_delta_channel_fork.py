@@ -531,6 +531,40 @@ async def test_aresume_that_replaces_the_pending_sends_drops_the_finished_task(
     )
 
 
+def test_replay_interrupted_in_its_first_step_still_seals_the_fork(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    graph = _build_send_fan_out(sync_checkpointer)
+    config = _thread("t")
+    graph.invoke(_both("in"), config, durability=durability)
+
+    graph.invoke(None, graph.get_state(config).config, durability=durability)
+
+    state = graph.get_state(config)
+    assert state.values["log"] == state.values["plain"] == ["in", "p"], (
+        f"the replay reran p, so the fork must not also replay the first p, "
+        f"but it reads {state.values['log']}"
+    )
+
+
+async def test_areplay_interrupted_in_its_first_step_still_seals_the_fork(
+    async_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    graph = _build_send_fan_out(async_checkpointer)
+    config = _thread("t")
+    await graph.ainvoke(_both("in"), config, durability=durability)
+
+    await graph.ainvoke(
+        None, (await graph.aget_state(config)).config, durability=durability
+    )
+
+    state = await graph.aget_state(config)
+    assert state.values["log"] == state.values["plain"] == ["in", "p"], (
+        f"the replay reran p, so the fork must not also replay the first p, "
+        f"but it reads {state.values['log']}"
+    )
+
+
 def test_resume_addressed_at_an_interrupted_head_reruns_its_tasks_once(
     sync_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:

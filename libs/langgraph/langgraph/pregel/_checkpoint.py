@@ -185,6 +185,7 @@ def create_checkpoint(
     updated_channels: set[str] | None = None,
     get_next_version: GetNextVersion | None = None,
     channels_to_snapshot: set[str] | None = None,
+    stored_versions: ChannelVersions | None = None,
 ) -> Checkpoint:
     """Build a new Checkpoint from the previous one and live channel state.
 
@@ -194,6 +195,11 @@ def create_checkpoint(
     from `checkpoint_writes`. Callers compute the set via
     `delta_channels_to_snapshot(channels, counters)`; defaults to empty
     (no snapshots) when not provided.
+
+    `stored_versions` are the channel versions of the last checkpoint the
+    saver stored. When given, a snapshotted channel whose version has not
+    moved since then is bumped; otherwise `updated_channels` stands in for the
+    channels whose version moved.
     """
     ts = datetime.now(timezone.utc).isoformat()
     channels_to_snapshot = channels_to_snapshot or set()
@@ -220,9 +226,12 @@ def create_checkpoint(
                 # so snapshotting a channel this step did not write needs a
                 # bump: exit mode reaching the cadence on a superstep that
                 # skipped the channel, and a fork's first checkpoint.
-                if get_next_version is not None and (
-                    updated_channels is None or k not in updated_channels
-                ):
+                unmoved = (
+                    channel_versions[k] == stored_versions.get(k)
+                    if stored_versions is not None
+                    else updated_channels is None or k not in updated_channels
+                )
+                if get_next_version is not None and unmoved:
                     old = channel_versions[k]
                     channel_versions[k] = get_next_version(old, None)
                     bumped[k] = (old, channel_versions[k])
