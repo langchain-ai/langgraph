@@ -29,6 +29,12 @@ PREVIOUS = sys.intern("__previous__")
 CACHE_NS_WRITES = sys.intern("__pregel_ns_writes")
 # cache namespace for node writes
 
+# --- Reserved queue names ---
+QUEUE_NS = sys.intern("__queue__")
+# checkpoint namespace (suffix) holding a graph's queued state updates
+QUEUED = sys.intern("__queued__")
+# channel of a queued-update checkpoint holding the update payload
+
 # --- Reserved config.configurable keys ---
 CONFIG_KEY_SEND = sys.intern("__pregel_send")
 # holds the `write` function that accepts writes to state/edges/reserved keys
@@ -37,6 +43,9 @@ CONFIG_KEY_READ = sys.intern("__pregel_read")
 CONFIG_KEY_CALL = sys.intern("__pregel_call")
 # holds the `call` function that accepts a node/func, args and returns a future
 CONFIG_KEY_CHECKPOINTER = sys.intern("__pregel_checkpointer")
+CONFIG_KEY_QUEUE_DISPATCHED = sys.intern("__pregel_queue_dispatched")
+# set by `Pregel.queue_state` on the config it hands to the subgraph the update
+# is addressed to, so the subgraph does not try to delegate again
 # holds a `BaseCheckpointSaver` passed from parent graph to child graphs
 CONFIG_KEY_STREAM = sys.intern("__pregel_stream")
 # holds a `StreamProtocol` passed from parent graph to child graphs
