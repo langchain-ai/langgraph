@@ -63,6 +63,10 @@ class TestMemorySaver:
         self.chkpnt_1: Checkpoint = empty_checkpoint()
         self.chkpnt_2: Checkpoint = create_checkpoint(self.chkpnt_1, {}, 1)
         self.chkpnt_3: Checkpoint = empty_checkpoint()
+        # Use ordered IDs so the before boundary is deterministic.
+        self.chkpnt_1["id"] = "1"
+        self.chkpnt_2["id"] = "2"
+        self.chkpnt_3["id"] = "3"
 
         self.metadata_1: CheckpointMetadata = {
             "source": "input",
@@ -100,19 +104,19 @@ class TestMemorySaver:
     async def test_search(self) -> None:
         # set up test
         # save checkpoints
-        self.memory_saver.put(
+        saved_config_1 = self.memory_saver.put(
             self.config_1,
             self.chkpnt_1,
             self.metadata_1,
             self.chkpnt_1["channel_versions"],
         )
-        self.memory_saver.put(
+        saved_config_2 = self.memory_saver.put(
             self.config_2,
             self.chkpnt_2,
             self.metadata_2,
             self.chkpnt_2["channel_versions"],
         )
-        self.memory_saver.put(
+        saved_config_3 = self.memory_saver.put(
             self.config_3,
             self.chkpnt_3,
             self.metadata_3,
@@ -152,24 +156,46 @@ class TestMemorySaver:
             search_results_5[1].config["configurable"]["checkpoint_ns"],
         } == {"", "inner"}
 
-        # TODO: test before and limit params
+        # The limit applies across threads and namespaces.
+        for limit in (0, 1, 2, 3, 4):
+            assert (
+                list(self.memory_saver.list(None, limit=limit))
+                == search_results_3[:limit]
+            )
+
+        # Exclude the boundary checkpoint and every checkpoint after it.
+        for before, expected in (
+            (saved_config_1, []),
+            (saved_config_2, search_results_1),
+            (saved_config_3, search_results_3[:2]),
+        ):
+            assert list(self.memory_saver.list(None, before=before)) == expected
+
+        assert (
+            list(self.memory_saver.list(None, before=saved_config_3, limit=1))
+            == search_results_1
+        )
+        assert (
+            list(self.memory_saver.list(None, filter=query_2, limit=1))
+            == search_results_2
+        )
 
     async def test_asearch(self) -> None:
         # set up test
         # save checkpoints
-        self.memory_saver.put(
+        saved_config_1 = self.memory_saver.put(
             self.config_1,
             self.chkpnt_1,
             self.metadata_1,
             self.chkpnt_1["channel_versions"],
         )
-        self.memory_saver.put(
+        saved_config_2 = self.memory_saver.put(
             self.config_2,
             self.chkpnt_2,
             self.metadata_2,
             self.chkpnt_2["channel_versions"],
         )
-        self.memory_saver.put(
+        saved_config_3 = self.memory_saver.put(
             self.config_3,
             self.chkpnt_3,
             self.metadata_3,
@@ -206,6 +232,30 @@ class TestMemorySaver:
             c async for c in self.memory_saver.alist(None, filter=query_4)
         ]
         assert len(search_results_4) == 0
+
+        # The limit applies across threads and namespaces.
+        for limit in (0, 1, 2, 3, 4):
+            assert [
+                c async for c in self.memory_saver.alist(None, limit=limit)
+            ] == search_results_3[:limit]
+
+        # Exclude the boundary checkpoint and every checkpoint after it.
+        for before, expected in (
+            (saved_config_1, []),
+            (saved_config_2, search_results_1),
+            (saved_config_3, search_results_3[:2]),
+        ):
+            assert [
+                c async for c in self.memory_saver.alist(None, before=before)
+            ] == expected
+
+        assert [
+            c
+            async for c in self.memory_saver.alist(None, before=saved_config_3, limit=1)
+        ] == search_results_1
+        assert [
+            c async for c in self.memory_saver.alist(None, filter=query_2, limit=1)
+        ] == search_results_2
 
 
 async def test_memory_saver() -> None:
