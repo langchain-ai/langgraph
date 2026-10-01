@@ -14,6 +14,7 @@ from langgraph.checkpoint.base import (
     create_checkpoint,
     empty_checkpoint,
 )
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import TASKS
 from psycopg import Connection
 from psycopg.rows import dict_row
@@ -358,3 +359,19 @@ def test_get_checkpoint_no_channel_values(
 
         checkpoint = saver.get_tuple(config)
         assert checkpoint.checkpoint["channel_values"] == {}
+
+
+def test_from_conn_string_forwards_serde() -> None:
+    """Sync from_conn_string forwards the serde argument, like the async variant."""
+    serde = JsonPlusSerializer()
+    with PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI, serde=serde) as saver:
+        assert saver.serde is serde
+
+
+def test_shallow_from_conn_string_forwards_serde() -> None:
+    """Sync ShallowPostgresSaver.from_conn_string forwards the serde argument."""
+    serde = JsonPlusSerializer()
+    with ShallowPostgresSaver.from_conn_string(
+        DEFAULT_POSTGRES_URI, serde=serde
+    ) as saver:
+        assert saver.serde is serde
