@@ -74,6 +74,15 @@ class AsyncBatchedBaseStore(BaseStore):
         except RuntimeError:
             pass
 
+    async def aclose(self) -> None:
+        """Cancel the background batch processing task."""
+        if self._task and not self._task.done():
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+
     def _ensure_task(self) -> None:
         """Ensure the background processing loop is running."""
         if self._task is None or self._task.done():
