@@ -22,6 +22,7 @@ from langgraph.prebuilt.chat_agent_executor import StructuredResponse
 class FakeToolCallingModel(BaseChatModel):
     tool_calls: list[list[ToolCall]] | None = None
     structured_response: StructuredResponse | None = None
+    response_metadata_list: list[dict[str, Any]] | None = None
     index: int = 0
     tool_style: Literal["openai", "anthropic"] = "openai"
 
@@ -39,8 +40,16 @@ class FakeToolCallingModel(BaseChatModel):
             if self.tool_calls
             else []
         )
+        metadata = (
+            self.response_metadata_list[self.index % len(self.response_metadata_list)]
+            if self.response_metadata_list
+            else {}
+        )
         message = AIMessage(
-            content=messages_string, id=str(self.index), tool_calls=tool_calls.copy()
+            content=messages_string,
+            id=str(self.index),
+            tool_calls=tool_calls.copy(),
+            response_metadata=metadata,
         )
         self.index += 1
         return ChatResult(generations=[ChatGeneration(message=message)])
