@@ -147,6 +147,60 @@ async def test_predicate_fires_on_supersteps_overflow() -> None:
     assert "x" not in result2
 
 
+def _delta_counters(saver: InMemorySaver, config: Any) -> dict[str, list[int]]:
+    tup = saver.get_tuple(config)
+    assert tup is not None
+    counters = tup.metadata.get("counters_since_delta_snapshot") or {}
+    return {ch: list(c) for ch, c in counters.items()}
+
+
+_UPDATE_PATHS_WITHOUT_THE_SNAPSHOT_PLAN = pytest.mark.parametrize(
+    ("values", "as_node", "supersteps"),
+    [
+        (None, END, 1),
+        (None, "__copy__", 0),
+        ({"a": []}, "__input__", 1),
+    ],
+    ids=["clear as END", "copy", "update as input"],
+)
+
+
+@_UPDATE_PATHS_WITHOUT_THE_SNAPSHOT_PLAN
+def test_update_state_path_keeps_delta_counters(
+    values: Any, as_node: str, supersteps: int
+) -> None:
+    saver = InMemorySaver()
+    graph = _build_two_channel_graph(saver)
+    config = {"configurable": {"thread_id": "counters"}}
+    graph.invoke({"a": ["seed-a"], "b": ["seed-b"]}, config)
+    before = _delta_counters(saver, config)
+    assert set(before) == {"a", "b"}, f"both channels need live counters: {before}"
+
+    updated = graph.update_state(config, values, as_node=as_node)
+
+    assert _delta_counters(saver, updated) == {
+        ch: [u, s + supersteps] for ch, (u, s) in before.items()
+    }
+
+
+@_UPDATE_PATHS_WITHOUT_THE_SNAPSHOT_PLAN
+async def test_aupdate_state_path_keeps_delta_counters(
+    values: Any, as_node: str, supersteps: int
+) -> None:
+    saver = InMemorySaver()
+    graph = _build_two_channel_graph(saver)
+    config = {"configurable": {"thread_id": "counters"}}
+    await graph.ainvoke({"a": ["seed-a"], "b": ["seed-b"]}, config)
+    before = _delta_counters(saver, config)
+    assert set(before) == {"a", "b"}, f"both channels need live counters: {before}"
+
+    updated = await graph.aupdate_state(config, values, as_node=as_node)
+
+    assert _delta_counters(saver, updated) == {
+        ch: [u, s + supersteps] for ch, (u, s) in before.items()
+    }
+
+
 async def test_counter_reset_after_supersteps_snapshot() -> None:
     """After the supersteps bound triggers a snapshot, the counters for
     that channel reset. Verify by using a bound higher than one run's
