@@ -545,6 +545,68 @@ def test_unaddressed_bulk_update_keeps_snapshot_cadence(
     assert not _snapshotted_checkpoints(sync_checkpointer, config)
 
 
+def _build_two_steps(checkpointer: BaseCheckpointSaver, subgraph: bool) -> Any:
+    if subgraph:
+        inner = StateGraph(_State)
+        inner.add_node("b1", lambda state: _both("b1"))
+        inner.add_node("b2", lambda state: _both("b2"))
+        inner.add_edge(START, "b1")
+        inner.add_edge("b1", "b2")
+        second: Any = inner.compile()
+    else:
+        second = lambda state: _both("b")  # noqa: E731
+    builder = StateGraph(_State)
+    builder.add_node("a", lambda state: _both("a"))
+    builder.add_node("b", second)
+    builder.add_edge(START, "a")
+    builder.add_edge("a", "b")
+    return builder.compile(checkpointer=checkpointer)
+
+
+@pytest.mark.parametrize("subgraph", [False, True])
+def test_replay_from_an_edit_the_thread_moved_past_leaves_its_branch_alone(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability, subgraph: bool
+) -> None:
+    graph = _build_two_steps(sync_checkpointer, subgraph)
+    config = _thread("t")
+    graph.invoke(_both("in-1"), config, durability=durability)
+    edit = graph.update_state(config, _both("edit"), as_node="a")
+    graph.invoke(_both("in-2"), config, durability=durability)
+    branch = graph.get_state(config)
+
+    graph.invoke(None, edit, durability=durability)
+
+    after = graph.get_state(branch.config).values
+    assert after["log"] == after["plain"] == branch.values["log"], (
+        f"a replay from the edit wrote into the branch that already grew from it: "
+        f"{after['log']}"
+    )
+    replay = graph.get_state(config).values
+    assert replay["log"] == replay["plain"]
+
+
+@pytest.mark.parametrize("subgraph", [False, True])
+async def test_areplay_from_an_edit_the_thread_moved_past_leaves_its_branch_alone(
+    async_checkpointer: BaseCheckpointSaver, durability: Durability, subgraph: bool
+) -> None:
+    graph = _build_two_steps(async_checkpointer, subgraph)
+    config = _thread("t")
+    await graph.ainvoke(_both("in-1"), config, durability=durability)
+    edit = await graph.aupdate_state(config, _both("edit"), as_node="a")
+    await graph.ainvoke(_both("in-2"), config, durability=durability)
+    branch = await graph.aget_state(config)
+
+    await graph.ainvoke(None, edit, durability=durability)
+
+    after = (await graph.aget_state(branch.config)).values
+    assert after["log"] == after["plain"] == branch.values["log"], (
+        f"a replay from the edit wrote into the branch that already grew from it: "
+        f"{after['log']}"
+    )
+    replay = (await graph.aget_state(config)).values
+    assert replay["log"] == replay["plain"]
+
+
 def _build_paused_before_b(checkpointer: BaseCheckpointSaver) -> Any:
     builder = StateGraph(_State)
     builder.add_node("a", lambda state: _both("a"))
