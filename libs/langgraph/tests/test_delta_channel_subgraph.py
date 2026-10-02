@@ -2,6 +2,7 @@ import operator
 from typing import Annotated, Any, Literal
 
 import pytest
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from typing_extensions import TypedDict
@@ -467,9 +468,9 @@ async def test_second_call_of_a_checkpointer_true_subgraph_areads_its_own_histor
 ) -> None:
     child = _child_builder().compile(checkpointer=True)
 
-    async def node(state: dict) -> dict:
-        await child.ainvoke(_both("first"))
-        await child.ainvoke(_both("second"))
+    async def node(state: dict, config: RunnableConfig) -> dict:
+        await child.ainvoke(_both("first"), config)
+        await child.ainvoke(_both("second"), config)
         return {}
 
     builder = StateGraph(_state_schema())
