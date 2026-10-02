@@ -279,6 +279,28 @@ async def test_asearch(saver_name: str, test_data) -> None:
 
 
 @pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
+async def test_delete_thread_ignores_late_writes(saver_name: str) -> None:
+    async with _saver(saver_name) as saver:
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-delete",
+                "checkpoint_ns": "",
+            }
+        }
+
+        stored = await saver.aput(config, empty_checkpoint(), {}, {})
+        await saver.adelete_thread("thread-delete")
+
+        await saver.aput(stored, empty_checkpoint(), {"step": 99}, {})
+        await saver.aput_writes(stored, [("ch", "late-write")], str(uuid4()))
+
+        assert await saver.aget_tuple({"configurable": {"thread_id": "thread-delete"}}) is None
+        assert [
+            c async for c in saver.alist({"configurable": {"thread_id": "thread-delete"}})
+        ] == []
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
 async def test_null_chars(saver_name: str, test_data) -> None:
     async with _saver(saver_name) as saver:
         config = await saver.aput(

@@ -1,4 +1,5 @@
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from langchain_core.runnables import RunnableConfig
@@ -188,3 +189,24 @@ class TestAsyncSqliteSaver:
             # (would have been dropped if injection succeeded)
             results = [c async for c in saver.alist(None, limit=None)]
             assert len(results) == 5
+
+    async def test_delete_thread_ignores_late_writes(self) -> None:
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            config: RunnableConfig = {
+                "configurable": {
+                    "thread_id": "thread-delete",
+                    "checkpoint_ns": "",
+                }
+            }
+
+            stored = await saver.aput(config, empty_checkpoint(), {}, {})
+            await saver.adelete_thread("thread-delete")
+
+            await saver.aput(stored, empty_checkpoint(), {"step": 99}, {})
+            await saver.aput_writes(stored, [("ch", "late-write")], str(uuid4()))
+
+            assert await saver.aget_tuple({"configurable": {"thread_id": "thread-delete"}}) is None
+            assert [
+                item
+                async for item in saver.alist({"configurable": {"thread_id": "thread-delete"}})
+            ] == []
