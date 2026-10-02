@@ -866,8 +866,15 @@ class Pregel(
         if self.checkpointer is not True:
             return config
         ns = config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        # Unlike `recast_checkpoint_ns`, keep the numeric parts: a task that
+        # calls the same subgraph again stores that call's history under one.
         return patch_configurable(
-            config, {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}
+            config,
+            {
+                CONFIG_KEY_CHECKPOINT_NS: NS_SEP.join(
+                    part.split(NS_END)[0] for part in ns.split(NS_SEP)
+                )
+            },
         )
 
     def _subgraph_for_namespace(

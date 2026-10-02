@@ -428,3 +428,68 @@ async def test_graph_without_a_checkpointer_areads_through_a_lent_saver(
     )
     history = [s async for s in app.aget_state_history(config)]
     assert history[0].values == _both("in", "a1", "b1", "b2", "edit")
+
+
+def test_second_call_of_a_checkpointer_true_subgraph_reads_its_own_history(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    child = _child_builder().compile(checkpointer=True)
+
+    def node(state: dict) -> dict:
+        child.invoke(_both("first"))
+        child.invoke(_both("second"))
+        return {}
+
+    builder = StateGraph(_state_schema())
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    builder.compile(checkpointer=sync_checkpointer).invoke(
+        _both(), {"configurable": {"thread_id": "1"}}
+    )
+
+    def read(namespace: str) -> dict:
+        return child.get_state(
+            {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": namespace,
+                    CONFIG_KEY_CHECKPOINTER: sync_checkpointer,
+                }
+            }
+        ).values
+
+    assert read("node") == _both("first", "a1", "b1", "b2")
+    assert read("node|1") == _both("second", "a1", "b1", "b2")
+
+
+async def test_second_call_of_a_checkpointer_true_subgraph_areads_its_own_history(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    child = _child_builder().compile(checkpointer=True)
+
+    async def node(state: dict) -> dict:
+        await child.ainvoke(_both("first"))
+        await child.ainvoke(_both("second"))
+        return {}
+
+    builder = StateGraph(_state_schema())
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    await builder.compile(checkpointer=async_checkpointer).ainvoke(
+        _both(), {"configurable": {"thread_id": "1"}}
+    )
+
+    async def read(namespace: str) -> dict:
+        snapshot = await child.aget_state(
+            {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": namespace,
+                    CONFIG_KEY_CHECKPOINTER: async_checkpointer,
+                }
+            }
+        )
+        return snapshot.values
+
+    assert await read("node") == _both("first", "a1", "b1", "b2")
+    assert await read("node|1") == _both("second", "a1", "b1", "b2")
