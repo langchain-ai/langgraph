@@ -79,7 +79,6 @@ from langgraph._internal._constants import (
     CONFIG_KEY_STREAM_MESSAGES_V2,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
-    ERROR,
     INPUT,
     INTERRUPT,
     NS_END,
@@ -149,6 +148,7 @@ from langgraph.pregel._messages import (
 from langgraph.pregel._read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel._retry import RetryPolicy
 from langgraph.pregel._runner import PregelRunner
+from langgraph.pregel._task_status import read_task_statuses
 from langgraph.pregel._tools import StreamToolCallHandler
 from langgraph.pregel._utils import (
     get_new_channel_versions,
@@ -1147,8 +1147,16 @@ class Pregel(
         config: RunnableConfig,
         saved: CheckpointTuple | None,
         recurse: BaseCheckpointSaver | None = None,
-        apply_pending_writes: bool = False,
+        live: bool = False,
     ) -> StateSnapshot:
+        """Build a `StateSnapshot` from a saved checkpoint and its pending writes.
+
+        With `live=True` the snapshot shows current status: values include the
+        output of tasks that already finished, `next` lists only tasks that still
+        need to run, and `interrupts` lists only questions still waiting for an
+        answer. Otherwise the snapshot is a record of the step: values as of the
+        start of the step, every task in the step, and the interrupts they raised.
+        """
         if not saved:
             return StateSnapshot(
                 values={},
@@ -1236,13 +1244,10 @@ class Pregel(
                 None,
                 self.trigger_to_nodes,
             )
-        if apply_pending_writes and saved.pending_writes:
-            for tid, k, v in saved.pending_writes:
-                if k in (ERROR, INTERRUPT):
-                    continue
-                if tid not in next_tasks:
-                    continue
-                next_tasks[tid].writes.append((k, v))
+        if live and saved.pending_writes:
+            for tid, status in read_task_statuses(saved.pending_writes).items():
+                if tid in next_tasks:
+                    next_tasks[tid].writes.extend(status.output)
             if tasks := [t for t in next_tasks.values() if t.writes]:
                 apply_writes(
                     saved.checkpoint, channels, tasks, None, self.trigger_to_nodes
@@ -1252,6 +1257,7 @@ class Pregel(
             saved.pending_writes,
             task_states,
             self.stream_channels_asis,
+            live=live,
         )
         # assemble the state snapshot
         return StateSnapshot(
@@ -1270,8 +1276,16 @@ class Pregel(
         config: RunnableConfig,
         saved: CheckpointTuple | None,
         recurse: BaseCheckpointSaver | None = None,
-        apply_pending_writes: bool = False,
+        live: bool = False,
     ) -> StateSnapshot:
+        """Build a `StateSnapshot` from a saved checkpoint and its pending writes.
+
+        With `live=True` the snapshot shows current status: values include the
+        output of tasks that already finished, `next` lists only tasks that still
+        need to run, and `interrupts` lists only questions still waiting for an
+        answer. Otherwise the snapshot is a record of the step: values as of the
+        start of the step, every task in the step, and the interrupts they raised.
+        """
         if not saved:
             return StateSnapshot(
                 values={},
@@ -1359,13 +1373,10 @@ class Pregel(
                 None,
                 self.trigger_to_nodes,
             )
-        if apply_pending_writes and saved.pending_writes:
-            for tid, k, v in saved.pending_writes:
-                if k in (ERROR, INTERRUPT):
-                    continue
-                if tid not in next_tasks:
-                    continue
-                next_tasks[tid].writes.append((k, v))
+        if live and saved.pending_writes:
+            for tid, status in read_task_statuses(saved.pending_writes).items():
+                if tid in next_tasks:
+                    next_tasks[tid].writes.extend(status.output)
             if tasks := [t for t in next_tasks.values() if t.writes]:
                 apply_writes(
                     saved.checkpoint, channels, tasks, None, self.trigger_to_nodes
@@ -1376,6 +1387,7 @@ class Pregel(
             saved.pending_writes,
             task_states,
             self.stream_channels_asis,
+            live=live,
         )
         # assemble the state snapshot
         return StateSnapshot(
@@ -1430,7 +1442,7 @@ class Pregel(
             config,
             saved,
             recurse=checkpointer if subgraphs else None,
-            apply_pending_writes=CONFIG_KEY_CHECKPOINT_ID not in config[CONF],
+            live=CONFIG_KEY_CHECKPOINT_ID not in config[CONF],
         )
 
     async def aget_state(
@@ -1474,7 +1486,7 @@ class Pregel(
             config,
             saved,
             recurse=checkpointer if subgraphs else None,
-            apply_pending_writes=CONFIG_KEY_CHECKPOINT_ID not in config[CONF],
+            live=CONFIG_KEY_CHECKPOINT_ID not in config[CONF],
         )
 
     def get_state_history(
@@ -1710,13 +1722,12 @@ class Pregel(
                             checkpointer.get_next_version,
                             self.trigger_to_nodes,
                         )
-                    # apply writes from tasks that already ran
-                    for tid, k, v in saved.pending_writes or []:
-                        if k in (ERROR, INTERRUPT):
-                            continue
-                        if tid not in next_tasks:
-                            continue
-                        next_tasks[tid].writes.append((k, v))
+                    # apply writes from tasks that already finished
+                    for tid, status in read_task_statuses(
+                        saved.pending_writes or []
+                    ).items():
+                        if tid in next_tasks:
+                            next_tasks[tid].writes.extend(status.output)
                     # clear all current tasks
                     apply_writes(
                         checkpoint,
@@ -2174,13 +2185,12 @@ class Pregel(
                             checkpointer.get_next_version,
                             self.trigger_to_nodes,
                         )
-                    # apply writes from tasks that already ran
-                    for tid, k, v in saved.pending_writes or []:
-                        if k in (ERROR, INTERRUPT):
-                            continue
-                        if tid not in next_tasks:
-                            continue
-                        next_tasks[tid].writes.append((k, v))
+                    # apply writes from tasks that already finished
+                    for tid, status in read_task_statuses(
+                        saved.pending_writes or []
+                    ).items():
+                        if tid in next_tasks:
+                            next_tasks[tid].writes.extend(status.output)
                     # clear all current tasks
                     apply_writes(
                         checkpoint,
