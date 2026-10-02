@@ -330,6 +330,51 @@ def test_pending_sends_migration(saver_name: str) -> None:
         assert TASKS in search_results[0].checkpoint["channel_versions"]
 
 
+def test_put_writes_is_retry_safe_across_saver_restart() -> None:
+    database = f"test_{uuid4().hex[:16]}"
+    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+        conn.execute(f"CREATE DATABASE {database}")
+
+    try:
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-restart",
+                "checkpoint_ns": "",
+            }
+        }
+        task_id = "task-restart"
+
+        with Connection.connect(
+            DEFAULT_POSTGRES_URI + database,
+            autocommit=True,
+            prepare_threshold=0,
+            row_factory=dict_row,
+        ) as conn:
+            saver = PostgresSaver(conn)
+            saver.setup()
+            checkpoint = empty_checkpoint()
+            stored = saver.put(config, checkpoint, {}, {})
+            saver.put_writes(stored, [("ch", "val")], task_id=task_id)
+
+        with Connection.connect(
+            DEFAULT_POSTGRES_URI + database,
+            autocommit=True,
+            prepare_threshold=0,
+            row_factory=dict_row,
+        ) as conn:
+            saver = PostgresSaver(conn)
+            saver.setup()
+            saver.put_writes(stored, [("ch", "val")], task_id=task_id)
+            checkpoint_tuple = saver.get_tuple(stored)
+
+        assert checkpoint_tuple is not None
+        assert checkpoint_tuple.pending_writes is not None
+        assert checkpoint_tuple.pending_writes == [(task_id, "ch", "val")]
+    finally:
+        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE {database}")
+
+
 @pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
 def test_get_checkpoint_no_channel_values(
     monkeypatch, saver_name: str, test_data

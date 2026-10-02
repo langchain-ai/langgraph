@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
@@ -307,3 +308,20 @@ class TestSqliteSaver:
             # Nested digit-starting key via dotted path
             results = list(saver.list(None, filter={"user.123abc": "ok2"}))
             assert len(results) == 1
+
+    def test_put_writes_is_retry_safe_across_saver_restart(
+        self, tmp_path: Path
+    ) -> None:
+        db_path = tmp_path / "restart-safe.sqlite"
+        task_id = "task-restart"
+
+        with SqliteSaver.from_conn_string(str(db_path)) as saver:
+            stored = saver.put(self.config_1, self.chkpnt_1, self.metadata_1, {})
+            saver.put_writes(stored, [("ch", "val")], task_id)
+
+        with SqliteSaver.from_conn_string(str(db_path)) as saver:
+            saver.put_writes(stored, [("ch", "val")], task_id)
+            checkpoint_tuple = saver.get_tuple(stored)
+
+        assert checkpoint_tuple is not None
+        assert checkpoint_tuple.pending_writes == [(task_id, "ch", "val")]
