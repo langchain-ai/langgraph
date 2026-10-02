@@ -4,6 +4,7 @@ Every graph carries a `DeltaChannel` and a plain reducer channel fed the same
 values; the plain channel needs no replay, so it is the oracle.
 """
 
+import sys
 from collections.abc import Sequence
 from operator import add
 from typing import Annotated, Any
@@ -27,6 +28,10 @@ from langgraph.types import (
 )
 
 pytestmark = pytest.mark.anyio
+NEEDS_CONTEXTVARS = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 
 
 def _append(current: list | None, writes: Sequence[Any]) -> list:
@@ -511,6 +516,7 @@ def test_resume_that_replaces_the_pending_sends_drops_the_finished_task(
     )
 
 
+@NEEDS_CONTEXTVARS
 async def test_aresume_that_replaces_the_pending_sends_drops_the_finished_task(
     async_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
@@ -547,6 +553,7 @@ def test_replay_interrupted_in_its_first_step_still_seals_the_fork(
     )
 
 
+@NEEDS_CONTEXTVARS
 async def test_areplay_interrupted_in_its_first_step_still_seals_the_fork(
     async_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
