@@ -16,4 +16,4 @@ class PregelScratchpad:
     get_null_resume: Callable[[bool], Any]
     resume: list[Any]
     # subgraph
-    subgraph_counter: Callable[[], int]
+    subgraph_counter: Callable[[str], int]

@@ -38,6 +38,7 @@ def _tasks_start(
     name: str,
     metadata: dict[str, Any] | None = None,
     input: Any = None,
+    key: str | None = None,
 ) -> dict[str, Any]:
     """Build a `tasks` ProtocolEvent carrying a TaskPayload (start)."""
     data: dict[str, Any] = {
@@ -48,6 +49,8 @@ def _tasks_start(
     }
     if metadata is not None:
         data["metadata"] = metadata
+    if key is not None:
+        data["key"] = key
     return {
         "type": "event",
         "method": "tasks",
@@ -130,6 +133,42 @@ def test_started_emitted_on_first_direct_child_task() -> None:
     assert payload["namespace"] == ["agent:abc123"]
     assert payload["graph_name"] == "agent"
     assert payload["trigger_call_id"] == "abc123"
+
+
+def test_keyed_instance_started_names_the_frame_and_the_key() -> None:
+    """A keyed subgraph instance (`Send(key=...)`) runs under `<node>|:key`, a
+    namespace without a task id. The task that pushed it announces the key,
+    which is how the started event finds its trigger."""
+    mux = _build_lifecycle_mux()
+    mux.push(_tasks_start([], task_id="abc123", name="call", key="call_a"))
+    mux.push(_tasks_start(["call", ":call_a"], task_id="t1", name="reply"))
+
+    [payload] = _drain_lifecycle(mux)
+    assert payload["event"] == "started"
+    assert payload["namespace"] == ["call", ":call_a"]
+    assert payload["graph_name"] == "call"
+    assert payload["trigger_call_id"] == "abc123"
+    assert payload["subgraph_key"] == "call_a"
+
+
+def test_keyed_instances_complete_on_their_own_parent_task_result() -> None:
+    """Two keyed instances of one node are closed by the result of the task
+    that pushed each, one frame up, not by the key segment."""
+    mux = _build_lifecycle_mux()
+    mux.push(_tasks_start([], task_id="pa", name="call", key="a"))
+    mux.push(_tasks_start([], task_id="pb", name="call", key="b"))
+    mux.push(_tasks_start(["call", ":a"], task_id="t1", name="reply"))
+    mux.push(_tasks_start(["call", ":b"], task_id="t2", name="reply"))
+    mux.push(_tasks_result([], task_id="pb", name="call"))
+    mux.push(_tasks_result([], task_id="pa", name="call"))
+
+    payloads = _drain_lifecycle(mux)
+    assert [(p["event"], p["namespace"]) for p in payloads] == [
+        ("started", ["call", ":a"]),
+        ("started", ["call", ":b"]),
+        ("completed", ["call", ":b"]),
+        ("completed", ["call", ":a"]),
+    ]
 
 
 def test_started_dedup_on_repeat_namespace() -> None:

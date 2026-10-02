@@ -33,6 +33,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
     CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
+    NS_END,
     NS_SEP,
 )
 from langgraph._internal._runnable import create_task_in_config_context
@@ -555,16 +556,17 @@ def _checkpoint_ns_for_parent_command(ns: str) -> str:
 
     parts = ns.split(NS_SEP)
 
-    # Drop any trailing numeric selectors for the current frame (e.g. `...|node:<id>|1`).
-    while parts and parts[-1].isdigit():
+    # Drop any trailing selectors for the current frame: numeric call-order
+    # selectors (`...|node:<id>|1`) and instance keys (`...|node|:key`).
+    while parts and (parts[-1].isdigit() or parts[-1].startswith(NS_END)):
         parts.pop()
 
     # Drop the current frame segment itself (e.g. the `node:<id>`).
     if parts:
         parts.pop()
 
-    # Drop any trailing numeric selectors for the parent frame (e.g. `...|1|node:<id>`).
-    while parts and parts[-1].isdigit():
+    # Drop any trailing selectors for the parent frame.
+    while parts and (parts[-1].isdigit() or parts[-1].startswith(NS_END)):
         parts.pop()
 
     return NS_SEP.join(parts)

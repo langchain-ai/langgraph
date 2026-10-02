@@ -35,18 +35,42 @@ DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT = int(
 )
 
 
-def recast_checkpoint_ns(ns: str) -> str:
+def recast_checkpoint_ns(ns: str, *, keep_keys: bool = False) -> str:
     """Remove task IDs from checkpoint namespace.
+
+    A namespace is a `|`-separated path. Each segment is one of:
+
+    - `name` or `name:task_id`: a graph/node frame; the task id is stripped.
+    - a bare integer: a call-order selector for subgraphs invoked inside a
+      node body; always dropped.
+    - `:key`: a caller-supplied subgraph instance key (see
+      `CONFIG_KEY_SUBGRAPH_KEY`); dropped unless `keep_keys` is True.
 
     Args:
         ns: The checkpoint namespace with task IDs.
+        keep_keys: Whether to keep `:key` instance segments.
 
     Returns:
         str: The checkpoint namespace without task IDs.
     """
-    return NS_SEP.join(
-        part.split(NS_END)[0] for part in ns.split(NS_SEP) if not part.isdigit()
-    )
+    parts: list[str] = []
+    for part in ns.split(NS_SEP):
+        if part.isdigit():
+            continue
+        if part.startswith(NS_END):
+            if keep_keys:
+                parts.append(part)
+            continue
+        parts.append(part.split(NS_END)[0])
+    return NS_SEP.join(parts)
+
+
+def is_addressable_checkpoint_ns(ns: tuple[str, ...] | str) -> bool:
+    """True if no frame in the namespace carries a task id, i.e. the namespace
+    is stable across invocations (a `checkpointer=True` subgraph, or a keyed
+    subgraph instance) rather than scoped to one task execution."""
+    parts = ns.split(NS_SEP) if isinstance(ns, str) else ns
+    return all(NS_END not in part or part.startswith(NS_END) for part in parts)
 
 
 def patch_configurable(
