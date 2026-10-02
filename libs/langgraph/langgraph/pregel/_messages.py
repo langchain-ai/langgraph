@@ -35,14 +35,27 @@ T = TypeVar("T")
 Meta = tuple[tuple[str, ...], dict[str, Any]]
 
 
-def _state_values(obj: Any) -> Sequence[Any]:
-    """Extract top-level field values from a state object (dict, BaseModel, or dataclass)."""
+def _state_values(obj: Any, keys: Sequence[str] | None = None) -> Sequence[Any]:
+    """Extract top-level field values from a state object (dict, BaseModel, or dataclass).
+
+    If `keys` is provided, only those fields are returned. This lets
+    `stream_mode="messages"` be restricted to specific state keys, so internal
+    message fields are not leaked to the client (#6798).
+    """
     if isinstance(obj, dict):
-        return list(obj.values())
+        if keys is None:
+            return list(obj.values())
+        return [obj[k] for k in keys if k in obj]
     elif isinstance(obj, BaseModel):
-        return [getattr(obj, k) for k in type(obj).model_fields]
+        field_names = set(type(obj).model_fields)
+        if keys is None:
+            return [getattr(obj, k) for k in type(obj).model_fields]
+        return [getattr(obj, k) for k in keys if k in field_names]
     elif is_dataclass(obj) and not isinstance(obj, type):
-        return [getattr(obj, f.name) for f in fields(obj)]
+        names = {f.name for f in fields(obj)}
+        if keys is None:
+            return [getattr(obj, f.name) for f in fields(obj)]
+        return [getattr(obj, k) for k in keys if k in names]
     return ()
 
 
@@ -63,6 +76,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         subgraphs: bool,
         *,
         parent_ns: tuple[str, ...] | None = None,
+        state_keys: Sequence[str] | None = None,
     ) -> None:
         """Configure the handler to stream messages from LLMs and nodes.
 
@@ -93,6 +107,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         self.metadata: dict[UUID, Meta] = {}
         self.seen: set[int | str] = set()
         self.parent_ns = parent_ns
+        self.state_keys = state_keys
 
     def _emit(self, meta: Meta, message: BaseMessage, *, dedupe: bool = False) -> None:
         if dedupe and message.id in self.seen:
@@ -111,7 +126,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
                 if isinstance(value, BaseMessage):
                     self._emit(meta, value, dedupe=True)
         else:
-            for value in _state_values(response):
+            for value in _state_values(response, self.state_keys):
                 if isinstance(value, BaseMessage):
                     self._emit(meta, value, dedupe=True)
                 elif isinstance(value, Sequence):
@@ -321,7 +336,7 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
                 ):
                     self._emit(meta, value, dedupe=True)
         else:
-            for value in _state_values(response):
+            for value in _state_values(response, self.state_keys):
                 if isinstance(value, BaseMessage) and not isinstance(
                     value, ToolMessage
                 ):

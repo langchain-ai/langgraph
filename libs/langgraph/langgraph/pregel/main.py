@@ -76,6 +76,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STREAM,
+    CONFIG_KEY_STREAM_MESSAGES_KEYS,
     CONFIG_KEY_STREAM_MESSAGES_V2,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
@@ -2770,6 +2771,7 @@ class Pregel(
                         stream.put,
                         subgraphs,
                         parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
+                        state_keys=config[CONF].get(CONFIG_KEY_STREAM_MESSAGES_KEYS),
                     )
                 )
 
@@ -3196,6 +3198,7 @@ class Pregel(
                         stream_put,
                         subgraphs,
                         parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
+                        state_keys=config[CONF].get(CONFIG_KEY_STREAM_MESSAGES_KEYS),
                     )
                 )
 
