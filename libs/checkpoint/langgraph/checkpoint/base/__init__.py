@@ -123,9 +123,23 @@ class Checkpoint(TypedDict):
     """The channels that were updated in this checkpoint.
     """
 
+    task_id_overrides: NotRequired[dict[str, str]]
+    """Task IDs preserved across a manual state update.
+
+    Maps newly generated task IDs to the IDs of interrupted tasks that remain
+    scheduled, preserving their checkpoint namespaces and interrupt IDs.
+    """
+
+    task_id_seeds: NotRequired[dict[str, tuple[str, int]]]
+    """Original checkpoint IDs and steps for interrupted tasks' functional calls.
+
+    Keyed by the preserved parent task ID. Descendant calls use these seeds so
+    their task IDs and cached results remain valid after a manual state update.
+    """
+
 
 def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
-    return Checkpoint(
+    copied = Checkpoint(
         v=checkpoint["v"],
         ts=checkpoint["ts"],
         id=checkpoint["id"],
@@ -135,6 +149,11 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
         pending_sends=checkpoint.get("pending_sends", []).copy(),
         updated_channels=checkpoint.get("updated_channels", None),
     )
+    if "task_id_overrides" in checkpoint:
+        copied["task_id_overrides"] = checkpoint["task_id_overrides"].copy()
+    if "task_id_seeds" in checkpoint:
+        copied["task_id_seeds"] = checkpoint["task_id_seeds"].copy()
+    return copied
 
 
 class CheckpointTuple(NamedTuple):

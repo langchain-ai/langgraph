@@ -46,6 +46,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_SEND,
     CONFIG_KEY_TASK_ID,
+    CONFIG_KEY_TASK_ID_SEED,
     CONFIG_KEY_THREAD_ID,
     ERROR,
     ERROR_SOURCE_NODE,
@@ -516,6 +517,63 @@ def prepare_next_tasks(
 PUSH_TRIGGER = (PUSH,)
 
 
+def preserve_interrupts(
+    checkpoint: Checkpoint,
+    previous_tasks: Mapping[str, PregelExecutableTask],
+    next_tasks: Mapping[str, PregelTask],
+    pending_writes: list[PendingWrite],
+    previous_checkpoint: Checkpoint,
+    previous_step: int,
+) -> dict[str, list[tuple[str, Any]]]:
+    """Carry interrupts and resume values to tasks surviving a state update."""
+    interrupted = {tid for tid, channel, _ in pending_writes if channel == INTERRUPT}
+    # Historical checkpoints can retain interrupts alongside completed results.
+    # Those tasks must re-run with fresh identities when the checkpoint is forked.
+    interrupted.difference_update(
+        tid
+        for tid, channel, _ in pending_writes
+        if channel not in (ERROR, INTERRUPT, RESUME)
+    )
+    previous_ids = {
+        (task.name, task.path): task.id
+        for task in previous_tasks.values()
+        if task.id in interrupted
+    }
+    overrides = {
+        task.id: previous_ids[task.name, task.path]
+        for task in next_tasks.values()
+        if (task.name, task.path) in previous_ids
+    }
+    if overrides:
+        checkpoint["task_id_overrides"] = overrides
+    preserved_ids = set(overrides.values())
+    if preserved_ids:
+        seeds = previous_checkpoint.get("task_id_seeds", {})
+        checkpoint["task_id_seeds"] = {
+            tid: seeds.get(tid, (previous_checkpoint["id"], previous_step))
+            for tid in preserved_ids
+        }
+    interrupt_ids = {
+        item.id
+        for tid, channel, items in pending_writes
+        if tid in preserved_ids and channel == INTERRUPT
+        for item in items
+    }
+    writes: dict[str, list[tuple[str, Any]]] = defaultdict(list)
+    for tid, channel, value in pending_writes:
+        if tid in preserved_ids and channel in (INTERRUPT, RESUME):
+            writes[tid].append((channel, value))
+        elif preserved_ids and tid not in previous_tasks:
+            # Functional calls are prepared lazily, outside prepare_next_tasks.
+            # Preserve their cached results and answers; only carry interrupts
+            # that are still exposed by a surviving parent task.
+            if channel in (RETURN, RESUME) or (
+                channel == INTERRUPT and any(i.id in interrupt_ids for i in value)
+            ):
+                writes[tid].append((channel, value))
+    return writes
+
+
 class _TaskIDFn(Protocol):
     def __call__(self, namespace: bytes, *parts: str | bytes) -> str:
         pass
@@ -621,6 +679,7 @@ def prepare_single_task(
                 PULL,
                 *triggers,
             )
+            task_id = checkpoint.get("task_id_overrides", {}).get(task_id, task_id)
             task_checkpoint_ns = f"{checkpoint_ns}{NS_END}{task_id}"
             # create scratchpad
             scratchpad = _scratchpad(
@@ -720,6 +779,9 @@ def prepare_single_task(
                             ),
                             configurable={
                                 CONFIG_KEY_TASK_ID: task_id,
+                                CONFIG_KEY_TASK_ID_SEED: checkpoint.get(
+                                    "task_id_seeds", {}
+                                ).get(task_id),
                                 # deque.extend is thread-safe
                                 CONFIG_KEY_SEND: writes.extend,
                                 CONFIG_KEY_READ: partial(
@@ -831,15 +893,20 @@ def prepare_push_task_functional(
     # create task id
     triggers: Sequence[str] = PUSH_TRIGGER
     checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
+    task_id_step = step
+    if seed := configurable.get(CONFIG_KEY_TASK_ID_SEED):
+        checkpoint_id_bytes = binascii.unhexlify(seed[0].replace("-", ""))
+        task_id_step = seed[1]
     task_id = task_id_func(
         checkpoint_id_bytes,
         checkpoint_ns,
-        str(step),
+        str(task_id_step),
         name,
         PUSH,
         task_path_str(task_path[1]),
         str(task_path[2]),
     )
+    task_id = checkpoint.get("task_id_overrides", {}).get(task_id, task_id)
     task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
     # we append True to the task path to indicate that a call is being
     # made, so we should not return interrupts from this task (responsibility lies with the parent)
@@ -995,6 +1062,7 @@ def prepare_push_task_send(
             PUSH,
             str(idx),
         )
+        task_id = checkpoint.get("task_id_overrides", {}).get(task_id, task_id)
     else:
         logger.warning(f"Ignoring invalid PUSH task path {task_path}")
         return
@@ -1070,6 +1138,9 @@ def prepare_push_task_send(
                 ),
                 configurable={
                     CONFIG_KEY_TASK_ID: task_id,
+                    CONFIG_KEY_TASK_ID_SEED: checkpoint.get("task_id_seeds", {}).get(
+                        task_id
+                    ),
                     # deque.extend is thread-safe
                     CONFIG_KEY_SEND: writes.extend,
                     CONFIG_KEY_READ: partial(

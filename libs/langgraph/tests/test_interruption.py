@@ -6,11 +6,356 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from pydantic import BaseModel, ValidationError
 from typing_extensions import TypedDict
 
+from langgraph.func import task
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import Command, Durability, Interrupt, interrupt
+from langgraph.types import Command, Durability, Interrupt, Send, StateUpdate, interrupt
 from tests.any_str import AnyStr
 
 pytestmark = pytest.mark.anyio
+
+
+@pytest.mark.parametrize("resume_style", ["null", "id_map"])
+@pytest.mark.parametrize("bulk", [False, True])
+@pytest.mark.parametrize("subgraph", [False, True])
+@pytest.mark.parametrize("checkpoint_config", [False, True])
+@pytest.mark.parametrize("task_depth", [0, 1, 2])
+def test_update_state_preserves_interrupts(
+    sync_checkpointer: BaseCheckpointSaver,
+    durability: Durability,
+    resume_style: str,
+    bulk: bool,
+    subgraph: bool,
+    checkpoint_config: bool,
+    task_depth: int,
+) -> None:
+    class State(TypedDict):
+        x: int
+        note: str
+
+    def approve(state: State):
+        first = interrupt({"x": state["x"]}, response_schema=Decision)
+        second = interrupt("second approval")
+        return {
+            "x": state["x"] + 1,
+            "note": f"{state['note']}:{first.approved}:{second}",
+        }
+
+    approve_task = task(approve)
+    calls: list[str] = []
+
+    @task
+    def before_approval():
+        calls.append("before")
+        return "cached"
+
+    @task
+    def nested_approval(state: State):
+        return approve_task(state).result()
+
+    def gate(state: State):
+        if task_depth:
+            assert before_approval().result() == "cached"
+            worker = nested_approval if task_depth == 2 else approve_task
+            return worker(state).result()
+        return approve(state)
+
+    builder = StateGraph(State).add_node("gate", gate).add_edge(START, "gate")
+    if subgraph:
+        builder = (
+            StateGraph(State)
+            .add_node("gate", builder.compile())
+            .add_edge(START, "gate")
+        )
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    invocation_config = config
+    graph.invoke({"x": 1, "note": ""}, config, durability=durability)
+
+    def update(values: dict[str, Any]) -> None:
+        nonlocal invocation_config
+        before = graph.get_state(config)
+        if bulk:
+            updated_config = graph.bulk_update_state(config, [[StateUpdate(values)]])
+        else:
+            updated_config = graph.update_state(config, values)
+        after = graph.get_state(config)
+        assert after.interrupts == before.interrupts
+        assert after.tasks[0].interrupts == before.tasks[0].interrupts
+        assert after.next == ("gate",)
+        assert graph.get_state(updated_config).interrupts == before.interrupts
+        assert graph.get_state(before.config).interrupts == before.interrupts
+        invocation_config = updated_config if checkpoint_config else config
+
+    def resume(value: Any) -> Command:
+        pending = graph.get_state(config).interrupts[0]
+        return Command(resume=value if resume_style == "null" else {pending.id: value})
+
+    update({"note": "patched"})
+    update({"x": 2})
+    graph.invoke(resume({"approved": True}), invocation_config, durability=durability)
+    assert graph.get_state(config).interrupts[0].value == "second approval"
+    update({"note": "patched again"})
+    expected = (
+        {"x": 2, "note": ":True:yes"}
+        if subgraph
+        else {"x": 3, "note": "patched again:True:yes"}
+    )
+    assert (
+        graph.invoke(resume("yes"), invocation_config, durability=durability)
+        == expected
+    )
+    assert graph.get_state(config).interrupts == ()
+    assert graph.get_state(config).next == ()
+    if not subgraph and not checkpoint_config:
+        assert calls == (["before"] if task_depth else [])
+
+
+@pytest.mark.parametrize("resume_style", ["null", "id_map"])
+@pytest.mark.parametrize("bulk", [False, True])
+@pytest.mark.parametrize("subgraph", [False, True])
+@pytest.mark.parametrize("checkpoint_config", [False, True])
+@pytest.mark.parametrize("task_depth", [0, 1, 2])
+async def test_update_state_preserves_interrupts_async(
+    async_checkpointer: BaseCheckpointSaver,
+    durability: Durability,
+    resume_style: str,
+    bulk: bool,
+    subgraph: bool,
+    checkpoint_config: bool,
+    task_depth: int,
+) -> None:
+    class State(TypedDict):
+        x: int
+        note: str
+
+    async def approve(state: State):
+        first = interrupt({"x": state["x"]}, response_schema=Decision)
+        second = interrupt("second approval")
+        return {
+            "x": state["x"] + 1,
+            "note": f"{state['note']}:{first.approved}:{second}",
+        }
+
+    approve_task = task(approve)
+    calls: list[str] = []
+
+    @task
+    async def before_approval():
+        calls.append("before")
+        return "cached"
+
+    @task
+    async def nested_approval(state: State):
+        return await approve_task(state)
+
+    async def gate(state: State):
+        if task_depth:
+            assert await before_approval() == "cached"
+            worker = nested_approval if task_depth == 2 else approve_task
+            return await worker(state)
+        return await approve(state)
+
+    builder = StateGraph(State).add_node("gate", gate).add_edge(START, "gate")
+    if subgraph:
+        builder = (
+            StateGraph(State)
+            .add_node("gate", builder.compile())
+            .add_edge(START, "gate")
+        )
+    graph = builder.compile(checkpointer=async_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    invocation_config = config
+    await graph.ainvoke({"x": 1, "note": ""}, config, durability=durability)
+
+    async def update(values: dict[str, Any]) -> None:
+        nonlocal invocation_config
+        before = await graph.aget_state(config)
+        if bulk:
+            updated_config = await graph.abulk_update_state(
+                config, [[StateUpdate(values)]]
+            )
+        else:
+            updated_config = await graph.aupdate_state(config, values)
+        after = await graph.aget_state(config)
+        assert after.interrupts == before.interrupts
+        assert after.tasks[0].interrupts == before.tasks[0].interrupts
+        assert after.next == ("gate",)
+        assert (await graph.aget_state(updated_config)).interrupts == before.interrupts
+        assert (await graph.aget_state(before.config)).interrupts == before.interrupts
+        invocation_config = updated_config if checkpoint_config else config
+
+    async def resume(value: Any) -> Command:
+        pending = (await graph.aget_state(config)).interrupts[0]
+        return Command(resume=value if resume_style == "null" else {pending.id: value})
+
+    await update({"note": "patched"})
+    await update({"x": 2})
+    await graph.ainvoke(
+        await resume({"approved": True}), invocation_config, durability=durability
+    )
+    assert (await graph.aget_state(config)).interrupts[0].value == "second approval"
+    await update({"note": "patched again"})
+    expected = (
+        {"x": 2, "note": ":True:yes"}
+        if subgraph
+        else {"x": 3, "note": "patched again:True:yes"}
+    )
+    assert (
+        await graph.ainvoke(
+            await resume("yes"), invocation_config, durability=durability
+        )
+        == expected
+    )
+    assert (await graph.aget_state(config)).interrupts == ()
+    assert (await graph.aget_state(config)).next == ()
+    if not subgraph and not checkpoint_config:
+        assert calls == (["before"] if task_depth else [])
+
+
+@pytest.mark.parametrize("action", ["resume", "reroute", "end", "copy"])
+@pytest.mark.parametrize("send", [False, True])
+@pytest.mark.parametrize("tasked", [False, True])
+def test_update_state_parallel_interrupts(
+    sync_checkpointer: BaseCheckpointSaver, action: str, send: bool, tasked: bool
+) -> None:
+    class State(TypedDict):
+        paused: bool
+        left: str
+        right: str
+
+    @task
+    def ask(side: str):
+        return interrupt(side)
+
+    def answer(side: str):
+        return ask(side).result() if tasked else interrupt(side)
+
+    builder = StateGraph(State)
+    builder.add_node("route", lambda state: None)
+    if send:
+        builder.add_node("gate", lambda state: {state["side"]: answer(state["side"])})
+    else:
+        builder.add_node("left", lambda state: {"left": answer("left")})
+        builder.add_node("right", lambda state: {"right": answer("right")})
+    builder.add_edge(START, "route")
+    builder.add_conditional_edges(
+        "route",
+        lambda state: (
+            (
+                [Send("gate", {"side": side}) for side in ("left", "right")]
+                if send
+                else ["left", "right"]
+            )
+            if state["paused"]
+            else END
+        ),
+    )
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    graph.invoke({"paused": True, "left": "", "right": ""}, config)
+    before = graph.get_state(config)
+    assert len(before.interrupts) == 2
+
+    if action == "resume":
+        graph.update_state(config, {"left": "patched"}, as_node="route")
+        after = graph.get_state(config)
+        assert after.interrupts == before.interrupts
+        assert after.next == (("gate", "gate") if send else ("left", "right"))
+        assert graph.invoke(
+            Command(resume={i.id: f"approved:{i.value}" for i in before.interrupts}),
+            config,
+        ) == {"paused": True, "left": "approved:left", "right": "approved:right"}
+        assert graph.get_state(config).interrupts == ()
+    else:
+        if action == "reroute":
+            graph.update_state(config, {"paused": False}, as_node="route")
+        else:
+            graph.update_state(
+                config, None, as_node=END if action == "end" else "__copy__"
+            )
+        after = graph.get_state(config)
+        assert after.interrupts == ()
+        if action == "copy":
+            assert after.next == (("gate", "gate") if send else ("left", "right"))
+            graph.invoke(None, config)
+            assert {i.id for i in graph.get_state(config).interrupts}.isdisjoint(
+                i.id for i in before.interrupts
+            )
+        else:
+            assert after.next == ()
+
+
+@pytest.mark.parametrize("action", ["resume", "reroute", "end", "copy"])
+@pytest.mark.parametrize("send", [False, True])
+@pytest.mark.parametrize("tasked", [False, True])
+async def test_update_state_parallel_interrupts_async(
+    async_checkpointer: BaseCheckpointSaver, action: str, send: bool, tasked: bool
+) -> None:
+    class State(TypedDict):
+        paused: bool
+        left: str
+        right: str
+
+    @task
+    def ask(side: str):
+        return interrupt(side)
+
+    def answer(side: str):
+        return ask(side).result() if tasked else interrupt(side)
+
+    builder = StateGraph(State)
+    builder.add_node("route", lambda state: None)
+    if send:
+        builder.add_node("gate", lambda state: {state["side"]: answer(state["side"])})
+    else:
+        builder.add_node("left", lambda state: {"left": answer("left")})
+        builder.add_node("right", lambda state: {"right": answer("right")})
+    builder.add_edge(START, "route")
+    builder.add_conditional_edges(
+        "route",
+        lambda state: (
+            (
+                [Send("gate", {"side": side}) for side in ("left", "right")]
+                if send
+                else ["left", "right"]
+            )
+            if state["paused"]
+            else END
+        ),
+    )
+    graph = builder.compile(checkpointer=async_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    await graph.ainvoke({"paused": True, "left": "", "right": ""}, config)
+    before = await graph.aget_state(config)
+    assert len(before.interrupts) == 2
+
+    if action == "resume":
+        await graph.aupdate_state(config, {"left": "patched"}, as_node="route")
+        after = await graph.aget_state(config)
+        assert after.interrupts == before.interrupts
+        assert after.next == (("gate", "gate") if send else ("left", "right"))
+        assert await graph.ainvoke(
+            Command(resume={i.id: f"approved:{i.value}" for i in before.interrupts}),
+            config,
+        ) == {"paused": True, "left": "approved:left", "right": "approved:right"}
+        assert (await graph.aget_state(config)).interrupts == ()
+    else:
+        if action == "reroute":
+            await graph.aupdate_state(config, {"paused": False}, as_node="route")
+        else:
+            await graph.aupdate_state(
+                config, None, as_node=END if action == "end" else "__copy__"
+            )
+        after = await graph.aget_state(config)
+        assert after.interrupts == ()
+        if action == "copy":
+            assert after.next == (("gate", "gate") if send else ("left", "right"))
+            await graph.ainvoke(None, config)
+            assert {
+                i.id for i in (await graph.aget_state(config)).interrupts
+            }.isdisjoint(i.id for i in before.interrupts)
+        else:
+            assert after.next == ()
 
 
 def test_interruption_without_state_updates(

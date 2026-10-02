@@ -320,7 +320,7 @@ async def achannels_from_checkpoint(
 
 
 def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
-    return Checkpoint(
+    copied = Checkpoint(
         v=checkpoint["v"],
         ts=checkpoint["ts"],
         id=checkpoint["id"],
@@ -329,3 +329,8 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
         versions_seen={k: v.copy() for k, v in checkpoint["versions_seen"].items()},
         updated_channels=checkpoint.get("updated_channels", None),
     )
+    if "task_id_overrides" in checkpoint:
+        copied["task_id_overrides"] = checkpoint["task_id_overrides"].copy()
+    if "task_id_seeds" in checkpoint:
+        copied["task_id_seeds"] = checkpoint["task_id_seeds"].copy()
+    return copied
