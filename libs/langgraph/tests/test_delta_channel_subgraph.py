@@ -393,3 +393,38 @@ def test_stateless_graph_update_state_ignores_lent_saver() -> None:
     with pytest.raises(ValueError, match="No checkpointer set"):
         app.update_state(config, _both("x"), as_node="a")
     assert list(saver.list(None)) == []
+
+
+def test_graph_without_a_checkpointer_reads_through_a_lent_saver(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    app = _child_builder().compile()
+    config = {
+        "configurable": {"thread_id": "1", CONFIG_KEY_CHECKPOINTER: sync_checkpointer}
+    }
+    app.invoke(_both("in"), config)
+
+    assert app.get_state(config).values == _both("in", "a1", "b1", "b2")
+    app.update_state(config, _both("edit"), as_node="b")
+    assert app.get_state(config).values == _both("in", "a1", "b1", "b2", "edit")
+    assert next(iter(app.get_state_history(config))).values == _both(
+        "in", "a1", "b1", "b2", "edit"
+    )
+
+
+async def test_graph_without_a_checkpointer_areads_through_a_lent_saver(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    app = _child_builder().compile()
+    config = {
+        "configurable": {"thread_id": "1", CONFIG_KEY_CHECKPOINTER: async_checkpointer}
+    }
+    await app.ainvoke(_both("in"), config)
+
+    assert (await app.aget_state(config)).values == _both("in", "a1", "b1", "b2")
+    await app.aupdate_state(config, _both("edit"), as_node="b")
+    assert (await app.aget_state(config)).values == _both(
+        "in", "a1", "b1", "b2", "edit"
+    )
+    history = [s async for s in app.aget_state_history(config)]
+    assert history[0].values == _both("in", "a1", "b1", "b2", "edit")

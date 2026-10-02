@@ -870,6 +870,22 @@ class Pregel(
             config, {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}
         )
 
+    def _subgraph_for_namespace(
+        self, config: RunnableConfig, checkpointer: BaseCheckpointSaver
+    ) -> tuple[PregelProtocol, RunnableConfig] | None:
+        """The subgraph a state method's namespaced config addresses, and the
+        config to call it with, lending it `checkpointer`. `None` when the
+        config is for this graph."""
+        checkpoint_ns = config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        if not checkpoint_ns or CONFIG_KEY_CHECKPOINTER in config[CONF]:
+            return None
+        recast = recast_checkpoint_ns(checkpoint_ns)
+        for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
+            return pregel, patch_configurable(
+                config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
+            )
+        raise ValueError(f"Subgraph {recast} not found")
+
     def _apply_checkpointer_allowlist(
         self, checkpointer: BaseCheckpointSaver | None
     ) -> BaseCheckpointSaver | None:
@@ -1422,19 +1438,9 @@ class Pregel(
         """Get the current state of the graph."""
         checkpointer = self._state_checkpointer(config)
 
-        if (
-            checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
-        ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
-            # remove task_ids from checkpoint_ns
-            recast = recast_checkpoint_ns(checkpoint_ns)
-            # find the subgraph with the matching name
-            for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
-                return pregel.get_state(
-                    patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
-                    subgraphs=subgraphs,
-                )
-            else:
-                raise ValueError(f"Subgraph {recast} not found")
+        if subgraph := self._subgraph_for_namespace(config, checkpointer):
+            pregel, subgraph_config = subgraph
+            return pregel.get_state(subgraph_config, subgraphs=subgraphs)
 
         config = merge_configs(self.config, config) if self.config else config
         config = self._own_checkpoint_config(config)
@@ -1457,19 +1463,9 @@ class Pregel(
         """Get the current state of the graph."""
         checkpointer = self._state_checkpointer(config)
 
-        if (
-            checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
-        ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
-            # remove task_ids from checkpoint_ns
-            recast = recast_checkpoint_ns(checkpoint_ns)
-            # find the subgraph with the matching name
-            async for _, pregel in self.aget_subgraphs(namespace=recast, recurse=True):
-                return await pregel.aget_state(
-                    patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
-                    subgraphs=subgraphs,
-                )
-            else:
-                raise ValueError(f"Subgraph {recast} not found")
+        if subgraph := self._subgraph_for_namespace(config, checkpointer):
+            pregel, subgraph_config = subgraph
+            return await pregel.aget_state(subgraph_config, subgraphs=subgraphs)
 
         config = merge_configs(self.config, config) if self.config else config
         config = self._own_checkpoint_config(config)
@@ -1498,29 +1494,21 @@ class Pregel(
         config = ensure_config(config)
         checkpointer = self._state_checkpointer(config)
 
-        if (
-            checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
-        ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
-            # remove task_ids from checkpoint_ns
-            recast = recast_checkpoint_ns(checkpoint_ns)
-            # find the subgraph with the matching name
-            for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
-                yield from pregel.get_state_history(
-                    patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
-                    filter=filter,
-                    before=before,
-                    limit=limit,
-                )
-                return
-            else:
-                raise ValueError(f"Subgraph {recast} not found")
+        if subgraph := self._subgraph_for_namespace(config, checkpointer):
+            pregel, subgraph_config = subgraph
+            yield from pregel.get_state_history(
+                subgraph_config, filter=filter, before=before, limit=limit
+            )
+            return
 
         config = merge_configs(
             self.config,
             config,
             {
                 CONF: {
-                    CONFIG_KEY_CHECKPOINT_NS: checkpoint_ns,
+                    CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(
+                        CONFIG_KEY_CHECKPOINT_NS, ""
+                    ),
                     CONFIG_KEY_THREAD_ID: str(config[CONF][CONFIG_KEY_THREAD_ID]),
                 }
             },
@@ -1546,30 +1534,22 @@ class Pregel(
         config = ensure_config(config)
         checkpointer = self._state_checkpointer(config)
 
-        if (
-            checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
-        ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
-            # remove task_ids from checkpoint_ns
-            recast = recast_checkpoint_ns(checkpoint_ns)
-            # find the subgraph with the matching name
-            async for _, pregel in self.aget_subgraphs(namespace=recast, recurse=True):
-                async for state in pregel.aget_state_history(
-                    patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
-                    filter=filter,
-                    before=before,
-                    limit=limit,
-                ):
-                    yield state
-                return
-            else:
-                raise ValueError(f"Subgraph {recast} not found")
+        if subgraph := self._subgraph_for_namespace(config, checkpointer):
+            pregel, subgraph_config = subgraph
+            async for state in pregel.aget_state_history(
+                subgraph_config, filter=filter, before=before, limit=limit
+            ):
+                yield state
+            return
 
         config = merge_configs(
             self.config,
             config,
             {
                 CONF: {
-                    CONFIG_KEY_CHECKPOINT_NS: checkpoint_ns,
+                    CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(
+                        CONFIG_KEY_CHECKPOINT_NS, ""
+                    ),
                     CONFIG_KEY_THREAD_ID: str(config[CONF][CONFIG_KEY_THREAD_ID]),
                 }
             },
@@ -1615,20 +1595,9 @@ class Pregel(
         if any(len(u) == 0 for u in supersteps):
             raise ValueError("No updates provided")
 
-        # delegate to subgraph
-        if (
-            checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
-        ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
-            # remove task_ids from checkpoint_ns
-            recast = recast_checkpoint_ns(checkpoint_ns)
-            # find the subgraph with the matching name
-            for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
-                return pregel.bulk_update_state(
-                    patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
-                    supersteps,
-                )
-            else:
-                raise ValueError(f"Subgraph {recast} not found")
+        if subgraph := self._subgraph_for_namespace(config, checkpointer):
+            pregel, subgraph_config = subgraph
+            return pregel.bulk_update_state(subgraph_config, supersteps)
 
         def perform_superstep(
             input_config: RunnableConfig, updates: Sequence[StateUpdate]
@@ -2074,20 +2043,9 @@ class Pregel(
         if any(len(u) == 0 for u in supersteps):
             raise ValueError("No updates provided")
 
-        # delegate to subgraph
-        if (
-            checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
-        ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
-            # remove task_ids from checkpoint_ns
-            recast = recast_checkpoint_ns(checkpoint_ns)
-            # find the subgraph with the matching name
-            async for _, pregel in self.aget_subgraphs(namespace=recast, recurse=True):
-                return await pregel.abulk_update_state(
-                    patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
-                    supersteps,
-                )
-            else:
-                raise ValueError(f"Subgraph {recast} not found")
+        if subgraph := self._subgraph_for_namespace(config, checkpointer):
+            pregel, subgraph_config = subgraph
+            return await pregel.abulk_update_state(subgraph_config, supersteps)
 
         async def aperform_superstep(
             input_config: RunnableConfig, updates: Sequence[StateUpdate]
