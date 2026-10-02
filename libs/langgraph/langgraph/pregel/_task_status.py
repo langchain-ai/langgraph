@@ -43,8 +43,10 @@ What these rules cannot see:
 - A task that fails can record partial output writes along with its error. It
   reads as finished, which is how the executor has always treated it.
 - Writes recorded before rule 1 existed may describe a finished task with no
-  output using only control writes. Those tasks read as unfinished, which
-  matches how they were treated before.
+  output using only control writes. Those tasks read as unfinished. The
+  executor treated them the same way before and runs them again. Their last
+  interrupt now counts as pending, so they appear in `next` and a resume
+  without an interrupt id raises if another interrupt is also pending.
 """
 
 from __future__ import annotations
