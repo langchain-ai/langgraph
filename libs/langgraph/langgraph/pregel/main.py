@@ -46,6 +46,7 @@ from langchain_core.runnables.schema import StreamEvent
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
+    ChannelVersions,
     Checkpoint,
     CheckpointTuple,
 )
@@ -132,8 +133,10 @@ from langgraph.pregel._checkpoint import (
     copy_checkpoint,
     create_checkpoint,
     create_checkpoint_plan_for_update_state_api,
+    delta_channels_with_pending_writes,
     empty_checkpoint,
     get_updated_channels_from_tasks,
+    versions_seen_without_bumps,
 )
 from langgraph.pregel._draw import draw_graph
 from langgraph.pregel._io import map_input, read_channels
@@ -1585,6 +1588,27 @@ class Pregel(
                 checkpoint_tuple.config, checkpoint_tuple, saver=checkpointer
             )
 
+    def _infer_as_node(self, versions_seen: dict[str, ChannelVersions]) -> str | None:
+        if len(self.nodes) == 1:
+            return next(iter(self.nodes))
+        seen = versions_seen_without_bumps(versions_seen)
+        if not any(v for vv in seen.values() for v in vv.values()):
+            if (
+                isinstance(self.input_channels, str)
+                and self.input_channels in self.nodes
+            ):
+                return self.input_channels
+            return None
+        last_seen_by_node = sorted(
+            (v, n) for n, s in seen.items() if n in self.nodes for v in s.values()
+        )
+        # if two nodes updated the state at the same time, it's ambiguous
+        if len(last_seen_by_node) == 1 or (
+            last_seen_by_node and last_seen_by_node[-1][0] != last_seen_by_node[-2][0]
+        ):
+            return last_seen_by_node[-1][1]
+        return None
+
     def bulk_update_state(
         self,
         config: RunnableConfig,
@@ -1619,13 +1643,24 @@ class Pregel(
             return pregel.bulk_update_state(subgraph_config, supersteps)
 
         def perform_superstep(
-            input_config: RunnableConfig, updates: Sequence[StateUpdate]
+            input_config: RunnableConfig,
+            updates: Sequence[StateUpdate],
+            is_first: bool = False,
         ) -> RunnableConfig:
             # get last checkpoint
             config = self._own_checkpoint_config(
                 ensure_config(self.config, input_config)
             )
             saved = checkpointer.get_tuple(config)
+            # Later supersteps, including the one after a `__copy__` (stored
+            # under the base's parent), never walk through the base's writes.
+            fork_pending = (
+                delta_channels_with_pending_writes(
+                    self.channels, saved.pending_writes if saved else None
+                )
+                if is_first
+                else set()
+            )
             if saved is not None:
                 self._migrate_checkpoint(saved.checkpoint)
             checkpoint = (
@@ -1705,9 +1740,17 @@ class Pregel(
                         self.trigger_to_nodes,
                     )
                 # save checkpoint
+                next_checkpoint = create_checkpoint(
+                    checkpoint,
+                    channels,
+                    step,
+                    get_next_version=checkpointer.get_next_version,
+                    channels_to_snapshot=fork_pending,
+                    stored_versions=checkpoint_previous_versions,
+                )
                 next_config = checkpointer.put(
                     checkpoint_config,
-                    create_checkpoint(checkpoint, channels, step),
+                    next_checkpoint,
                     {
                         "source": "update",
                         "step": step + 1,
@@ -1715,7 +1758,7 @@ class Pregel(
                     },
                     get_new_channel_versions(
                         checkpoint_previous_versions,
-                        checkpoint["channel_versions"],
+                        next_checkpoint["channel_versions"],
                     ),
                 )
                 return patch_checkpoint_map(
@@ -1744,9 +1787,17 @@ class Pregel(
                         if saved and saved.metadata.get("step") is not None
                         else -1
                     )
+                    next_checkpoint = create_checkpoint(
+                        checkpoint,
+                        channels,
+                        next_step,
+                        get_next_version=checkpointer.get_next_version,
+                        channels_to_snapshot=fork_pending,
+                        stored_versions=checkpoint_previous_versions,
+                    )
                     next_config = checkpointer.put(
                         checkpoint_config,
-                        create_checkpoint(checkpoint, channels, next_step),
+                        next_checkpoint,
                         {
                             "source": "input",
                             "step": next_step,
@@ -1756,7 +1807,7 @@ class Pregel(
                         },
                         get_new_channel_versions(
                             checkpoint_previous_versions,
-                            checkpoint["channel_versions"],
+                            next_checkpoint["channel_versions"],
                         ),
                     )
 
@@ -1885,31 +1936,8 @@ class Pregel(
             if len(updates) == 1:
                 values, as_node, task_id = updates[0]
                 # find last node that updated the state, if not provided
-                if as_node is None and len(self.nodes) == 1:
-                    as_node = tuple(self.nodes)[0]
-                elif as_node is None and not any(
-                    v
-                    for vv in checkpoint["versions_seen"].values()
-                    for v in vv.values()
-                ):
-                    if (
-                        isinstance(self.input_channels, str)
-                        and self.input_channels in self.nodes
-                    ):
-                        as_node = self.input_channels
-                elif as_node is None:
-                    last_seen_by_node = sorted(
-                        (v, n)
-                        for n, seen in checkpoint["versions_seen"].items()
-                        if n in self.nodes
-                        for v in seen.values()
-                    )
-                    # if two nodes updated the state at the same time, it's ambiguous
-                    if last_seen_by_node:
-                        if len(last_seen_by_node) == 1:
-                            as_node = last_seen_by_node[0][1]
-                        elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
-                            as_node = last_seen_by_node[-1][1]
+                if as_node is None:
+                    as_node = self._infer_as_node(checkpoint["versions_seen"])
                 if as_node is None:
                     raise InvalidUpdateError("Ambiguous update, specify as_node")
                 if as_node not in self.nodes:
@@ -1999,17 +2027,19 @@ class Pregel(
                     parents=saved.metadata.get("parents", {}) if saved else {},
                     saved_metadata=saved.metadata if saved else None,
                     is_fresh_thread=saved is None,
+                    fork_channels=fork_pending,
+                    channel_versions=checkpoint["channel_versions"],
                 )
             )
             checkpoint = create_checkpoint(
                 checkpoint,
                 channels,
                 step + 1,
-                updated_channels=updated_channels if channels_to_snapshot else None,
                 get_next_version=checkpointer.get_next_version
                 if channels_to_snapshot
                 else None,
                 channels_to_snapshot=channels_to_snapshot,
+                stored_versions=checkpoint_previous_versions,
             )
             next_config = checkpointer.put(
                 checkpoint_config,
@@ -2028,8 +2058,8 @@ class Pregel(
         current_config = patch_configurable(
             config, {CONFIG_KEY_THREAD_ID: str(config[CONF][CONFIG_KEY_THREAD_ID])}
         )
-        for superstep in supersteps:
-            current_config = perform_superstep(current_config, superstep)
+        for i, superstep in enumerate(supersteps):
+            current_config = perform_superstep(current_config, superstep, i == 0)
         return current_config
 
     async def abulk_update_state(
@@ -2066,13 +2096,24 @@ class Pregel(
             return await pregel.abulk_update_state(subgraph_config, supersteps)
 
         async def aperform_superstep(
-            input_config: RunnableConfig, updates: Sequence[StateUpdate]
+            input_config: RunnableConfig,
+            updates: Sequence[StateUpdate],
+            is_first: bool = False,
         ) -> RunnableConfig:
             # get last checkpoint
             config = self._own_checkpoint_config(
                 ensure_config(self.config, input_config)
             )
             saved = await checkpointer.aget_tuple(config)
+            # Later supersteps, including the one after a `__copy__` (stored
+            # under the base's parent), never walk through the base's writes.
+            fork_pending = (
+                delta_channels_with_pending_writes(
+                    self.channels, saved.pending_writes if saved else None
+                )
+                if is_first
+                else set()
+            )
             if saved is not None:
                 self._migrate_checkpoint(saved.checkpoint)
             checkpoint = (
@@ -2150,16 +2191,25 @@ class Pregel(
                         self.trigger_to_nodes,
                     )
                 # save checkpoint
+                next_checkpoint = create_checkpoint(
+                    checkpoint,
+                    channels,
+                    step,
+                    get_next_version=checkpointer.get_next_version,
+                    channels_to_snapshot=fork_pending,
+                    stored_versions=checkpoint_previous_versions,
+                )
                 next_config = await checkpointer.aput(
                     checkpoint_config,
-                    create_checkpoint(checkpoint, channels, step),
+                    next_checkpoint,
                     {
                         "source": "update",
                         "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
                     },
                     get_new_channel_versions(
-                        checkpoint_previous_versions, checkpoint["channel_versions"]
+                        checkpoint_previous_versions,
+                        next_checkpoint["channel_versions"],
                     ),
                 )
                 return patch_checkpoint_map(
@@ -2188,9 +2238,17 @@ class Pregel(
                         if saved and saved.metadata.get("step") is not None
                         else -1
                     )
+                    next_checkpoint = create_checkpoint(
+                        checkpoint,
+                        channels,
+                        next_step,
+                        get_next_version=checkpointer.get_next_version,
+                        channels_to_snapshot=fork_pending,
+                        stored_versions=checkpoint_previous_versions,
+                    )
                     next_config = await checkpointer.aput(
                         checkpoint_config,
-                        create_checkpoint(checkpoint, channels, next_step),
+                        next_checkpoint,
                         {
                             "source": "input",
                             "step": next_step,
@@ -2200,7 +2258,7 @@ class Pregel(
                         },
                         get_new_channel_versions(
                             checkpoint_previous_versions,
-                            checkpoint["channel_versions"],
+                            next_checkpoint["channel_versions"],
                         ),
                     )
 
@@ -2328,27 +2386,8 @@ class Pregel(
             if len(updates) == 1:
                 values, as_node, task_id = updates[0]
                 # find last node that updated the state, if not provided
-                if as_node is None and len(self.nodes) == 1:
-                    as_node = tuple(self.nodes)[0]
-                elif as_node is None and not saved:
-                    if (
-                        isinstance(self.input_channels, str)
-                        and self.input_channels in self.nodes
-                    ):
-                        as_node = self.input_channels
-                elif as_node is None:
-                    last_seen_by_node = sorted(
-                        (v, n)
-                        for n, seen in checkpoint["versions_seen"].items()
-                        if n in self.nodes
-                        for v in seen.values()
-                    )
-                    # if two nodes updated the state at the same time, it's ambiguous
-                    if last_seen_by_node:
-                        if len(last_seen_by_node) == 1:
-                            as_node = last_seen_by_node[0][1]
-                        elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
-                            as_node = last_seen_by_node[-1][1]
+                if as_node is None:
+                    as_node = self._infer_as_node(checkpoint["versions_seen"])
                 if as_node is None:
                     raise InvalidUpdateError("Ambiguous update, specify as_node")
                 if as_node not in self.nodes:
@@ -2438,17 +2477,19 @@ class Pregel(
                     parents=saved.metadata.get("parents", {}) if saved else {},
                     saved_metadata=saved.metadata if saved else None,
                     is_fresh_thread=saved is None,
+                    fork_channels=fork_pending,
+                    channel_versions=checkpoint["channel_versions"],
                 )
             )
             checkpoint = create_checkpoint(
                 checkpoint,
                 channels,
                 step + 1,
-                updated_channels=updated_channels if channels_to_snapshot else None,
                 get_next_version=checkpointer.get_next_version
                 if channels_to_snapshot
                 else None,
                 channels_to_snapshot=channels_to_snapshot,
+                stored_versions=checkpoint_previous_versions,
             )
             next_config = await checkpointer.aput(
                 checkpoint_config,
@@ -2466,8 +2507,8 @@ class Pregel(
         current_config = patch_configurable(
             config, {CONFIG_KEY_THREAD_ID: str(config[CONF][CONFIG_KEY_THREAD_ID])}
         )
-        for superstep in supersteps:
-            current_config = await aperform_superstep(current_config, superstep)
+        for i, superstep in enumerate(supersteps):
+            current_config = await aperform_superstep(current_config, superstep, i == 0)
         return current_config
 
     def update_state(
