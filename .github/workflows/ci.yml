@@ -20,7 +20,7 @@ permissions:
 # pointless jobs early so that more useful jobs can run sooner.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   changes:
