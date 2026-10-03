@@ -386,7 +386,42 @@ def _format_messages(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
         warnings.warn(msg)
         return list(messages)
     else:
-        return convert_to_messages(convert_to_openai_messages(messages))
+        # Save message metadata keyed by message ID before the round-trip,
+        # since convert_to_openai_messages drops non-standard fields.
+        saved_metadata: dict[str, tuple[dict, dict]] = {}
+        for message in messages:
+            if message.id and (message.additional_kwargs or message.response_metadata):
+                saved_metadata[message.id] = (
+                    message.additional_kwargs,
+                    message.response_metadata,
+                )
+
+        openai_msgs = convert_to_openai_messages(messages, include_id=True)
+
+        formatted = convert_to_messages(openai_msgs)
+
+        # Restore metadata that was lost during conversion without overwriting
+        # fields produced by the conversion itself.
+        for message in formatted:
+            if message.id and message.id in saved_metadata:
+                saved_kwargs, saved_response_metadata = saved_metadata[message.id]
+                lost_kwargs = {
+                    field_name: field_value
+                    for field_name, field_value in saved_kwargs.items()
+                    if field_name not in message.additional_kwargs
+                }
+                if lost_kwargs:
+                    message.additional_kwargs.update(lost_kwargs)
+
+                lost_response_metadata = {
+                    field_name: field_value
+                    for field_name, field_value in saved_response_metadata.items()
+                    if field_name not in message.response_metadata
+                }
+                if lost_response_metadata:
+                    message.response_metadata.update(lost_response_metadata)
+
+        return formatted
 
 
 def push_message(
