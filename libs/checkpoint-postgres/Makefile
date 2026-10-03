@@ -4,15 +4,17 @@
 # TESTING AND COVERAGE
 ######################
 
+COMPOSE_PROJECT_NAME ?= langgraph_checkpoint_postgres
+
 start-postgres:
-	POSTGRES_VERSION=${POSTGRES_VERSION:-16} docker compose -f tests/compose-postgres.yml up -V --force-recreate --wait || ( \
+	POSTGRES_VERSION=${POSTGRES_VERSION:-16} docker compose -p $(COMPOSE_PROJECT_NAME) -f tests/compose-postgres.yml up -V --force-recreate --wait || ( \
 		echo "Failed to start PostgreSQL, printing logs..."; \
-		docker compose -f tests/compose-postgres.yml logs; \
+		docker compose -p $(COMPOSE_PROJECT_NAME) -f tests/compose-postgres.yml logs; \
 		exit 1 \
 	)
 
 stop-postgres:
-	docker compose -f tests/compose-postgres.yml down
+	docker compose -p $(COMPOSE_PROJECT_NAME) -f tests/compose-postgres.yml down
 
 POSTGRES_VERSIONS ?= 15 16
 test_pg_version:
