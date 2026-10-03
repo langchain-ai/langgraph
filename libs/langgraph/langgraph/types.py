@@ -735,6 +735,28 @@ class StateSnapshot(NamedTuple):
     """
 
 
+def _make_hashable(value: Any) -> Any:
+    """Recursively convert mutable containers into hashable equivalents.
+
+    Dicts become order-independent tuples of frozen `(key, value)` pairs,
+    lists/tuples become tuples, and sets become frozensets, so that equal
+    payloads always produce equal hashes regardless of container ordering.
+    Any other value is returned unchanged.
+    """
+    if isinstance(value, dict):
+        return tuple(
+            sorted(
+                ((_make_hashable(k), _make_hashable(v)) for k, v in value.items()),
+                key=repr,
+            )
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(_make_hashable(v) for v in value)
+    if isinstance(value, (set, frozenset)):
+        return frozenset(_make_hashable(v) for v in value)
+    return value
+
+
 class Send:
     """A message or packet to send to a specific node in the graph.
 
@@ -810,7 +832,13 @@ class Send:
         self.timeout = TimeoutPolicy.coerce(timeout)
 
     def __hash__(self) -> int:
-        return hash((self.node, self.arg, self.timeout))
+        try:
+            return hash((self.node, _make_hashable(self.arg), self.timeout))
+        except TypeError:
+            # `arg` holds values that cannot be made hashable (e.g. arbitrary
+            # objects without `__hash__`); fall back to identity so `Send`
+            # instances remain usable in sets and dicts.
+            return hash((self.node, id(self.arg), self.timeout))
 
     def __repr__(self) -> str:
         if self.timeout is None:
