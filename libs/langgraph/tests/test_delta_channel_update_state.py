@@ -113,6 +113,37 @@ def test_fresh_update_state_head_snapshots_delta_channel() -> None:
     assert "counters_since_delta_snapshot" not in head.metadata
 
 
+def test_fresh_update_state_stores_nothing_for_a_delta_channel_it_did_not_write() -> (
+    None
+):
+    saver = InMemorySaver()
+    State = TypedDict(  # type: ignore[call-overload]  # noqa: UP013
+        "State",
+        {
+            "messages": Annotated[list, DeltaChannel(_messages_delta_reducer)],
+            "notes": Annotated[list, DeltaChannel(_messages_delta_reducer)],
+        },
+    )
+    graph = (
+        StateGraph(State)
+        .add_node("model", lambda state: {})
+        .add_edge(START, "model")
+        .compile(checkpointer=saver)
+    )
+    config = {"configurable": {"thread_id": "fresh-unwritten"}}
+
+    graph.update_state(
+        config,
+        {"messages": [HumanMessage(content="hello", id="m1")]},
+        as_node="model",
+    )
+
+    head = saver.get_tuple(config)
+    assert head is not None
+    assert "notes" not in head.checkpoint["channel_versions"]
+    assert graph.get_state(config).values["notes"] == []
+
+
 # ---------------------------------------------------------------------------
 # Non-fresh thread: update_state after invoke
 # ---------------------------------------------------------------------------

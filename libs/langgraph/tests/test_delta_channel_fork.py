@@ -5,6 +5,7 @@ values; the plain channel needs no replay, so it is the oracle.
 """
 
 import sys
+import threading
 from collections.abc import Sequence
 from operator import add
 from typing import Annotated, Any
@@ -17,6 +18,7 @@ from typing_extensions import TypedDict
 
 from langgraph._internal._constants import INPUT
 from langgraph.channels.delta import DeltaChannel
+from langgraph.errors import NodeError
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import (
     Command,
@@ -343,6 +345,26 @@ def test_fork_by_bulk_update_whose_first_superstep_skips_the_plan(
     )
 
 
+def test_bulk_update_after_a_copy_stores_no_snapshot(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    config = _thread("t")
+    _build(sync_checkpointer, "first").invoke(_both("in-1"), config)
+    graph = _build(sync_checkpointer, "second")
+    graph.invoke(_both("in-2"), config)
+    base = next(
+        s for s in graph.get_state_history(config) if "in-2" not in s.values["log"]
+    )
+
+    forked = graph.bulk_update_state(
+        _at(config, base),
+        [[StateUpdate(None, "__copy__")], [StateUpdate(_both("s2"), "n")]],
+    )
+
+    assert graph.get_state(forked).values["log"] == ["in-1", "first-out", "s2"]
+    assert not _snapshotted_checkpoints(sync_checkpointer, config)
+
+
 def test_unaddressed_bulk_update_keeps_snapshot_cadence(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -479,6 +501,42 @@ def test_resume_on_an_interrupted_head_consumes_its_writes_without_a_snapshot(
     state = graph.get_state(config)
     assert state.next == ()
     assert state.values["log"] == state.values["plain"] == ["in-1", "p"]
+    assert not _snapshotted_checkpoints(sync_checkpointer, config)
+
+
+def test_resume_whose_node_writes_the_delta_channel_stores_no_snapshot(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    def ask(state: _State) -> dict:
+        return _both(interrupt("continue?"))
+
+    graph = (
+        StateGraph(_State)
+        .add_node("ask", ask)
+        .add_edge(START, "ask")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = _thread("t")
+    graph.invoke(_both("in"), config, durability=durability)
+
+    graph.invoke(Command(resume="yes"), config, durability=durability)
+
+    state = graph.get_state(config)
+    assert state.values["log"] == state.values["plain"] == ["in", "yes"]
+    assert not _snapshotted_checkpoints(sync_checkpointer, config)
+
+
+def test_resume_after_interrupt_before_stores_no_snapshot(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    config = _thread("t")
+    graph = _build(sync_checkpointer, "n")
+    graph.invoke(_both("in"), config, interrupt_before=["n"], durability=durability)
+
+    graph.invoke(None, config, durability=durability)
+
+    state = graph.get_state(config)
+    assert state.values["log"] == state.values["plain"] == ["in", "n-out"]
     assert not _snapshotted_checkpoints(sync_checkpointer, config)
 
 
@@ -633,3 +691,41 @@ def test_turns_addressed_at_the_head_store_no_snapshot(
     assert (
         graph.get_state(config).values["log"] == graph.get_state(config).values["plain"]
     )
+
+
+def test_resume_that_reruns_an_error_handler_drops_its_stored_writes(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    handled = threading.Event()
+    attempts = {"c": 0}
+
+    def fails(state: _State) -> dict:
+        raise RuntimeError("f always fails")
+
+    def handler(state: _State, error: NodeError) -> dict:
+        handled.set()
+        return _both("h")
+
+    def flaky(state: _State) -> dict:
+        attempts["c"] += 1
+        if attempts["c"] == 1:
+            assert handled.wait(5)
+            raise ValueError("c fails once")
+        return _both("c")
+
+    graph = (
+        StateGraph(_State)
+        .add_node("f", fails, error_handler=handler)
+        .add_node("c", flaky)
+        .add_edge(START, "f")
+        .add_edge(START, "c")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = _thread("t")
+    with pytest.raises(ValueError):
+        graph.invoke(_both("in"), config, durability=durability)
+
+    live = graph.invoke(None, config, durability=durability)
+
+    state = graph.get_state(config)
+    assert state.values["log"] == state.values["plain"] == live["log"]

@@ -24,7 +24,8 @@ RETURN = sys.intern("__return__")
 PREVIOUS = sys.intern("__previous__")
 # the implicit branch that handles each node's Control values
 SNAPSHOT_BUMPS = sys.intern("__snapshot_bumps__")
-# `versions_seen` key for channel versions minted only to store a snapshot
+# `versions_seen` key recording which entries a snapshot-only version bump
+# advanced, and the versions those nodes really read
 
 
 # --- Reserved cache namespaces ---

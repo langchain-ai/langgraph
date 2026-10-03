@@ -9465,6 +9465,137 @@ async def test_aupdate_state_after_an_exit_snapshot_infers_the_last_writer() -> 
     )
 
 
+def test_update_state_after_a_fork_seal_infers_the_subscriber_that_ran() -> None:
+    graph = Pregel(
+        nodes={
+            "a": NodeBuilder()
+            .subscribe_only("inp")
+            .do(lambda _: ["a"])
+            .write_to("d", go="go"),
+            "c": NodeBuilder().subscribe_only("go").do(lambda _: ["c"]).write_to("d"),
+            "b": NodeBuilder().subscribe_only("d").do(lambda _: "b").write_to("out"),
+        },
+        channels={
+            "inp": LastValue(str),
+            "go": EphemeralValue(str),
+            "d": DeltaChannel(_extend),
+            "out": LastValue(str),
+        },
+        input_channels=["inp"],
+        output_channels=["out"],
+        checkpointer=_IntVersionSaver(),
+    )
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"inp": "go"}, config)
+    base = next(s for s in graph.get_state_history(config) if s.metadata["step"] == 0)
+    graph.invoke(None, graph.update_state(base.config, "u", as_node="b"))
+
+    graph.update_state(config, "w")
+
+    values = graph.get_state(config).values
+    assert values["out"] == "w", (
+        f"the update should apply as b, the last node to run, but state is {values}"
+    )
+
+
+def test_update_state_after_a_fork_seal_infers_the_node_whose_read_it_advanced() -> (
+    None
+):
+    graph = Pregel(
+        nodes={
+            "a": NodeBuilder().subscribe_only("inp").do(lambda _: ["a"]).write_to("d"),
+            "b": NodeBuilder().subscribe_only("d").do(lambda _: "b").write_to("out"),
+        },
+        channels={
+            "inp": LastValue(str),
+            "d": DeltaChannel(_extend),
+            "out": LastValue(str),
+        },
+        input_channels=["inp"],
+        output_channels=["out"],
+        checkpointer=_IntVersionSaver(),
+    )
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"inp": "1"}, config)
+    graph.invoke({"inp": "2"}, config)
+    base = next(s for s in graph.get_state_history(config) if s.next == ("a",))
+    fork = graph.update_state(base.config, "u", as_node="b")
+
+    graph.update_state(fork, "w")
+
+    values = graph.get_state(config).values
+    assert values["out"] == "w", (
+        f"the update should apply as b, the last node to read, but state is {values}"
+    )
+
+
+def test_update_state_after_a_snapshotting_update_infers_the_last_writer() -> None:
+    graph = _build_chain_after_a_delta_channel()
+    config = {"configurable": {"thread_id": "t"}}
+    graph.update_state(config, ["u"], as_node="a")
+    graph.invoke(None, config, interrupt_after=["b"])
+
+    graph.update_state(config, "u")
+
+    values = graph.get_state(config).values
+    assert values.get("x") == "u", (
+        f"the update should apply as b, the last node to write, but state is {values}"
+    )
+
+
+async def test_aupdate_state_after_a_snapshotting_update_infers_the_last_writer() -> (
+    None
+):
+    graph = _build_chain_after_a_delta_channel()
+    config = {"configurable": {"thread_id": "t"}}
+    await graph.aupdate_state(config, ["u"], as_node="a")
+    await graph.ainvoke(None, config, interrupt_after=["b"])
+
+    await graph.aupdate_state(config, "u")
+
+    values = (await graph.aget_state(config)).values
+    assert values.get("x") == "u", (
+        f"the update should apply as b, the last node to write, but state is {values}"
+    )
+
+
+class _UpdatesOnlyState(TypedDict):
+    x: Annotated[list[str], operator.add]
+
+
+def _graph_never_run() -> Any:
+    return (
+        StateGraph(_UpdatesOnlyState)
+        .add_node("a", lambda _: {"x": ["a"]})
+        .add_node("b", lambda _: {"x": ["b"]})
+        .add_edge(START, "a")
+        .add_edge("a", "b")
+        .compile(checkpointer=InMemorySaver())
+    )
+
+
+def test_update_state_on_a_thread_seeded_by_updates_applies_as_input() -> None:
+    graph = _graph_never_run()
+    config = {"configurable": {"thread_id": "t"}}
+    graph.update_state(config, {"x": ["u1"]})
+
+    graph.update_state(config, {"x": ["u2"]})
+
+    state = graph.get_state(config)
+    assert (state.values["x"], state.next) == (["u1", "u2"], ("a",))
+
+
+async def test_aupdate_state_on_a_thread_seeded_by_updates_applies_as_input() -> None:
+    graph = _graph_never_run()
+    config = {"configurable": {"thread_id": "t"}}
+    await graph.aupdate_state(config, {"x": ["u1"]})
+
+    await graph.aupdate_state(config, {"x": ["u2"]})
+
+    state = await graph.aget_state(config)
+    assert (state.values["x"], state.next) == (["u1", "u2"], ("a",))
+
+
 async def test_delta_channel_end_to_end_inmemory() -> None:
     """Full graph run: DeltaChannel accumulates correctly across multiple turns."""
 

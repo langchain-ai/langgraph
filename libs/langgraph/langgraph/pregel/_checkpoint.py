@@ -16,7 +16,7 @@ from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 
 from langgraph._internal._config import DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT
-from langgraph._internal._constants import PUSH, SNAPSHOT_BUMPS
+from langgraph._internal._constants import NS_END, NS_SEP, PUSH, SNAPSHOT_BUMPS
 from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.delta import DeltaChannel
@@ -88,12 +88,14 @@ def get_updated_channels_from_tasks(
 
 def get_delta_channels_from_all_channels(
     channels: Mapping[str, BaseChannel],
+    channel_versions: ChannelVersions,
 ) -> set[str]:
-    """DeltaChannels to snapshot on the first update_state of a fresh thread."""
+    """DeltaChannels to snapshot on the first update_state of a fresh thread:
+    the ones it wrote, as the rest have no version and nothing to store."""
     return {
         k
         for k, ch in channels.items()
-        if isinstance(ch, DeltaChannel) and ch.is_available()
+        if isinstance(ch, DeltaChannel) and ch.is_available() and k in channel_versions
     }
 
 
@@ -157,7 +159,9 @@ def create_checkpoint_plan_for_update_state_api(
         "parents": parents,
     }
     if is_fresh_thread:
-        return get_delta_channels_from_all_channels(channels), metadata
+        return get_delta_channels_from_all_channels(
+            channels, channel_versions
+        ), metadata
 
     new_counters = create_metadata_for_update_state_api(
         channels,
@@ -197,9 +201,8 @@ def create_checkpoint(
     (no snapshots) when not provided.
 
     `stored_versions` are the channel versions of the last checkpoint the
-    saver stored. When given, a snapshotted channel whose version has not
-    moved since then is bumped; otherwise `updated_channels` stands in for the
-    channels whose version moved.
+    saver stored. A snapshotted channel whose version has not moved since
+    then is bumped.
     """
     ts = datetime.now(timezone.utc).isoformat()
     channels_to_snapshot = channels_to_snapshot or set()
@@ -226,12 +229,11 @@ def create_checkpoint(
                 # so snapshotting a channel this step did not write needs a
                 # bump: exit mode reaching the cadence on a superstep that
                 # skipped the channel, and a fork's first checkpoint.
-                unmoved = (
-                    channel_versions[k] == stored_versions.get(k)
-                    if stored_versions is not None
-                    else updated_channels is None or k not in updated_channels
-                )
-                if get_next_version is not None and unmoved:
+                if (
+                    get_next_version is not None
+                    and stored_versions is not None
+                    and channel_versions[k] == stored_versions.get(k)
+                ):
                     old = channel_versions[k]
                     channel_versions[k] = get_next_version(old, None)
                     bumped[k] = (old, channel_versions[k])
@@ -258,37 +260,55 @@ def _mark_bumps_seen(
     """Advance whoever had seen a bumped channel's old version to the new one.
 
     A bump that only stores a snapshot is not a write. Left unseen, it would
-    re-fire `interrupt_before` and rerun the channel's subscribers. The bumped
-    versions are also kept under `SNAPSHOT_BUMPS`, so inferring which node
-    wrote last can skip them.
+    re-fire `interrupt_before` and rerun the channel's subscribers. For each
+    entry it advances, `SNAPSHOT_BUMPS` keeps the new version and the one the
+    node really read, so `versions_seen_without_bumps` can put the read back.
     """
     if not bumped:
         return versions_seen
-    out = {
-        node: {
-            **seen,
-            **{k: new for k, (old, new) in bumped.items() if seen.get(k) == old},
-        }
-        for node, seen in versions_seen.items()
-    }
-    out[SNAPSHOT_BUMPS] = {
-        **versions_seen.get(SNAPSHOT_BUMPS, {}),
-        **{k: new for k, (_, new) in bumped.items()},
-    }
+    out = dict(versions_seen)
+    marks = dict(versions_seen.get(SNAPSHOT_BUMPS, {}))
+    for node, seen in versions_seen.items():
+        if node == SNAPSHOT_BUMPS:
+            continue
+        for k, (old, new) in bumped.items():
+            if seen.get(k) != old:
+                continue
+            advanced, read = _bump_keys(node, k)
+            # If an earlier bump set `old`, the real read is already recorded.
+            if old is not None and marks.get(advanced) != old:
+                marks[read] = old
+            marks[advanced] = new
+            out[node] = {**out[node], k: new}
+    if marks:
+        out[SNAPSHOT_BUMPS] = marks
     return out
+
+
+def _bump_keys(node: str, channel: str) -> tuple[str, str]:
+    # Node names can't contain either separator, so the keys can't collide.
+    return f"{node}{NS_SEP}{channel}", f"{node}{NS_END}{channel}"
 
 
 def versions_seen_without_bumps(
     versions_seen: dict[str, ChannelVersions],
 ) -> dict[str, ChannelVersions]:
-    """`versions_seen` without the versions minted only to store a snapshot."""
-    if not (bumps := versions_seen.get(SNAPSHOT_BUMPS)):
+    """`versions_seen` as the nodes read it: an entry a bump advanced goes back
+    to the version the node really read, or away if it never read one."""
+    if not (marks := versions_seen.get(SNAPSHOT_BUMPS)):
         return versions_seen
-    return {
-        node: {k: v for k, v in seen.items() if bumps.get(k) != v}
-        for node, seen in versions_seen.items()
-        if node != SNAPSHOT_BUMPS
-    }
+    out: dict[str, ChannelVersions] = {}
+    for node, seen in versions_seen.items():
+        if node == SNAPSHOT_BUMPS:
+            continue
+        out[node] = {}
+        for k, v in seen.items():
+            advanced, read = _bump_keys(node, k)
+            if marks.get(advanced) != v:
+                out[node][k] = v
+            elif read in marks:
+                out[node][k] = marks[read]
+    return out
 
 
 def _needs_replay(spec: BaseChannel, stored: object) -> bool:

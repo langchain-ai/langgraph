@@ -230,9 +230,11 @@ class PregelLoop:
     # * the checkpoint this run starts from has pending writes to them; see
     #   `delta_channels_with_pending_writes`.
     _delta_channels_forced_snapshot: set[str]
-    # Set by `_first` for a resume whose loaded writes `after_tick` still has
-    # to check against the tasks that ran.
-    _seal_unclaimed_writes: bool = False
+    # Set by `_first` for a resume: the writes it loaded with the checkpoint,
+    # which `after_tick` checks against the ones reapply handed back.
+    _resume_loaded_writes: Sequence[PendingWrite] = ()
+    # Tasks `_reapply_writes_to_succeeded_nodes` handed loaded writes back to.
+    _reapplied_task_ids: set[str]
 
     # The checkpoint_config that points at the parent loaded at `__enter__`
     # (or the synthetic-empty checkpoint, on first run). We capture it
@@ -695,20 +697,21 @@ class PregelLoop:
             for ch, v in writes
             if isinstance(self.specs.get(ch), DeltaChannel) and _get_overwrite(v)[0]
         )
-        if self._seal_unclaimed_writes:
-            # A loaded write no task of this run claimed belongs to a task the
-            # resume dropped, such as a `Send` that `Command(goto=...)` replaced.
+        if self._resume_loaded_writes:
+            # A loaded write reapply didn't hand back belongs to a task this run
+            # drops or reruns: a `Send` that `Command(goto=...)` replaced, or an
+            # error handler that runs again.
             self._delta_channels_forced_snapshot.update(
                 delta_channels_with_pending_writes(
                     self.specs,
                     [
                         w
-                        for w in self.checkpoint_pending_writes
-                        if w[0] != NULL_TASK_ID and w[0] not in self.tasks
+                        for w in self._resume_loaded_writes
+                        if w[0] not in self._reapplied_task_ids
                     ],
                 )
             )
-            self._seal_unclaimed_writes = False
+            self._resume_loaded_writes = ()
         # all tasks have finished
         self.updated_channels = apply_writes(
             self.checkpoint,
@@ -774,6 +777,7 @@ class PregelLoop:
                 continue
             if task := tasks.get(tid):
                 task.writes.append((k, v))
+                self._reapplied_task_ids.add(tid)
 
     def _resume_error_handlers_if_applicable(self) -> None:
         """On resume, schedule error handlers for tasks that failed in a prior run.
@@ -926,12 +930,18 @@ class PregelLoop:
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
             ]
         # A resume that reapplies the head's pending writes only learns which
-        # of them its tasks claim once they are scheduled, so `after_tick`
-        # seals the rest.
-        self._seal_unclaimed_writes = is_resuming and self._reapplies_pending_writes
+        # of them go back to their tasks once those are scheduled, so
+        # `after_tick` seals the rest. Kept apart from the writes this run adds.
+        reapplies = is_resuming and self._reapplies_pending_writes
+        self._resume_loaded_writes = (
+            [w for w in self.checkpoint_pending_writes if w[0] != NULL_TASK_ID]
+            if reapplies
+            else ()
+        )
+        self._reapplied_task_ids = set()
         self._delta_channels_forced_snapshot = (
             set()
-            if self._seal_unclaimed_writes
+            if reapplies
             else delta_channels_with_pending_writes(
                 self.specs, self.checkpoint_pending_writes
             )
@@ -1190,8 +1200,6 @@ class PregelLoop:
             if do_checkpoint
             else None,
             channels_to_snapshot=channels_to_snapshot,
-            # An exit-mode run that stops in its first tick still carries the
-            # loaded checkpoint's `updated_channels`, though nothing moved.
             stored_versions=self.checkpoint_previous_versions,
         )
         for k in channels_to_snapshot:
