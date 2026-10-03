@@ -219,3 +219,45 @@ async def test_counter_reset_after_supersteps_snapshot() -> None:
 
         state = graph.get_state(config)
         assert state.values["b"] == ["seed-b"]
+
+
+class _HistoryRequestSaver(InMemorySaver):
+    def __init__(self) -> None:
+        super().__init__()
+        self.requested: list[list[str]] = []
+
+    def get_delta_channel_history(self, *, config: Any, channels: Any) -> Any:
+        self.requested.append(sorted(channels))
+        return super().get_delta_channel_history(config=config, channels=channels)
+
+
+def test_never_written_channel_is_not_walked() -> None:
+    saver = _HistoryRequestSaver()
+    graph = _build_two_channel_graph(saver, n_loops=3)
+    config = {"configurable": {"thread_id": "never-written"}}
+    graph.invoke({"a": ["seed-a"]}, config)
+    saver.requested.clear()
+
+    graph.invoke({"a": ["more-a"]}, config)
+    state = graph.get_state(config)
+
+    assert state.values["b"] == []
+    assert saver.requested and all(r == ["a"] for r in saver.requested), (
+        f"only the written channel needs a walk; asked for {saver.requested}"
+    )
+
+
+async def test_anever_written_channel_is_not_walked() -> None:
+    saver = _HistoryRequestSaver()
+    graph = _build_two_channel_graph(saver, n_loops=3)
+    config = {"configurable": {"thread_id": "never-written"}}
+    await graph.ainvoke({"a": ["seed-a"]}, config)
+    saver.requested.clear()
+
+    await graph.ainvoke({"a": ["more-a"]}, config)
+    state = await graph.aget_state(config)
+
+    assert state.values["b"] == []
+    assert saver.requested and all(r == ["a"] for r in saver.requested), (
+        f"only the written channel needs a walk; asked for {saver.requested}"
+    )

@@ -353,6 +353,10 @@ def channels_from_checkpoint(
     (`_DeltaSnapshot` blob or pre-migration plain value) and accumulate
     the writes between it and the target. All delta channels needing
     replay are batched into a single saver call.
+
+    A delta channel with no version at the checkpoint was never written, so
+    it is empty without a walk. A walk for it would find no snapshot to stop
+    at and read every ancestor, every time the thread is loaded.
     """
     channel_specs: dict[str, BaseChannel] = {}
     managed_specs: dict[str, ManagedValueSpec] = {}
@@ -365,7 +369,8 @@ def channels_from_checkpoint(
     delta_channels: list[str] = [
         k
         for k, spec in channel_specs.items()
-        if _needs_replay(spec, checkpoint["channel_values"].get(k, MISSING))
+        if k in checkpoint["channel_versions"]
+        and _needs_replay(spec, checkpoint["channel_values"].get(k, MISSING))
     ]
     _require_saver_for_history(checkpoint, delta_channels, saver, config)
     histories: Mapping[str, Any] = {}
@@ -408,7 +413,8 @@ async def achannels_from_checkpoint(
     delta_channels: list[str] = [
         k
         for k, spec in channel_specs.items()
-        if _needs_replay(spec, checkpoint["channel_values"].get(k, MISSING))
+        if k in checkpoint["channel_versions"]
+        and _needs_replay(spec, checkpoint["channel_values"].get(k, MISSING))
     ]
     _require_saver_for_history(checkpoint, delta_channels, saver, config)
     histories: Mapping[str, Any] = {}
