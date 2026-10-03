@@ -852,9 +852,32 @@ class ToolNode(RunnableCallable):
             tool_runtimes.append(tool_runtime)
 
         # Pass original tool calls without injection
-        coros = []
-        for call, tool_runtime in zip(tool_calls, tool_runtimes, strict=False):
-            coros.append(self._arun_one(call, input_type, tool_runtime))  # type: ignore[arg-type]
+        # Respect RunnableConfig.max_concurrency in the async path, mirroring the
+        # sync path's use of get_executor_for_config(config). Without this, every
+        # tool call fires concurrently regardless of the configured limit.
+        max_concurrency = config.get("max_concurrency")
+        semaphore: asyncio.Semaphore | None = None
+        if max_concurrency is not None:
+            if max_concurrency <= 0:
+                msg = (
+                    f"max_concurrency must be a positive integer, got {max_concurrency}"
+                )
+                raise ValueError(msg)
+            semaphore = asyncio.Semaphore(max_concurrency)
+
+        async def _arun_one_bounded(
+            call: ToolCall,
+            tool_runtime: ToolRuntime,
+        ) -> ToolMessage | Command | list[Command | ToolMessage]:
+            if semaphore is None:
+                return await self._arun_one(call, input_type, tool_runtime)  # type: ignore[arg-type]
+            async with semaphore:
+                return await self._arun_one(call, input_type, tool_runtime)  # type: ignore[arg-type]
+
+        coros = [
+            _arun_one_bounded(call, tool_runtime)  # type: ignore[arg-type]
+            for call, tool_runtime in zip(tool_calls, tool_runtimes, strict=False)
+        ]
         outputs = await asyncio.gather(*coros)
 
         return self._combine_tool_outputs(outputs, input_type)
