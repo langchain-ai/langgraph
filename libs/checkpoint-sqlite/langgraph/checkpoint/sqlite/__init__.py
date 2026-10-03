@@ -507,13 +507,12 @@ class SqliteSaver(BaseCheckpointSaver[str]):
 
         Two-stage query:
 
-        * Stage 1 (paged): newest-first slice of `checkpoints` returning
-          `(checkpoint_id, parent_checkpoint_id, type, checkpoint)` per
-          ancestor. Sqlite has no JSONB, so we ship the full serialized
-          checkpoint blob and inspect `channel_values` in Python. Pages
-          newest-first by `checkpoint_id` with a `< cursor` predicate;
-          page size is `DELTA_PAGE_SIZE`. Stops paging when every channel
-          has found its seed or the chain is exhausted.
+        * Stage 1 (streamed): recursive CTE over `checkpoints` following
+          `parent_checkpoint_id` from the target, returning
+          `(checkpoint_id, type, checkpoint)` per ancestor. Sqlite has no
+          JSONB, so we ship the full serialized checkpoint blob and inspect
+          `channel_values` in Python. Stops reading when every channel has
+          found its seed or the chain is exhausted.
 
         * Stage 2 (per-channel UNION ALL): one branch per channel reading
           `writes` filtered to that channel's specific `chain_cids`. No
@@ -538,12 +537,14 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         seeded: set[str] = set()
 
         with self.cursor(transaction=False) as cur:
-            cur.execute(DELTA_STAGE1_SQL, (thread_id, checkpoint_ns, checkpoint_id))
+            cur.execute(
+                DELTA_STAGE1_SQL,
+                (thread_id, checkpoint_ns, checkpoint_id, thread_id, checkpoint_ns),
+            )
             for row in cur:
-                cid, parent_cid, type_tag, blob = row
+                cid, type_tag, blob = row
                 if step_walk_with_row(
                     cid=cid,
-                    parent_cid=parent_cid,
                     type_tag=type_tag,
                     blob=blob,
                     target_id=checkpoint_id,
