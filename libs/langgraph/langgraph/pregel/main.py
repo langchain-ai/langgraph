@@ -129,6 +129,7 @@ from langgraph.pregel._algo import (
 from langgraph.pregel._call import identifier
 from langgraph.pregel._checkpoint import (
     achannels_from_checkpoint,
+    advance_delta_counters,
     channels_from_checkpoint,
     copy_checkpoint,
     create_checkpoint,
@@ -1696,6 +1697,7 @@ class Pregel(
                         "Cannot apply multiple updates when clearing state"
                     )
 
+                updated_channels: set[str] = set()
                 if saved is not None:
                     # tasks for this checkpoint
                     next_tasks = prepare_next_tasks(
@@ -1718,7 +1720,7 @@ class Pregel(
                         for w in saved.pending_writes or []
                         if w[0] == NULL_TASK_ID
                     ]:
-                        apply_writes(
+                        updated_channels |= apply_writes(
                             checkpoint,
                             channels,
                             [PregelTaskWrites((), INPUT, null_writes, [])],
@@ -1732,7 +1734,7 @@ class Pregel(
                         if tid in next_tasks:
                             next_tasks[tid].writes.extend(status.output)
                     # clear all current tasks
-                    apply_writes(
+                    updated_channels |= apply_writes(
                         checkpoint,
                         channels,
                         next_tasks.values(),
@@ -1755,6 +1757,13 @@ class Pregel(
                         "source": "update",
                         "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
+                        **(
+                            advance_delta_counters(
+                                channels, updated_channels, prev_metadata=saved.metadata
+                            )
+                            if saved
+                            else {}
+                        ),
                     },
                     get_new_channel_versions(
                         checkpoint_previous_versions,
@@ -1773,7 +1782,7 @@ class Pregel(
                     )
 
                 if input_writes := deque(map_input(self.input_channels, values)):
-                    apply_writes(
+                    updated_channels = apply_writes(
                         checkpoint,
                         channels,
                         [PregelTaskWrites((), INPUT, input_writes, [])],
@@ -1804,6 +1813,15 @@ class Pregel(
                             "parents": saved.metadata.get("parents", {})
                             if saved
                             else {},
+                            **(
+                                advance_delta_counters(
+                                    channels,
+                                    updated_channels,
+                                    prev_metadata=saved.metadata,
+                                )
+                                if saved
+                                else {}
+                            ),
                         },
                         get_new_channel_versions(
                             checkpoint_previous_versions,
@@ -1849,6 +1867,12 @@ class Pregel(
                         "source": "fork",
                         "step": step + 1,
                         "parents": saved.metadata.get("parents", {}),
+                        # The copy has the same values and the same parent.
+                        **{
+                            k: v
+                            for k, v in saved.metadata.items()
+                            if k == "counters_since_delta_snapshot"
+                        },
                     },
                     {},
                 )
@@ -2147,6 +2171,7 @@ class Pregel(
                     raise InvalidUpdateError(
                         "Cannot apply multiple updates when clearing state"
                     )
+                updated_channels: set[str] = set()
                 if saved is not None:
                     # tasks for this checkpoint
                     next_tasks = prepare_next_tasks(
@@ -2169,7 +2194,7 @@ class Pregel(
                         for w in saved.pending_writes or []
                         if w[0] == NULL_TASK_ID
                     ]:
-                        apply_writes(
+                        updated_channels |= apply_writes(
                             checkpoint,
                             channels,
                             [PregelTaskWrites((), INPUT, null_writes, [])],
@@ -2183,7 +2208,7 @@ class Pregel(
                         if tid in next_tasks:
                             next_tasks[tid].writes.extend(status.output)
                     # clear all current tasks
-                    apply_writes(
+                    updated_channels |= apply_writes(
                         checkpoint,
                         channels,
                         next_tasks.values(),
@@ -2206,6 +2231,13 @@ class Pregel(
                         "source": "update",
                         "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
+                        **(
+                            advance_delta_counters(
+                                channels, updated_channels, prev_metadata=saved.metadata
+                            )
+                            if saved
+                            else {}
+                        ),
                     },
                     get_new_channel_versions(
                         checkpoint_previous_versions,
@@ -2224,7 +2256,7 @@ class Pregel(
                     )
 
                 if input_writes := deque(map_input(self.input_channels, values)):
-                    apply_writes(
+                    updated_channels = apply_writes(
                         checkpoint,
                         channels,
                         [PregelTaskWrites((), INPUT, input_writes, [])],
@@ -2255,6 +2287,15 @@ class Pregel(
                             "parents": saved.metadata.get("parents", {})
                             if saved
                             else {},
+                            **(
+                                advance_delta_counters(
+                                    channels,
+                                    updated_channels,
+                                    prev_metadata=saved.metadata,
+                                )
+                                if saved
+                                else {}
+                            ),
                         },
                         get_new_channel_versions(
                             checkpoint_previous_versions,
@@ -2300,6 +2341,12 @@ class Pregel(
                         "source": "fork",
                         "step": step + 1,
                         "parents": saved.metadata.get("parents", {}),
+                        # The copy has the same values and the same parent.
+                        **{
+                            k: v
+                            for k, v in saved.metadata.items()
+                            if k == "counters_since_delta_snapshot"
+                        },
                     },
                     {},
                 )
