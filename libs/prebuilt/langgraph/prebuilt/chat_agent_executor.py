@@ -199,6 +199,12 @@ def _should_bind_tools(
     tool_names = set(tool.name for tool in tools)
     bound_tool_names = set()
     for bound_tool in bound_tools:
+        # Pre-bound BaseTool / StructuredTool instances (e.g. via model.bind_tools or manual kwargs)
+        if isinstance(bound_tool, BaseTool):
+            bound_tool_names.add(bound_tool.name)
+            continue
+        if not isinstance(bound_tool, dict):
+            continue
         # OpenAI-style tool
         if bound_tool.get("type") == "function":
             bound_tool_name = bound_tool["function"]["name"]
