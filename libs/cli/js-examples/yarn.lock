@@ -2072,10 +2072,10 @@ doctrine@^2.1.0:
   dependencies:
     esutils "^2.0.2"
 
-dotenv@^17.4.2:
-  version "17.4.2"
-  resolved "https://registry.yarnpkg.com/dotenv/-/dotenv-17.4.2.tgz#c07e54a746e11eba021dd9e1047ced5afdc1c034"
-  integrity sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==
+dotenv@^18.0.4:
+  version "18.0.4"
+  resolved "https://registry.yarnpkg.com/dotenv/-/dotenv-18.0.4.tgz#419bbe784f30915bfeb10e2d407e13ca5528504f"
+  integrity sha512-jGt9uI5BIxpVO15kvy+iEFqNAwxYClKWnkptLjSNPnFLC003Imd0ofr3aEVsbpHdSBdSsbcApNIlz4nbyGMwdA==
 
 dunder-proto@^1.0.0, dunder-proto@^1.0.1:
   version "1.0.1"
