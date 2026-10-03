@@ -48,9 +48,6 @@ def get_anonymized_params(
     if kwargs.get("docker_compose"):
         params["docker_compose"] = True
 
-    if kwargs.get("debugger_port"):
-        params["debugger_port"] = True
-
     if kwargs.get("postgres_uri"):
         params["postgres_uri"] = True
 

@@ -5,6 +5,7 @@ import pathlib
 import shutil
 import sys
 from collections.abc import Sequence
+from urllib.parse import SplitResult, urlencode, urlsplit, urlunsplit
 
 import click
 import click.exceptions
@@ -140,17 +141,6 @@ OPT_VERBOSE = click.option(
     help="Show more output from the server logs",
 )
 OPT_WATCH = click.option("--watch", is_flag=True, help="Restart on file changes")
-OPT_DEBUGGER_PORT = click.option(
-    "--debugger-port",
-    type=int,
-    help="Pull the debugger image locally and serve the UI on specified port",
-)
-OPT_DEBUGGER_BASE_URL = click.option(
-    "--debugger-base-url",
-    type=str,
-    help="URL used by the debugger to access LangGraph API. Defaults to http://127.0.0.1:[PORT]",
-)
-
 OPT_POSTGRES_URI = click.option(
     "--postgres-uri",
     help="Postgres URI to use for the database. Defaults to launching a local database",
@@ -242,18 +232,94 @@ cli.add_command(deploy)
 # ---------------------------------------------------------------------------
 
 
+def _validated_http_url(value: str, option_name: str) -> SplitResult:
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+        _ = parsed.port
+    except ValueError as exc:
+        raise click.UsageError(
+            f"{option_name} must be a valid HTTP(S) URL without credentials."
+        ) from exc
+
+    if (
+        value != value.strip()
+        or parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise click.UsageError(
+            f"{option_name} must be a valid HTTP(S) URL without credentials."
+        )
+    return parsed
+
+
+def _studio_link(
+    *,
+    port: int,
+    studio_url: str | None,
+    api_url: str | None,
+    debugger_base_url: str | None,
+) -> str:
+    if debugger_base_url is not None:
+        if api_url is not None and api_url != debugger_base_url:
+            raise click.UsageError(
+                "--api-url and --debugger-base-url cannot specify different URLs."
+            )
+        click.echo(
+            "Warning: --debugger-base-url is deprecated; use --api-url instead.",
+            err=True,
+        )
+        api_url = debugger_base_url
+
+    studio_url = "https://smith.langchain.com" if studio_url is None else studio_url
+    api_url = f"http://127.0.0.1:{port}" if api_url is None else api_url
+    studio_parts = _validated_http_url(studio_url, "--studio-url")
+    _validated_http_url(api_url, "--api-url")
+    if studio_parts.query or studio_parts.fragment:
+        raise click.UsageError(
+            "--studio-url must not include a query string or fragment."
+        )
+
+    studio_path = f"{studio_parts.path.rstrip('/')}/studio/"
+    return urlunsplit(
+        studio_parts._replace(
+            path=studio_path,
+            query=urlencode({"baseUrl": api_url}),
+        )
+    )
+
+
 @OPT_RECREATE
 @OPT_PULL
 @OPT_PORT
 @OPT_DOCKER_COMPOSE
 @OPT_CONFIG
 @OPT_VERBOSE
-@OPT_DEBUGGER_PORT
-@OPT_DEBUGGER_BASE_URL
 @OPT_WATCH
 @OPT_POSTGRES_URI
 @OPT_API_VERSION
 @OPT_ENGINE_RUNTIME_MODE
+@click.option(
+    "--studio-url",
+    type=str,
+    default=None,
+    help="URL of the LangGraph Studio instance. Defaults to https://smith.langchain.com",
+)
+@click.option(
+    "--api-url",
+    type=str,
+    default=None,
+    help="URL that LangGraph Studio uses to access the API. Defaults to http://127.0.0.1:[PORT]",
+)
+@click.option(
+    "--debugger-base-url",
+    type=str,
+    default=None,
+    hidden=True,
+)
 @click.option(
     "--image",
     type=str,
@@ -284,14 +350,21 @@ def up(
     watch: bool,
     wait: bool,
     verbose: bool,
-    debugger_port: int | None,
-    debugger_base_url: str | None,
     postgres_uri: str | None,
     api_version: str | None,
     engine_runtime_mode: str,
+    studio_url: str | None,
+    api_url: str | None,
+    debugger_base_url: str | None,
     image: str | None,
     base_image: str | None,
 ):
+    studio_link = _studio_link(
+        port=port,
+        studio_url=studio_url,
+        api_url=api_url,
+        debugger_base_url=debugger_base_url,
+    )
     click.secho("Starting LangGraph API server...", fg="green")
     click.secho(
         """For local dev, requires env var LANGSMITH_API_KEY with access to LangSmith Deployment.
@@ -308,8 +381,6 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
             pull=pull,
             watch=watch,
             verbose=verbose,
-            debugger_port=debugger_port,
-            debugger_base_url=debugger_base_url,
             postgres_uri=postgres_uri,
             api_version=api_version,
             engine_runtime_mode=engine_runtime_mode,
@@ -337,20 +408,12 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
             if "unpacking to docker.io" in line:
                 set("Starting...")
             elif "Application startup complete" in line:
-                debugger_origin = (
-                    f"http://localhost:{debugger_port}"
-                    if debugger_port
-                    else "https://smith.langchain.com"
-                )
-                debugger_base_url_query = (
-                    debugger_base_url or f"http://127.0.0.1:{port}"
-                )
                 set("")
                 sys.stdout.write(
                     f"""Ready!
 - API: http://localhost:{port}
 - Docs: http://localhost:{port}/docs
-- LangGraph Studio: {debugger_origin}/studio/?baseUrl={debugger_base_url_query}
+- LangGraph Studio: {studio_link}
 """
                 )
                 sys.stdout.flush()
@@ -935,8 +998,6 @@ def prepare_args_and_stdin(
     docker_compose: pathlib.Path | None,
     port: int,
     watch: bool,
-    debugger_port: int | None = None,
-    debugger_base_url: str | None = None,
     postgres_uri: str | None = None,
     api_version: str | None = None,
     engine_runtime_mode: str = "combined_queue_worker",
@@ -950,8 +1011,6 @@ def prepare_args_and_stdin(
     stdin = langgraph_cli.docker.compose(
         capabilities,
         port=port,
-        debugger_port=debugger_port,
-        debugger_base_url=debugger_base_url,
         postgres_uri=postgres_uri,
         image=image,
         base_image=base_image,
@@ -989,8 +1048,6 @@ def prepare(
     pull: bool,
     watch: bool,
     verbose: bool,
-    debugger_port: int | None = None,
-    debugger_base_url: str | None = None,
     postgres_uri: str | None = None,
     api_version: str | None = None,
     engine_runtime_mode: str = "combined_queue_worker",
@@ -1032,8 +1089,6 @@ def prepare(
         docker_compose=docker_compose,
         port=port,
         watch=watch,
-        debugger_port=debugger_port,
-        debugger_base_url=debugger_base_url or f"http://127.0.0.1:{port}",
         postgres_uri=postgres_uri,
         api_version=api_version,
         engine_runtime_mode=engine_runtime_mode,
