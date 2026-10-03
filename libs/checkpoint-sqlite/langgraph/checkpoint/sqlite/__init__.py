@@ -81,6 +81,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
 
     conn: sqlite3.Connection
     is_setup: bool
+    _has_task_path: bool = True
 
     def __init__(
         self,
@@ -154,6 +155,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 checkpoint_ns TEXT NOT NULL DEFAULT '',
                 checkpoint_id TEXT NOT NULL,
                 task_id TEXT NOT NULL,
+                task_path TEXT NOT NULL DEFAULT '',
                 idx INTEGER NOT NULL,
                 channel TEXT NOT NULL,
                 type TEXT,
@@ -162,6 +164,19 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             );
             """
         )
+        # sqlite has no ADD COLUMN IF NOT EXISTS; this migrates databases
+        # created before `task_path` existed and is a no-op on the rest.
+        try:
+            self.conn.execute(
+                "ALTER TABLE writes ADD COLUMN task_path TEXT NOT NULL DEFAULT ''"
+            )
+        except sqlite3.OperationalError as e:
+            # A read-only database from before the column can still be read;
+            # its rows would all read back as '' anyway.
+            if "readonly database" in str(e):
+                self._has_task_path = False
+            elif "duplicate column name" not in str(e):
+                raise
 
         self.is_setup = True
 
@@ -460,9 +475,9 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             task_path: Path of the task creating the writes.
         """
         query = (
-            "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, task_path, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
             if all(w[0] in WRITES_IDX_MAP for w in writes)
-            else "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            else "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, task_path, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         with self.cursor() as cur:
             cur.executemany(
@@ -473,6 +488,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                         str(config["configurable"]["checkpoint_ns"]),
                         str(config["configurable"]["checkpoint_id"]),
                         task_id,
+                        task_path,
                         WRITES_IDX_MAP.get(channel, idx),
                         channel,
                         *self.serde.dumps_typed(value),
@@ -559,6 +575,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
 
             channels_with_chain = [ch for ch in channels if chain_by_ch[ch]]
             stage2_sql = build_delta_stage2_sql(
+                has_task_path=self._has_task_path,
                 chain_lens=[len(chain_by_ch[ch]) for ch in channels_with_chain],
             )
             if stage2_sql:
@@ -569,7 +586,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                     )
                 cur.execute(stage2_sql, stage2_params)
                 stage2_rows = cast(
-                    "list[tuple[str, str, str, int, str, bytes]]", cur.fetchall()
+                    "list[tuple[str, str, str, int, str, bytes, str]]", cur.fetchall()
                 )
             else:
                 stage2_rows = []
