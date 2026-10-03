@@ -1,7 +1,9 @@
+import asyncio
 import contextlib
 import dataclasses
 import json
 import sys
+import threading
 import warnings
 from functools import partial
 from typing import (
@@ -2422,3 +2424,65 @@ def test_tool_node_list_return_mixed_with_regular_tool() -> None:
     tool_call_ids = {m.tool_call_id for m in all_msgs}
     assert list_tool_id in tool_call_ids
     assert regular_tool_id in tool_call_ids
+
+
+async def test_tool_node_async_respects_max_concurrency() -> None:
+    """Regression test for langgraph#8517.
+
+    ToolNode's async path must honor RunnableConfig.max_concurrency when
+    executing multiple tool calls, mirroring the sync path which routes
+    through get_executor_for_config(config).
+    """
+    active = 0
+    peak = 0
+    lock = threading.Lock()
+
+    @dec_tool
+    async def slow_tool(x: int) -> str:
+        """A slow async tool that records peak concurrency."""
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        try:
+            await asyncio.sleep(0.05)
+        finally:
+            with lock:
+                active -= 1
+        return f"done {x}"
+
+    tool_calls = [
+        {
+            "name": "slow_tool",
+            "args": {"x": i},
+            "id": f"call-{i}",
+            "type": "tool_call",
+        }
+        for i in range(6)
+    ]
+
+    # max_concurrency=1 must serialize execution
+    result = await ToolNode([slow_tool]).ainvoke(
+        {"messages": [AIMessage("", tool_calls=tool_calls)]},
+        config={**_create_config_with_runtime(), "max_concurrency": 1},
+    )
+    assert peak == 1, f"expected peak concurrency 1, got {peak}"
+    assert len(result["messages"]) == 6
+
+    # max_concurrency=2 must cap at 2
+    peak = 0
+    result = await ToolNode([slow_tool]).ainvoke(
+        {"messages": [AIMessage("", tool_calls=tool_calls)]},
+        config={**_create_config_with_runtime(), "max_concurrency": 2},
+    )
+    assert peak == 2, f"expected peak concurrency 2, got {peak}"
+    assert len(result["messages"]) == 6
+
+    # no max_concurrency preserves full parallelism (no regression)
+    peak = 0
+    result = await ToolNode([slow_tool]).ainvoke(
+        {"messages": [AIMessage("", tool_calls=tool_calls)]},
+        config=_create_config_with_runtime(),
+    )
+    assert peak == 6, f"expected full parallelism without a limit, got {peak}"
+    assert len(result["messages"]) == 6
