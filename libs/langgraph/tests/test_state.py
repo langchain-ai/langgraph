@@ -15,6 +15,7 @@ from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.graph.state import (
     StateGraph,
     _get_node_name,
+    _is_field_binop,
     _is_field_channel,
     _warn_invalid_state_schema,
 )
@@ -371,3 +372,46 @@ def test_is_field_channel() -> None:
     # No channel cases
     assert _is_field_channel(int) is None
     assert _is_field_channel(Annotated[int, "just_metadata"]) is None
+
+
+def test_is_field_binop_accepts_two_positional_call() -> None:
+    """Reducers are invoked with two positionals, not matched on declared arity."""
+
+    def with_default(existing: int, new: int, step: int = 1) -> int:
+        return existing + new * step
+
+    def variadic(existing: int, *updates: int) -> int:
+        return existing + sum(updates)
+
+    for reducer in (set.union, with_default, variadic, operator.add):
+        value_type = set if reducer is set.union else int
+        channel = _is_field_binop(Annotated[value_type, reducer])
+        assert isinstance(channel, BinaryOperatorAggregate)
+        assert channel.operator is reducer
+
+    def only_one(existing: int) -> int:
+        return existing
+
+    def extra_required(existing: int, new: int, step: int) -> int:
+        return existing + new + step
+
+    def required_keyword_only(existing: int, new: int, *, step: int) -> int:
+        return existing + new + step
+
+    for reducer in (only_one, extra_required, required_keyword_only):
+        with pytest.raises(ValueError, match="Invalid reducer signature"):
+            _is_field_binop(Annotated[int, reducer])
+
+
+def test_set_union_reducer_merges_state() -> None:
+    class StateWithSet(TypedDict):
+        tags: Annotated[set, set.union]
+
+    builder = StateGraph(StateWithSet)
+
+    def add_b(state: StateWithSet) -> dict[str, set[str]]:
+        return {"tags": {"b"}}
+
+    builder.add_node("add_b", add_b)
+    builder.add_edge("__start__", "add_b")
+    assert builder.compile().invoke({"tags": {"a"}}) == {"tags": {"a", "b"}}

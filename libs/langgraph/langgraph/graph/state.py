@@ -1901,24 +1901,47 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
     return None
 
 
+_VARIADIC_SET_METHODS = frozenset(
+    {"union", "intersection", "difference", "symmetric_difference"}
+)
+
+
+def _is_variadic_set_method(reducer: Callable[..., Any]) -> bool:
+    """True for ``set.union`` and the other ``(self, /, *others)`` combiners.
+
+    Those methods have no ``__text_signature__`` before Python 3.13, so
+    ``signature()`` cannot see that ``reducer(current, update)`` is valid.
+    """
+    return (
+        getattr(reducer, "__objclass__", None) in (set, frozenset)
+        and getattr(reducer, "__name__", None) in _VARIADIC_SET_METHODS
+    )
+
+
 def _is_field_binop(typ: type[Any]) -> BinaryOperatorAggregate | None:
+    """Accept reducers that can be called as ``operator(current, update)``.
+
+    ``BinaryOperatorAggregate.update`` always passes two positional arguments.
+    Match that call (so ``set.union``, defaults, and ``*args`` are valid)
+    instead of requiring exactly two declared positional parameters.
+    """
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
         if len(meta) >= 1 and callable(meta[-1]):
-            sig = signature(meta[-1])
-            params = list(sig.parameters.values())
-            if (
-                sum(
-                    p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
-                    for p in params
-                )
-                == 2
-            ):
-                return BinaryOperatorAggregate(typ, meta[-1])
-            else:
+            reducer = meta[-1]
+            try:
+                sig = signature(reducer)
+            except (TypeError, ValueError):
+                if _is_variadic_set_method(reducer):
+                    return BinaryOperatorAggregate(typ, reducer)
+                raise
+            try:
+                sig.bind(None, None)
+            except TypeError as exc:
                 raise ValueError(
                     f"Invalid reducer signature. Expected (a, b) -> c. Got {sig}"
-                )
+                ) from exc
+            return BinaryOperatorAggregate(typ, reducer)
     return None
 
 
