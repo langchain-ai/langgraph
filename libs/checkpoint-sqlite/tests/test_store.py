@@ -1232,6 +1232,72 @@ def test_non_ascii(
         assert result5[0].key == "5"
 
 
+class _FixedEmbeddings(Embeddings):
+    """Embeddings that map known texts to fixed vectors."""
+
+    def __init__(self, vectors: dict[str, list[float]]) -> None:
+        self.vectors = vectors
+        self.dims = len(next(iter(vectors.values())))
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self.vectors[t] for t in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.vectors[text]
+
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, _FixedEmbeddings) and self.vectors == other.vectors
+
+
+def _backfill_store() -> Any:
+    embeddings = _FixedEmbeddings(
+        {"a": [1.0, 0.0, 0.0], "b": [0.9, 0.1, 0.0], "c": [0.0, 0.0, 1.0]}
+    )
+    return create_vector_store(
+        cast(CharacterEmbeddings, embeddings), text_fields=["text"]
+    )
+
+
+def test_vector_search_backfills_unindexed_items() -> None:
+    """Non-indexed items fill the page when vector hits cannot (as InMemoryStore does)."""
+    with _backfill_store() as store:
+        store.put(("docs",), "a", {"text": "a"})
+        store.put(("docs",), "b", {"text": "b"})
+        store.put(("docs",), "plain", {"text": "c"}, index=False)
+
+        results = store.search(("docs",), query="a", limit=3)
+
+        assert [r.key for r in results] == ["a", "b", "plain"]
+        assert results[0].score is not None
+        assert results[1].score is not None
+        assert results[2].score is None
+
+        # Vector hits still win the limit over unindexed items.
+        assert [r.key for r in store.search(("docs",), query="a", limit=2)] == [
+            "a",
+            "b",
+        ]
+        # Pagination runs over the combined ordering.
+        paged = store.search(("docs",), query="a", limit=2, offset=1)
+        assert [r.key for r in paged] == ["b", "plain"]
+        assert store.search(("docs",), query="a", limit=2, offset=3) == []
+
+
+def test_vector_search_backfill_respects_namespace_and_filter() -> None:
+    with _backfill_store() as store:
+        store.put(("docs",), "a", {"text": "a"})
+        store.put(("docs",), "keep", {"text": "b", "kind": "x"}, index=False)
+        store.put(("docs",), "skip", {"text": "b", "kind": "y"}, index=False)
+        store.put(("other",), "elsewhere", {"text": "b", "kind": "x"}, index=False)
+
+        results = store.search(("docs",), query="a", filter={"kind": "x"}, limit=5)
+        assert [r.key for r in results] == ["keep"]
+
+        results = store.search(("docs",), query="a", limit=5)
+        assert {r.key for r in results} == {"a", "keep", "skip"}
+        assert results[0].key == "a"
+
+
 def test_escape_glob_literal() -> None:
     assert _escape_glob_literal("users.alice") == "users.alice"
     # "_" and "%" are LIKE wildcards but literal in GLOB, so they are left alone.

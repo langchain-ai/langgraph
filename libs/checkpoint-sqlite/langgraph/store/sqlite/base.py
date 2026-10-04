@@ -535,6 +535,18 @@ class BaseSqliteStore:
                     else:
                         prefix_filter_str = ""
 
+                # Items without any embedding (e.g. put with index=False) cannot be
+                # scored. Like InMemoryStore, return them after the scored results so
+                # a page that the vector hits cannot fill is topped up with them.
+                unscored_conditions = [
+                    "NOT EXISTS (SELECT 1 FROM store_vectors nv "
+                    "WHERE nv.prefix = s.prefix AND nv.key = s.key)"
+                ]
+                if op.namespace_prefix:
+                    unscored_conditions.append(ns_condition)
+                unscored_conditions.extend(filter_conditions)
+                unscored_where = " AND ".join(unscored_conditions)
+
                 # We use a CTE to compute scores, with a SQLite-compatible approach for distinct results
                 base_query = f"""
                     WITH scored AS (
@@ -543,18 +555,28 @@ class BaseSqliteStore:
                         FROM store s
                         JOIN store_vectors sv ON s.prefix = sv.prefix AND s.key = sv.key
                         {prefix_filter_str}
-                            ORDER BY score DESC 
+                            ORDER BY score DESC
                         LIMIT ?
                     ),
                     ranked AS (
                         SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, score,
                                 ROW_NUMBER() OVER (PARTITION BY prefix, key ORDER BY score DESC) as rn
                         FROM scored
+                    ),
+                    combined AS (
+                        SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, score,
+                                0 AS grp
+                        FROM ranked
+                        WHERE rn = 1
+                        UNION ALL
+                        SELECT s.prefix, s.key, s.value, s.created_at, s.updated_at, s.expires_at, s.ttl_minutes,
+                                NULL AS score, 1 AS grp
+                        FROM store s
+                        WHERE {unscored_where}
                     )
                     SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, score
-                    FROM ranked
-                    WHERE rn = 1
-                        ORDER BY score DESC
+                    FROM combined
+                        ORDER BY grp, score DESC, updated_at DESC
                     LIMIT ?
                     OFFSET ?
                     """
@@ -562,7 +584,11 @@ class BaseSqliteStore:
                     _PLACEHOLDER,  # Vector placeholder
                     *ns_args,
                     *filter_params,
-                    op.limit * 2,  # Expanded limit for better results
+                    # Expanded limit for better results; must cover the offset too
+                    # so deeper pages still see all of their scored rows.
+                    (op.limit + op.offset) * 2,
+                    *ns_args,
+                    *filter_params,
                     op.limit,
                     op.offset,
                 ]
