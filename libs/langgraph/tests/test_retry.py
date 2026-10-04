@@ -2755,6 +2755,7 @@ def test_error_handler_resumes_after_crash_multiple_nodes():
 
     call_count = {"a": 0, "b": 0, "handler_a": 0, "handler_b": 0}
     handler_a_started = threading.Event()
+    handler_b_started = threading.Event()
 
     def node_a(state: State) -> State:
         call_count["a"] += 1
@@ -2775,6 +2776,7 @@ def test_error_handler_resumes_after_crash_multiple_nodes():
         assert "a failed" in str(error.error)
         handler_a_started.set()
         if handler_should_fail[0]:
+            assert handler_b_started.wait(timeout=5), "handler_b never started"
             raise RuntimeError("handler_a crash")
         return {"results": [f"recovered_a:{error.node}"]}
 
@@ -2782,6 +2784,7 @@ def test_error_handler_resumes_after_crash_multiple_nodes():
         call_count["handler_b"] += 1
         assert error.node == "b"
         assert "b failed" in str(error.error)
+        handler_b_started.set()
         if handler_should_fail[0]:
             raise RuntimeError("handler_b crash")
         return {"results": [f"recovered_b:{error.node}"]}
