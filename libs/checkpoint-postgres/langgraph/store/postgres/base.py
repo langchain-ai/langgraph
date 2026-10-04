@@ -503,7 +503,10 @@ class BasePostgresStore(Generic[C]):
                 vectors_per_doc_estimate = cast(dict, self.index_config)[
                     "__estimated_num_vectors"
                 ]
-                expanded_limit = (op.limit * vectors_per_doc_estimate * 2) + 1
+                # The offset is included so deeper pages still see all scored rows.
+                expanded_limit = (
+                    (op.limit + op.offset) * vectors_per_doc_estimate * 2
+                ) + 1
 
                 # “sub_scored” does the main vector search
                 # Then we do DISTINCT ON to drop duplicates if your store can have them
@@ -518,19 +521,36 @@ class BasePostgresStore(Generic[C]):
                         LIMIT %s
                     """
 
+                # Items without any embedding (e.g. put with index=False) cannot be
+                # scored. Like InMemoryStore, return them after the scored results so
+                # a page that the vector hits cannot fill is topped up with them.
+                # `grp` keeps them last: DESC would otherwise sort their NULL scores first.
                 search_results_sql = f"""
                         WITH scored AS (
                             {vector_search_cte}
+                        ),
+                        combined AS (
+                            SELECT uniq.prefix, uniq.key, uniq.value, uniq.created_at, uniq.updated_at,
+                                {post_operator} AS score, 0 AS grp
+                            FROM (
+                                SELECT DISTINCT ON (scored.prefix, scored.key)
+                                    scored.prefix, scored.key, scored.value, scored.created_at, scored.updated_at, scored.neg_score
+                                FROM scored
+                                ORDER BY scored.prefix, scored.key, scored.neg_score ASC
+                            ) uniq
+                            UNION ALL
+                            SELECT store.prefix, store.key, store.value, store.created_at, store.updated_at,
+                                NULL::double precision AS score, 1 AS grp
+                            FROM store
+                            WHERE NOT EXISTS (
+                                SELECT 1 FROM store_vectors nv
+                                WHERE nv.prefix = store.prefix AND nv.key = store.key
+                            )
+                            AND {ns_condition} {extra_filters} {search_expiry_clause}
                         )
-                        SELECT uniq.prefix, uniq.key, uniq.value, uniq.created_at, uniq.updated_at,
-                            {post_operator} AS score
-                        FROM (
-                            SELECT DISTINCT ON (scored.prefix, scored.key)
-                                scored.prefix, scored.key, scored.value, scored.created_at, scored.updated_at, scored.neg_score
-                            FROM scored
-                            ORDER BY scored.prefix, scored.key, scored.neg_score ASC
-                        ) uniq
-                        ORDER BY score DESC
+                        SELECT prefix, key, value, created_at, updated_at, score
+                        FROM combined
+                        ORDER BY grp, score DESC, updated_at DESC
                         LIMIT %s
                         OFFSET %s
                     """
@@ -541,6 +561,8 @@ class BasePostgresStore(Generic[C]):
                     *filter_params,
                     PLACEHOLDER,
                     expanded_limit,
+                    *ns_param,
+                    *filter_params,
                     op.limit,
                     op.offset,
                 ]

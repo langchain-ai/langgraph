@@ -863,12 +863,48 @@ def test_embed_with_path_operation_config(
         assert all(r.score is None for r in results), f"{results}"
         assert any(r.key == "doc5" for r in results)
 
+        # Non-indexed items fill the page when vector hits cannot, after scored ones.
         results = store.search(("test",), query="hhh")
-        # TODO: We don't currently fill in additional results if there are not enough
-        # returned during vector search.
-        # assert len(results) == 3
-        # doc5_result = next(r for r in results if r.key == "doc5")
-        # assert doc5_result.score is None
+        assert len(results) == 3
+        assert results[-1].key == "doc5"
+        assert results[-1].score is None
+        assert all(r.score is not None for r in results[:-1])
+
+
+@pytest.mark.parametrize("distance_type", ["cosine", "inner_product", "l2"])
+def test_vector_search_backfills_unindexed_items(
+    request: Any,
+    fake_embeddings: CharacterEmbeddings,
+    distance_type: str,
+) -> None:
+    with _create_vector_store(
+        "vector", distance_type, fake_embeddings, text_fields=["text"]
+    ) as store:
+        store.put(("docs",), "a", {"text": "aaa", "kind": "x"})
+        store.put(("docs",), "b", {"text": "bbb", "kind": "x"})
+        store.put(("docs",), "plain", {"text": "ccc", "kind": "x"}, index=False)
+        store.put(("docs",), "skip", {"text": "ddd", "kind": "y"}, index=False)
+        store.put(("other",), "elsewhere", {"text": "eee"}, index=False)
+
+        results = store.search(("docs",), query="aaa", limit=10)
+        assert results[0].key == "a"
+        assert {r.key for r in results} == {"a", "b", "plain", "skip"}
+        assert [r.score is None for r in results] == [False, False, True, True]
+
+        # Scored hits still win a tight limit over unindexed items.
+        results = store.search(("docs",), query="aaa", limit=2)
+        assert [r.key for r in results][0] == "a"
+        assert all(r.score is not None for r in results)
+
+        # Pagination runs over the combined ordering.
+        page = store.search(("docs",), query="aaa", limit=2, offset=1)
+        assert page[0].key == "b"
+        assert page[0].score is not None
+        assert page[1].score is None
+
+        # Namespace and filters apply to the non-indexed items too.
+        results = store.search(("docs",), query="aaa", filter={"kind": "y"}, limit=10)
+        assert [r.key for r in results] == ["skip"]
 
 
 def _cosine_similarity(X: list[float], Y: list[list[float]]) -> list[float]:
