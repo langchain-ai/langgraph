@@ -5127,6 +5127,25 @@ def test_command_pydantic_dataclass() -> None:
         assert graph.invoke(State(foo="")) == {"foo": "foobar"}
 
 
+def test_command_repr() -> None:
+    # 1. Unpicklable objects (e.g. threading.Lock) should not raise TypeError
+    lock = threading.Lock()
+    cmd_lock = Command(update={"lock": lock})
+    r = repr(cmd_lock)
+    assert "lock" in r
+    assert "Command(update={'lock': " in r
+
+    # 2. Default empty values should be omitted
+    assert repr(Command()) == "Command()"
+
+    # 3. Provided values should be formatted properly
+    assert repr(Command(goto="node_a")) == "Command(goto='node_a')"
+    assert repr(Command(update={"x": 1})) == "Command(update={'x': 1})"
+    assert repr(Command(resume=False)) == "Command(resume=False)"
+    assert repr(Command(resume=0)) == "Command(resume=0)"
+    assert repr(Command(graph="sub", goto="n")) == "Command(graph='sub', goto='n')"
+
+
 def test_command_with_static_breakpoints(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:

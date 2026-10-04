@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from collections import deque
 from collections.abc import Callable, Hashable, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, fields
 from datetime import timedelta
 from typing import (
     TYPE_CHECKING,
@@ -858,9 +858,10 @@ class Command(Generic[N], ToolOutputMixin):
     goto: Send | Sequence[Send | N] | N = ()
 
     def __repr__(self) -> str:
-        # get all non-None values
         contents = ", ".join(
-            f"{key}={value!r}" for key, value in asdict(self).items() if value
+            f"{f.name}={val!r}"
+            for f in fields(self)
+            if (val := getattr(self, f.name)) is not None and val != ()
         )
         return f"Command({contents})"
 
