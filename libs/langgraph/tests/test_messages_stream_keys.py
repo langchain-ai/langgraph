@@ -3,12 +3,16 @@
 Default behaviour must stay unchanged: without configuration, every message
 found in the state is streamed.
 """
+
 from operator import add
-from typing import Annotated, TypedDict
+from typing import Annotated
 
 import pytest
 from langchain_core.messages import AIMessage
+from typing_extensions import TypedDict
+
 from langgraph.graph import END, START, StateGraph
+from langgraph.pregel._messages import StreamMessagesHandlerV2
 
 pytestmark = pytest.mark.anyio
 
@@ -95,3 +99,49 @@ async def test_astream_restricted_to_configured_keys_only():
 async def test_astream_unknown_key_streams_nothing():
     config = {"configurable": {"__pregel_stream_messages_keys": ["nope"]}}
     assert await astreamed(config) == []
+
+
+def test_v2_handler_accepts_state_keys_without_error():
+    """Regression: StreamMessagesHandlerV2 must accept ``state_keys`` so that the
+    v2-flagged ``stream_mode=\"messages\"`` path (which passes it unconditionally in
+    main.py) does not raise ``TypeError``. See review on PR #8868.
+    """
+    h = StreamMessagesHandlerV2(lambda c: None, False, state_keys=["messages"])
+    assert h.state_keys == ["messages"]
+    h2 = StreamMessagesHandlerV2(lambda c: None, False)
+    assert h2.state_keys is None
+
+
+def test_v2_path_restricted_to_configured_keys_only():
+    """Full round-trip through the v2-flagged messages handler with keys set."""
+    config = {
+        "configurable": {
+            "__pregel_stream_messages_v2": True,
+            "__pregel_stream_messages_keys": ["messages"],
+        }
+    }
+    contents = [
+        c["data"][0].content
+        for c in build().stream(
+            INPUT, config=config, stream_mode="messages", version="v2"
+        )
+    ]
+    assert PUBLIC in contents
+    assert SECRET not in contents
+
+
+async def test_astream_v2_path_restricted_to_configured_keys_only():
+    config = {
+        "configurable": {
+            "__pregel_stream_messages_v2": True,
+            "__pregel_stream_messages_keys": ["messages"],
+        }
+    }
+    contents = [
+        c["data"][0].content
+        async for c in build().astream(
+            INPUT, config=config, stream_mode="messages", version="v2"
+        )
+    ]
+    assert PUBLIC in contents
+    assert SECRET not in contents

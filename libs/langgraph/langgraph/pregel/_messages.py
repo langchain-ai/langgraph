@@ -315,8 +315,9 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
         subgraphs: bool,
         *,
         parent_ns: tuple[str, ...] | None = None,
+        state_keys: Sequence[str] | None = None,
     ) -> None:
-        super().__init__(stream, subgraphs, parent_ns=parent_ns)
+        super().__init__(stream, subgraphs, parent_ns=parent_ns, state_keys=state_keys)
         self._streamed_run_ids: set[UUID] = set()
 
     def _find_and_emit_messages(self, meta: Meta, response: Any) -> None:
