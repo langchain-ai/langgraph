@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextlib
 import queue
 import threading
+import warnings
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict, cast
@@ -1588,9 +1589,17 @@ class SyncThreadStream:
             data = params.get("data") if isinstance(params, dict) else None
             interrupt_id = data.get("interrupt_id") if isinstance(data, dict) else None
             if isinstance(interrupt_id, str):
+                if isinstance(data, dict) and "payload" not in data and "value" in data:
+                    warnings.warn(
+                        "input.requested data.value is deprecated; use data.payload instead.",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
                 payload: InterruptPayload = {
                     "interrupt_id": interrupt_id,
-                    "value": data.get("value") if isinstance(data, dict) else None,
+                    "value": data.get("payload", data.get("value"))
+                    if isinstance(data, dict)
+                    else None,
                     "namespace": params.get("namespace") or []
                     if isinstance(params, dict)
                     else [],
