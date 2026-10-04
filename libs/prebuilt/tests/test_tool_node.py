@@ -623,7 +623,7 @@ def test_tool_node_node_interrupt() -> None:
                 },
                 config=_create_config_with_runtime(),
             )
-            assert exc_info.value == "foo"
+        assert str(exc_info.value) == "foo"
 
 
 @pytest.mark.parametrize("input_type", ["dict", "tool_calls"])
