@@ -1232,6 +1232,48 @@ def test_non_ascii(
         assert result5[0].key == "5"
 
 
+class _FixedEmbeddings(Embeddings):
+    """Embeddings that map known texts to fixed vectors."""
+
+    def __init__(self, vectors: dict[str, list[float]]) -> None:
+        self.vectors = vectors
+        self.dims = len(next(iter(vectors.values())))
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self.vectors[t] for t in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.vectors[text]
+
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, _FixedEmbeddings) and self.vectors == other.vectors
+
+
+@pytest.mark.parametrize("distance_type", ["cosine", "l2"])
+def test_vector_search_orders_nearest_first(distance_type: str) -> None:
+    embeddings = _FixedEmbeddings(
+        {
+            "a": [1.0, 0.0, 0.0],
+            "b": [0.9, 0.1, 0.0],
+            "c": [0.0, 0.0, 1.0],
+        }
+    )
+    with create_vector_store(
+        cast(CharacterEmbeddings, embeddings),
+        text_fields=["text"],
+        distance_type=distance_type,
+    ) as store:
+        for key in ("a", "b", "c"):
+            store.put(("docs",), key, {"text": key})
+
+        results = store.search(("docs",), query="a")
+
+        assert [r.key for r in results] == ["a", "b", "c"]
+        scores = [r.score for r in results]
+        assert all(s is not None for s in scores)
+        assert scores == sorted(scores, reverse=True)  # type: ignore[type-var]
+
+
 def test_escape_glob_literal() -> None:
     assert _escape_glob_literal("users.alice") == "users.alice"
     # "_" and "%" are LIKE wildcards but literal in GLOB, so they are left alone.

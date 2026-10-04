@@ -508,7 +508,9 @@ class BaseSqliteStore:
                 if distance_type == "cosine":
                     score_expr = "1.0 - vec_distance_cosine(sv.embedding, ?)"
                 elif distance_type == "l2":
-                    score_expr = "vec_distance_L2(sv.embedding, ?)"
+                    # L2 is a distance (smaller is better), but results are sorted by
+                    # score descending, so negate it (matches the Postgres store).
+                    score_expr = "-1 * vec_distance_L2(sv.embedding, ?)"
                 elif distance_type == "inner_product":
                     # For inner product, we want higher values to be better, so negate the result
                     # since inner product similarity is higher when vectors are more similar
