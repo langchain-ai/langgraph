@@ -428,12 +428,14 @@ class BasePostgresStore(Generic[C]):
     ) -> tuple[
         list[tuple[str, list[None | str | list[float]]]],  # queries, params
         list[tuple[int, str]],  # idx, query_text pairs to embed
+        list[tuple[str, list[Any] | None]],
     ]:
         """
         Build per-SearchOp SQL queries (with optional TTL refresh) plus embedding requests.
         Returns:
         - queries: list of (SQL, param_list)
         - embedding_requests: list of (original_index_in_search_ops, text_query)
+        - backfill_queries: list of (backfill_sql, backfill_params) or None per op
         """
 
         omit_expired = self._omit_expired
@@ -445,6 +447,8 @@ class BasePostgresStore(Generic[C]):
 
         queries = []
         embedding_requests = []
+        backfill_queries: list[tuple[str, list[Any] | None]] = [None] * len(search_ops)
+
         for idx, (_, op) in enumerate(search_ops):
             filter_params = []
             filter_clauses = []
@@ -484,7 +488,7 @@ class BasePostgresStore(Generic[C]):
                     "vector_type", "vector"
                 )
 
-                # For hamming bit vectors, or “regular” vectors
+                # For hamming bit vectors, or "regular" vectors
                 if (
                     vector_type == "bit"
                     and cast(dict, self.index_config).get("distance_type") == "hamming"
@@ -505,7 +509,7 @@ class BasePostgresStore(Generic[C]):
                 ]
                 expanded_limit = (op.limit * vectors_per_doc_estimate * 2) + 1
 
-                # “sub_scored” does the main vector search
+                # "sub_scored" does the main vector search
                 # Then we do DISTINCT ON to drop duplicates if your store can have them
                 # Finally we limit & offset
                 vector_search_cte = f"""
@@ -544,6 +548,20 @@ class BasePostgresStore(Generic[C]):
                     op.limit,
                     op.offset,
                 ]
+
+                backfill_sql = f"""
+                    SELECT store.prefix, store.key, store.value, store.created_at, store.updated_at, NULL AS score
+                    FROM store
+                    WHERE {ns_condition} {extra_filters} {search_expiry_clause}
+                    ORDER BY store.updated_at DESC
+                    LIMIT %s
+                """
+                backfill_params = [
+                    *ns_param,
+                    *filter_params,
+                    op.limit,
+                ]
+                backfill_queries[idx] = (backfill_sql, backfill_params)
 
             else:
                 base_query = f"""
@@ -585,7 +603,7 @@ class BasePostgresStore(Generic[C]):
                 final_params = search_results_params
             queries.append((final_sql, final_params))
 
-        return queries, embedding_requests
+        return queries, embedding_requests, backfill_queries
 
     def _get_batch_list_namespaces_queries(
         self,
@@ -1073,7 +1091,9 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         results: list[Result],
         cur: Cursor[DictRow],
     ) -> None:
-        queries, embedding_requests = self._prepare_batch_search_queries(search_ops)
+        queries, embedding_requests, backfill_queries = (
+            self._prepare_batch_search_queries(search_ops)
+        )
 
         if embedding_requests and self.embeddings:
             embeddings = self.embeddings.embed_documents(
@@ -1087,15 +1107,46 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                     if _paramslist[i] is PLACEHOLDER:
                         _paramslist[i] = embedding
 
-        for (idx, _), (query, params) in zip(search_ops, queries, strict=False):
-            cur.execute(query, params)
+        for idx, (_, op) in enumerate(search_ops):
+            cur.execute(*queries[idx])
             rows = cast(list[Row], cur.fetchall())
-            results[idx] = [
+
+            seen_keys: set[tuple[str, str]] = {
+                (row["prefix"], row["key"]) for row in rows
+            }
+            scored_items = [
                 _row_to_search_item(
                     _decode_ns_bytes(row["prefix"]), row, loader=self._deserializer
                 )
                 for row in rows
             ]
+
+            if backfill_queries[idx] is not None and len(scored_items) < op.limit:
+                backfill_sql, backfill_params = backfill_queries[idx]
+                backfill_params[-1] = op.limit - len(scored_items)
+                cur.execute(backfill_sql, backfill_params)
+                backfill_rows = cast(list[Row], cur.fetchall())
+
+                for row in backfill_rows:
+                    key = (row["prefix"], row["key"])
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        scored_items.append(
+                            _row_to_search_item(
+                                _decode_ns_bytes(row["prefix"]),
+                                {
+                                    "prefix": row["prefix"],
+                                    "key": row["key"],
+                                    "value": row["value"],
+                                    "created_at": row["created_at"],
+                                    "updated_at": row["updated_at"],
+                                    "score": None,
+                                },
+                                loader=self._deserializer,
+                            )
+                        )
+
+            results[idx] = scored_items
 
     def _batch_list_namespaces_ops(
         self,

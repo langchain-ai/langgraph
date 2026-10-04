@@ -440,15 +440,18 @@ class BaseSqliteStore:
             tuple[str, list[None | str | list[float]], bool]
         ],  # queries, params, needs_refresh
         list[tuple[int, str]],  # idx, query_text pairs to embed
+        list[tuple[str, list[Any] | None]],
     ]:
         """
         Build per-SearchOp SQL queries (with optional TTL refresh flag) plus embedding requests.
         Returns:
         - queries: list of (SQL, param_list, needs_ttl_refresh_flag)
         - embedding_requests: list of (original_index_in_search_ops, text_query)
+        - backfill_queries: list of (backfill_sql, backfill_params) or None per op
         """
         queries = []
         embedding_requests = []
+        backfill_queries: list[tuple[str, list[Any] | None]] = [None] * len(search_ops)
 
         for idx, (_, op) in enumerate(search_ops):
             # Build filter conditions first
@@ -474,7 +477,7 @@ class BaseSqliteStore:
                             filter_params.append(value)
                         elif value is None:
                             filter_conditions.append(
-                                "json_extract(value, '$." + key + "') IS NULL"
+                                "json_extract(value, '$.' + key + ') IS NULL'"
                             )
                         elif isinstance(value, bool):
                             # SQLite JSON stores booleans as integers
@@ -529,6 +532,7 @@ class BaseSqliteStore:
                     prefix_filter_str = f"WHERE {ns_condition} {filter_str} "
                     ns_args: Sequence = ns_args_tuple
                 else:
+                    ns_condition = "TRUE"
                     ns_args = ()
                     if filter_str:
                         prefix_filter_str = f"WHERE {filter_str[5:]} "
@@ -566,6 +570,22 @@ class BaseSqliteStore:
                     op.limit,
                     op.offset,
                 ]
+
+                backfill_sql = f"""
+                    SELECT s.prefix, s.key, s.value, s.created_at, s.updated_at, NULL as score
+                    FROM store s
+                    WHERE {ns_condition} {filter_str}
+                        AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP)
+                    ORDER BY s.updated_at DESC
+                    LIMIT ?
+                """
+                backfill_params = [
+                    *ns_args,
+                    *filter_params,
+                    op.limit,
+                ]
+                backfill_queries[idx] = (backfill_sql, backfill_params)
+
             # Regular search branch (no vector search)
             else:
                 ns_condition, ns_args_tuple = _namespace_prefix_condition(
@@ -603,7 +623,7 @@ class BaseSqliteStore:
 
             queries.append((final_sql, final_params, needs_ttl_refresh))
 
-        return queries, embedding_requests
+        return queries, embedding_requests, backfill_queries
 
     def _get_batch_list_namespaces_queries(
         self,
@@ -1369,8 +1389,8 @@ class SqliteStore(BaseSqliteStore, BaseStore):
         results: list[Result],
         cur: sqlite3.Cursor,
     ) -> None:
-        prepared_queries, embedding_requests = self._prepare_batch_search_queries(
-            search_ops
+        prepared_queries, embedding_requests, backfill_queries = (
+            self._prepare_batch_search_queries(search_ops)
         )
 
         # Setup similarity functions if they don't exist
@@ -1394,8 +1414,8 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                         f"Embedding request index {embed_req_idx} out of bounds for prepared_queries."
                     )
 
-        for (original_op_idx, _), (query, params, needs_refresh) in zip(
-            search_ops, prepared_queries, strict=False
+        for pos, ((original_op_idx, op), (query, params, needs_refresh)) in enumerate(
+            zip(search_ops, prepared_queries, strict=False)
         ):
             cur.execute(query, params)
             rows = cur.fetchall()
@@ -1458,6 +1478,31 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                     )
                     for row in rows
                 ]
+
+            if backfill_queries[pos] is not None and len(items) < op.limit:
+                backfill_sql, backfill_params = backfill_queries[pos]
+                backfill_params[-1] = op.limit - len(items)
+                cur.execute(backfill_sql, backfill_params)
+
+                seen_keys: set[tuple[str, str]] = {(row[0], row[1]) for row in rows}
+                for row in cur.fetchall():
+                    if (row[0], row[1]) in seen_keys:
+                        continue
+                    seen_keys.add((row[0], row[1]))
+                    items.append(
+                        _row_to_search_item(
+                            _decode_ns_text(row[0]),
+                            {
+                                "key": row[1],
+                                "value": row[2],
+                                "created_at": row[3],
+                                "updated_at": row[4],
+                                "expires_at": row[5] if len(row) > 5 else None,
+                                "ttl_minutes": row[6] if len(row) > 6 else None,
+                            },
+                            loader=self._deserializer,
+                        )
+                    )
 
             results[original_op_idx] = items
 

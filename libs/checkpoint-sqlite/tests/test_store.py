@@ -768,6 +768,17 @@ def test_embed_with_path_operation_config(
         assert len(results) == 3
         assert any(r.key == "doc5" for r in results)
 
+        results = store.search(("test",), query="hhh")
+        assert len(results) == 3
+        doc5_result = next(r for r in results if r.key == "doc5")
+        assert doc5_result.score is None
+
+        results = store.search(("test",), query="hhh", limit=5)
+        assert len(results) == 3
+        keys = [r.key for r in results]
+        assert "doc5" in keys
+        assert keys.index("doc5") >= 2
+
 
 # Helper functions for vector similarity calculations
 def _cosine_similarity(X: list[float], Y: list[list[float]]) -> list[float]:
