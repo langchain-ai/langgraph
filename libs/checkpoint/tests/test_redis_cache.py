@@ -146,6 +146,47 @@ class TestRedisCache:
         assert len(result) == 1
         assert result[keys[1]] == {"result": 2}
 
+    @pytest.mark.parametrize(
+        ("target", "unrelated"),
+        [
+            ("team*", "teamB"),
+            ("team?", "teamB"),
+            ("team[AB]", "teamB"),
+            ("team[A-Z]", "teamB"),
+            ("team\\", "teamB"),
+        ],
+    )
+    def test_clear_treats_namespace_as_literal(
+        self, target: str, unrelated: str
+    ) -> None:
+        """Glob characters in a namespace must not match other namespaces."""
+        target_key: FullKey = ((target,), "key")
+        unrelated_key: FullKey = ((unrelated,), "key")
+        self.cache.set({target_key: ({"v": 1}, None), unrelated_key: ({"v": 2}, None)})
+
+        self.cache.clear([(target,)])
+
+        result = self.cache.get([target_key, unrelated_key])
+        assert target_key not in result
+        assert result[unrelated_key] == {"v": 2}
+
+    def test_clear_treats_prefix_as_literal(self) -> None:
+        """Glob characters in the cache prefix must not match other prefixes."""
+        cache = RedisCache(self.client, prefix="app*:")
+        other = RedisCache(self.client, prefix="appX:")
+        key: FullKey = (("ns",), "key")
+        cache.set({key: ({"v": 1}, None)})
+        other.set({key: ({"v": 2}, None)})
+
+        cache.clear()
+        assert cache.get([key]) == {}
+        assert other.get([key]) == {key: {"v": 2}}
+
+        cache.set({key: ({"v": 1}, None)})
+        cache.clear([("ns",)])
+        assert cache.get([key]) == {}
+        assert other.get([key]) == {key: {"v": 2}}
+
     def test_empty_operations(self) -> None:
         """Test behavior with empty keys/values."""
         # Empty get
