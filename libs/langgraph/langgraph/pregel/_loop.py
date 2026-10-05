@@ -98,7 +98,9 @@ from langgraph.pregel._algo import (
 )
 from langgraph.pregel._checkpoint import (
     achannels_from_checkpoint,
+    acheckpoint_superseded,
     channels_from_checkpoint,
+    checkpoint_superseded,
     copy_checkpoint,
     create_checkpoint,
     delta_channels_to_snapshot,
@@ -911,6 +913,19 @@ class PregelLoop:
         # The parent checkpoint subgraphs replay from, when a fork below would
         # otherwise move it
         replay_bound: RunnableConfig | None = None
+        # Whether this run saves a fork checkpoint (below) to start its branch.
+        # The fork carries a `Command`'s writes itself, so nothing this run
+        # writes is stored on the checkpoint it addressed, which may have
+        # children that replay it.
+        forks = (
+            is_resuming
+            and is_time_traveling
+            and (
+                self.checkpoint_metadata.get("source") not in ("update", "fork")
+                or self._addressed_checkpoint_superseded
+            )
+        )
+        carried: list[PendingWrite] = []
         # A resume that reapplies the head's pending writes only learns which
         # of them go back to their tasks once those are scheduled, so
         # `after_tick` seals the rest. Kept apart from the writes this run adds.
@@ -958,10 +973,18 @@ class PregelLoop:
                 raise EmptyInputError("Received empty Command input")
             # save writes
             for tid, ws in writes.items():
-                self.put_writes(tid, ws)
+                if forks:
+                    carried.extend((tid, c, v) for c, v in ws)
+                else:
+                    self.put_writes(tid, ws)
+            self._delta_channels_forced_snapshot.update(
+                delta_channels_with_pending_writes(self.specs, carried)
+            )
         # apply NULL writes
         if null_writes := [
-            w[1:] for w in self.checkpoint_pending_writes if w[0] == NULL_TASK_ID
+            w[1:]
+            for w in (*self.checkpoint_pending_writes, *carried)
+            if w[0] == NULL_TASK_ID
         ]:
             null_updated_channels = apply_writes(
                 self.checkpoint,
@@ -989,10 +1012,7 @@ class PregelLoop:
             # already have their own fork checkpoint, unless the thread moved
             # past it: its other children would replay whatever this run
             # stores on it.
-            if is_time_traveling and (
-                self.checkpoint_metadata.get("source") not in ("update", "fork")
-                or self._addressed_checkpoint_superseded
-            ):
+            if forks:
                 if (
                     self.checkpoint_metadata.get("source") in ("update", "fork")
                     and self.prev_checkpoint_config
@@ -1682,14 +1702,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             # checkpoint_map during time-travel.
             saved = self.checkpointer.get_tuple(self.checkpoint_config)
             if saved is not None and saved.metadata.get("source") in ("update", "fork"):
-                latest = self.checkpointer.get_tuple(
-                    patch_configurable(
-                        self.checkpoint_config, {CONFIG_KEY_CHECKPOINT_ID: None}
-                    )
-                )
-                self._addressed_checkpoint_superseded = (
-                    latest is not None
-                    and latest.checkpoint["id"] != saved.checkpoint["id"]
+                self._addressed_checkpoint_superseded = checkpoint_superseded(
+                    self.checkpointer, self.checkpoint_config, saved
                 )
         elif replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE):
             # Subgraph replay: the parent is replaying and passed us a
@@ -1949,14 +1963,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             # checkpoint_map during time-travel.
             saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
             if saved is not None and saved.metadata.get("source") in ("update", "fork"):
-                latest = await self.checkpointer.aget_tuple(
-                    patch_configurable(
-                        self.checkpoint_config, {CONFIG_KEY_CHECKPOINT_ID: None}
-                    )
-                )
-                self._addressed_checkpoint_superseded = (
-                    latest is not None
-                    and latest.checkpoint["id"] != saved.checkpoint["id"]
+                self._addressed_checkpoint_superseded = await acheckpoint_superseded(
+                    self.checkpointer, self.checkpoint_config, saved
                 )
         elif replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE):
             # Subgraph replay: the parent is replaying and passed us a

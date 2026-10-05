@@ -563,9 +563,15 @@ def _build_two_steps(checkpointer: BaseCheckpointSaver, subgraph: bool) -> Any:
     return builder.compile(checkpointer=checkpointer)
 
 
+@pytest.mark.parametrize(
+    "replay_input", [None, Command(update=_both("cmd"))], ids=["none", "command"]
+)
 @pytest.mark.parametrize("subgraph", [False, True])
 def test_replay_from_an_edit_the_thread_moved_past_leaves_its_branch_alone(
-    sync_checkpointer: BaseCheckpointSaver, durability: Durability, subgraph: bool
+    sync_checkpointer: BaseCheckpointSaver,
+    durability: Durability,
+    subgraph: bool,
+    replay_input: Command | None,
 ) -> None:
     graph = _build_two_steps(sync_checkpointer, subgraph)
     config = _thread("t")
@@ -574,7 +580,7 @@ def test_replay_from_an_edit_the_thread_moved_past_leaves_its_branch_alone(
     graph.invoke(_both("in-2"), config, durability=durability)
     branch = graph.get_state(config)
 
-    graph.invoke(None, edit, durability=durability)
+    graph.invoke(replay_input, edit, durability=durability)
 
     after = graph.get_state(branch.config).values
     assert after["log"] == after["plain"] == branch.values["log"], (
@@ -585,9 +591,15 @@ def test_replay_from_an_edit_the_thread_moved_past_leaves_its_branch_alone(
     assert replay["log"] == replay["plain"]
 
 
+@pytest.mark.parametrize(
+    "replay_input", [None, Command(update=_both("cmd"))], ids=["none", "command"]
+)
 @pytest.mark.parametrize("subgraph", [False, True])
 async def test_areplay_from_an_edit_the_thread_moved_past_leaves_its_branch_alone(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability, subgraph: bool
+    async_checkpointer: BaseCheckpointSaver,
+    durability: Durability,
+    subgraph: bool,
+    replay_input: Command | None,
 ) -> None:
     graph = _build_two_steps(async_checkpointer, subgraph)
     config = _thread("t")
@@ -596,7 +608,7 @@ async def test_areplay_from_an_edit_the_thread_moved_past_leaves_its_branch_alon
     await graph.ainvoke(_both("in-2"), config, durability=durability)
     branch = await graph.aget_state(config)
 
-    await graph.ainvoke(None, edit, durability=durability)
+    await graph.ainvoke(replay_input, edit, durability=durability)
 
     after = (await graph.aget_state(branch.config)).values
     assert after["log"] == after["plain"] == branch.values["log"], (
@@ -605,6 +617,32 @@ async def test_areplay_from_an_edit_the_thread_moved_past_leaves_its_branch_alon
     )
     replay = (await graph.aget_state(config)).values
     assert replay["log"] == replay["plain"]
+
+
+@pytest.mark.parametrize(
+    "command",
+    [Command(update=_both("cmd")), Command(goto="a")],
+    ids=["update", "goto"],
+)
+def test_command_replay_of_an_old_checkpoint_stores_nothing_on_it(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability, command: Command
+) -> None:
+    graph = _build_two_steps(sync_checkpointer, subgraph=False)
+    config = _thread("t")
+    graph.invoke(_both("in"), config, interrupt_before=["b"], durability=durability)
+    old = graph.get_state(config)
+    graph.invoke(None, config, durability=durability)
+    branch = graph.get_state(config)
+
+    graph.invoke(command, old.config, durability=durability)
+
+    after = graph.get_state(branch.config).values
+    assert after["log"] == after["plain"] == branch.values["log"]
+    graph.invoke(None, old.config, durability=durability)
+    replay = graph.get_state(config).values
+    assert replay["log"] == replay["plain"] == ["in", "a", "b"], (
+        f"a later replay of the checkpoint repeated the earlier Command: {replay}"
+    )
 
 
 def _build_paused_before_b(checkpointer: BaseCheckpointSaver) -> Any:
