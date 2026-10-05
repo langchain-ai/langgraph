@@ -741,6 +741,9 @@ class SyncThreadsClient:
             assistant_id: assistant the run will use. Required.
             headers: optional headers forwarded on every command and SSE
                 request for this stream session.
+            run_start_timeout: optional seconds to wait for an in-flight
+                `run.start` before subscriptions raise `TimeoutError`.
+                Defaults to `None` (wait forever).
             transport: event transport to use, `"sse"` (default) or
                 `"websocket"`.
 

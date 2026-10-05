@@ -67,7 +67,7 @@ class SyncStreamController:
         transport: SyncProtocolTransport,
         *,
         run_start_gate: threading.Event | None = None,
-        run_start_timeout: float = _DEFAULT_RUN_START_TIMEOUT,
+        run_start_timeout: float | None = _DEFAULT_RUN_START_TIMEOUT,
         max_reconnect_attempts: int = 5,
         reconnect_backoff_base: float = 0.1,
         reconnect_backoff_cap: float = 10.0,

@@ -85,6 +85,24 @@ def test_sync_subscribe_before_run_start_waits_on_gate():
     assert not t.is_alive(), "subscriber thread should have terminated"
 
 
+def test_sync_thread_stream_passes_run_start_timeout_to_gate():
+    fake = SyncFakeServer()
+    fake.script_sequence([SyncStreamScript(events=[])])
+
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(
+            thread_id="t-timeout",
+            assistant_id="agent",
+            run_start_timeout=0.01,
+        ) as thread:
+            controller = thread._controller
+            assert controller is not None
+            assert controller._run_start_timeout == 0.01
+            with pytest.raises(TimeoutError, match=r"Sync run\.start gate timeout"):
+                controller.reconcile_stream({"channels": ["values"]})
+
+
 # ---------------------------------------------------------------------------
 # Task 9.2 — reconnect backoff + ready check
 # ---------------------------------------------------------------------------

@@ -1141,7 +1141,9 @@ class SyncThreadStream:
         # has accepted the run command.
         run_start_gate = threading.Event()
         self._controller = SyncStreamController(
-            self._transport, run_start_gate=run_start_gate
+            self._transport,
+            run_start_gate=run_start_gate,
+            run_start_timeout=self._run_start_timeout,
         )
         self._run_done = _BlockingResult()
         self._ensure_lifecycle_watcher_running()
