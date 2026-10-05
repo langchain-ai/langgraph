@@ -16,6 +16,7 @@ from typing_extensions import TypedDict
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import END, START, StateGraph
 from langgraph.pregel._checkpoint import delta_channels_to_snapshot
+from langgraph.types import Command, interrupt
 
 pytestmark = pytest.mark.anyio
 
@@ -261,3 +262,36 @@ async def test_anever_written_channel_is_not_walked() -> None:
     assert saver.requested and all(r == ["a"] for r in saver.requested), (
         f"only the written channel needs a walk; asked for {saver.requested}"
     )
+
+
+@pytest.mark.parametrize("durability", ["sync", "async"])
+def test_first_write_pending_at_an_interrupt_is_applied_once_on_resume(
+    durability: Any,
+) -> None:
+    class State(TypedDict):
+        x: list
+        first: Annotated[list, DeltaChannel(_simple_reducer)]
+
+    def ask(state: State) -> dict:
+        interrupt("ok?")
+        return {"x": ["asked"]}
+
+    saver = InMemorySaver()
+    graph = (
+        StateGraph(State)
+        .add_node("p", lambda state: {"first": ["p"]})
+        .add_node("ask", ask)
+        .add_edge(START, "p")
+        .add_edge(START, "ask")
+        .compile(checkpointer=saver)
+    )
+    config = {"configurable": {"thread_id": "pending-first-write"}}
+    graph.invoke({"x": ["in"]}, config, durability=durability)
+    head = saver.get_tuple(config)
+    assert head is not None
+    assert "first" not in head.checkpoint["channel_versions"]
+    assert ("first", ["p"]) in [w[1:] for w in head.pending_writes or []]
+
+    graph.invoke(Command(resume="yes"), config, durability=durability)
+
+    assert graph.get_state(config).values["first"] == ["p"]
