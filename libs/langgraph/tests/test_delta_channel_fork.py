@@ -335,8 +335,11 @@ def test_bulk_update_on_an_old_checkpoint_leaves_its_other_branch_alone(
     assert graph.get_state(edited).values["log"] == [*base.values["log"], "s1", "s2"]
 
 
+@pytest.mark.parametrize(
+    "edit", [_both("edit"), {"other": ["edit"]}], ids=["delta_and_plain", "plain_only"]
+)
 def test_clearing_an_old_checkpoint_does_not_pick_up_an_edit_of_it(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointSaver, edit: dict
 ) -> None:
     graph = (
         StateGraph(_State)
@@ -350,12 +353,13 @@ def test_clearing_an_old_checkpoint_does_not_pick_up_an_edit_of_it(
     graph.invoke(_both("in"), config, interrupt_before=["b"])
     base = graph.get_state(config)
     graph.update_state(config, _both("later"), as_node="a")
-    graph.update_state(base.config, _both("edit"), as_node="b")
+    graph.update_state(base.config, edit, as_node="b")
 
     cleared = graph.update_state(base.config, None, as_node=END)
 
-    state = graph.get_state(cleared)
-    assert state.values["log"] == state.values["plain"] == ["in", "a"]
+    values = graph.get_state(cleared).values
+    assert values["log"] == values["plain"] == ["in", "a"]
+    assert values["other"] == []
 
 
 def test_clearing_a_checkpoint_after_editing_it_keeps_the_edit_in_both_channels(

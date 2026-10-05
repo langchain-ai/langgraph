@@ -10,13 +10,24 @@ from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
+    CheckpointTuple,
     PendingWrite,
 )
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 
-from langgraph._internal._config import DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT
-from langgraph._internal._constants import NS_END, NS_SEP, PUSH, SNAPSHOT_BUMPS
+from langgraph._internal._config import (
+    DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT,
+    patch_configurable,
+)
+from langgraph._internal._constants import (
+    CONF,
+    CONFIG_KEY_CHECKPOINT_ID,
+    NS_END,
+    NS_SEP,
+    PUSH,
+    SNAPSHOT_BUMPS,
+)
 from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.delta import DeltaChannel
@@ -114,6 +125,35 @@ def delta_channels_with_pending_writes(
         for _, ch, _ in pending_writes or ()
         if isinstance(specs.get(ch), DeltaChannel)
     }
+
+
+def checkpoint_superseded(
+    saver: BaseCheckpointSaver, config: RunnableConfig, saved: CheckpointTuple
+) -> bool:
+    """Whether the thread has moved past `saved`, the checkpoint `config` addressed.
+
+    A checkpoint with a child is never the latest put, so this misses none. A
+    leaf of an abandoned branch counts as well; telling it apart would mean
+    listing the thread to look for children, which the saver can't do cheaply.
+    """
+    if not config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
+        return False
+    latest = saver.get_tuple(
+        patch_configurable(config, {CONFIG_KEY_CHECKPOINT_ID: None})
+    )
+    return latest is not None and latest.checkpoint["id"] != saved.checkpoint["id"]
+
+
+async def acheckpoint_superseded(
+    saver: BaseCheckpointSaver, config: RunnableConfig, saved: CheckpointTuple
+) -> bool:
+    """Async `checkpoint_superseded`."""
+    if not config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
+        return False
+    latest = await saver.aget_tuple(
+        patch_configurable(config, {CONFIG_KEY_CHECKPOINT_ID: None})
+    )
+    return latest is not None and latest.checkpoint["id"] != saved.checkpoint["id"]
 
 
 def create_metadata_for_update_state_api(

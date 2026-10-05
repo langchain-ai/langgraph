@@ -130,7 +130,9 @@ from langgraph.pregel._algo import (
 from langgraph.pregel._call import identifier
 from langgraph.pregel._checkpoint import (
     achannels_from_checkpoint,
+    acheckpoint_superseded,
     channels_from_checkpoint,
+    checkpoint_superseded,
     copy_checkpoint,
     create_checkpoint,
     create_checkpoint_plan_for_update_state_api,
@@ -2006,11 +2008,6 @@ class Pregel(
                     ),
                 )
             updated_channels = get_updated_channels_from_tasks(run_tasks)
-            edited_delta_channels = {
-                ch
-                for ch in updated_channels
-                if isinstance(self.channels.get(ch), DeltaChannel)
-            }
             # The base's other children replay whatever is stored on it, so an
             # edit of an older checkpoint stores none of its writes there: the
             # checkpoint written here carries them, its delta channels
@@ -2018,10 +2015,13 @@ class Pregel(
             if (
                 is_first
                 and saved is not None
-                and edited_delta_channels
-                and _is_older_checkpoint(checkpointer, config, saved)
+                and checkpoint_superseded(checkpointer, config, saved)
             ):
-                fork_pending.update(edited_delta_channels)
+                fork_pending.update(
+                    ch
+                    for ch in updated_channels
+                    if isinstance(self.channels.get(ch), DeltaChannel)
+                )
             elif saved is not None:
                 for task_id, task in zip(run_task_ids, run_tasks):
                     channel_writes = [w for w in task.writes if w[0] != PUSH]
@@ -2472,11 +2472,6 @@ class Pregel(
                     ),
                 )
             updated_channels = get_updated_channels_from_tasks(run_tasks)
-            edited_delta_channels = {
-                ch
-                for ch in updated_channels
-                if isinstance(self.channels.get(ch), DeltaChannel)
-            }
             # The base's other children replay whatever is stored on it, so an
             # edit of an older checkpoint stores none of its writes there: the
             # checkpoint written here carries them, its delta channels
@@ -2484,10 +2479,13 @@ class Pregel(
             if (
                 is_first
                 and saved is not None
-                and edited_delta_channels
-                and await _ais_older_checkpoint(checkpointer, config, saved)
+                and await acheckpoint_superseded(checkpointer, config, saved)
             ):
-                fork_pending.update(edited_delta_channels)
+                fork_pending.update(
+                    ch
+                    for ch in updated_channels
+                    if isinstance(self.channels.get(ch), DeltaChannel)
+                )
             elif saved is not None:
                 for task_id, task in zip(run_task_ids, run_tasks):
                     channel_writes = [w for w in task.writes if w[0] != PUSH]
@@ -4198,30 +4196,6 @@ def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> Mapping[str, Sequence[str
         for trigger in node.triggers:
             trigger_to_nodes[trigger].append(name)
     return dict(trigger_to_nodes)
-
-
-def _is_older_checkpoint(
-    checkpointer: BaseCheckpointSaver, config: RunnableConfig, saved: CheckpointTuple
-) -> bool:
-    """Whether `config` addressed a checkpoint the thread has moved past."""
-    if not config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
-        return False
-    latest = checkpointer.get_tuple(
-        patch_configurable(config, {CONFIG_KEY_CHECKPOINT_ID: None})
-    )
-    return latest is not None and latest.checkpoint["id"] != saved.checkpoint["id"]
-
-
-async def _ais_older_checkpoint(
-    checkpointer: BaseCheckpointSaver, config: RunnableConfig, saved: CheckpointTuple
-) -> bool:
-    """Whether `config` addressed a checkpoint the thread has moved past."""
-    if not config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
-        return False
-    latest = await checkpointer.aget_tuple(
-        patch_configurable(config, {CONFIG_KEY_CHECKPOINT_ID: None})
-    )
-    return latest is not None and latest.checkpoint["id"] != saved.checkpoint["id"]
 
 
 def _output(
