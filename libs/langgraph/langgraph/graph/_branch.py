@@ -82,18 +82,18 @@ def _get_branch_path_input_schema(
 
 class BranchSpec(NamedTuple):
     path: Runnable[Any, Hashable | list[Hashable]]
-    ends: dict[Hashable, str] | None
+    ends: dict[Any, str] | None
     input_schema: type[Any] | None = None
 
     @classmethod
     def from_path(
         cls,
         path: Runnable[Any, Hashable | list[Hashable]],
-        path_map: dict[Hashable, str] | list[str] | None,
+        path_map: dict[Any, str] | list[str] | None,
         infer_schema: bool = False,
     ) -> BranchSpec:
         # coerce path_map to a dictionary
-        path_map_: dict[Hashable, str] | None = None
+        path_map_: dict[Any, str] | None = None
         try:
             if isinstance(path_map, dict):
                 path_map_ = path_map.copy()
