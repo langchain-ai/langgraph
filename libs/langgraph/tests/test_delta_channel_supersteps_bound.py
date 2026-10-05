@@ -94,6 +94,28 @@ async def test_forced_snapshot_single_run() -> None:
         assert "seed-a" in state.values["a"]
 
 
+async def test_supersteps_bound_skips_a_channel_never_written() -> None:
+    with patch(
+        "langgraph.pregel._checkpoint.DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT",
+        3,
+    ):
+        saver = InMemorySaver()
+        graph = _build_two_channel_graph(saver, n_loops=4)
+        config = {"configurable": {"thread_id": "never-written"}}
+
+        graph.invoke({"a": ["seed-a"]}, config)
+
+        minted = [
+            t.config["configurable"]["checkpoint_id"]
+            for t in saver.list(config)
+            if "b" in t.checkpoint["channel_versions"]
+        ]
+        assert not minted, (
+            f"b was never written, but {len(minted)} checkpoints minted it a version"
+        )
+        assert graph.get_state(config).values["b"] == []
+
+
 async def test_forced_snapshot_accumulates_across_runs() -> None:
     """Supersteps counter for an unwritten channel persists across separate
     invoke() calls. After enough runs, the channel is force-snapshotted."""
@@ -139,12 +161,16 @@ async def test_predicate_fires_on_supersteps_overflow() -> None:
     channels = {"x": ch_instance}
     counters: dict[str, tuple[int, int]] = {"x": (0, 5000)}
 
-    result = delta_channels_to_snapshot(channels, counters)
+    result = delta_channels_to_snapshot(channels, counters, {"x": 1})
     assert "x" in result
 
     counters_below: dict[str, tuple[int, int]] = {"x": (0, 4999)}
-    result2 = delta_channels_to_snapshot(channels, counters_below)
+    result2 = delta_channels_to_snapshot(channels, counters_below, {"x": 1})
     assert "x" not in result2
+
+    assert not delta_channels_to_snapshot(channels, counters, {}), (
+        "a channel with no version was never written, so it has nothing to snapshot"
+    )
 
 
 async def test_counter_reset_after_supersteps_snapshot() -> None:
