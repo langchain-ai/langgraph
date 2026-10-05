@@ -311,29 +311,35 @@ def versions_seen_without_bumps(
     return out
 
 
-def _needs_replay(spec: BaseChannel, stored: object) -> bool:
-    """True if `spec` is a `DeltaChannel` and no value is stored at this
-    checkpoint, requiring an ancestor walk to reconstruct.
+def _delta_channels_to_replay(
+    specs: Mapping[str, BaseChannel], checkpoint: Checkpoint
+) -> list[str]:
+    """DeltaChannels whose value at `checkpoint` the ancestor walk rebuilds.
 
-    `_DeltaSnapshot` blobs and plain values (migration) resolve directly via
-    `from_checkpoint` — only absence (`MISSING`) triggers replay.
+    A `_DeltaSnapshot` blob or a plain value (migration) resolves directly via
+    `from_checkpoint`, so only a channel with nothing stored here needs the
+    walk. A channel with no version was never written, so it is empty without
+    one; a walk for it would find no snapshot to stop at and read every
+    ancestor, every time the thread is loaded.
     """
-    if not isinstance(spec, DeltaChannel):
-        return False
-    return stored is MISSING
+    return [
+        k
+        for k, spec in specs.items()
+        if isinstance(spec, DeltaChannel)
+        and k in checkpoint["channel_versions"]
+        and checkpoint["channel_values"].get(k, MISSING) is MISSING
+    ]
 
 
 def _require_saver_for_history(
-    checkpoint: Checkpoint,
     delta_channels: list[str],
     saver: BaseCheckpointSaver | None,
     config: RunnableConfig | None,
 ) -> None:
-    written = [k for k in delta_channels if k in checkpoint["channel_versions"]]
-    if written and (saver is None or config is None):
+    if delta_channels and (saver is None or config is None):
         raise ValueError(
-            f"DeltaChannel {written} has history to replay but no checkpointer "
-            "or config was passed to read it"
+            f"DeltaChannel {delta_channels} has history to replay but no "
+            "checkpointer or config was passed to read it"
         )
 
 
@@ -362,12 +368,8 @@ def channels_from_checkpoint(
         else:
             managed_specs[k] = v
 
-    delta_channels: list[str] = [
-        k
-        for k, spec in channel_specs.items()
-        if _needs_replay(spec, checkpoint["channel_values"].get(k, MISSING))
-    ]
-    _require_saver_for_history(checkpoint, delta_channels, saver, config)
+    delta_channels = _delta_channels_to_replay(channel_specs, checkpoint)
+    _require_saver_for_history(delta_channels, saver, config)
     histories: Mapping[str, Any] = {}
     if delta_channels and saver is not None and config is not None:
         histories = saver.get_delta_channel_history(
@@ -405,12 +407,8 @@ async def achannels_from_checkpoint(
         else:
             managed_specs[k] = v
 
-    delta_channels: list[str] = [
-        k
-        for k, spec in channel_specs.items()
-        if _needs_replay(spec, checkpoint["channel_values"].get(k, MISSING))
-    ]
-    _require_saver_for_history(checkpoint, delta_channels, saver, config)
+    delta_channels = _delta_channels_to_replay(channel_specs, checkpoint)
+    _require_saver_for_history(delta_channels, saver, config)
     histories: Mapping[str, Any] = {}
     if delta_channels and saver is not None and config is not None:
         histories = await saver.aget_delta_channel_history(
