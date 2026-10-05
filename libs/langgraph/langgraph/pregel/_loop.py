@@ -98,7 +98,9 @@ from langgraph.pregel._algo import (
 )
 from langgraph.pregel._checkpoint import (
     achannels_from_checkpoint,
+    acheckpoint_superseded,
     channels_from_checkpoint,
+    checkpoint_superseded,
     copy_checkpoint,
     create_checkpoint,
     delta_channels_to_snapshot,
@@ -236,6 +238,9 @@ class PregelLoop:
     _resume_loaded_writes: Sequence[PendingWrite] = ()
     # Tasks `_reapply_writes_to_succeeded_nodes` handed loaded writes back to.
     _reapplied_task_ids: set[str]
+    # An update or fork checkpoint addressed by `checkpoint_id` that the thread
+    # has moved past, so it may already have children.
+    _addressed_checkpoint_superseded: bool = False
 
     # The checkpoint_config that points at the parent loaded at `__enter__`
     # (or the synthetic-empty checkpoint, on first run). We capture it
@@ -905,6 +910,22 @@ class PregelLoop:
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
             ]
+        # The parent checkpoint subgraphs replay from, when a fork below would
+        # otherwise move it
+        replay_bound: RunnableConfig | None = None
+        # Whether this run saves a fork checkpoint (below) to start its branch.
+        # The fork carries a `Command`'s writes itself, so nothing this run
+        # writes is stored on the checkpoint it addressed, which may have
+        # children that replay it.
+        forks = (
+            is_resuming
+            and is_time_traveling
+            and (
+                self.checkpoint_metadata.get("source") not in ("update", "fork")
+                or self._addressed_checkpoint_superseded
+            )
+        )
+        carried: list[PendingWrite] = []
         # A resume that reapplies the head's pending writes only learns which
         # of them go back to their tasks once those are scheduled, so
         # `after_tick` seals the rest. Kept apart from the writes this run adds.
@@ -952,10 +973,18 @@ class PregelLoop:
                 raise EmptyInputError("Received empty Command input")
             # save writes
             for tid, ws in writes.items():
-                self.put_writes(tid, ws)
+                if forks:
+                    carried.extend((tid, c, v) for c, v in ws)
+                else:
+                    self.put_writes(tid, ws)
+            self._delta_channels_forced_snapshot.update(
+                delta_channels_with_pending_writes(self.specs, carried)
+            )
         # apply NULL writes
         if null_writes := [
-            w[1:] for w in self.checkpoint_pending_writes if w[0] == NULL_TASK_ID
+            w[1:]
+            for w in (*self.checkpoint_pending_writes, *carried)
+            if w[0] == NULL_TASK_ID
         ]:
             null_updated_channels = apply_writes(
                 self.checkpoint,
@@ -980,11 +1009,15 @@ class PregelLoop:
             # the parent's latest checkpoint remains the old one and
             # subsequent resumes load the wrong state.
             # Skip for update_state forks (source=update/fork) since they
-            # already have their own fork checkpoint.
-            if is_time_traveling and self.checkpoint_metadata.get("source") not in (
-                "update",
-                "fork",
-            ):
+            # already have their own fork checkpoint, unless the thread moved
+            # past it: its other children would replay whatever this run
+            # stores on it.
+            if forks:
+                if (
+                    self.checkpoint_metadata.get("source") in ("update", "fork")
+                    and self.prev_checkpoint_config
+                ):
+                    replay_bound = self.prev_checkpoint_config
                 # Clear old INTERRUPT writes from the loaded checkpoint.
                 # The fork will have a new checkpoint_id which changes
                 # task IDs — stale interrupt writes would accumulate and
@@ -1077,7 +1110,11 @@ class PregelLoop:
             replay_state: ReplayState | None = None
             if is_time_traveling:
                 replay_checkpoint_id = self.checkpoint["id"]
-                if (
+                if replay_bound is not None:
+                    replay_checkpoint_id = replay_bound[CONF].get(
+                        CONFIG_KEY_CHECKPOINT_ID, replay_checkpoint_id
+                    )
+                elif (
                     self.checkpoint_metadata.get("source")
                     in (
                         "update",
@@ -1664,6 +1701,10 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             # This covers both normal replay and subgraphs resolved via
             # checkpoint_map during time-travel.
             saved = self.checkpointer.get_tuple(self.checkpoint_config)
+            if saved is not None and saved.metadata.get("source") in ("update", "fork"):
+                self._addressed_checkpoint_superseded = checkpoint_superseded(
+                    self.checkpointer, self.checkpoint_config, saved
+                )
         elif replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE):
             # Subgraph replay: the parent is replaying and passed us a
             # replay_state with its checkpoint_id. Look up our checkpoint
@@ -1921,6 +1962,10 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             # This covers both normal replay and subgraphs resolved via
             # checkpoint_map during time-travel.
             saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
+            if saved is not None and saved.metadata.get("source") in ("update", "fork"):
+                self._addressed_checkpoint_superseded = await acheckpoint_superseded(
+                    self.checkpointer, self.checkpoint_config, saved
+                )
         elif replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE):
             # Subgraph replay: the parent is replaying and passed us a
             # replay_state with its checkpoint_id. Look up our checkpoint
