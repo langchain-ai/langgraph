@@ -108,6 +108,7 @@ from langgraph.callbacks import (
     get_sync_graph_callback_manager_for_config,
 )
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.topic import Topic
 from langgraph.config import get_config
 from langgraph.constants import END
@@ -129,7 +130,9 @@ from langgraph.pregel._algo import (
 from langgraph.pregel._call import identifier
 from langgraph.pregel._checkpoint import (
     achannels_from_checkpoint,
+    acheckpoint_superseded,
     channels_from_checkpoint,
+    checkpoint_superseded,
     copy_checkpoint,
     create_checkpoint,
     create_checkpoint_plan_for_update_state_api,
@@ -2028,7 +2031,21 @@ class Pregel(
                     ),
                 )
             updated_channels = get_updated_channels_from_tasks(run_tasks)
-            if saved is not None:
+            # The base's other children replay whatever is stored on it, so an
+            # edit of an older checkpoint stores none of its writes there: the
+            # checkpoint written here carries them, its delta channels
+            # snapshotted. Later supersteps address the checkpoint just written.
+            if (
+                is_first
+                and saved is not None
+                and checkpoint_superseded(checkpointer, config, saved)
+            ):
+                fork_pending.update(
+                    ch
+                    for ch in updated_channels
+                    if isinstance(self.channels.get(ch), DeltaChannel)
+                )
+            elif saved is not None:
                 for task_id, task in zip(run_task_ids, run_tasks):
                     channel_writes = [w for w in task.writes if w[0] != PUSH]
                     if channel_writes:
@@ -2502,7 +2519,21 @@ class Pregel(
                     ),
                 )
             updated_channels = get_updated_channels_from_tasks(run_tasks)
-            if saved is not None:
+            # The base's other children replay whatever is stored on it, so an
+            # edit of an older checkpoint stores none of its writes there: the
+            # checkpoint written here carries them, its delta channels
+            # snapshotted. Later supersteps address the checkpoint just written.
+            if (
+                is_first
+                and saved is not None
+                and await acheckpoint_superseded(checkpointer, config, saved)
+            ):
+                fork_pending.update(
+                    ch
+                    for ch in updated_channels
+                    if isinstance(self.channels.get(ch), DeltaChannel)
+                )
+            elif saved is not None:
                 for task_id, task in zip(run_task_ids, run_tasks):
                     channel_writes = [w for w in task.writes if w[0] != PUSH]
                     if channel_writes:
