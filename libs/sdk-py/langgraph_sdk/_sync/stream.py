@@ -16,6 +16,7 @@ import contextlib
 import queue
 import threading
 from collections.abc import Iterator, Mapping
+from concurrent.futures import Future
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict, cast
 
@@ -227,11 +228,17 @@ class SyncRunModule:
             params["metadata"] = metadata
         if langsmith_tracing is not None:
             params["langsmith_tracer"] = langsmith_tracing
-        result = self._owner._send_command("run.start", params)
-        self._owner._run_seen = True
         controller = self._owner._controller
-        if controller is not None and controller._run_start_gate is not None:
-            controller._run_start_gate.set()
+        gate = controller._begin_run_start() if controller is not None else None
+        try:
+            result = self._owner._send_command("run.start", params)
+        except BaseException as err:
+            if controller is not None and gate is not None:
+                controller._resolve_run_start(gate, err)
+            raise
+        self._owner._run_seen = True
+        if controller is not None and gate is not None:
+            controller._resolve_run_start(gate)
         return result
 
     def respond(
@@ -1136,10 +1143,8 @@ class SyncThreadStream:
             thread_id=self.thread_id,
             headers=self._headers,
         )
-        # Gate is unset; SyncRunModule.start (or an explicit set) clears it so
-        # that subscriptions opening before run.start block until the server
-        # has accepted the run command.
-        run_start_gate = threading.Event()
+        # Subscriptions opening before run.start wait until the command resolves.
+        run_start_gate: Future[None] = Future()
         self._controller = SyncStreamController(
             self._transport,
             run_start_gate=run_start_gate,

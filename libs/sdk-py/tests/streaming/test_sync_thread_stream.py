@@ -14,6 +14,7 @@ from typing import Any
 import httpx
 import orjson
 import pytest
+from langchain_protocol import SubscribeParams
 
 import langgraph_sdk.stream.sync_controller as _ctrl_mod
 from langgraph_sdk._sync.http import SyncHttpClient
@@ -74,10 +75,10 @@ def test_sync_subscribe_before_run_start_waits_on_gate():
             t.start()
             started.wait(timeout=0.5)
 
-            # Set the gate manually (simulating run.start completing)
+            # Resolve the gate manually (simulating run.start completing)
             time.sleep(0.05)
             assert controller._run_start_gate is not None
-            controller._run_start_gate.set()
+            controller._run_start_gate.set_result(None)
 
             t.join(timeout=2.0)
 
@@ -101,6 +102,45 @@ def test_sync_thread_stream_passes_run_start_timeout_to_gate():
             assert controller._run_start_timeout == 0.01
             with pytest.raises(TimeoutError, match=r"Sync run\.start gate timeout"):
                 controller.reconcile_stream({"channels": ["values"]})
+
+
+def test_sync_thread_stream_propagates_run_start_error_to_subscriber(monkeypatch):
+    """A failed run.start must wake subscribers with its error, not a gate timeout."""
+
+    class _FailingCommandServer(SyncFakeServer):
+        def _handle(self, request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/commands"):
+                raise httpx.ConnectError("connection refused")
+            return super()._handle(request)
+
+    fake = _FailingCommandServer()
+    fake.script_sequence([SyncStreamScript(events=[])])
+
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(
+            thread_id="t-run-start-error",
+            assistant_id="agent",
+            run_start_timeout=0.05,
+        ) as thread:
+            controller = thread._controller
+            assert controller is not None
+            waiting = threading.Event()
+            reconcile_stream = controller.reconcile_stream
+
+            def signal_waiting(params: SubscribeParams) -> None:
+                waiting.set()
+                reconcile_stream(params)
+
+            monkeypatch.setattr(controller, "reconcile_stream", signal_waiting)
+
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                subscriber = executor.submit(lambda: list(thread.subscribe(["values"])))
+                assert waiting.wait(timeout=1)
+                with pytest.raises(httpx.ConnectError, match="connection refused"):
+                    thread.run.start(input={})
+                with pytest.raises(httpx.ConnectError, match="connection refused"):
+                    subscriber.result(timeout=1)
 
 
 # ---------------------------------------------------------------------------
@@ -244,7 +284,7 @@ def test_sync_concurrent_commands_do_not_share_command_id():
         with threads_client.stream(thread_id="t-cmd", assistant_id="agent") as stream:
             # Pre-set gate so _send_command doesn't wait.
             if stream._controller and stream._controller._run_start_gate:
-                stream._controller._run_start_gate.set()
+                stream._controller._run_start_gate.set_result(None)
             # Replace transport with capturing transport.
             capture_transport = _CapturingTransport(client=raw, thread_id="t-cmd")
             stream._transport = capture_transport
@@ -286,7 +326,7 @@ def test_sync_events_returns_fresh_iterator_each_access():
         with threads_client.stream(thread_id="t-5", assistant_id="agent") as thread:
             # Pre-set gate.
             if thread._controller and thread._controller._run_start_gate:
-                thread._controller._run_start_gate.set()
+                thread._controller._run_start_gate.set_result(None)
 
             iter1 = thread.events
             iter2 = thread.events
@@ -335,7 +375,7 @@ def test_close_unblocks_active_subscription_before_lifecycle_join():
         threads_client = SyncThreadsClient(SyncHttpClient(raw))
         with threads_client.stream(thread_id="t-6", assistant_id="agent") as thread:
             if thread._controller and thread._controller._run_start_gate:
-                thread._controller._run_start_gate.set()
+                thread._controller._run_start_gate.set_result(None)
 
             assert thread._controller is not None
             sub = thread._controller.register_subscription({"channels": ["values"]})

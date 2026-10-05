@@ -7,6 +7,8 @@ import logging
 import random
 import threading
 import time
+from concurrent.futures import Future
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, field
 from queue import Queue as _Queue
 from typing import Any
@@ -66,7 +68,7 @@ class SyncStreamController:
         self,
         transport: SyncProtocolTransport,
         *,
-        run_start_gate: threading.Event | None = None,
+        run_start_gate: Future[None] | None = None,
         run_start_timeout: float | None = _DEFAULT_RUN_START_TIMEOUT,
         max_reconnect_attempts: int = 5,
         reconnect_backoff_base: float = 0.1,
@@ -83,9 +85,10 @@ class SyncStreamController:
         self._lock = threading.RLock()
         self._cursor: int | None = None
         # When None, no gate is applied and reconcile_stream proceeds immediately.
-        # SyncThreadStream passes an un-set Event so subscriptions wait until
-        # run.start completes.
+        # SyncThreadStream passes an unresolved Future so subscriptions wait
+        # until run.start completes or fails.
         self._run_start_gate = run_start_gate
+        self._run_start_in_flight = False
         self._run_start_timeout = run_start_timeout
         self._max_reconnect_attempts = max_reconnect_attempts
         self._reconnect_backoff_base = reconnect_backoff_base
@@ -103,6 +106,29 @@ class SyncStreamController:
         with self._lock:
             self._subscriptions.pop(subscription_id, None)
 
+    def _begin_run_start(self) -> Future[None] | None:
+        with self._lock:
+            gate = self._run_start_gate
+            if gate is None:
+                return None
+            if gate.done() or self._run_start_in_flight:
+                gate = Future()
+                self._run_start_gate = gate
+            self._run_start_in_flight = True
+            return gate
+
+    def _resolve_run_start(
+        self, gate: Future[None], error: BaseException | None = None
+    ) -> None:
+        with self._lock:
+            if not gate.done():
+                if error is None:
+                    gate.set_result(None)
+                else:
+                    gate.set_exception(error)
+            if self._run_start_gate is gate:
+                self._run_start_in_flight = False
+
     def signal_paused(self) -> None:
         """Wake every active subscription iterator on interrupt (run pause).
 
@@ -117,10 +143,16 @@ class SyncStreamController:
             sub.queue.put(None)
 
     def reconcile_stream(self, candidate_filter: SubscribeParams) -> None:
-        if self._run_start_gate is not None and not self._run_start_gate.wait(
-            timeout=self._run_start_timeout
-        ):
-            raise TimeoutError("Sync run.start gate timeout.")
+        with self._lock:
+            run_start_gate = self._run_start_gate
+        if run_start_gate is not None:
+            try:
+                run_start_gate.result(timeout=self._run_start_timeout)
+            except FutureTimeoutError:
+                if run_start_gate.done():
+                    run_start_gate.result()
+                else:
+                    raise TimeoutError("Sync run.start gate timeout.") from None
         with self._lock:
             if (
                 self._shared_stream is not None
