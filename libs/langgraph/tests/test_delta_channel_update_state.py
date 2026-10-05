@@ -280,6 +280,9 @@ def test_bulk_update_state_multi_task_per_superstep_delta_channel() -> None:
     saver = InMemorySaver()
     graph = _build_graph(saver)
     config = {"configurable": {"thread_id": "bulk-multi-task"}}
+    graph.invoke({"messages": [HumanMessage(content="hi", id="hi")]}, config)
+    base = saver.get_tuple(config)
+    assert base is not None
 
     graph.bulk_update_state(
         config,
@@ -299,13 +302,19 @@ def test_bulk_update_state_multi_task_per_superstep_delta_channel() -> None:
         ],
     )
 
+    stored = saver.get_tuple(base.config)
+    assert stored is not None
+    assert {task_id for task_id, _, _ in stored.pending_writes or []} == {
+        "task-1",
+        "task-2",
+    }, "explicit task ids must key the stored writes"
     state = graph.get_state(config)
     contents = [m.content for m in state.values["messages"]]
     ids = [m.id for m in state.values["messages"]]
-    assert sorted(contents) == ["first", "second"], (
+    assert sorted(contents) == ["first", "hi", "second"], (
         f"both updates' writes must persist; got {contents}"
     )
-    assert sorted(ids) == ["m1", "m2"]
+    assert sorted(ids) == ["hi", "m1", "m2"]
 
 
 def _update(content: str, as_node: str) -> StateUpdate:
