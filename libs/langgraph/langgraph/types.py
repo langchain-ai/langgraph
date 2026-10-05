@@ -735,6 +735,22 @@ class StateSnapshot(NamedTuple):
     """
 
 
+def _make_hashable(value: Any) -> Any:
+    """Recursively convert unhashable containers into hashable tuples.
+
+    Dicts are sorted by key so equal dicts hash equally regardless of
+    insertion order (keeping ``hash`` consistent with ``__eq__`` for
+    ``Send`` packets whose ``arg`` is a plain state dictionary).
+    """
+    if isinstance(value, dict):
+        return tuple(sorted((k, _make_hashable(v)) for k, v in value.items()))
+    if isinstance(value, (list, tuple)):
+        return tuple(_make_hashable(v) for v in value)
+    if isinstance(value, set):
+        return tuple(sorted(_make_hashable(v) for v in value))
+    return value
+
+
 class Send:
     """A message or packet to send to a specific node in the graph.
 
@@ -810,7 +826,12 @@ class Send:
         self.timeout = TimeoutPolicy.coerce(timeout)
 
     def __hash__(self) -> int:
-        return hash((self.node, self.arg, self.timeout))
+        try:
+            return hash((self.node, _make_hashable(self.arg), self.timeout))
+        except TypeError:
+            # Arbitrary unhashable objects (custom class instances, mixed-type
+            # sets, ...) cannot be normalized; fall back to object identity.
+            return id(self)
 
     def __repr__(self) -> str:
         if self.timeout is None:
