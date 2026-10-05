@@ -129,7 +129,6 @@ from langgraph.pregel._algo import (
 from langgraph.pregel._call import identifier
 from langgraph.pregel._checkpoint import (
     achannels_from_checkpoint,
-    advance_delta_counters,
     channels_from_checkpoint,
     copy_checkpoint,
     create_checkpoint,
@@ -1742,29 +1741,31 @@ class Pregel(
                         self.trigger_to_nodes,
                     )
                 # save checkpoint
+                channels_to_snapshot, checkpoint_metadata = (
+                    create_checkpoint_plan_for_update_state_api(
+                        channels,
+                        updated_channels,
+                        source="update",
+                        step=step + 1,
+                        parents=saved.metadata.get("parents", {}) if saved else {},
+                        saved_metadata=saved.metadata if saved else None,
+                        is_fresh_thread=saved is None,
+                        fork_channels=fork_pending,
+                        channel_versions=checkpoint["channel_versions"],
+                    )
+                )
                 next_checkpoint = create_checkpoint(
                     checkpoint,
                     channels,
                     step,
                     get_next_version=checkpointer.get_next_version,
-                    channels_to_snapshot=fork_pending,
+                    channels_to_snapshot=channels_to_snapshot,
                     stored_versions=checkpoint_previous_versions,
                 )
                 next_config = checkpointer.put(
                     checkpoint_config,
                     next_checkpoint,
-                    {
-                        "source": "update",
-                        "step": step + 1,
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
-                        **(
-                            advance_delta_counters(
-                                channels, updated_channels, prev_metadata=saved.metadata
-                            )
-                            if saved
-                            else {}
-                        ),
-                    },
+                    checkpoint_metadata,
                     get_new_channel_versions(
                         checkpoint_previous_versions,
                         next_checkpoint["channel_versions"],
@@ -1796,33 +1797,31 @@ class Pregel(
                         if saved and saved.metadata.get("step") is not None
                         else -1
                     )
+                    channels_to_snapshot, checkpoint_metadata = (
+                        create_checkpoint_plan_for_update_state_api(
+                            channels,
+                            updated_channels,
+                            source="input",
+                            step=next_step,
+                            parents=saved.metadata.get("parents", {}) if saved else {},
+                            saved_metadata=saved.metadata if saved else None,
+                            is_fresh_thread=saved is None,
+                            fork_channels=fork_pending,
+                            channel_versions=checkpoint["channel_versions"],
+                        )
+                    )
                     next_checkpoint = create_checkpoint(
                         checkpoint,
                         channels,
                         next_step,
                         get_next_version=checkpointer.get_next_version,
-                        channels_to_snapshot=fork_pending,
+                        channels_to_snapshot=channels_to_snapshot,
                         stored_versions=checkpoint_previous_versions,
                     )
                     next_config = checkpointer.put(
                         checkpoint_config,
                         next_checkpoint,
-                        {
-                            "source": "input",
-                            "step": next_step,
-                            "parents": saved.metadata.get("parents", {})
-                            if saved
-                            else {},
-                            **(
-                                advance_delta_counters(
-                                    channels,
-                                    updated_channels,
-                                    prev_metadata=saved.metadata,
-                                )
-                                if saved
-                                else {}
-                            ),
-                        },
+                        checkpoint_metadata,
                         get_new_channel_versions(
                             checkpoint_previous_versions,
                             next_checkpoint["channel_versions"],
@@ -2047,6 +2046,7 @@ class Pregel(
                 create_checkpoint_plan_for_update_state_api(
                     channels,
                     updated_channels,
+                    source="update",
                     step=step + 1,
                     parents=saved.metadata.get("parents", {}) if saved else {},
                     saved_metadata=saved.metadata if saved else None,
@@ -2216,29 +2216,31 @@ class Pregel(
                         self.trigger_to_nodes,
                     )
                 # save checkpoint
+                channels_to_snapshot, checkpoint_metadata = (
+                    create_checkpoint_plan_for_update_state_api(
+                        channels,
+                        updated_channels,
+                        source="update",
+                        step=step + 1,
+                        parents=saved.metadata.get("parents", {}) if saved else {},
+                        saved_metadata=saved.metadata if saved else None,
+                        is_fresh_thread=saved is None,
+                        fork_channels=fork_pending,
+                        channel_versions=checkpoint["channel_versions"],
+                    )
+                )
                 next_checkpoint = create_checkpoint(
                     checkpoint,
                     channels,
                     step,
                     get_next_version=checkpointer.get_next_version,
-                    channels_to_snapshot=fork_pending,
+                    channels_to_snapshot=channels_to_snapshot,
                     stored_versions=checkpoint_previous_versions,
                 )
                 next_config = await checkpointer.aput(
                     checkpoint_config,
                     next_checkpoint,
-                    {
-                        "source": "update",
-                        "step": step + 1,
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
-                        **(
-                            advance_delta_counters(
-                                channels, updated_channels, prev_metadata=saved.metadata
-                            )
-                            if saved
-                            else {}
-                        ),
-                    },
+                    checkpoint_metadata,
                     get_new_channel_versions(
                         checkpoint_previous_versions,
                         next_checkpoint["channel_versions"],
@@ -2270,33 +2272,31 @@ class Pregel(
                         if saved and saved.metadata.get("step") is not None
                         else -1
                     )
+                    channels_to_snapshot, checkpoint_metadata = (
+                        create_checkpoint_plan_for_update_state_api(
+                            channels,
+                            updated_channels,
+                            source="input",
+                            step=next_step,
+                            parents=saved.metadata.get("parents", {}) if saved else {},
+                            saved_metadata=saved.metadata if saved else None,
+                            is_fresh_thread=saved is None,
+                            fork_channels=fork_pending,
+                            channel_versions=checkpoint["channel_versions"],
+                        )
+                    )
                     next_checkpoint = create_checkpoint(
                         checkpoint,
                         channels,
                         next_step,
                         get_next_version=checkpointer.get_next_version,
-                        channels_to_snapshot=fork_pending,
+                        channels_to_snapshot=channels_to_snapshot,
                         stored_versions=checkpoint_previous_versions,
                     )
                     next_config = await checkpointer.aput(
                         checkpoint_config,
                         next_checkpoint,
-                        {
-                            "source": "input",
-                            "step": next_step,
-                            "parents": saved.metadata.get("parents", {})
-                            if saved
-                            else {},
-                            **(
-                                advance_delta_counters(
-                                    channels,
-                                    updated_channels,
-                                    prev_metadata=saved.metadata,
-                                )
-                                if saved
-                                else {}
-                            ),
-                        },
+                        checkpoint_metadata,
                         get_new_channel_versions(
                             checkpoint_previous_versions,
                             next_checkpoint["channel_versions"],
@@ -2520,6 +2520,7 @@ class Pregel(
                 create_checkpoint_plan_for_update_state_api(
                     channels,
                     updated_channels,
+                    source="update",
                     step=step + 1,
                     parents=saved.metadata.get("parents", {}) if saved else {},
                     saved_metadata=saved.metadata if saved else None,

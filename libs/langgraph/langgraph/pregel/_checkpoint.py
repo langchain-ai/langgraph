@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timezone
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -141,30 +141,11 @@ def create_metadata_for_update_state_api(
     return new_counters
 
 
-def advance_delta_counters(
-    channels: Mapping[str, BaseChannel],
-    updated_channels: set[str],
-    *,
-    prev_metadata: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    """The `counters_since_delta_snapshot` entry for an update_state
-    checkpoint saved one superstep after `prev_metadata`'s, for the paths
-    that skip `create_checkpoint_plan_for_update_state_api`.
-
-    Without it, the next checkpoint restarts every delta channel's snapshot
-    cadence from zero.
-    """
-    counters = create_metadata_for_update_state_api(
-        channels, updated_channels, prev_metadata=prev_metadata
-    )
-    non_zero = {k: v for k, v in counters.items() if v != (0, 0)}
-    return {"counters_since_delta_snapshot": non_zero} if non_zero else {}
-
-
 def create_checkpoint_plan_for_update_state_api(
     channels: Mapping[str, BaseChannel],
     updated_channels: set[str],
     *,
+    source: Literal["update", "input"],
     step: int,
     parents: dict[str, Any],
     saved_metadata: Mapping[str, Any] | None,
@@ -174,7 +155,7 @@ def create_checkpoint_plan_for_update_state_api(
 ) -> tuple[set[str], dict[str, Any]]:
     """Return ``(channels_to_snapshot, metadata)`` for an update_state head."""
     metadata: dict[str, Any] = {
-        "source": "update",
+        "source": source,
         "step": step,
         "parents": parents,
     }

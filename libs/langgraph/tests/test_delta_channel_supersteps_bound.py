@@ -181,7 +181,7 @@ def _delta_counters(saver: InMemorySaver, config: Any) -> dict[str, list[int]]:
     return {ch: list(c) for ch, c in counters.items()}
 
 
-_UPDATE_PATHS_WITHOUT_THE_SNAPSHOT_PLAN = pytest.mark.parametrize(
+_CLEAR_COPY_AND_INPUT_UPDATES = pytest.mark.parametrize(
     ("values", "as_node", "supersteps"),
     [
         (None, END, 1),
@@ -192,7 +192,7 @@ _UPDATE_PATHS_WITHOUT_THE_SNAPSHOT_PLAN = pytest.mark.parametrize(
 )
 
 
-@_UPDATE_PATHS_WITHOUT_THE_SNAPSHOT_PLAN
+@_CLEAR_COPY_AND_INPUT_UPDATES
 def test_update_state_path_keeps_delta_counters(
     values: Any, as_node: str, supersteps: int
 ) -> None:
@@ -210,7 +210,7 @@ def test_update_state_path_keeps_delta_counters(
     }
 
 
-@_UPDATE_PATHS_WITHOUT_THE_SNAPSHOT_PLAN
+@_CLEAR_COPY_AND_INPUT_UPDATES
 async def test_aupdate_state_path_keeps_delta_counters(
     values: Any, as_node: str, supersteps: int
 ) -> None:
@@ -226,6 +226,61 @@ async def test_aupdate_state_path_keeps_delta_counters(
     assert _delta_counters(saver, updated) == {
         ch: [u, s + supersteps] for ch, (u, s) in before.items()
     }
+
+
+_UPDATES_THAT_ADD_A_SUPERSTEP = pytest.mark.parametrize(
+    ("values", "as_node"),
+    [(None, END), ({"a": []}, "__input__")],
+    ids=["clear as END", "update as input"],
+)
+
+
+@_UPDATES_THAT_ADD_A_SUPERSTEP
+def test_update_state_path_snapshots_at_the_supersteps_bound(
+    values: Any, as_node: str
+) -> None:
+    saver = InMemorySaver()
+    graph = _build_two_channel_graph(saver)
+    config = {"configurable": {"thread_id": "bound"}}
+    graph.invoke({"a": ["seed-a"], "b": ["seed-b"]}, config)
+    expected = graph.get_state(config).values
+    supersteps = _delta_counters(saver, config)["b"][1]
+
+    with patch(
+        "langgraph.pregel._checkpoint.DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT",
+        supersteps + 1,
+    ):
+        updated = graph.update_state(config, values, as_node=as_node)
+
+    head = saver.get_tuple(updated)
+    assert head is not None
+    assert isinstance(head.checkpoint["channel_values"].get("b"), _DeltaSnapshot)
+    assert "b" not in _delta_counters(saver, updated)
+    assert graph.get_state(updated).values == expected
+
+
+@_UPDATES_THAT_ADD_A_SUPERSTEP
+async def test_aupdate_state_path_snapshots_at_the_supersteps_bound(
+    values: Any, as_node: str
+) -> None:
+    saver = InMemorySaver()
+    graph = _build_two_channel_graph(saver)
+    config = {"configurable": {"thread_id": "bound"}}
+    await graph.ainvoke({"a": ["seed-a"], "b": ["seed-b"]}, config)
+    expected = (await graph.aget_state(config)).values
+    supersteps = _delta_counters(saver, config)["b"][1]
+
+    with patch(
+        "langgraph.pregel._checkpoint.DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT",
+        supersteps + 1,
+    ):
+        updated = await graph.aupdate_state(config, values, as_node=as_node)
+
+    head = saver.get_tuple(updated)
+    assert head is not None
+    assert isinstance(head.checkpoint["channel_values"].get("b"), _DeltaSnapshot)
+    assert "b" not in _delta_counters(saver, updated)
+    assert (await graph.aget_state(updated)).values == expected
 
 
 async def test_counter_reset_after_supersteps_snapshot() -> None:
