@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timezone
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -145,6 +145,7 @@ def create_checkpoint_plan_for_update_state_api(
     channels: Mapping[str, BaseChannel],
     updated_channels: set[str],
     *,
+    source: Literal["update", "input"],
     step: int,
     parents: dict[str, Any],
     saved_metadata: Mapping[str, Any] | None,
@@ -154,7 +155,7 @@ def create_checkpoint_plan_for_update_state_api(
 ) -> tuple[set[str], dict[str, Any]]:
     """Return ``(channels_to_snapshot, metadata)`` for an update_state head."""
     metadata: dict[str, Any] = {
-        "source": "update",
+        "source": source,
         "step": step,
         "parents": parents,
     }

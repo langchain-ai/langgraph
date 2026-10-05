@@ -315,7 +315,7 @@ def test_fork_before_first_value_by_bulk_update(
 
 
 @pytest.mark.parametrize("first_as_node", [INPUT, END, "__copy__"])
-def test_fork_by_bulk_update_whose_first_superstep_skips_the_plan(
+def test_fork_by_bulk_update_whose_first_superstep_is_not_a_node(
     sync_checkpointer: BaseCheckpointSaver, first_as_node: str
 ) -> None:
     config = _thread("t")
