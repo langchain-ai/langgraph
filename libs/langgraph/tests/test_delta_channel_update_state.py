@@ -113,6 +113,37 @@ def test_fresh_update_state_head_snapshots_delta_channel() -> None:
     assert "counters_since_delta_snapshot" not in head.metadata
 
 
+def test_fresh_update_state_stores_nothing_for_a_delta_channel_it_did_not_write() -> (
+    None
+):
+    saver = InMemorySaver()
+    State = TypedDict(  # type: ignore[call-overload]  # noqa: UP013
+        "State",
+        {
+            "messages": Annotated[list, DeltaChannel(_messages_delta_reducer)],
+            "notes": Annotated[list, DeltaChannel(_messages_delta_reducer)],
+        },
+    )
+    graph = (
+        StateGraph(State)
+        .add_node("model", lambda state: {})
+        .add_edge(START, "model")
+        .compile(checkpointer=saver)
+    )
+    config = {"configurable": {"thread_id": "fresh-unwritten"}}
+
+    graph.update_state(
+        config,
+        {"messages": [HumanMessage(content="hello", id="m1")]},
+        as_node="model",
+    )
+
+    head = saver.get_tuple(config)
+    assert head is not None
+    assert "notes" not in head.checkpoint["channel_versions"]
+    assert graph.get_state(config).values["notes"] == []
+
+
 # ---------------------------------------------------------------------------
 # Non-fresh thread: update_state after invoke
 # ---------------------------------------------------------------------------
@@ -338,3 +369,29 @@ def test_state_history_chain_after_fresh_update_state_delta_channel() -> None:
     assert update_snapshot.metadata["step"] == 0
     assert update_snapshot.parent_config is None
     assert [m.content for m in update_snapshot.values["messages"]] == ["hello"]
+
+
+def test_update_state_that_snapshots_keeps_a_deferred_node_pending() -> None:
+    channel = DeltaChannel(_messages_delta_reducer, snapshot_frequency=1)
+
+    class State(TypedDict):
+        messages: Annotated[list, channel]
+
+    builder = StateGraph(State)
+    builder.add_node("a", lambda state: {"messages": [HumanMessage("a", id="a")]})
+    builder.add_node(
+        "b", lambda state: {"messages": [HumanMessage("b", id="b")]}, defer=True
+    )
+    builder.add_node("c", lambda state: {})
+    builder.add_edge(START, "a")
+    builder.add_edge("a", "b")
+    builder.add_edge("a", "c")
+    graph = builder.compile(checkpointer=InMemorySaver(), interrupt_after=["a"])
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"messages": [HumanMessage("s", id="s")]}, config)
+
+    graph.update_state(config, {"messages": [HumanMessage("u", id="u")]}, as_node="c")
+    final = graph.invoke(None, config)
+
+    assert [m.content for m in final["messages"]] == ["s", "a", "u", "b"]
+    assert graph.get_state(config).next == ()

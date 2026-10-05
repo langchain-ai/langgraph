@@ -16,6 +16,7 @@ from typing_extensions import TypedDict
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import END, START, StateGraph
 from langgraph.pregel._checkpoint import delta_channels_to_snapshot
+from langgraph.types import Command, interrupt
 
 pytestmark = pytest.mark.anyio
 
@@ -94,6 +95,28 @@ async def test_forced_snapshot_single_run() -> None:
         assert "seed-a" in state.values["a"]
 
 
+async def test_supersteps_bound_skips_a_channel_never_written() -> None:
+    with patch(
+        "langgraph.pregel._checkpoint.DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT",
+        3,
+    ):
+        saver = InMemorySaver()
+        graph = _build_two_channel_graph(saver, n_loops=4)
+        config = {"configurable": {"thread_id": "never-written"}}
+
+        graph.invoke({"a": ["seed-a"]}, config)
+
+        minted = [
+            t.config["configurable"]["checkpoint_id"]
+            for t in saver.list(config)
+            if "b" in t.checkpoint["channel_versions"]
+        ]
+        assert not minted, (
+            f"b was never written, but {len(minted)} checkpoints minted it a version"
+        )
+        assert graph.get_state(config).values["b"] == []
+
+
 async def test_forced_snapshot_accumulates_across_runs() -> None:
     """Supersteps counter for an unwritten channel persists across separate
     invoke() calls. After enough runs, the channel is force-snapshotted."""
@@ -139,12 +162,16 @@ async def test_predicate_fires_on_supersteps_overflow() -> None:
     channels = {"x": ch_instance}
     counters: dict[str, tuple[int, int]] = {"x": (0, 5000)}
 
-    result = delta_channels_to_snapshot(channels, counters)
+    result = delta_channels_to_snapshot(channels, counters, {"x": 1})
     assert "x" in result
 
     counters_below: dict[str, tuple[int, int]] = {"x": (0, 4999)}
-    result2 = delta_channels_to_snapshot(channels, counters_below)
+    result2 = delta_channels_to_snapshot(channels, counters_below, {"x": 1})
     assert "x" not in result2
+
+    assert not delta_channels_to_snapshot(channels, counters, {}), (
+        "a channel with no version was never written, so it has nothing to snapshot"
+    )
 
 
 def _delta_counters(saver: InMemorySaver, config: Any) -> dict[str, list[int]]:
@@ -247,3 +274,78 @@ async def test_counter_reset_after_supersteps_snapshot() -> None:
 
         state = graph.get_state(config)
         assert state.values["b"] == ["seed-b"]
+
+
+class _HistoryRequestSaver(InMemorySaver):
+    def __init__(self) -> None:
+        super().__init__()
+        self.requested: list[list[str]] = []
+
+    def get_delta_channel_history(self, *, config: Any, channels: Any) -> Any:
+        self.requested.append(sorted(channels))
+        return super().get_delta_channel_history(config=config, channels=channels)
+
+
+def test_never_written_channel_is_not_walked() -> None:
+    saver = _HistoryRequestSaver()
+    graph = _build_two_channel_graph(saver, n_loops=3)
+    config = {"configurable": {"thread_id": "never-written"}}
+    graph.invoke({"a": ["seed-a"]}, config)
+    saver.requested.clear()
+
+    graph.invoke({"a": ["more-a"]}, config)
+    state = graph.get_state(config)
+
+    assert state.values["b"] == []
+    assert saver.requested and all(r == ["a"] for r in saver.requested), (
+        f"only the written channel needs a walk; asked for {saver.requested}"
+    )
+
+
+async def test_anever_written_channel_is_not_walked() -> None:
+    saver = _HistoryRequestSaver()
+    graph = _build_two_channel_graph(saver, n_loops=3)
+    config = {"configurable": {"thread_id": "never-written"}}
+    await graph.ainvoke({"a": ["seed-a"]}, config)
+    saver.requested.clear()
+
+    await graph.ainvoke({"a": ["more-a"]}, config)
+    state = await graph.aget_state(config)
+
+    assert state.values["b"] == []
+    assert saver.requested and all(r == ["a"] for r in saver.requested), (
+        f"only the written channel needs a walk; asked for {saver.requested}"
+    )
+
+
+@pytest.mark.parametrize("durability", ["sync", "async"])
+def test_first_write_pending_at_an_interrupt_is_applied_once_on_resume(
+    durability: Any,
+) -> None:
+    class State(TypedDict):
+        x: list
+        first: Annotated[list, DeltaChannel(_simple_reducer)]
+
+    def ask(state: State) -> dict:
+        interrupt("ok?")
+        return {"x": ["asked"]}
+
+    saver = InMemorySaver()
+    graph = (
+        StateGraph(State)
+        .add_node("p", lambda state: {"first": ["p"]})
+        .add_node("ask", ask)
+        .add_edge(START, "p")
+        .add_edge(START, "ask")
+        .compile(checkpointer=saver)
+    )
+    config = {"configurable": {"thread_id": "pending-first-write"}}
+    graph.invoke({"x": ["in"]}, config, durability=durability)
+    head = saver.get_tuple(config)
+    assert head is not None
+    assert "first" not in head.checkpoint["channel_versions"]
+    assert ("first", ["p"]) in [w[1:] for w in head.pending_writes or []]
+
+    graph.invoke(Command(resume="yes"), config, durability=durability)
+
+    assert graph.get_state(config).values["first"] == ["p"]
