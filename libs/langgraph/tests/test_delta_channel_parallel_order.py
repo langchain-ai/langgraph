@@ -1,5 +1,6 @@
 """`DeltaChannel` replay must apply parallel writes in the order `invoke` did."""
 
+import asyncio
 from typing import Annotated, Any
 
 import pytest
@@ -76,6 +77,18 @@ async def test_get_state_matches_live_invoke_order(
     replayed = (await graph.aget_state(config)).values["items"]
 
     assert live == FAN_OUT_NAMES
+    assert replayed == live
+
+
+async def test_sync_get_state_on_async_saver_matches_live_order(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = _build_fan_out_graph(async_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    live = (await graph.ainvoke({"items": []}, config))["items"]
+    replayed = (await asyncio.to_thread(graph.get_state, config)).values["items"]
+
     assert replayed == live
 
 
