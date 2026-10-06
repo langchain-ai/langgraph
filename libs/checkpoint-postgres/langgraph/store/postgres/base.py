@@ -25,6 +25,7 @@ from langgraph.store.base import (
     BaseStore,
     GetOp,
     IndexConfig,
+    InvalidNamespaceError,
     Item,
     ListNamespacesOp,
     Op,
@@ -1386,6 +1387,19 @@ def _group_ops(ops: Iterable[Op]) -> tuple[dict[type, list[tuple[int, Op]]], int
     grouped_ops: dict[type, list[tuple[int, Op]]] = defaultdict(list)
     tot = 0
     for idx, op in enumerate(ops):
+        if isinstance(op, (GetOp, PutOp)):
+            paths = (op.namespace,)
+        elif isinstance(op, SearchOp):
+            paths = (op.namespace_prefix,)
+        else:
+            paths = tuple(condition.path for condition in op.match_conditions or ())
+        for path in paths:
+            for label in path:
+                if not isinstance(label, str) or not label or "." in label:
+                    raise InvalidNamespaceError(
+                        f"Invalid namespace label {label!r}: labels must be nonempty "
+                        "strings without periods ('.')."
+                    )
         grouped_ops[type(op)].append((idx, op))
         tot += 1
     return grouped_ops, tot
