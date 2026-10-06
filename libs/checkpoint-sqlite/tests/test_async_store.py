@@ -749,17 +749,20 @@ async def test_async_namespace_segment_boundary(store: AsyncSqliteStore) -> None
     }
 
 
-async def test_abatch_rejects_ambiguous_namespace_labels(
-    store: AsyncSqliteStore,
+@pytest.mark.parametrize("namespace", [("foo.bar",), ("foo", ""), ("foo", 1)])
+async def test_abatch_rejects_invalid_namespace_labels(
+    store: AsyncSqliteStore, namespace: tuple
 ) -> None:
     await store.aput(("foo", "bar"), "key", {"original": True})
 
     for op in (
-        GetOp(("foo.bar",), "key"),
-        PutOp(("foo.bar",), "key", {"changed": True}),
-        PutOp(("foo.bar",), "key", None),
-        SearchOp(("foo.bar",)),
-        ListNamespacesOp((MatchCondition("prefix", ("foo.bar",)),)),
+        GetOp(namespace, "key"),
+        GetOp(namespace, "key", refresh_ttl=True),
+        PutOp(namespace, "key", {"changed": True}),
+        PutOp(namespace, "key", None),
+        SearchOp(namespace),
+        ListNamespacesOp((MatchCondition("prefix", namespace),)),
+        ListNamespacesOp((MatchCondition("suffix", namespace),)),
     ):
         with pytest.raises(InvalidNamespaceError):
             await store.abatch([op])
@@ -788,7 +791,7 @@ async def test_invalid_namespace_only_fails_its_own_call(
     assert isinstance(invalid, InvalidNamespaceError)
 
 
-async def test_sync_methods_reject_ambiguous_namespace_labels(
+async def test_sync_methods_reject_invalid_namespace_labels(
     store: AsyncSqliteStore,
 ) -> None:
     """The sync wrappers run off the event loop thread and must validate too."""

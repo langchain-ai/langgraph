@@ -875,17 +875,20 @@ async def test_omit_expired_search_pagination(store: AsyncPostgresStore) -> None
     assert [i.key for i in page2] == ["c"]
 
 
-async def test_abatch_rejects_ambiguous_namespace_labels(
-    store: AsyncPostgresStore,
+@pytest.mark.parametrize("namespace", [("foo.bar",), ("foo", ""), ("foo", 1)])
+async def test_abatch_rejects_invalid_namespace_labels(
+    store: AsyncPostgresStore, namespace: tuple
 ) -> None:
     await store.aput(("foo", "bar"), "key", {"original": True})
 
     for op in (
-        GetOp(("foo.bar",), "key"),
-        PutOp(("foo.bar",), "key", {"changed": True}),
-        PutOp(("foo.bar",), "key", None),
-        SearchOp(("foo.bar",)),
-        ListNamespacesOp((MatchCondition("prefix", ("foo.bar",)),)),
+        GetOp(namespace, "key"),
+        GetOp(namespace, "key", refresh_ttl=True),
+        PutOp(namespace, "key", {"changed": True}),
+        PutOp(namespace, "key", None),
+        SearchOp(namespace),
+        ListNamespacesOp((MatchCondition("prefix", namespace),)),
+        ListNamespacesOp((MatchCondition("suffix", namespace),)),
     ):
         with pytest.raises(InvalidNamespaceError):
             await store.abatch([op])
@@ -914,7 +917,7 @@ async def test_invalid_namespace_only_fails_its_own_call(
     assert isinstance(invalid, InvalidNamespaceError)
 
 
-async def test_sync_methods_reject_ambiguous_namespace_labels(
+async def test_sync_methods_reject_invalid_namespace_labels(
     store: AsyncPostgresStore,
 ) -> None:
     """The sync wrappers run off the event loop thread and must validate too."""

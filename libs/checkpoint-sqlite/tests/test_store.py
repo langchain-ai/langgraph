@@ -1442,7 +1442,7 @@ def test_list_namespaces_metacharacter_labels(store: SqliteStore) -> None:
 @pytest.mark.parametrize(
     "kind", ["get", "put", "delete", "search", "list_prefix", "list_suffix"]
 )
-def test_batch_rejects_ambiguous_namespace_labels(
+def test_batch_rejects_invalid_namespace_labels(
     store: SqliteStore, namespace: tuple, kind: str
 ) -> None:
     """Ops passed straight to `batch` must not reach another namespace.

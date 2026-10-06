@@ -897,6 +897,11 @@ class BaseStore(ABC):
                 By default, the expiration timer refreshes on both read operations (get/search)
                 and write operations (put/update), whenever the item is included in the operation.
 
+        Raises:
+            InvalidNamespaceError: If the namespace is empty, its root label is
+                `"langgraph"`, or a label is empty, is not a string, or contains a
+                period (`.`).
+
         Note:
             Indexing support depends on your store implementation.
             If you do not initialize the store with indexing capabilities,
@@ -1171,6 +1176,11 @@ class BaseStore(ABC):
                 By default, the expiration timer refreshes on both read operations (get/search)
                 and write operations (put/update), whenever the item is included in the operation.
 
+        Raises:
+            InvalidNamespaceError: If the namespace is empty, its root label is
+                `"langgraph"`, or a label is empty, is not a string, or contains a
+                period (`.`).
+
         Note:
             Indexing support depends on your store implementation.
             If you do not initialize the store with indexing capabilities,
@@ -1327,6 +1337,27 @@ def _validate_namespace_labels(namespace: tuple[str, ...]) -> None:
             raise InvalidNamespaceError(
                 f"Namespace labels cannot be empty strings. Got {label} in {namespace}"
             )
+
+
+def validate_op_namespace(op: Op) -> None:
+    """Validate the namespace labels an op carries before a store executes it.
+
+    `BaseStore` methods check labels before batching, but ops passed directly to
+    `batch`/`abatch` skip those methods. Stores that serialize namespaces as
+    delimited text should call this for every op they execute, so a label such
+    as `"foo.bar"` cannot address the namespace `("foo", "bar")`.
+
+    Raises:
+        InvalidNamespaceError: If a label is empty, is not a string, or contains
+            a period (`.`).
+    """
+    if isinstance(op, (GetOp, PutOp)):
+        _validate_namespace_labels(op.namespace)
+    elif isinstance(op, SearchOp):
+        _validate_namespace_labels(op.namespace_prefix)
+    elif isinstance(op, ListNamespacesOp):
+        for condition in op.match_conditions or ():
+            _validate_namespace_labels(condition.path)
 
 
 def _ensure_refresh(

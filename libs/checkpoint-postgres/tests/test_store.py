@@ -1171,7 +1171,7 @@ def test_namespace_labels_with_trailing_newline(store) -> None:
 @pytest.mark.parametrize(
     "kind", ["get", "put", "delete", "search", "list_prefix", "list_suffix"]
 )
-def test_batch_rejects_ambiguous_namespace_labels(
+def test_batch_rejects_invalid_namespace_labels(
     store, namespace: tuple, kind: str
 ) -> None:
     """Ops passed straight to `batch` must not reach another namespace.

@@ -13,10 +13,14 @@ from langgraph.store.base import (
     GetOp,
     InvalidNamespaceError,
     Item,
+    ListNamespacesOp,
+    MatchCondition,
     Op,
     PutOp,
     Result,
+    SearchOp,
     get_text_at_path,
+    validate_op_namespace,
 )
 from langgraph.store.base.batch import AsyncBatchedBaseStore
 from langgraph.store.memory import InMemoryStore
@@ -539,14 +543,16 @@ def test_rejects_invalid_namespace_labels(
 ) -> None:
     store = InMemoryStore()
     batch = mocker.spy(InMemoryStore, "batch")
+    call = {
+        "get": lambda: store.get(namespace, "key"),
+        "delete": lambda: store.delete(namespace, "key"),
+        "search": lambda: store.search(namespace),
+        "prefix": lambda: store.list_namespaces(prefix=namespace),
+        "suffix": lambda: store.list_namespaces(suffix=namespace),
+    }[method]
 
     with pytest.raises(InvalidNamespaceError):
-        if method in ("prefix", "suffix"):
-            store.list_namespaces(**{method: namespace})
-        elif method == "search":
-            store.search(namespace)
-        else:
-            getattr(store, method)(namespace, "key")
+        call()
 
     batch.assert_not_called()
 
@@ -563,14 +569,16 @@ async def test_async_rejects_invalid_namespace_labels(
     # `MockAsyncBatchedStore` dispatches through `InMemoryStore.batch`.
     batch = mocker.spy(InMemoryStore, "batch")
     abatch = mocker.spy(InMemoryStore, "abatch")
+    call = {
+        "get": lambda: store.aget(namespace, "key"),
+        "delete": lambda: store.adelete(namespace, "key"),
+        "search": lambda: store.asearch(namespace),
+        "prefix": lambda: store.alist_namespaces(prefix=namespace),
+        "suffix": lambda: store.alist_namespaces(suffix=namespace),
+    }[method]
 
     with pytest.raises(InvalidNamespaceError):
-        if method in ("prefix", "suffix"):
-            await store.alist_namespaces(**{method: namespace})
-        elif method == "search":
-            await store.asearch(namespace)
-        else:
-            await getattr(store, f"a{method}")(namespace, "key")
+        await call()
 
     batch.assert_not_called()
     abatch.assert_not_called()
@@ -606,6 +614,43 @@ async def test_async_search_and_listing_keep_empty_prefixes_and_wildcards(
     assert sorted(
         await store.alist_namespaces(prefix=("tenant", "*"), suffix=("*",))
     ) == [("tenant", "a_%"), ("tenant", "b", "child")]
+
+
+@pytest.mark.parametrize("namespace", INVALID_NAMESPACES)
+@pytest.mark.parametrize(
+    "kind", ["get", "put", "delete", "search", "list_prefix", "list_suffix"]
+)
+def test_validate_op_namespace_rejects_invalid_labels(
+    namespace: tuple, kind: str
+) -> None:
+    op = {
+        "get": GetOp(namespace, "key"),
+        "put": PutOp(namespace, "key", {"v": 1}),
+        "delete": PutOp(namespace, "key", None),
+        "search": SearchOp(namespace),
+        "list_prefix": ListNamespacesOp((MatchCondition("prefix", namespace),)),
+        "list_suffix": ListNamespacesOp((MatchCondition("suffix", namespace),)),
+    }[kind]
+
+    with pytest.raises(InvalidNamespaceError):
+        validate_op_namespace(op)
+
+
+def test_validate_op_namespace_allows_empty_prefix_and_wildcards() -> None:
+    for op in (
+        SearchOp(()),
+        ListNamespacesOp(),
+        ListNamespacesOp(
+            (
+                MatchCondition("prefix", ("tenant", "*")),
+                MatchCondition("suffix", ("*",)),
+            )
+        ),
+        GetOp(("tenant", "a_%"), "key"),
+        # Write-only rules belong to `put`, not to op validation.
+        PutOp(("langgraph", "x"), "key", {"v": 1}),
+    ):
+        validate_op_namespace(op)
 
 
 async def test_async_batch_store_deduplication(mocker: MockerFixture) -> None:

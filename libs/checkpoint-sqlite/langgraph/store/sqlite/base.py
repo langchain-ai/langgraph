@@ -17,7 +17,6 @@ from langgraph.store.base import (
     BaseStore,
     GetOp,
     IndexConfig,
-    InvalidNamespaceError,
     Item,
     ListNamespacesOp,
     Op,
@@ -29,6 +28,7 @@ from langgraph.store.base import (
     ensure_embeddings,
     get_text_at_path,
     tokenize_path,
+    validate_op_namespace,
 )
 
 _AIO_ERROR_MSG = (
@@ -258,34 +258,10 @@ def _group_ops(ops: Iterable[Op]) -> tuple[dict[type, list[tuple[int, Op]]], int
     grouped_ops: dict[type, list[tuple[int, Op]]] = defaultdict(list)
     tot = 0
     for idx, op in enumerate(ops):
-        _validate_op_namespace(op)
+        validate_op_namespace(op)
         grouped_ops[type(op)].append((idx, op))
         tot += 1
     return grouped_ops, tot
-
-
-def _validate_op_namespace(op: Op) -> None:
-    """Reject namespace labels that would alias another namespace once dot-joined.
-
-    `("foo.bar",)` and `("foo", "bar")` flatten to the same `prefix` text.
-    `BaseStore` methods check labels before batching, but ops passed directly to
-    `batch`/`abatch` reach here unchecked.
-    """
-    if isinstance(op, (GetOp, PutOp)):
-        paths = (op.namespace,)
-    elif isinstance(op, SearchOp):
-        paths = (op.namespace_prefix,)
-    elif isinstance(op, ListNamespacesOp):
-        paths = tuple(condition.path for condition in op.match_conditions or ())
-    else:
-        return
-    for path in paths:
-        for label in path:
-            if not isinstance(label, str) or not label or "." in label:
-                raise InvalidNamespaceError(
-                    f"Invalid namespace label {label!r} found in {path}. Namespace "
-                    "labels must be non-empty strings without periods ('.')."
-                )
 
 
 class PreparedGetQuery(NamedTuple):
