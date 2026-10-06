@@ -740,20 +740,6 @@ def _build_deferred_after_interrupt(checkpointer: BaseCheckpointSaver) -> Any:
     return builder.compile(checkpointer=checkpointer, interrupt_after=["a"])
 
 
-@pytest.mark.parametrize(
-    "durability",
-    [
-        "sync",
-        "async",
-        pytest.param(
-            "exit",
-            marks=pytest.mark.xfail(
-                reason="exit durability stores a resumed run's loaded writes twice",
-                strict=True,
-            ),
-        ),
-    ],
-)
 def test_resume_on_an_interrupted_head_consumes_its_writes_without_a_snapshot(
     sync_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
