@@ -312,7 +312,7 @@ class _ActionHandler(typing.Protocol[V]):
     ) -> types.HandlerResult: ...
 
 
-T = typing.TypeVar("T", covariant=True)
+T = typing.TypeVar("T")
 
 
 class _ResourceActionOn(typing.Generic[T]):

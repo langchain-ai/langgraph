@@ -30,16 +30,33 @@ from langgraph.checkpoint.base import (
     writes_sort_key,
 )
 
-# Stage 1 streams ancestors of `target_cid` newest-first. The `<=`
-# predicate keeps target itself in the stream so we can read its
-# `parent_checkpoint_id` from the first row without a separate lookup;
-# the caller skips target's own writes/seed (matches the
-# `BaseCheckpointSaver` contract).
+# Stage 1 streams target, then its ancestors nearest-first, by following
+# `parent_checkpoint_id` rather than id order: ids are only monotonic within
+# one process, so a range scan by id can miss a parent whose id sorts above
+# its child's. Target is the anchor row; its own writes/seed are skipped
+# (matches the `BaseCheckpointSaver` contract).
+#
+# `put` is `INSERT OR REPLACE`, so re-putting an existing id under a
+# descendant's config makes the chain a loop. `step_walk_with_row` stops on a
+# repeated id; sqlite yields recursive rows lazily, so abandoning the cursor
+# ends the recursion.
+#
+# `CROSS JOIN` pins `ancestors` as the outer loop, so each step is one primary
+# key lookup. With a plain `JOIN` and no `ANALYZE` stats, sqlite can put
+# `checkpoints` outside and scan the whole thread per step.
 DELTA_STAGE1_SQL = (
+    "WITH RECURSIVE ancestors(checkpoint_id, parent_checkpoint_id, type, "
+    "checkpoint) AS ("
     "SELECT checkpoint_id, parent_checkpoint_id, type, checkpoint "
     "FROM checkpoints "
-    "WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id <= ? "
-    "ORDER BY checkpoint_id DESC"
+    "WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? "
+    "UNION ALL "
+    "SELECT c.checkpoint_id, c.parent_checkpoint_id, c.type, c.checkpoint "
+    "FROM ancestors a CROSS JOIN checkpoints c "
+    "ON c.checkpoint_id = a.parent_checkpoint_id "
+    "WHERE c.thread_id = ? AND c.checkpoint_ns = ?"
+    ") "
+    "SELECT checkpoint_id, type, checkpoint FROM ancestors"
 )
 
 
@@ -75,7 +92,6 @@ def build_delta_stage2_sql(
 def step_walk_with_row(
     *,
     cid: str,
-    parent_cid: str | None,
     type_tag: str,
     blob: bytes,
     target_id: str,
@@ -88,36 +104,32 @@ def step_walk_with_row(
 ) -> bool:
     """Process one streamed stage-1 row in the merged ancestor walk.
 
-    The cursor returns (cid, parent_cid, type, blob) rows in
-    `checkpoint_id` DESC order starting at target. The first row is
-    target itself; we read its parent_cid to seed the walk and otherwise
-    skip it (target's own writes/seed are not part of the contract).
+    The cursor returns (cid, type, blob) rows in walk order starting at
+    target. The first row is target itself and is skipped (target's own
+    writes/seed are not part of the contract).
 
-    For each subsequent row, if `cid` matches the walk's current
-    position, we deserialize the blob, append the cid to every
-    not-yet-seeded channel's chain, and check `channel_values` for
+    For each subsequent row we deserialize the blob, append the cid to
+    every not-yet-seeded channel's chain, and check `channel_values` for
     seeds. The deserialized checkpoint is dropped before advancing — no
     cross-row cache, so peak in-flight is one deserialized checkpoint.
 
-    Off-path rows (different branch on the same thread) advance the
-    cursor without doing any work.
-
-    Returns True when every requested channel is seeded — the caller
-    can stop iterating and close the cursor.
+    Returns True when the caller can stop iterating and close the cursor:
+    every requested channel is seeded, or the chain revisited a checkpoint.
     """
     if "started" not in walk_state:
         if cid == target_id:
             walk_state["started"] = True
-            walk_state["cur_cid"] = parent_cid
             walk_state["active"] = {ch for ch in channels if ch not in seeded}
+            walk_state["walked"] = {cid}
         # Not target yet (or target not present): keep streaming.
         return False
     active: set[str] = walk_state["active"]
     if not active:
         return True
-    if cid != walk_state["cur_cid"]:
-        # Off-path row from a sibling branch — skip without deserializing.
-        return False
+    walked: set[str] = walk_state["walked"]
+    if cid in walked:
+        return True
+    walked.add(cid)
     for ch in active:
         chain_by_ch[ch].append(cid)
     ckpt = serde.loads_typed((type_tag, blob))
@@ -127,7 +139,6 @@ def step_walk_with_row(
         seeded.add(ch)
         active.discard(ch)
     del ckpt, channel_values
-    walk_state["cur_cid"] = parent_cid
     return not active
 
 
