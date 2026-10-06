@@ -30,7 +30,11 @@ from langgraph.checkpoint.sqlite._delta import (
     build_delta_stage2_sql,
     step_walk_with_row,
 )
-from langgraph.checkpoint.sqlite.utils import search_where
+from langgraph.checkpoint.sqlite.utils import (
+    load_pending_writes,
+    pending_writes_sql,
+    search_where,
+)
 
 T = TypeVar("T", bound=Callable)
 
@@ -412,7 +416,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                     }
                 # find any pending writes
                 await cur.execute(
-                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
+                    pending_writes_sql(self._has_task_path),
                     (
                         str(config["configurable"]["thread_id"]),
                         checkpoint_ns,
@@ -438,10 +442,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                         if parent_checkpoint_id
                         else None
                     ),
-                    [
-                        (task_id, channel, self.serde.loads_typed((type, value)))
-                        async for task_id, channel, type, value in cur
-                    ],
+                    load_pending_writes(await cur.fetchall(), self.serde),
                 )
 
     async def alist(
@@ -490,7 +491,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                 metadata,
             ) in cur:
                 await wcur.execute(
-                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
+                    pending_writes_sql(self._has_task_path),
                     (thread_id, checkpoint_ns, checkpoint_id),
                 )
                 yield CheckpointTuple(
@@ -517,10 +518,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                         if parent_checkpoint_id
                         else None
                     ),
-                    [
-                        (task_id, channel, self.serde.loads_typed((type, value)))
-                        async for task_id, channel, type, value in wcur
-                    ],
+                    load_pending_writes(await wcur.fetchall(), self.serde),
                 )
 
     async def aput(

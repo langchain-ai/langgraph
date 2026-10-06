@@ -266,7 +266,8 @@ class BaseCheckpointSaver(Generic[V]):
             config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
-            The requested checkpoint tuple, or `None` if not found.
+            The requested checkpoint tuple, or `None` if not found. Its
+                `pending_writes` must be in `writes_sort_key` order.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
@@ -456,7 +457,8 @@ class BaseCheckpointSaver(Generic[V]):
             config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
-            The requested checkpoint tuple, or `None` if not found.
+            The requested checkpoint tuple, or `None` if not found. Its
+                `pending_writes` must be in `writes_sort_key` order.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
@@ -634,9 +636,8 @@ class BaseCheckpointSaver(Generic[V]):
         fixed here.
 
         `PendingWrite` carries no `task_path`, so this default replays each
-        checkpoint's writes in `get_tuple`'s `pending_writes` order. Savers
-        that do not return `pending_writes` ordered by
-        `(task_path, task_id, idx)` must override it.
+        checkpoint's writes in `get_tuple`'s `pending_writes` order, which
+        `get_tuple` must return in `writes_sort_key` order.
 
         Args:
             config: Configuration identifying the target checkpoint.
