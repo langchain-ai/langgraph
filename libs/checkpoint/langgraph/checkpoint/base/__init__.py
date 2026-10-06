@@ -162,6 +162,14 @@ class DeltaChannelHistory(TypedDict):
       Always present; possibly empty. Already filtered to one channel.
       Writes stored at the target checkpoint itself are pending for the
       next super-step and are excluded.
+
+      Within a single checkpoint, writes are ordered by `writes_sort_key`,
+      `(task_path, task_id, idx)`, which is the order live execution applies
+      a super-step's task writes in. `task_id` is a hash of the path, so
+      ordering by it permutes parallel tasks writing one channel, and
+      reducers need not be order-invariant. Writes stored without a
+      `task_path` (graph input, `update_state` updates, exit-durability runs,
+      rows predating the column) sort first, by `task_id`.
     * `seed` — the stored value at the nearest ancestor whose
       `channel_values[ch]` is populated. Omitted if the walk reached the
       root without finding any stored value (consumer treats absence as
@@ -172,6 +180,20 @@ class DeltaChannelHistory(TypedDict):
 
     writes: list[PendingWrite]
     seed: NotRequired[Any]
+
+
+def writes_sort_key(
+    task_path: str, task_id: str = "", idx: int = 0
+) -> tuple[str, str, int]:
+    """Sort key for the writes of one super-step.
+
+    Live execution applies a super-step's tasks in this order, so a saver
+    that replays stored writes, as `get_delta_channel_history` does, must
+    sort them by it too, or an order-sensitive reducer rebuilds a different
+    value than the run produced. `task_path` is the string passed to
+    `put_writes`.
+    """
+    return (task_path, task_id, idx)
 
 
 class BaseCheckpointSaver(Generic[V]):
@@ -244,7 +266,8 @@ class BaseCheckpointSaver(Generic[V]):
             config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
-            The requested checkpoint tuple, or `None` if not found.
+            The requested checkpoint tuple, or `None` if not found. Its
+                `pending_writes` must be in `writes_sort_key` order.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
@@ -434,7 +457,8 @@ class BaseCheckpointSaver(Generic[V]):
             config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
-            The requested checkpoint tuple, or `None` if not found.
+            The requested checkpoint tuple, or `None` if not found. Its
+                `pending_writes` must be in `writes_sort_key` order.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
@@ -610,6 +634,10 @@ class BaseCheckpointSaver(Generic[V]):
         channel. Savers with direct storage access (`InMemorySaver`,
         `PostgresSaver`) override for performance; the return contract is
         fixed here.
+
+        `PendingWrite` carries no `task_path`, so this default replays each
+        checkpoint's writes in `get_tuple`'s `pending_writes` order, which
+        `get_tuple` must return in `writes_sort_key` order.
 
         Args:
             config: Configuration identifying the target checkpoint.

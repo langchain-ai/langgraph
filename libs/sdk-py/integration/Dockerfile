@@ -22,18 +22,23 @@ RUN pip install --no-cache-dir \
     "langchain>=1.3.0" \
     "deepagents>=0.6.2"
 
-# Swap the published langgraph *core* for this monorepo's local copy, so the
-# server executes the langgraph under test rather than the latest release.
+# Swap the published langgraph *core* and *checkpoint* for this monorepo's
+# local copies, so the server executes the langgraph under test rather than the
+# latest release.
 # We keep the rest of the base image (langgraph-api, runtime, Go core server)
 # on `latest` — that still surfaces upstream regressions — but the core the
 # server runs is now the PR's, which is what lets this suite catch core
 # regressions (e.g. ensure_config / runtime changes) before they're published.
-# `--no-deps` keeps the base image's already-compatible
-# checkpoint/prebuilt/sdk; we only replace core. The local source comes from
-# the `langgraph_src` additional build context (see docker-compose.yml).
+# Checkpoint goes with core because core can need a checkpoint API from the
+# same release. `--no-deps` keeps the base image's already-compatible
+# prebuilt/sdk. The local sources come from the `checkpoint_src` and
+# `langgraph_src` additional build contexts (see docker-compose.yml).
+COPY --from=checkpoint_src pyproject.toml README.md LICENSE /opt/checkpoint-src/
+COPY --from=checkpoint_src langgraph /opt/checkpoint-src/langgraph/
 COPY --from=langgraph_src pyproject.toml README.md LICENSE /opt/langgraph-src/
 COPY --from=langgraph_src langgraph /opt/langgraph-src/langgraph/
-RUN pip install --no-cache-dir --force-reinstall --no-deps /opt/langgraph-src
+RUN pip install --no-cache-dir --force-reinstall --no-deps \
+    /opt/checkpoint-src /opt/langgraph-src
 
 # Project graphs + registration config.
 COPY graph/ /app/graph/

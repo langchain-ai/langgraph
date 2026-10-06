@@ -27,6 +27,7 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     PendingWrite,
     V,
+    writes_sort_key,
 )
 from langgraph.store.base import BaseStore
 from xxhash import xxh3_128_hexdigest
@@ -251,9 +252,7 @@ def apply_writes(
         Set of channels that were updated in this step.
     """
     # sort tasks on path, to ensure deterministic order for update application
-    # any path parts after the 3rd are ignored for sorting
-    # (we use them for eg. task ids which aren't good for sorting)
-    tasks = sorted(tasks, key=lambda t: task_path_str(t.path[:3]))
+    tasks = sorted(tasks, key=lambda t: writes_sort_key(task_path_str(t.path)))
     # if no task has triggers this is applying writes from the null task only
     # so we don't do anything other than update the channels written to
     bump_step = any(t.triggers for t in tasks)

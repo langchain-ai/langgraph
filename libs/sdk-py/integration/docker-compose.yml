@@ -38,16 +38,17 @@ services:
     # see ./Dockerfile. The base image bundles langgraph-api +
     # langgraph_runtime_postgres + langgraph_license + the Go core-server;
     # on top we add graph deps (deepagents), the graph files, and this
-    # monorepo's local langgraph *core* (so the server runs the code under
-    # test, not the released langgraph).
+    # monorepo's local langgraph *core* and *checkpoint* (so the server runs
+    # the code under test, not the released langgraph).
     build:
       context: .
       dockerfile: Dockerfile
       additional_contexts:
-        # The monorepo's local langgraph core (libs/langgraph), installed over
-        # the base image so the server runs the langgraph under test. See the
-        # Dockerfile for why.
+        # The monorepo's local langgraph core (libs/langgraph) and checkpoint
+        # (libs/checkpoint), installed over the base image so the server runs
+        # the langgraph under test. See the Dockerfile for why.
         langgraph_src: ../../langgraph
+        checkpoint_src: ../../checkpoint
     image: langgraph-v3-integration-api:local
     depends_on:
       postgres:
