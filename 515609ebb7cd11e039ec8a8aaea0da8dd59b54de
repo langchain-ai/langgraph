@@ -1,0 +1,19 @@
+libs/cli/langgraph_cli/host_backend.py
+  s_052c045e7735cc::t_4f3c2894390e45 73-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "515609ebb7cd11e039ec8a8aaea0da8dd59b54de",
+  "prompts": {},
+  "sessions": {
+    "s_052c045e7735cc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0c663-ede4-7d32-aa94-e210efdbf5b0",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  }
+}

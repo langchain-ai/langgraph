@@ -1,0 +1,35 @@
+libs/cli/langgraph_cli/host_backend.py
+  s_052c045e7735cc::t_f3002e22e9e124 75,80,88-91,98-109,113
+libs/cli/langgraph_cli/deploy.py
+  s_052c045e7735cc::t_20455afee2e8fd 678
+  s_052c045e7735cc::t_5bb4ec2ed705a6 709-714
+  h_e6aca5e1220677 1665,1683,1685
+  s_052c045e7735cc::t_f3002e22e9e124 609,620-642,657,662,665-669,671-677,679-686,692-693,1384-1393,1492-1493,1630-1631,1657-1664,1666-1667,1726,1737,1851-1852,1859-1872,1876
+libs/cli/tests/unit_tests/test_deploy_helpers.py
+  s_052c045e7735cc::t_f1ab4bd51c4fc6 545,548-549
+  s_052c045e7735cc::t_ad73afc17cafc0 544,546-547
+libs/cli/tests/unit_tests/test_deploy_agents.py
+  s_052c045e7735cc::t_20455afee2e8fd 1-23,25-52,54-56,72-75,77-78,82,84-88,93-94
+  s_052c045e7735cc::t_ad73afc17cafc0 24,53,57-71,76,79-81,83,89-92,95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ab851822c5199777f054ea1e52c4bfc8d03278b0",
+  "prompts": {},
+  "humans": {
+    "h_e6aca5e1220677": {
+      "author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  },
+  "sessions": {
+    "s_052c045e7735cc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0c663-ede4-7d32-aa94-e210efdbf5b0",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  }
+}

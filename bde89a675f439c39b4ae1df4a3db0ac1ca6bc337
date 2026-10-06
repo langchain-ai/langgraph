@@ -1,0 +1,19 @@
+libs/langgraph/langgraph/stream/run_stream.py
+  s_04b44f7bb68b9f::t_ef4d37e45d84ad 36-37,39-46,102,402
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "bde89a675f439c39b4ae1df4a3db0ac1ca6bc337",
+  "prompts": {},
+  "sessions": {
+    "s_04b44f7bb68b9f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a067b5-0d0a-7aa8-ae0a-9cf38ad3b2f6",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "nick-hollon-lc <nick.hollon@langchain.dev>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+libs/cli/langgraph_cli/__init__.py
+  s_47f1b7eee5f72d::t_ecfea1136789ae 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e9276162fc3778a1d8301e93e77e39a02f5f84c6",
+  "prompts": {},
+  "sessions": {
+    "s_47f1b7eee5f72d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0d081-9341-7b10-9463-875735e73285",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  }
+}
