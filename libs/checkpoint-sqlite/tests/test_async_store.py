@@ -9,8 +9,10 @@ from typing import cast
 import pytest
 from langgraph.store.base import (
     GetOp,
+    InvalidNamespaceError,
     Item,
     ListNamespacesOp,
+    MatchCondition,
     PutOp,
     SearchOp,
 )
@@ -745,3 +747,62 @@ async def test_async_namespace_segment_boundary(store: AsyncSqliteStore) -> None
     assert set(await store.alist_namespaces(suffix=["alice"], limit=100)) == {
         ("uid", "users", "alice"),
     }
+
+
+async def test_abatch_rejects_ambiguous_namespace_labels(
+    store: AsyncSqliteStore,
+) -> None:
+    await store.aput(("foo", "bar"), "key", {"original": True})
+
+    for op in (
+        GetOp(("foo.bar",), "key"),
+        PutOp(("foo.bar",), "key", {"changed": True}),
+        PutOp(("foo.bar",), "key", None),
+        SearchOp(("foo.bar",)),
+        ListNamespacesOp((MatchCondition("prefix", ("foo.bar",)),)),
+    ):
+        with pytest.raises(InvalidNamespaceError):
+            await store.abatch([op])
+
+    item = await store.aget(("foo", "bar"), "key")
+    assert item is not None and item.value == {"original": True}
+
+
+async def test_invalid_namespace_only_fails_its_own_call(
+    store: AsyncSqliteStore,
+) -> None:
+    """Concurrent calls share one `abatch`, which fails every op if it raises.
+
+    Labels are checked before an op is queued, so one caller's bad label cannot
+    fail another caller's request.
+    """
+    await store.aput(("foo", "bar"), "key", {"original": True})
+
+    valid, invalid = await asyncio.gather(
+        store.aget(("foo", "bar"), "key"),
+        store.aget(("foo.bar",), "key"),
+        return_exceptions=True,
+    )
+
+    assert isinstance(valid, Item) and valid.value == {"original": True}
+    assert isinstance(invalid, InvalidNamespaceError)
+
+
+async def test_sync_methods_reject_ambiguous_namespace_labels(
+    store: AsyncSqliteStore,
+) -> None:
+    """The sync wrappers run off the event loop thread and must validate too."""
+    await store.aput(("foo", "bar"), "key", {"original": True})
+
+    for call in (
+        lambda: store.get(("foo.bar",), "key"),
+        lambda: store.search(("foo.bar",)),
+        lambda: store.delete(("foo.bar",), "key"),
+        lambda: store.list_namespaces(prefix=("foo.bar",)),
+        lambda: store.batch([GetOp(("foo.bar",), "key")]),
+    ):
+        with pytest.raises(InvalidNamespaceError):
+            await asyncio.to_thread(call)
+
+    item = await store.aget(("foo", "bar"), "key")
+    assert item is not None and item.value == {"original": True}

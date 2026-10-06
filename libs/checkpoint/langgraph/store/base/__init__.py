@@ -771,6 +771,10 @@ class BaseStore(ABC):
 
         Returns:
             The retrieved item or `None` if not found.
+
+        Raises:
+            InvalidNamespaceError: If a namespace label is empty, is not a string,
+                or contains a period (`.`).
         """
         _validate_namespace_labels(namespace)
         return self.batch(
@@ -801,6 +805,10 @@ class BaseStore(ABC):
 
         Returns:
             List of items matching the search criteria.
+
+        Raises:
+            InvalidNamespaceError: If a `namespace_prefix` label is empty, is not a
+                string, or contains a period (`.`).
 
         ???+ example "Examples"
 
@@ -942,6 +950,10 @@ class BaseStore(ABC):
         Args:
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
+
+        Raises:
+            InvalidNamespaceError: If a namespace label is empty, is not a string,
+                or contains a period (`.`).
         """
         _validate_namespace_labels(namespace)
         self.batch([PutOp(namespace, str(key), None, ttl=None)])
@@ -971,6 +983,10 @@ class BaseStore(ABC):
         Returns:
             A list of namespace tuples that match the criteria. Each tuple represents a
                 full namespace path up to `max_depth`.
+
+        Raises:
+            InvalidNamespaceError: If a `prefix` or `suffix` label is empty, is not a
+                string, or contains a period (`.`).
 
         ???+ example "Examples":
 
@@ -1018,6 +1034,10 @@ class BaseStore(ABC):
 
         Returns:
             The retrieved item or `None` if not found.
+
+        Raises:
+            InvalidNamespaceError: If a namespace label is empty, is not a string,
+                or contains a period (`.`).
         """
         _validate_namespace_labels(namespace)
         return (
@@ -1057,6 +1077,10 @@ class BaseStore(ABC):
 
         Returns:
             List of items matching the search criteria.
+
+        Raises:
+            InvalidNamespaceError: If a `namespace_prefix` label is empty, is not a
+                string, or contains a period (`.`).
 
         ???+ example "Examples"
 
@@ -1208,6 +1232,10 @@ class BaseStore(ABC):
         Args:
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
+
+        Raises:
+            InvalidNamespaceError: If a namespace label is empty, is not a string,
+                or contains a period (`.`).
         """
         _validate_namespace_labels(namespace)
         await self.abatch([PutOp(namespace, str(key), None)])
@@ -1237,6 +1265,10 @@ class BaseStore(ABC):
         Returns:
             A list of namespace tuples that match the criteria. Each tuple represents a
                 full namespace path up to `max_depth`.
+
+        Raises:
+            InvalidNamespaceError: If a `prefix` or `suffix` label is empty, is not a
+                string, or contains a period (`.`).
 
         ???+ example "Examples"
 

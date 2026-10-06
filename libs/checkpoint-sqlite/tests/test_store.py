@@ -14,6 +14,7 @@ import pytest
 from langchain_core.embeddings import Embeddings
 from langgraph.store.base import (
     GetOp,
+    InvalidNamespaceError,
     Item,
     ListNamespacesOp,
     MatchCondition,
@@ -1435,3 +1436,51 @@ def test_list_namespaces_metacharacter_labels(store: SqliteStore) -> None:
         assert set(store.list_namespaces(prefix=[label, "child"], limit=100)) == {
             (label, "child"),
         }
+
+
+@pytest.mark.parametrize("namespace", [("foo.bar",), ("foo", ""), ("foo", 1)])
+@pytest.mark.parametrize(
+    "kind", ["get", "put", "delete", "search", "list_prefix", "list_suffix"]
+)
+def test_batch_rejects_ambiguous_namespace_labels(
+    store: SqliteStore, namespace: tuple, kind: str
+) -> None:
+    """Ops passed straight to `batch` must not reach another namespace.
+
+    Namespaces are stored dot-joined, so `("foo.bar",)` flattens to the same
+    text as `("foo", "bar")`. `BaseStore` methods validate labels themselves,
+    but `batch` takes ops as given.
+    """
+    op = {
+        "get": GetOp(namespace, "key"),
+        "put": PutOp(namespace, "key", {"changed": True}),
+        "delete": PutOp(namespace, "key", None),
+        "search": SearchOp(namespace),
+        "list_prefix": ListNamespacesOp((MatchCondition("prefix", namespace),)),
+        "list_suffix": ListNamespacesOp((MatchCondition("suffix", namespace),)),
+    }[kind]
+    store.put(("foo", "bar"), "key", {"original": True})
+
+    with pytest.raises(InvalidNamespaceError):
+        store.batch([PutOp(("valid",), "key", {}), op])
+
+    item = store.get(("foo", "bar"), "key")
+    assert item is not None and item.value == {"original": True}
+    # The whole batch is rejected before any SQL runs.
+    assert store.get(("valid",), "key") is None
+
+
+def test_batch_allows_empty_search_prefix_and_listing_wildcards(
+    store: SqliteStore,
+) -> None:
+    store.put(("foo", "bar"), "key", {"v": 1})
+
+    found, listed = store.batch(
+        [
+            SearchOp(()),
+            ListNamespacesOp((MatchCondition("prefix", ("foo", "*")),)),
+        ]
+    )
+
+    assert [item.namespace for item in found] == [("foo", "bar")]
+    assert listed == [("foo", "bar")]
