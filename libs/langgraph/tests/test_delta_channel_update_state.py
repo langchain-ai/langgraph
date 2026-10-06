@@ -434,6 +434,56 @@ def test_bulk_update_state_keeps_every_update_next_to_a_pending_task(
     )
 
 
+class _TaskPathOrderSaver(InMemorySaver):
+    """Replays each checkpoint's writes by `(task_path, task_id, idx)`."""
+
+    def get_tuple(self, config: Any) -> Any:
+        tup = super().get_tuple(config)
+        if tup is None or not tup.pending_writes:
+            return tup
+        conf = tup.config["configurable"]
+        stored = self.writes[
+            (conf["thread_id"], conf["checkpoint_ns"], conf["checkpoint_id"])
+        ]
+        rows = sorted(
+            zip(stored.items(), tup.pending_writes),
+            key=lambda row: (row[0][1][3], *row[0][0]),
+        )
+        return tup._replace(pending_writes=[write for _, write in rows])
+
+    get_delta_channel_history = BaseCheckpointSaver.get_delta_channel_history
+    aget_delta_channel_history = BaseCheckpointSaver.aget_delta_channel_history
+
+
+GIVEN = ["u1", "u2", "u3", "u4", "u5", "u6"]
+
+
+def _updates_in_given_order() -> list[list[StateUpdate]]:
+    return [
+        [_update(c, "assistant" if i % 2 else "model") for i, c in enumerate(GIVEN)]
+    ]
+
+
+def test_bulk_update_state_replays_updates_in_the_order_given() -> None:
+    graph = _build_graph(_TaskPathOrderSaver(), two_nodes=True)
+    config = {"configurable": {"thread_id": "bulk-order"}}
+    graph.invoke({"messages": [HumanMessage(content="hi", id="hi")]}, config)
+
+    graph.bulk_update_state(config, _updates_in_given_order())
+
+    assert _contents(graph.get_state(config)) == ["hi", *GIVEN]
+
+
+async def test_abulk_update_state_replays_updates_in_the_order_given() -> None:
+    graph = _build_graph(_TaskPathOrderSaver(), two_nodes=True)
+    config = {"configurable": {"thread_id": "bulk-order"}}
+    await graph.ainvoke({"messages": [HumanMessage(content="hi", id="hi")]}, config)
+
+    await graph.abulk_update_state(config, _updates_in_given_order())
+
+    assert _contents(await graph.aget_state(config)) == ["hi", *GIVEN]
+
+
 # ---------------------------------------------------------------------------
 # Public-API observation of fresh-thread checkpoint shape
 # ---------------------------------------------------------------------------

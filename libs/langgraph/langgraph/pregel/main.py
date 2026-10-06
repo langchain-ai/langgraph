@@ -19,7 +19,7 @@ from collections.abc import (
 from dataclasses import is_dataclass, replace
 from datetime import timedelta
 from functools import partial
-from inspect import isclass
+from inspect import isclass, signature
 from typing import (
     Any,
     Generic,
@@ -126,6 +126,7 @@ from langgraph.pregel._algo import (
     apply_writes,
     local_read,
     prepare_next_tasks,
+    task_path_str,
 )
 from langgraph.pregel._call import identifier
 from langgraph.pregel._checkpoint import (
@@ -1989,7 +1990,7 @@ class Pregel(
                 if not writers:
                     raise InvalidUpdateError(f"Node {as_node} has no writers")
                 writes: deque[tuple[str, Any]] = deque()
-                task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
+                task = PregelTaskWrites((INTERRUPT, i), as_node, writes, [INTERRUPT])
                 # get the task ids that were prepared for this node
                 # if a task id was provided in the StateUpdate, we use it
                 # otherwise, we use the next available task id
@@ -2050,7 +2051,10 @@ class Pregel(
                     channel_writes = [w for w in task.writes if w[0] != PUSH]
                     if channel_writes:
                         checkpointer.put_writes(
-                            checkpoint_config, channel_writes, task_id
+                            checkpoint_config,
+                            channel_writes,
+                            task_id,
+                            **_task_path_kwarg(checkpointer.put_writes, task),
                         )
             apply_writes(
                 checkpoint,
@@ -2477,7 +2481,7 @@ class Pregel(
                 if not writers:
                     raise InvalidUpdateError(f"Node {as_node} has no writers")
                 writes: deque[tuple[str, Any]] = deque()
-                task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
+                task = PregelTaskWrites((INTERRUPT, i), as_node, writes, [INTERRUPT])
                 # get the task ids that were prepared for this node
                 # if a task id was provided in the StateUpdate, we use it
                 # otherwise, we use the next available task id
@@ -2538,7 +2542,10 @@ class Pregel(
                     channel_writes = [w for w in task.writes if w[0] != PUSH]
                     if channel_writes:
                         await checkpointer.aput_writes(
-                            checkpoint_config, channel_writes, task_id
+                            checkpoint_config,
+                            channel_writes,
+                            task_id,
+                            **_task_path_kwarg(checkpointer.aput_writes, task),
                         )
             apply_writes(
                 checkpoint,
@@ -4235,6 +4242,17 @@ class Pregel(
                 )
         # clear cache
         await self.cache.aclear(namespaces)
+
+
+def _task_path_kwarg(put_writes: Callable[..., Any], task: PregelTaskWrites) -> dict:
+    """Pass the task's path to savers whose `put_writes` takes one.
+
+    Savers that replay a checkpoint's writes in task path order then give back
+    updates applied together in the order they were given.
+    """
+    if signature(put_writes).parameters.get("task_path") is None:
+        return {}
+    return {"task_path": task_path_str(task.path)}
 
 
 def _update_task_id(checkpoint_id: str, i: int) -> str:
