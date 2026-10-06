@@ -1599,9 +1599,22 @@ class RemoteBuildSource:
 
 
 @dataclass(frozen=True, slots=True)
-class CustomerRegistrySource:
+class BuildAndPush:
     reference: ImageReference
     prebuilt_image: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class PublishedImage:
+    image_uri: str
+
+
+ImageSource = BuildAndPush | PublishedImage
+
+
+@dataclass(frozen=True, slots=True)
+class CustomerRegistrySource:
+    image: ImageSource
     requested_placement: RequestedPlacement
 
     def run(self, ctx: DeployContext) -> DeployOutcome:
@@ -1686,16 +1699,22 @@ class CustomerRegistrySource:
         )
 
     def _publish(self, ctx: DeployContext, step: int) -> tuple[str, int]:
-        image = str(self.reference)
+        if isinstance(self.image, PublishedImage):
+            return self.image.image_uri, step
+        image = str(self.image.reference)
         with Runner() as runner:
-            if self.prebuilt_image:
-                _log_deploy_step(step, f"Validating image {self.prebuilt_image}")
+            if self.image.prebuilt_image:
+                _log_deploy_step(step, f"Validating image {self.image.prebuilt_image}")
                 _validate_prebuilt_image(
-                    runner, self.prebuilt_image, verbose=ctx.verbose
+                    runner, self.image.prebuilt_image, verbose=ctx.verbose
                 )
                 runner.run(
                     subp_exec(
-                        "docker", "tag", self.prebuilt_image, image, verbose=ctx.verbose
+                        "docker",
+                        "tag",
+                        self.image.prebuilt_image,
+                        image,
+                        verbose=ctx.verbose,
                     )
                 )
             else:
@@ -1737,22 +1756,36 @@ def _select_source(
     *,
     push_to: str | None,
     image: str | None,
+    image_uri: str | None,
     image_name: str | None,
     tag: str | None,
     remote_build_flag: bool | None,
     placement: RequestedPlacement,
     selector: DeploymentSelector,
 ) -> DeploymentSource:
-    if push_to is None and placement.requested:
+    if push_to is None and image_uri is None and placement.requested:
         raise click.UsageError(
             "--listener-id and --k8s-namespace only apply when creating a "
-            "deployment with --push-to."
+            "deployment with --push-to or --image-uri."
         )
     if placement.requested and isinstance(selector, ById):
         raise click.UsageError(
             "Listener and namespace are fixed when a deployment is created, so "
             "they cannot be set for an existing --deployment-id. Drop them, or "
             "create a new deployment with --name."
+        )
+    if image_uri is not None:
+        if push_to is not None:
+            raise click.UsageError("--image-uri cannot be combined with --push-to.")
+        if image is not None:
+            raise click.UsageError("--image-uri cannot be combined with --image.")
+        if tag is not None:
+            raise click.UsageError("--image-uri cannot be combined with --tag.")
+        if remote_build_flag is not None:
+            raise click.UsageError("--image-uri cannot be combined with --remote.")
+        return CustomerRegistrySource(
+            image=PublishedImage(image_uri),
+            requested_placement=placement,
         )
     if push_to is not None:
         if remote_build_flag is True:
@@ -1761,8 +1794,7 @@ def _select_source(
         if image is None:
             _require_local_docker()
         return CustomerRegistrySource(
-            reference=reference,
-            prebuilt_image=image,
+            image=BuildAndPush(reference=reference, prebuilt_image=image),
             requested_placement=placement,
         )
     if image and remote_build_flag is True:
@@ -2076,18 +2108,29 @@ def _deploy_base_options(
                 ),
             ),
             click.option(
+                "--image-uri",
+                help=(
+                    "Deploy an image that's already in a registry you manage, "
+                    "without building, retagging, or pushing anything. For "
+                    "self-hosted and hybrid LangSmith. Give the full reference, "
+                    "e.g. 123456789.dkr.ecr.us-east-1.amazonaws.com/agents/"
+                    "my-agent:v1.2.3 or ...@sha256:<digest>. Cannot be combined "
+                    "with --push-to, --image, --tag, or --remote."
+                ),
+            ),
+            click.option(
                 "--listener-id",
                 help=(
                     "Listener that will run the deployment, for workspaces that "
                     "deploy through a listener in your own cluster. Only used when "
-                    "creating a deployment with --push-to."
+                    "creating a deployment with --push-to or --image-uri."
                 ),
             ),
             click.option(
                 "--k8s-namespace",
                 help=(
                     "Kubernetes namespace the listener deploys into. Only used when "
-                    "creating a deployment with --push-to."
+                    "creating a deployment with --push-to or --image-uri."
                 ),
             ),
             click.option(
@@ -2200,6 +2243,7 @@ def _deploy_cmd(
     image_name: str | None,
     image: str | None,
     push_to: str | None,
+    image_uri: str | None,
     listener_id: str | None,
     k8s_namespace: str | None,
     tag: str | None,
@@ -2273,6 +2317,7 @@ def _deploy_cmd(
     source = _select_source(
         push_to=push_to,
         image=image,
+        image_uri=image_uri,
         image_name=image_name,
         tag=tag,
         remote_build_flag=remote_build_flag,

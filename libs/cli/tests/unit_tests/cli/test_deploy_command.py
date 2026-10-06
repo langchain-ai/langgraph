@@ -695,6 +695,106 @@ def test_push_to_with_deployment_id_fetches_the_deployment_once(
     ]
 
 
+def test_image_uri_creates_an_external_deployment_without_any_docker_work(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run("--image-uri", EXTERNAL_DIGEST)
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.docker.verbs() == []
+    assert deploy_project.timeline == [LIST_DEPLOYMENTS, CREATE_DEPLOYMENT]
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT][
+        "source_revision_config"
+    ] == {"image_uri": EXTERNAL_DIGEST}
+
+
+def test_image_uri_updates_an_existing_external_deployment_without_any_docker_work(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.existing_deployments = [
+        {"id": "dep-ext", "name": "my-app", "source": "external_docker"}
+    ]
+
+    result = deploy_project.run("--image-uri", EXTERNAL_DIGEST)
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.docker.verbs() == []
+    assert deploy_project.timeline == [LIST_DEPLOYMENTS, _patch("dep-ext")]
+    assert deploy_project.control_plane.bodies[_patch("dep-ext")] == {
+        "source_revision_config": {"image_uri": EXTERNAL_DIGEST},
+        "secrets": [],
+        "tracked_packages": TRACKED_PACKAGES,
+    }
+
+
+def test_image_uri_places_a_new_deployment_on_the_only_listener(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER]
+
+    result = deploy_project.run(
+        "--image-uri", EXTERNAL_DIGEST, host_url=CLOUD_CONTROL_PLANE_URL
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.docker.verbs() == []
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {},
+        "listener_id": LISTENER_ID,
+        "listener_config": {"k8s_namespace": "agents"},
+    }
+
+
+def test_image_uri_rejects_a_non_external_deployment_before_any_docker_work(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.existing_deployments = [
+        {"id": "dep-cli", "name": "my-app", "source": "internal_docker"}
+    ]
+
+    result = deploy_project.run("--image-uri", EXTERNAL_DIGEST)
+
+    assert result.exit_code != 0
+    assert "cannot be updated with --push-to" in result.output
+    assert deploy_project.docker.verbs() == []
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        pytest.param(
+            ("--image-uri", EXTERNAL_DIGEST, "--push-to", PUSH_REPOSITORY),
+            "--image-uri cannot be combined with --push-to.",
+            id="with_push_to",
+        ),
+        pytest.param(
+            ("--image-uri", EXTERNAL_DIGEST, "--image", "local/app:dev"),
+            "--image-uri cannot be combined with --image.",
+            id="with_image",
+        ),
+        pytest.param(
+            ("--image-uri", EXTERNAL_DIGEST, "--tag", "v2"),
+            "--image-uri cannot be combined with --tag.",
+            id="with_tag",
+        ),
+        pytest.param(
+            ("--image-uri", EXTERNAL_DIGEST, "--remote"),
+            "--image-uri cannot be combined with --remote.",
+            id="with_remote",
+        ),
+    ],
+)
+def test_image_uri_conflicting_flags_are_rejected_before_any_docker_work(
+    deploy_project: DeployProject, args: tuple[str, ...], message: str
+) -> None:
+    result = deploy_project.run(*args)
+
+    assert result.exit_code != 0
+    assert message in result.output
+    assert deploy_project.docker.verbs() == []
+    assert deploy_project.timeline == []
+
+
 def test_invalid_tag_fails_before_any_control_plane_call(
     deploy_project: DeployProject,
 ) -> None:
