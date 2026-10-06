@@ -29,7 +29,11 @@ from langgraph.checkpoint.sqlite._delta import (
     build_delta_stage2_sql,
     step_walk_with_row,
 )
-from langgraph.checkpoint.sqlite.utils import search_where
+from langgraph.checkpoint.sqlite.utils import (
+    load_pending_writes,
+    pending_writes_sql,
+    search_where,
+)
 
 _AIO_ERROR_MSG = (
     "The SqliteSaver does not support async methods. "
@@ -275,7 +279,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                     }
                 # find any pending writes
                 cur.execute(
-                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
+                    pending_writes_sql(self._has_task_path),
                     (
                         str(config["configurable"]["thread_id"]),
                         checkpoint_ns,
@@ -301,10 +305,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                         if parent_checkpoint_id
                         else None
                     ),
-                    [
-                        (task_id, channel, self.serde.loads_typed((type, value)))
-                        for task_id, channel, type, value in cur
-                    ],
+                    load_pending_writes(cur, self.serde),
                 )
 
     def list(
@@ -366,7 +367,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 metadata,
             ) in cur:
                 wcur.execute(
-                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
+                    pending_writes_sql(self._has_task_path),
                     (thread_id, checkpoint_ns, checkpoint_id),
                 )
                 yield CheckpointTuple(
@@ -393,10 +394,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                         if parent_checkpoint_id
                         else None
                     ),
-                    [
-                        (task_id, channel, self.serde.loads_typed((type, value)))
-                        for task_id, channel, type, value in wcur
-                    ],
+                    load_pending_writes(wcur, self.serde),
                 )
 
     def put(
@@ -523,13 +521,12 @@ class SqliteSaver(BaseCheckpointSaver[str]):
 
         Two-stage query:
 
-        * Stage 1 (paged): newest-first slice of `checkpoints` returning
-          `(checkpoint_id, parent_checkpoint_id, type, checkpoint)` per
-          ancestor. Sqlite has no JSONB, so we ship the full serialized
-          checkpoint blob and inspect `channel_values` in Python. Pages
-          newest-first by `checkpoint_id` with a `< cursor` predicate;
-          page size is `DELTA_PAGE_SIZE`. Stops paging when every channel
-          has found its seed or the chain is exhausted.
+        * Stage 1 (streamed): recursive CTE over `checkpoints` following
+          `parent_checkpoint_id` from the target, returning
+          `(checkpoint_id, type, checkpoint)` per ancestor. Sqlite has no
+          JSONB, so we ship the full serialized checkpoint blob and inspect
+          `channel_values` in Python. Stops reading when every channel has
+          found its seed or the chain is exhausted.
 
         * Stage 2 (per-channel UNION ALL): one branch per channel reading
           `writes` filtered to that channel's specific `chain_cids`. No
@@ -554,12 +551,14 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         seeded: set[str] = set()
 
         with self.cursor(transaction=False) as cur:
-            cur.execute(DELTA_STAGE1_SQL, (thread_id, checkpoint_ns, checkpoint_id))
+            cur.execute(
+                DELTA_STAGE1_SQL,
+                (thread_id, checkpoint_ns, checkpoint_id, thread_id, checkpoint_ns),
+            )
             for row in cur:
-                cid, parent_cid, type_tag, blob = row
+                cid, type_tag, blob = row
                 if step_walk_with_row(
                     cid=cid,
-                    parent_cid=parent_cid,
                     type_tag=type_tag,
                     blob=blob,
                     target_id=checkpoint_id,

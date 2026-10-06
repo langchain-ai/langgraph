@@ -448,11 +448,12 @@ class PostgresSaver(BasePostgresSaver):
 
         Two-stage query, both stages cover ALL requested channels:
 
-        * Stage 1 (paged): dynamic SELECT over `checkpoints` with K parallel
-          JSONB key lookups (one column pair per channel) — no subquery, no
-          aggregation. Pages newest-first by `checkpoint_id` with a cursor;
-          page size is `_DELTA_PAGE_SIZE`. Stops paging when every channel
-          has found its seed or the chain is exhausted.
+        * Stage 1 (paged): dynamic SELECT over `checkpoints` with three
+          columns per channel: its version, an `EXISTS` probe for a stored
+          blob at that version, and its inline value. Pages newest-first by
+          `checkpoint_id` with a cursor; page size is `_DELTA_PAGE_SIZE`.
+          Stops paging when every channel has found its seed or a page comes
+          back short.
 
         * Stage 2 (per-channel UNION ALL): one branch per channel reading
           `checkpoint_writes` filtered to that channel's specific

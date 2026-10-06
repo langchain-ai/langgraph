@@ -30,7 +30,11 @@ from langgraph.checkpoint.sqlite._delta import (
     build_delta_stage2_sql,
     step_walk_with_row,
 )
-from langgraph.checkpoint.sqlite.utils import search_where
+from langgraph.checkpoint.sqlite.utils import (
+    load_pending_writes,
+    pending_writes_sql,
+    search_where,
+)
 
 T = TypeVar("T", bound=Callable)
 
@@ -412,7 +416,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                     }
                 # find any pending writes
                 await cur.execute(
-                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
+                    pending_writes_sql(self._has_task_path),
                     (
                         str(config["configurable"]["thread_id"]),
                         checkpoint_ns,
@@ -438,10 +442,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                         if parent_checkpoint_id
                         else None
                     ),
-                    [
-                        (task_id, channel, self.serde.loads_typed((type, value)))
-                        async for task_id, channel, type, value in cur
-                    ],
+                    load_pending_writes(await cur.fetchall(), self.serde),
                 )
 
     async def alist(
@@ -490,7 +491,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                 metadata,
             ) in cur:
                 await wcur.execute(
-                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
+                    pending_writes_sql(self._has_task_path),
                     (thread_id, checkpoint_ns, checkpoint_id),
                 )
                 yield CheckpointTuple(
@@ -517,10 +518,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                         if parent_checkpoint_id
                         else None
                     ),
-                    [
-                        (task_id, channel, self.serde.loads_typed((type, value)))
-                        async for task_id, channel, type, value in wcur
-                    ],
+                    load_pending_writes(await wcur.fetchall(), self.serde),
                 )
 
     async def aput(
@@ -643,8 +641,8 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         """Fast-path override of `BaseCheckpointSaver.aget_delta_channel_history`.
 
         See `SqliteSaver.get_delta_channel_history` for design notes; this
-        is the async equivalent using `aiosqlite` cursors. Stage 1 pages
-        the parent chain newest-first and Python-deserializes each
+        is the async equivalent using `aiosqlite` cursors. Stage 1 streams
+        the parent chain from the target and Python-deserializes each
         checkpoint blob to find per-channel snapshots; stage 2 fetches
         only the relevant writes via per-channel UNION ALL.
         """
@@ -668,13 +666,13 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
 
         async with self.lock, self.conn.cursor() as cur:
             await cur.execute(
-                DELTA_STAGE1_SQL, (thread_id, checkpoint_ns, checkpoint_id)
+                DELTA_STAGE1_SQL,
+                (thread_id, checkpoint_ns, checkpoint_id, thread_id, checkpoint_ns),
             )
             async for row in cur:
-                cid, parent_cid, type_tag, blob = row
+                cid, type_tag, blob = row
                 if step_walk_with_row(
                     cid=cid,
-                    parent_cid=parent_cid,
                     type_tag=type_tag,
                     blob=blob,
                     target_id=checkpoint_id,

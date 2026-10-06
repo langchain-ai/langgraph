@@ -687,5 +687,23 @@ class AsyncPostgresSaver(BasePostgresSaver):
             self.adelete_thread(thread_id), self.loop
         ).result()
 
+    def get_delta_channel_history(
+        self, *, config: RunnableConfig, channels: Sequence[str]
+    ) -> Mapping[str, DeltaChannelHistory]:
+        """Sync bridge to `aget_delta_channel_history`, guarded like `get_tuple`."""
+        try:
+            if asyncio.get_running_loop() is self.loop:
+                raise asyncio.InvalidStateError(
+                    "Synchronous calls to AsyncPostgresSaver are only allowed from a "
+                    "different thread. From the main thread, use the async interface. "
+                    "For example, use `await checkpointer.aget_delta_channel_history(...)`."
+                )
+        except RuntimeError:
+            pass
+        return asyncio.run_coroutine_threadsafe(
+            self.aget_delta_channel_history(config=config, channels=channels),
+            self.loop,
+        ).result()
+
 
 __all__ = ["AsyncPostgresSaver", "AsyncShallowPostgresSaver", "Conn"]
