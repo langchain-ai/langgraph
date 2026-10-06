@@ -163,7 +163,7 @@ class DeltaChannelHistory(TypedDict):
       Writes stored at the target checkpoint itself are pending for the
       next super-step and are excluded.
 
-      Within a single checkpoint, writes are ordered by
+      Within a single checkpoint, writes are ordered by `writes_sort_key`,
       `(task_path, task_id, idx)`, which is the order live execution applies
       a super-step's task writes in. `task_id` is a hash of the path, so
       ordering by it permutes parallel tasks writing one channel, and
@@ -180,6 +180,20 @@ class DeltaChannelHistory(TypedDict):
 
     writes: list[PendingWrite]
     seed: NotRequired[Any]
+
+
+def writes_sort_key(
+    task_path: str, task_id: str = "", idx: int = 0
+) -> tuple[str, str, int]:
+    """Sort key for the writes of one super-step.
+
+    Live execution applies a super-step's tasks in this order, so a saver
+    that replays stored writes, as `get_delta_channel_history` does, must
+    sort them by it too, or an order-sensitive reducer rebuilds a different
+    value than the run produced. `task_path` is the string passed to
+    `put_writes`.
+    """
+    return (task_path, task_id, idx)
 
 
 class BaseCheckpointSaver(Generic[V]):

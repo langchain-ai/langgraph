@@ -14,6 +14,7 @@ from langgraph.checkpoint.base import (
     DeltaChannelHistory,
     PendingWrite,
     get_checkpoint_id,
+    writes_sort_key,
 )
 from langgraph.checkpoint.serde.types import TASKS
 from psycopg.types.json import Jsonb
@@ -525,10 +526,10 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                     "tuple[str, bytes]", (r["type"], r["blob"])
                 )
 
-        # Sort writes per (channel, cid) newest-first by (task_path, task_id, idx)
+        # Sort writes per (channel, cid) newest-first
         for cid_map in writes_by_ch_by_cid.values():
             for ws in cid_map.values():
-                ws.sort(key=lambda w: (w[4], w[2], w[3]), reverse=True)
+                ws.sort(key=lambda w: writes_sort_key(w[4], w[2], w[3]), reverse=True)
 
         result: dict[str, DeltaChannelHistory] = {}
         for ch in channels:

@@ -24,7 +24,11 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from langgraph.checkpoint.base import DeltaChannelHistory, PendingWrite
+from langgraph.checkpoint.base import (
+    DeltaChannelHistory,
+    PendingWrite,
+    writes_sort_key,
+)
 
 # Stage 1 streams ancestors of `target_cid` newest-first. The `<=`
 # predicate keeps target itself in the stream so we can read its
@@ -140,9 +144,9 @@ def build_delta_channels_writes_history(
 
     Stage-2 rows are
     `(checkpoint_id, channel, task_id, idx, type, value, task_path)`.
-    Final write order is oldest→newest globally and
-    `(task_path, task_id, idx)` within a checkpoint, matching the contract
-    on `DeltaChannelHistory.writes`.
+    Final write order is oldest→newest globally and `writes_sort_key`
+    within a checkpoint, matching the contract on
+    `DeltaChannelHistory.writes`.
 
     `seed` is omitted when the walk reached a true root with no snapshot
     found (channel never entered `seeded`); consumers treat absence as
@@ -157,7 +161,7 @@ def build_delta_channels_writes_history(
         )
     for cid_map in writes_by_ch_by_cid.values():
         for ws in cid_map.values():
-            ws.sort(key=lambda w: (w[4], w[2], w[3]))
+            ws.sort(key=lambda w: writes_sort_key(w[4], w[2], w[3]))
 
     result: dict[str, DeltaChannelHistory] = {}
     for ch in channels:

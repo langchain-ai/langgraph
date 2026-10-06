@@ -25,6 +25,7 @@ from langgraph.checkpoint.base import (
     SerializerProtocol,
     get_checkpoint_id,
     get_checkpoint_metadata,
+    writes_sort_key,
 )
 
 logger = logging.getLogger(__name__)
@@ -200,7 +201,9 @@ class InMemorySaver(
 
             step_writes = self.writes.get((thread_id, checkpoint_ns, cp_id), {})
             for _, (tid, ch, serialized, _) in sorted(
-                step_writes.items(), key=lambda kv: (kv[1][3], kv[0]), reverse=True
+                step_writes.items(),
+                key=lambda kv: writes_sort_key(kv[1][3], *kv[0]),
+                reverse=True,
             ):
                 if ch not in remaining:
                     continue
