@@ -559,6 +559,7 @@ def test_push_to_builds_pushes_then_creates_an_external_deployment(
     assert result.exit_code == 0, result.output
     assert deploy_project.timeline == [
         LIST_DEPLOYMENTS,
+        LIST_LISTENERS,
         "docker build",
         "docker push",
         "docker inspect-digest",
@@ -788,7 +789,7 @@ def test_push_to_refuses_an_unresolved_placement_before_any_docker_work(
     assert CREATE_DEPLOYMENT not in deploy_project.timeline
 
 
-def test_self_hosted_control_plane_keeps_its_default_placement(
+def test_self_hosted_control_plane_auto_places_on_the_only_listener(
     deploy_project: DeployProject,
 ) -> None:
     deploy_project.control_plane.listeners = [LISTENER]
@@ -797,8 +798,13 @@ def test_self_hosted_control_plane_keeps_its_default_placement(
 
     assert result.exit_code == 0, result.output
     assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
-        "resource_spec": {}
+        "resource_spec": {},
+        "listener_id": LISTENER_ID,
+        "listener_config": {"k8s_namespace": "agents"},
     }
+    assert f"Deploying through listener {LISTENER_ID} in namespace agents" in (
+        result.output
+    )
 
 
 def test_self_hosted_control_plane_places_when_asked(
@@ -882,15 +888,29 @@ def test_a_deployment_without_a_listener_announces_nothing(
     assert "listener" not in result.output
 
 
-def test_a_self_hosted_create_without_flags_never_looks_up_listeners(
+def test_a_self_hosted_control_plane_without_listeners_creates_as_before(
     deploy_project: DeployProject,
 ) -> None:
-    deploy_project.control_plane.listeners = [LISTENER]
-
     result = deploy_project.run("--push-to", PUSH_REPOSITORY)
 
     assert result.exit_code == 0, result.output
-    assert LIST_LISTENERS not in deploy_project.timeline
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {}
+    }
+    assert deploy_project.timeline.count(LIST_LISTENERS) == 1
+
+
+def test_self_hosted_control_plane_refuses_an_unresolved_placement(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.listeners = [LISTENER, OTHER_LISTENER]
+
+    result = deploy_project.run("--push-to", PUSH_REPOSITORY)
+
+    assert result.exit_code != 0
+    assert "--listener-id" in result.output
+    assert deploy_project.docker.verbs() == []
+    assert CREATE_DEPLOYMENT not in deploy_project.timeline
 
 
 def test_a_control_plane_that_demands_a_listener_names_the_flags(

@@ -1642,8 +1642,6 @@ class CustomerRegistrySource:
         requested = self.requested_placement
         if requested.listener_id is not None:
             return requested.on(_requested_listener(ctx.client, requested.listener_id))
-        if not (ctx.endpoints.is_cloud or requested.requested):
-            return Unplaced()
         return requested.among(_available_listeners(ctx.client))
 
     def _announce(self, placement: Placement) -> None:
