@@ -528,6 +528,86 @@ async def test_cannot_put_empty_namespace() -> None:
     assert (await async_store.aget(("valid", "namespace"), "key")) is None
 
 
+INVALID_NAMESPACES = [("foo.bar",), ("foo", ""), (123,)]
+NAMESPACE_METHODS = ["get", "delete", "search", "prefix", "suffix"]
+
+
+@pytest.mark.parametrize("namespace", INVALID_NAMESPACES)
+@pytest.mark.parametrize("method", NAMESPACE_METHODS)
+def test_rejects_invalid_namespace_labels(
+    mocker: MockerFixture, namespace: tuple, method: str
+) -> None:
+    store = InMemoryStore()
+    batch = mocker.spy(InMemoryStore, "batch")
+
+    with pytest.raises(InvalidNamespaceError):
+        if method in ("prefix", "suffix"):
+            store.list_namespaces(**{method: namespace})
+        elif method == "search":
+            store.search(namespace)
+        else:
+            getattr(store, method)(namespace, "key")
+
+    batch.assert_not_called()
+
+
+@pytest.mark.parametrize("batched", [False, True])
+@pytest.mark.parametrize("namespace", INVALID_NAMESPACES)
+@pytest.mark.parametrize("method", NAMESPACE_METHODS)
+async def test_async_rejects_invalid_namespace_labels(
+    mocker: MockerFixture, batched: bool, namespace: tuple, method: str
+) -> None:
+    # The batched store must reject before queueing: a failure inside the
+    # shared `abatch` would fail every op queued alongside this one.
+    store = MockAsyncBatchedStore() if batched else InMemoryStore()
+    # `MockAsyncBatchedStore` dispatches through `InMemoryStore.batch`.
+    batch = mocker.spy(InMemoryStore, "batch")
+    abatch = mocker.spy(InMemoryStore, "abatch")
+
+    with pytest.raises(InvalidNamespaceError):
+        if method in ("prefix", "suffix"):
+            await store.alist_namespaces(**{method: namespace})
+        elif method == "search":
+            await store.asearch(namespace)
+        else:
+            await getattr(store, f"a{method}")(namespace, "key")
+
+    batch.assert_not_called()
+    abatch.assert_not_called()
+
+
+def test_search_and_listing_keep_empty_prefixes_and_wildcards() -> None:
+    store = InMemoryStore()
+    store.put(("tenant", "a_%"), "key", {"v": 1})
+    store.put(("tenant", "b", "child"), "key", {"v": 1})
+
+    assert len(store.search(())) == 2
+    assert [item.namespace for item in store.search(("tenant", "a_%"))] == [
+        ("tenant", "a_%")
+    ]
+    assert sorted(store.list_namespaces(prefix=("tenant", "*"), suffix=("*",))) == [
+        ("tenant", "a_%"),
+        ("tenant", "b", "child"),
+    ]
+
+
+@pytest.mark.parametrize("batched", [False, True])
+async def test_async_search_and_listing_keep_empty_prefixes_and_wildcards(
+    batched: bool,
+) -> None:
+    store = MockAsyncBatchedStore() if batched else InMemoryStore()
+    await store.aput(("tenant", "a_%"), "key", {"v": 1})
+    await store.aput(("tenant", "b", "child"), "key", {"v": 1})
+
+    assert len(await store.asearch(())) == 2
+    assert [item.namespace for item in await store.asearch(("tenant", "a_%"))] == [
+        ("tenant", "a_%")
+    ]
+    assert sorted(
+        await store.alist_namespaces(prefix=("tenant", "*"), suffix=("*",))
+    ) == [("tenant", "a_%"), ("tenant", "b", "child")]
+
+
 async def test_async_batch_store_deduplication(mocker: MockerFixture) -> None:
     abatch = mocker.spy(InMemoryStore, "batch")
     store = MockAsyncBatchedStore()
