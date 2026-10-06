@@ -235,7 +235,7 @@ def add_messages(
 
     if format == "langchain-openai":
         merged = _format_messages(merged)
-    elif format:
+    elif cast(str | None, format):
         msg = f"Unrecognized {format=}. Expected one of 'langchain-openai', None."
         raise ValueError(msg)
     else:

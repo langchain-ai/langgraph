@@ -726,7 +726,13 @@ class StateSnapshot(NamedTuple):
     tasks: tuple[PregelTask, ...]
     """Tasks to execute in this step. If already attempted, may contain an error."""
     interrupts: tuple[Interrupt, ...]
-    """Interrupts that occurred in this step that are pending resolution."""
+    """Interrupts that occurred in this step.
+
+    When reading the latest state (`get_state` without a `checkpoint_id`), this
+    contains only interrupts still waiting for an answer. When reading a specific
+    checkpoint or state history, it contains the most recent interrupt each task
+    raised in that step, including ones answered later in the same step.
+    """
 
 
 class Send:
