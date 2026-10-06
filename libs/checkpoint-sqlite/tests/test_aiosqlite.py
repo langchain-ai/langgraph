@@ -56,6 +56,13 @@ class TestAsyncSqliteSaver:
         }
         self.metadata_3: CheckpointMetadata = {}
 
+    async def test_adelete_thread_on_fresh_database(self) -> None:
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            await saver.adelete_thread("missing-thread")
+            await saver.adelete_thread("missing-thread")
+
+            assert [checkpoint async for checkpoint in saver.alist(None)] == []
+
     async def test_combined_metadata(self) -> None:
         async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
             config: RunnableConfig = {
