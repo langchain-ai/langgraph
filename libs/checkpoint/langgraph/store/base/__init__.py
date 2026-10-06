@@ -772,6 +772,7 @@ class BaseStore(ABC):
         Returns:
             The retrieved item or `None` if not found.
         """
+        _validate_namespace_labels(namespace)
         return self.batch(
             [GetOp(namespace, str(key), _ensure_refresh(self.ttl_config, refresh_ttl))]
         )[0]
@@ -840,6 +841,7 @@ class BaseStore(ABC):
                 Natural language search support depends on your store implementation
                 and requires proper embedding configuration.
         """
+        _validate_namespace_labels(namespace_prefix)
         return self.batch(
             [
                 SearchOp(
@@ -941,6 +943,7 @@ class BaseStore(ABC):
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
         """
+        _validate_namespace_labels(namespace)
         self.batch([PutOp(namespace, str(key), None, ttl=None)])
 
     def list_namespaces(
@@ -984,6 +987,8 @@ class BaseStore(ABC):
             # [("a", "b", "c"), ("a", "b", "d"), ("a", "b", "f")]
             ```
         """
+        _validate_namespace_labels(prefix or ())
+        _validate_namespace_labels(suffix or ())
         match_conditions = []
         if prefix:
             match_conditions.append(MatchCondition(match_type="prefix", path=prefix))
@@ -1014,6 +1019,7 @@ class BaseStore(ABC):
         Returns:
             The retrieved item or `None` if not found.
         """
+        _validate_namespace_labels(namespace)
         return (
             await self.abatch(
                 [
@@ -1091,6 +1097,7 @@ class BaseStore(ABC):
                 Natural language search support depends on your store implementation
                 and requires proper embedding configuration.
         """
+        _validate_namespace_labels(namespace_prefix)
         return (
             await self.abatch(
                 [
@@ -1202,6 +1209,7 @@ class BaseStore(ABC):
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
         """
+        _validate_namespace_labels(namespace)
         await self.abatch([PutOp(namespace, str(key), None)])
 
     async def alist_namespaces(
@@ -1245,6 +1253,8 @@ class BaseStore(ABC):
             # Returns: [("a", "b", "c"), ("a", "b", "d"), ("a", "b", "f")]
             ```
         """
+        _validate_namespace_labels(prefix or ())
+        _validate_namespace_labels(suffix or ())
         match_conditions = []
         if prefix:
             match_conditions.append(MatchCondition(match_type="prefix", path=prefix))
@@ -1263,6 +1273,14 @@ class BaseStore(ABC):
 def _validate_namespace(namespace: tuple[str, ...]) -> None:
     if not namespace:
         raise InvalidNamespaceError("Namespace cannot be empty.")
+    _validate_namespace_labels(namespace)
+    if namespace[0] == "langgraph":
+        raise InvalidNamespaceError(
+            f'Root label for namespace cannot be "langgraph". Got: {namespace}'
+        )
+
+
+def _validate_namespace_labels(namespace: tuple[str, ...]) -> None:
     for label in namespace:
         if not isinstance(label, str):
             raise InvalidNamespaceError(
@@ -1277,10 +1295,6 @@ def _validate_namespace(namespace: tuple[str, ...]) -> None:
             raise InvalidNamespaceError(
                 f"Namespace labels cannot be empty strings. Got {label} in {namespace}"
             )
-    if namespace[0] == "langgraph":
-        raise InvalidNamespaceError(
-            f'Root label for namespace cannot be "langgraph". Got: {namespace}'
-        )
 
 
 def _ensure_refresh(
