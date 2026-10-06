@@ -439,6 +439,24 @@ class ConfigurableHeaderConfig(TypedDict, total=False):
     """
 
 
+class McpTasksConfig(TypedDict, total=False):
+    """Settings for authenticated MCP elicitation tasks."""
+
+    poll_interval_ms: int
+    """Suggested client polling interval, in milliseconds. Default 1000; range 100–60000."""
+    ttl_minutes: int
+    """Maximum task lifetime, in minutes. Default 1440; range 1–10080."""
+    completed_grace_seconds: int
+    """Result retention after completion, in seconds. Default 300; range 1–86400."""
+    allow_insecure_urls: bool
+    """Allow HTTP elicitation URLs for development. Defaults to False; production URLs require HTTPS."""
+
+
+class McpConfig(TypedDict, total=False):
+    tasks: McpTasksConfig
+    """Polling, retention and URL settings for the MCP Tasks extension."""
+
+
 class HttpConfig(TypedDict, total=False):
     """Configuration for the built-in HTTP server that powers your deployment's routes and endpoints."""
 
@@ -473,6 +491,8 @@ class HttpConfig(TypedDict, total=False):
 
     Default is False.
     """
+    mcp: McpConfig
+    """Optional. Configure the MCP Tasks extension for elicitation over protocol 2026-07-28."""
     disable_a2a: bool
     """Optional. If `True`, /a2a routes are removed, disabling default support to expose the deployment as an agent-to-agent (A2A) server.
 
