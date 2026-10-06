@@ -1,4 +1,6 @@
 import sqlite3
+from collections.abc import Iterator
+from contextlib import closing
 from pathlib import Path
 
 import aiosqlite
@@ -85,6 +87,27 @@ async def test_async_setup_migrates_legacy_writes_table_repeatably(
                 ("old-task", ""),
                 ("task-1", "~__pregel_pull, node"),
             ]
+
+
+@pytest.fixture
+def busy_db(tmp_path: Path) -> Iterator[Path]:
+    db = tmp_path / "busy.sqlite"
+    with SqliteSaver.from_conn_string(str(db)) as saver:
+        saver.setup()
+    with closing(sqlite3.connect(db, isolation_level=None)) as writer:
+        writer.execute("BEGIN IMMEDIATE")
+        yield db
+        writer.execute("ROLLBACK")
+
+
+def test_setup_does_not_wait_on_another_writer(busy_db: Path) -> None:
+    with closing(sqlite3.connect(busy_db, timeout=0)) as conn:
+        SqliteSaver(conn).setup()
+
+
+async def test_async_setup_does_not_wait_on_another_writer(busy_db: Path) -> None:
+    async with aiosqlite.connect(busy_db, timeout=0) as conn:
+        await AsyncSqliteSaver(conn).setup()
 
 
 def _legacy_database_with_history(db: Path) -> dict:
