@@ -226,12 +226,13 @@ class PregelLoop:
     # `_put_exit_delta_writes` for how they are ordered.
     _exit_delta_writes: list[tuple[int, str, str, str, Any]] | None = None
 
-    # The pending writes loaded with the checkpoint, already stored on it, kept
-    # alive so their ids stay unique; the tasks whose delta writes are among
-    # them, which a resume addressed by `checkpoint_id` reruns; and the
-    # checkpoint's own superstep, the first one this run ticks.
-    _loaded_write_ids: dict[int, tuple[str, str, Any]]
-    _stored_delta_task_ids: set[str]
+    # The (task_id, channel) pairs whose delta writes are stored on the loaded
+    # checkpoint, which a resume addressed by `checkpoint_id` can rerun; this
+    # run's `Command` delta writes, kept apart from the NULL_TASK_ID writes
+    # loaded with the checkpoint; and the checkpoint's own superstep, the
+    # first one this run ticks.
+    _stored_delta_writes: set[tuple[str, str]]
+    _exit_command_writes: list[tuple[str, Any]]
     _exit_first_step: int | None = None
 
     # Delta channels that must snapshot at the next checkpoint, whatever their
@@ -745,22 +746,25 @@ class PregelLoop:
             )
         # capture delta-channel writes for exit-mode accumulator before clearing
         if self._exit_delta_writes is not None:
-            if self._exit_first_step is None:
+            # On the first tick the pending writes still hold the ones loaded
+            # with the checkpoint, which are already stored on it.
+            first = self._exit_first_step is None
+            if first:
                 self._exit_first_step = self.step
-            for w in self.checkpoint_pending_writes:
-                tid, ch, v = w
+                self._exit_delta_writes.extend(
+                    (self.step, NULL_TASK_ID, "", ch, v)
+                    for ch, v in self._exit_command_writes
+                )
+            for tid, ch, v in self.checkpoint_pending_writes:
                 if not isinstance(self.specs.get(ch), DeltaChannel):
                     continue
-                if (
-                    id(w) in self._loaded_write_ids
-                    or tid in self._stored_delta_task_ids
+                if first and (
+                    tid == NULL_TASK_ID or (tid, ch) in self._stored_delta_writes
                 ):
                     continue
                 task = self.tasks.get(tid)
                 path = task_path_str(task.path) if task else ""
                 self._exit_delta_writes.append((self.step, tid, path, ch, v))
-        self._loaded_write_ids = {}
-        self._stored_delta_task_ids = set()
         # clear pending writes
         self.checkpoint_pending_writes.clear()
         # only replay (re-execute) done tasks on the first tick
@@ -881,12 +885,12 @@ class PregelLoop:
     def _first(
         self, *, input_keys: str | Sequence[str], updated_channels: set[str] | None
     ) -> set[str] | None:
-        self._loaded_write_ids = {id(w): w for w in self.checkpoint_pending_writes}
-        self._stored_delta_task_ids = {
-            tid
+        self._stored_delta_writes = {
+            (tid, ch)
             for tid, ch, _ in self.checkpoint_pending_writes
             if tid != NULL_TASK_ID and isinstance(self.specs.get(ch), DeltaChannel)
         }
+        self._exit_command_writes = []
         # Resuming from a previous checkpoint requires two things:
         # 1. A prior checkpoint exists (channel_versions is non-empty)
         # 2. The input signals continuation (not a fresh run with new input)
@@ -1004,6 +1008,12 @@ class PregelLoop:
                     carried.extend((tid, c, v) for c, v in ws)
                 else:
                     self.put_writes(tid, ws)
+                    if self._exit_delta_writes is not None and tid == NULL_TASK_ID:
+                        self._exit_command_writes.extend(
+                            (c, v)
+                            for c, v in ws
+                            if isinstance(self.specs.get(c), DeltaChannel)
+                        )
             self._delta_channels_forced_snapshot.update(
                 delta_channels_with_pending_writes(self.specs, carried)
             )

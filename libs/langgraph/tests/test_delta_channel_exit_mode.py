@@ -443,6 +443,56 @@ def test_resume_after_a_parallel_interrupt_replays_in_live_order(
     assert sorted(state.values["log"]) == ["after", "ask", "done", "in"]
 
 
+def test_resume_with_a_command_update_replays_its_write_once(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    builder = StateGraph(_ResumeState)
+    builder.add_node("done", lambda state: _both("done"))
+    builder.add_node("ask", _ask("ask"))
+    builder.add_edge(START, "done")
+    builder.add_edge(START, "ask")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke(_both("in"), config, durability=durability)
+
+    graph.invoke(
+        Command(resume="yes", update=_both("cmd")), config, durability=durability
+    )
+
+    state = graph.get_state(config)
+    assert state.values["log"] == state.values["plain"] == ["in", "cmd", "ask", "done"]
+
+
+class _FlagState(_ResumeState, total=False):
+    extra: Annotated[list, DeltaChannel(_append)]
+    flag: bool
+
+
+def test_addressed_resume_keeps_a_rerun_tasks_write_to_a_new_channel(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    def done(state: _FlagState) -> dict:
+        return {**_both("done"), **({"extra": ["new"]} if state.get("flag") else {})}
+
+    builder = StateGraph(_FlagState)
+    builder.add_node("done", done)
+    builder.add_node("ask", _ask("ask"))
+    builder.add_edge(START, "done")
+    builder.add_edge(START, "ask")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke(_both("in"), config, durability=durability)
+    head = graph.get_state(config).config
+
+    live = graph.invoke(
+        Command(resume="yes", update={"flag": True}), head, durability=durability
+    )
+
+    state = graph.get_state(config)
+    assert live["extra"] == state.values["extra"] == ["new"]
+    assert state.values["log"] == state.values["plain"]
+
+
 def test_resume_interleaves_the_resumed_superstep_by_task_path(
     sync_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
