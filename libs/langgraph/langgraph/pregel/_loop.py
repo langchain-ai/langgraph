@@ -12,7 +12,6 @@ from contextlib import (
     ExitStack,
 )
 from datetime import datetime, timezone
-from inspect import signature
 from types import TracebackType
 from typing import (
     Any,
@@ -107,6 +106,7 @@ from langgraph.pregel._checkpoint import (
     delta_channels_with_pending_writes,
     empty_checkpoint,
     exit_delta_task_id,
+    put_writes_accepts_task_path,
 )
 from langgraph.pregel._executor import (
     AsyncBackgroundExecutor,
@@ -1584,8 +1584,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             self.checkpointer_get_next_version = checkpointer.get_next_version
             self.checkpointer_put_writes = checkpointer.put_writes
             self.checkpointer_put_writes_accepts_task_path = (
-                signature(checkpointer.put_writes).parameters.get("task_path")
-                is not None
+                put_writes_accepts_task_path(checkpointer.put_writes)
             )
         else:
             self.checkpointer_get_next_version = increment
@@ -1840,8 +1839,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             self.checkpointer_get_next_version = checkpointer.get_next_version
             self.checkpointer_put_writes = checkpointer.aput_writes
             self.checkpointer_put_writes_accepts_task_path = (
-                signature(checkpointer.aput_writes).parameters.get("task_path")
-                is not None
+                put_writes_accepts_task_path(checkpointer.aput_writes)
             )
         else:
             self.checkpointer_get_next_version = increment

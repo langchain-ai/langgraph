@@ -19,7 +19,7 @@ from collections.abc import (
 from dataclasses import is_dataclass, replace
 from datetime import timedelta
 from functools import partial
-from inspect import isclass, signature
+from inspect import isclass
 from typing import (
     Any,
     Generic,
@@ -140,6 +140,7 @@ from langgraph.pregel._checkpoint import (
     delta_channels_with_pending_writes,
     empty_checkpoint,
     get_updated_channels_from_tasks,
+    put_writes_accepts_task_path,
     versions_seen_without_bumps,
 )
 from langgraph.pregel._draw import draw_graph
@@ -4250,7 +4251,7 @@ def _task_path_kwarg(put_writes: Callable[..., Any], task: PregelTaskWrites) -> 
     Savers that replay a checkpoint's writes in task path order then give back
     updates applied together in the order they were given.
     """
-    if signature(put_writes).parameters.get("task_path") is None:
+    if not put_writes_accepts_task_path(put_writes):
         return {}
     return {"task_path": task_path_str(task.path)}
 

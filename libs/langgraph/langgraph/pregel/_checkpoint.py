@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timezone
+from inspect import signature
 from typing import Any, Literal, cast
 
 from langchain_core.runnables import RunnableConfig
@@ -47,6 +48,15 @@ def empty_checkpoint() -> Checkpoint:
         channel_versions={},
         versions_seen={},
     )
+
+
+def put_writes_accepts_task_path(put_writes: Callable[..., Any]) -> bool:
+    """Whether a saver's `put_writes` or `aput_writes` takes `task_path`.
+
+    Savers written before the parameter existed don't, so it is passed only
+    when this is true.
+    """
+    return signature(put_writes).parameters.get("task_path") is not None
 
 
 def exit_delta_task_id(step: int, task_id: str) -> str:
