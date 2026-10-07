@@ -27,14 +27,14 @@ from langchain_core.tools import tool as dec_tool
 from langchain_core.tools.base import InjectedToolCallId
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.config import get_stream_writer
-from langgraph.errors import GraphBubbleUp, GraphInterrupt, InvalidResumeError
+from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.graph.message import REMOVE_ALL_MESSAGES, add_messages
 from langgraph.runtime import ExecutionInfo, ServerInfo
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command, Send, interrupt
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import TypedDict
 
@@ -671,7 +671,7 @@ def test_tool_node_reraises_invalid_resume_from_nested_interrupt(
 
     # A bad answer isn't a bad tool argument: the run fails without saving, so
     # the same interrupt can be answered again.
-    with pytest.raises(InvalidResumeError, match="approved"):
+    with pytest.raises(ValidationError, match="approved"):
         graph.invoke(Command(resume={pending.id: {"approved": "maybe"}}), config)
     assert [i.id for i in graph.get_state(config).interrupts] == [pending.id]
 
@@ -698,7 +698,7 @@ async def test_tool_node_reraises_invalid_resume_from_nested_interrupt_async(
     config: RunnableConfig = {"configurable": {"thread_id": "1"}}
     [pending] = (await graph.ainvoke(_ask_human_call(), config))["__interrupt__"]
 
-    with pytest.raises(InvalidResumeError, match="approved"):
+    with pytest.raises(ValidationError, match="approved"):
         await graph.ainvoke(Command(resume={pending.id: {"approved": "maybe"}}), config)
     state = await graph.aget_state(config)
     assert [i.id for i in state.interrupts] == [pending.id]

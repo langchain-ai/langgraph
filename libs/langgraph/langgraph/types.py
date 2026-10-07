@@ -883,12 +883,13 @@ class Command(Generic[N], ToolOutputMixin):
 
 
 def _validate_resume(adapter: TypeAdapter[Any], value: Any) -> Any:
-    from langgraph.errors import InvalidResumeError
+    from langgraph.errors import _mark_invalid_resume
 
     try:
         return adapter.validate_python(value)
     except ValidationError as exc:
-        raise InvalidResumeError(str(exc)) from exc
+        _mark_invalid_resume(exc)
+        raise
 
 
 @overload
@@ -997,8 +998,8 @@ def interrupt(
 
     Raises:
         GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
-        InvalidResumeError: When a resume value does not match a Pydantic model, `TypedDict`, or dataclass `response_schema`.
-            Its cause is the `pydantic.ValidationError`. Nothing is saved, so the interrupt can be answered again.
+        pydantic.ValidationError: When a resume value does not match a Pydantic model, `TypedDict`, or dataclass `response_schema`.
+            Nothing is saved, so the interrupt can be answered again. `is_invalid_resume` identifies it.
     """
     from langgraph._internal._constants import (
         CONFIG_KEY_CHECKPOINT_NS,

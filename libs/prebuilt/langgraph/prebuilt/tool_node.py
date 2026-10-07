@@ -99,6 +99,14 @@ if TYPE_CHECKING:
     from langgraph.runtime import Runtime
     from pydantic_core import ErrorDetails
 
+try:
+    from langgraph.errors import is_invalid_resume
+except ImportError:  # `langgraph` before `is_invalid_resume` never marks resume errors
+
+    def is_invalid_resume(error: BaseException) -> bool:
+        return False
+
+
 # right now we use a dict as the default, can change this to AgentState, but depends
 # on if this lives in LangChain or LangGraph... ideally would have some typed
 # messages key
@@ -957,6 +965,11 @@ class ToolNode(RunnableCallable):
             try:
                 response = tool.invoke(call_args, config)
             except ValidationError as exc:
+                if is_invalid_resume(exc):
+                    # A graph this tool ran got a resume value that doesn't match its
+                    # `response_schema`. That's not a bad tool argument: fail the run
+                    # so the interrupt can be answered again.
+                    raise
                 # Filter out errors for injected arguments
                 injected = self._injected_args.get(call["name"])
                 filtered_errors = _filter_validation_errors(exc, injected)
@@ -1104,6 +1117,11 @@ class ToolNode(RunnableCallable):
             try:
                 response = await tool.ainvoke(call_args, config)
             except ValidationError as exc:
+                if is_invalid_resume(exc):
+                    # A graph this tool ran got a resume value that doesn't match its
+                    # `response_schema`. That's not a bad tool argument: fail the run
+                    # so the interrupt can be answered again.
+                    raise
                 # Filter out errors for injected arguments
                 injected = self._injected_args.get(call["name"])
                 filtered_errors = _filter_validation_errors(exc, injected)
