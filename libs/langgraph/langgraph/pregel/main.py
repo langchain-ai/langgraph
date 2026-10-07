@@ -3714,16 +3714,15 @@ class Pregel(
         config: RunnableConfig | None = None,
         *,
         version: Literal["v1", "v2", "v3"] = "v2",
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        control: RunControl | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
         **kwargs: Any,
     ) -> Any:
         """Stream events from this graph.
 
-        For `version="v1"` / `"v2"`, yields `StreamEvent` dicts (see
-        `Runnable.stream_events`). For `version="v3"`, returns a
+        For `version="v1"` / `"v2"`, delegates to
+        `Runnable.(a)stream_events`; synchronous v1/v2 event streaming is
+        not implemented in langchain-core, so use `astream_events` for
+        those versions. For `version="v3"`, returns a
         `GraphRunStream` whose typed projections the caller drives by
         iterating — no background thread.
 
@@ -3753,20 +3752,27 @@ class Pregel(
             config: Optional runnable config.
             version: Streaming-event schema version. `"v3"` selects the
                 content-block-centric streaming protocol.
-            interrupt_before: Nodes to interrupt before, if any. Only
-                used for `version="v3"`.
-            interrupt_after: Nodes to interrupt after, if any. Only
-                used for `version="v3"`.
+            interrupt_before: Nodes to interrupt before, if any.
+                Honored on every version that can run; type-checked
+                only on the `version="v3"` overloads.
+            interrupt_after: Nodes to interrupt after, if any. Honored
+                on every version that can run; type-checked only on
+                the `version="v3"` overloads.
             control: Optional run control used to request cooperative
-                drain. Only used for `version="v3"`.
+                drain. Honored on every version that can run;
+                type-checked only on the `version="v3"` overloads.
             transformers: Extra transformer classes or configured
                 factories appended after compile-time
                 `stream_transformers`. Factories are called as
                 `factory(scope)` so they can propagate to subgraph
                 scopes. Only used for `version="v3"`.
-            **kwargs: For `version="v1"`/`"v2"`, forwarded to
-                `Runnable.stream_events`. For `version="v3"`, forwarded
-                to the underlying `stream(...)` call (e.g. `context`,
+            **kwargs: For `version="v1"`/`"v2"` on `astream_events`,
+                forwarded to `Runnable.astream_events`, which passes
+                them through to `astream` — so execution kwargs such as
+                `context`, `durability`, `interrupt_before`,
+                `interrupt_after` and `control` are honored on every
+                version that can run. For `version="v3"`, forwarded to the
+                underlying `stream(...)` call (e.g. `context`,
                 `durability`, `output_keys`, `print_mode`, `debug`).
                 `stream_mode` and `subgraphs` are not accepted under
                 `version="v3"` and raise `TypeError` if supplied; v3
@@ -3774,16 +3780,15 @@ class Pregel(
 
         Returns:
             For `version="v3"`, a `GraphRunStream` the caller iterates
-            to drive the run. Otherwise an `Iterator[StreamEvent]`.
+            to drive the run. For `version="v1"`/`"v2"`,
+            `astream_events` yields `StreamEvent` dicts; the synchronous
+            v1/v2 path is not implemented in langchain-core.
         """
         if version == "v3":
             _reject_v3_invariant_kwargs(kwargs)
             return self._pregel_stream_v3(
                 input,
                 config,
-                interrupt_before=interrupt_before,
-                interrupt_after=interrupt_after,
-                control=control,
                 transformers=transformers,
                 **kwargs,
             )
@@ -3819,9 +3824,6 @@ class Pregel(
         config: RunnableConfig | None = None,
         *,
         version: Literal["v1", "v2", "v3"] = "v2",
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        control: RunControl | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent] | Awaitable[Any]:
@@ -3844,9 +3846,6 @@ class Pregel(
             return self._apregel_stream_v3(
                 input,
                 config,
-                interrupt_before=interrupt_before,
-                interrupt_after=interrupt_after,
-                control=control,
                 transformers=transformers,
                 **kwargs,
             )
