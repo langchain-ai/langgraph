@@ -18,6 +18,7 @@ __all__ = (
     "ErrorCode",
     "GraphDrained",
     "GraphRecursionError",
+    "InvalidResumeError",
     "InvalidUpdateError",
     "GraphBubbleUp",
     "GraphInterrupt",
@@ -97,6 +98,18 @@ class InvalidUpdateError(Exception):
     """
 
     pass
+
+
+class InvalidResumeError(ValueError):
+    """Raised when a resume value doesn't match the interrupt's `response_schema`.
+
+    Nothing from the run is saved, so the interrupt can be answered again. The
+    `pydantic.ValidationError` describing the problem is the exception's cause.
+
+    It isn't a `pydantic.ValidationError` itself because `ToolNode` reads those as
+    invalid tool arguments, which would hide this error when the interrupt runs in
+    a graph that a tool calls.
+    """
 
 
 class GraphInterrupt(GraphBubbleUp):

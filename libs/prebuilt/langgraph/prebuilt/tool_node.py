@@ -957,11 +957,6 @@ class ToolNode(RunnableCallable):
             try:
                 response = tool.invoke(call_args, config)
             except ValidationError as exc:
-                if getattr(exc, "langgraph_invalid_resume", False):
-                    # Set by `interrupt()`: a graph this tool ran got a resume value
-                    # that doesn't match its `response_schema`. The tool's own
-                    # arguments were fine, so fail the run and keep the interrupt.
-                    raise
                 # Filter out errors for injected arguments
                 injected = self._injected_args.get(call["name"])
                 filtered_errors = _filter_validation_errors(exc, injected)
@@ -1109,11 +1104,6 @@ class ToolNode(RunnableCallable):
             try:
                 response = await tool.ainvoke(call_args, config)
             except ValidationError as exc:
-                if getattr(exc, "langgraph_invalid_resume", False):
-                    # Set by `interrupt()`: a graph this tool ran got a resume value
-                    # that doesn't match its `response_schema`. The tool's own
-                    # arguments were fine, so fail the run and keep the interrupt.
-                    raise
                 # Filter out errors for injected arguments
                 injected = self._injected_args.get(call["name"])
                 filtered_errors = _filter_validation_errors(exc, injected)
