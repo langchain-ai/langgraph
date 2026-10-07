@@ -701,22 +701,22 @@ class TestSelectSource:
                 id="image_uri_selects_the_published_image_source_by_digest",
             ),
             pytest.param(
-                {"image_uri": f"{REPOSITORY}:v1.2.3"},
+                {"image_uri": f"  {REPOSITORY}@sha256:abc123  "},
                 False,
                 CustomerRegistrySource(
-                    image=PublishedImage(f"{REPOSITORY}:v1.2.3"),
+                    image=PublishedImage(f"{REPOSITORY}@sha256:abc123"),
                     requested_placement=RequestedPlacement(),
                 ),
-                id="image_uri_needs_no_local_docker",
+                id="image_uri_needs_no_local_docker_and_is_trimmed",
             ),
             pytest.param(
                 {
-                    "image_uri": REPOSITORY,
+                    "image_uri": f"{REPOSITORY}@sha256:abc123",
                     "placement": RequestedPlacement("listener-1", "agents"),
                 },
                 False,
                 CustomerRegistrySource(
-                    image=PublishedImage(REPOSITORY),
+                    image=PublishedImage(f"{REPOSITORY}@sha256:abc123"),
                     requested_placement=RequestedPlacement("listener-1", "agents"),
                 ),
                 id="image_uri_carries_the_requested_placement",
@@ -825,6 +825,26 @@ class TestSelectSource:
                 {"image_uri": REPOSITORY, "remote_build_flag": True},
                 "--image-uri cannot be combined with --remote.",
                 id="image_uri_with_remote",
+            ),
+            pytest.param(
+                {"image_uri": ""},
+                "--image-uri must not be empty.",
+                id="image_uri_empty",
+            ),
+            pytest.param(
+                {"image_uri": "   "},
+                "--image-uri must not be empty.",
+                id="image_uri_blank",
+            ),
+            pytest.param(
+                {"image_uri": f"{REPOSITORY}:v1.2.3"},
+                "--image-uri must pin a digest",
+                id="image_uri_with_a_mutable_tag",
+            ),
+            pytest.param(
+                {"image_uri": REPOSITORY},
+                "--image-uri must pin a digest",
+                id="image_uri_without_any_tag_or_digest",
             ),
         ],
     )

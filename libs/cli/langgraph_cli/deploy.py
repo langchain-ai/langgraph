@@ -32,7 +32,7 @@ from langgraph_cli.host_backend import (
     HostBackendError,
     SourceName,
 )
-from langgraph_cli.image_reference import ImageReference
+from langgraph_cli.image_reference import DIGEST_SEPARATOR, ImageReference
 from langgraph_cli.progress import Progress
 from langgraph_cli.util import warn_non_wolfi_distro
 
@@ -1544,9 +1544,9 @@ def _ensure_customer_registry_source(existing: ExistingDeployment) -> None:
     if existing.source != _CUSTOMER_REGISTRY_SOURCE:
         raise click.UsageError(
             f"Deployment {existing.id} was not created from an external image "
-            "and cannot be updated with --push-to. Run without --push-to to keep "
-            "its current build mode, or use a different --name to create a new "
-            "deployment."
+            "and cannot be updated with --push-to or --image-uri. Run without "
+            "either flag to keep its current build mode, or use a different "
+            "--name to create a new deployment."
         )
 
 
@@ -1752,6 +1752,20 @@ def _push_reference(push_to: str, tag: str | None) -> ImageReference:
     return reference.with_tag(normalize_image_tag(tag or _DEFAULT_IMAGE_TAG))
 
 
+def _validate_image_uri(image_uri: str) -> str:
+    value = image_uri.strip()
+    if not value:
+        raise click.UsageError("--image-uri must not be empty.")
+    if DIGEST_SEPARATOR not in value:
+        raise click.UsageError(
+            "--image-uri must pin a digest, e.g. "
+            f"repository{DIGEST_SEPARATOR}<sha256 hex>. Kubernetes can cache "
+            "images by tag, so redeploying a mutable tag may silently keep "
+            "running the previous image."
+        )
+    return value
+
+
 def _select_source(
     *,
     push_to: str | None,
@@ -1784,7 +1798,7 @@ def _select_source(
         if remote_build_flag is not None:
             raise click.UsageError("--image-uri cannot be combined with --remote.")
         return CustomerRegistrySource(
-            image=PublishedImage(image_uri),
+            image=PublishedImage(_validate_image_uri(image_uri)),
             requested_placement=placement,
         )
     if push_to is not None:

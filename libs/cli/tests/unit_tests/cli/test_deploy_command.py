@@ -755,7 +755,7 @@ def test_image_uri_rejects_a_non_external_deployment_before_any_docker_work(
     result = deploy_project.run("--image-uri", EXTERNAL_DIGEST)
 
     assert result.exit_code != 0
-    assert "cannot be updated with --push-to" in result.output
+    assert "cannot be updated with --push-to or --image-uri" in result.output
     assert deploy_project.docker.verbs() == []
 
 
