@@ -14,7 +14,13 @@ from langchain_core.language_models.chat_model_stream import (
     AsyncChatModelStream,
     ChatModelStream,
 )
-from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    AIMessageChunk,
+    HumanMessage,
+    RemoveMessage,
+    ToolMessage,
+)
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import TypedDict
@@ -317,6 +323,29 @@ class TestWholeMessageFallback:
         log.close()
         assert _unstamped(log._items) == []
 
+    @pytest.mark.parametrize(
+        "message",
+        [
+            HumanMessage(content="summary", id="human-msg-1"),
+            RemoveMessage(id="removed-msg-1"),
+        ],
+    )
+    def test_whole_non_ai_message_is_ignored(self, message: Any) -> None:
+        t, log = _make_sync_transformer()
+        t.process(
+            {
+                "type": "event",
+                "method": "messages",
+                "params": {
+                    "namespace": [],
+                    "timestamp": TS,
+                    "data": (message, {"langgraph_node": "summarize"}),
+                },
+            }
+        )
+        log.close()
+        assert _unstamped(log._items) == []
+
     def test_whole_message_has_full_lifecycle(self) -> None:
         t, log = _make_sync_transformer()
         t.process(_whole_msg("full"))
@@ -585,6 +614,28 @@ class TestEndToEnd:
         run = graph.stream_events({"messages": "hi"}, version="v3")
         (stream,) = list(run.messages)
         assert stream.output.text == "hardcoded"
+
+    def test_human_message_returned_from_node_is_not_projected(self) -> None:
+        def summarize(state: MessagesState) -> dict[str, Any]:
+            return {"messages": HumanMessage(content="summary", id="summary-1")}
+
+        def answer(state: MessagesState) -> dict[str, Any]:
+            return {"messages": AIMessage(content="answer", id="answer-1")}
+
+        graph = (
+            StateGraph(MessagesState)
+            .add_node("summarize", summarize)
+            .add_node("answer", answer)
+            .add_edge(START, "summarize")
+            .add_edge("summarize", "answer")
+            .add_edge("answer", END)
+            .compile()
+        )
+
+        run = graph.stream_events({"messages": "hi"}, version="v3")
+        (stream,) = list(run.messages)
+        assert stream.node == "answer"
+        assert stream.output.text == "answer"
 
     @pytest.mark.anyio
     async def test_async_node_calling_astream_v2(self) -> None:
