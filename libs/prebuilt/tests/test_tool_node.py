@@ -626,6 +626,72 @@ def test_tool_node_node_interrupt() -> None:
             assert exc_info.value == "foo"
 
 
+def test_tool_node_sync_wrapper_reraises_graph_bubble_up() -> None:
+    def tool_interrupt(some_val: int) -> None:
+        """Raise a control-flow exception from a sync tool."""
+        raise GraphBubbleUp("interrupted")
+
+    def wrap_tool_call(request, execute):
+        return execute(request)
+
+    node = ToolNode(
+        [tool_interrupt],
+        wrap_tool_call=wrap_tool_call,
+        handle_tool_errors=True,
+    )
+    with pytest.raises(GraphBubbleUp, match="interrupted"):
+        node.invoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "hi?",
+                        tool_calls=[
+                            {
+                                "name": "tool_interrupt",
+                                "args": {"some_val": 0},
+                                "id": "some 0",
+                            }
+                        ],
+                    )
+                ]
+            },
+            config=_create_config_with_runtime(),
+        )
+
+
+async def test_tool_node_async_wrapper_reraises_graph_bubble_up() -> None:
+    def tool_interrupt(some_val: int) -> None:
+        """Raise a control-flow exception from a sync tool in async execution."""
+        raise GraphBubbleUp("interrupted")
+
+    async def awrap_tool_call(request, execute):
+        return await execute(request)
+
+    node = ToolNode(
+        [tool_interrupt],
+        awrap_tool_call=awrap_tool_call,
+        handle_tool_errors=True,
+    )
+    with pytest.raises(GraphBubbleUp, match="interrupted"):
+        await node.ainvoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "hi?",
+                        tool_calls=[
+                            {
+                                "name": "tool_interrupt",
+                                "args": {"some_val": 0},
+                                "id": "some 0",
+                            }
+                        ],
+                    )
+                ]
+            },
+            config=_create_config_with_runtime(),
+        )
+
+
 @pytest.mark.parametrize("input_type", ["dict", "tool_calls"])
 async def test_tool_node_command(input_type: str) -> None:
 
