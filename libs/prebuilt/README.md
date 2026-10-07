@@ -146,7 +146,7 @@ def my_graph_function():
     response = interrupt([request])[0]
     if response['type'] == "response":
         # Do something with the response
-    ...
+        ...
 ```
 
 ## 📕 Releases & Versioning
