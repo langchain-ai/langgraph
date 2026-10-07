@@ -20,6 +20,7 @@ from typing import Annotated, Any
 
 import pytest
 from langchain_core.messages import HumanMessage
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from typing_extensions import TypedDict
@@ -27,16 +28,17 @@ from typing_extensions import TypedDict
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import _messages_delta_reducer
-from langgraph.types import StateUpdate
+from langgraph.types import StateSnapshot, StateUpdate
 
 pytestmark = pytest.mark.anyio
 
 
 def _build_graph(
-    checkpointer: InMemorySaver,
+    checkpointer: BaseCheckpointSaver,
     *,
     two_nodes: bool = False,
     snapshot_frequency: int = 1000,
+    interrupt_before: list[str] | None = None,
 ) -> Any:
     """Compile a minimal DeltaChannel-backed `messages` graph.
 
@@ -63,7 +65,7 @@ def _build_graph(
         builder.set_finish_point("assistant")
     else:
         builder.set_finish_point("model")
-    return builder.compile(checkpointer=checkpointer)
+    return builder.compile(checkpointer=checkpointer, interrupt_before=interrupt_before)
 
 
 # ---------------------------------------------------------------------------
@@ -304,15 +306,14 @@ def test_bulk_update_state_multi_task_per_superstep_delta_channel() -> None:
     that each call `put_writes`. Guards the regression where moving
     `put_writes` outside the per-task loop would persist only the last
     task's writes.
-
-    Explicit `task_id`s are required to disambiguate writes belonging to
-    different `StateUpdate`s targeting the same node — otherwise both share
-    the deterministic interrupt-derived id and collide in the saver.
     """
 
     saver = InMemorySaver()
     graph = _build_graph(saver)
     config = {"configurable": {"thread_id": "bulk-multi-task"}}
+    graph.invoke({"messages": [HumanMessage(content="hi", id="hi")]}, config)
+    base = saver.get_tuple(config)
+    assert base is not None
 
     graph.bulk_update_state(
         config,
@@ -332,13 +333,155 @@ def test_bulk_update_state_multi_task_per_superstep_delta_channel() -> None:
         ],
     )
 
+    stored = saver.get_tuple(base.config)
+    assert stored is not None
+    assert {task_id for task_id, _, _ in stored.pending_writes or []} == {
+        "task-1",
+        "task-2",
+    }, "explicit task ids must key the stored writes"
     state = graph.get_state(config)
     contents = [m.content for m in state.values["messages"]]
     ids = [m.id for m in state.values["messages"]]
-    assert sorted(contents) == ["first", "second"], (
+    assert sorted(contents) == ["first", "hi", "second"], (
         f"both updates' writes must persist; got {contents}"
     )
-    assert sorted(ids) == ["m1", "m2"]
+    assert sorted(ids) == ["hi", "m1", "m2"]
+
+
+def _update(content: str, as_node: str) -> StateUpdate:
+    return StateUpdate(
+        values={"messages": [HumanMessage(content=content, id=content)]},
+        as_node=as_node,
+    )
+
+
+def _contents(state: StateSnapshot) -> list[str]:
+    return [m.content for m in state.values["messages"]]
+
+
+def test_bulk_update_state_keeps_every_update_without_task_ids(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = _build_graph(sync_checkpointer, two_nodes=True)
+    config = {"configurable": {"thread_id": "bulk-no-task-ids"}}
+    graph.invoke({"messages": [HumanMessage(content="hi", id="hi")]}, config)
+
+    graph.bulk_update_state(
+        config,
+        [
+            [
+                _update("first", "model"),
+                _update("second", "model"),
+                _update("third", "assistant"),
+            ]
+        ],
+    )
+
+    contents = _contents(graph.get_state(config))
+    assert sorted(contents) == ["first", "hi", "second", "third"], (
+        f"every update's writes must persist; got {contents}"
+    )
+
+
+async def test_abulk_update_state_keeps_every_update_without_task_ids(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = _build_graph(async_checkpointer, two_nodes=True)
+    config = {"configurable": {"thread_id": "bulk-no-task-ids"}}
+    await graph.ainvoke({"messages": [HumanMessage(content="hi", id="hi")]}, config)
+
+    await graph.abulk_update_state(
+        config,
+        [
+            [
+                _update("first", "model"),
+                _update("second", "model"),
+                _update("third", "assistant"),
+            ]
+        ],
+    )
+
+    contents = _contents(await graph.aget_state(config))
+    assert sorted(contents) == ["first", "hi", "second", "third"], (
+        f"every update's writes must persist; got {contents}"
+    )
+
+
+def test_bulk_update_state_keeps_every_update_next_to_a_pending_task(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = _build_graph(
+        sync_checkpointer, two_nodes=True, interrupt_before=["assistant"]
+    )
+    config = {"configurable": {"thread_id": "bulk-pending-task"}}
+    graph.invoke({"messages": [HumanMessage(content="hi", id="hi")]}, config)
+    assert graph.get_state(config).next == ("assistant",)
+
+    graph.bulk_update_state(
+        config,
+        [
+            [
+                _update("first", "assistant"),
+                _update("second", "model"),
+                _update("third", "model"),
+            ]
+        ],
+    )
+
+    contents = _contents(graph.get_state(config))
+    assert sorted(contents) == ["first", "hi", "second", "third"], (
+        f"every update's writes must persist; got {contents}"
+    )
+
+
+class _TaskPathOrderSaver(InMemorySaver):
+    """Replays each checkpoint's writes by `(task_path, task_id, idx)`."""
+
+    def get_tuple(self, config: Any) -> Any:
+        tup = super().get_tuple(config)
+        if tup is None or not tup.pending_writes:
+            return tup
+        conf = tup.config["configurable"]
+        stored = self.writes[
+            (conf["thread_id"], conf["checkpoint_ns"], conf["checkpoint_id"])
+        ]
+        rows = sorted(
+            zip(stored.items(), tup.pending_writes),
+            key=lambda row: (row[0][1][3], *row[0][0]),
+        )
+        return tup._replace(pending_writes=[write for _, write in rows])
+
+    get_delta_channel_history = BaseCheckpointSaver.get_delta_channel_history
+    aget_delta_channel_history = BaseCheckpointSaver.aget_delta_channel_history
+
+
+GIVEN = ["u1", "u2", "u3", "u4", "u5", "u6"]
+
+
+def _updates_in_given_order() -> list[list[StateUpdate]]:
+    return [
+        [_update(c, "assistant" if i % 2 else "model") for i, c in enumerate(GIVEN)]
+    ]
+
+
+def test_bulk_update_state_replays_updates_in_the_order_given() -> None:
+    graph = _build_graph(_TaskPathOrderSaver(), two_nodes=True)
+    config = {"configurable": {"thread_id": "bulk-order"}}
+    graph.invoke({"messages": [HumanMessage(content="hi", id="hi")]}, config)
+
+    graph.bulk_update_state(config, _updates_in_given_order())
+
+    assert _contents(graph.get_state(config)) == ["hi", *GIVEN]
+
+
+async def test_abulk_update_state_replays_updates_in_the_order_given() -> None:
+    graph = _build_graph(_TaskPathOrderSaver(), two_nodes=True)
+    config = {"configurable": {"thread_id": "bulk-order"}}
+    await graph.ainvoke({"messages": [HumanMessage(content="hi", id="hi")]}, config)
+
+    await graph.abulk_update_state(config, _updates_in_given_order())
+
+    assert _contents(await graph.aget_state(config)) == ["hi", *GIVEN]
 
 
 # ---------------------------------------------------------------------------
