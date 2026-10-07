@@ -109,11 +109,10 @@ async def swr(
         fresh_for: How long a cached value is considered fresh (no revalidation).
             Defaults to ``timedelta(0)`` so every access triggers a background
             revalidate while still returning the cached value instantly. Values
-            above :data:`MAX_CACHE_TTL` are clamped to the backend maximum.
+            above the backend maximum are clamped by the server.
         max_age: Total lifetime of a cached entry. After this, the next access
-            blocks on the loader. Defaults to :data:`MAX_CACHE_TTL` (24 h by
-            default). Values above :data:`MAX_CACHE_TTL` are clamped to the
-            backend maximum.
+            blocks on the loader. Defaults to 1 day. Values above the backend
+            maximum are clamped by the server.
         model: Optional Pydantic model class. When provided, values are
             serialized via ``model_dump(mode="json")`` before storage and
             deserialized via ``model.model_validate()`` on read.
