@@ -3,6 +3,7 @@ from unittest.mock import patch
 from langgraph_cli.deploy import (
     _extract_deployment_url,
     format_deployments_table,
+    format_listeners_table,
     format_revisions_table,
 )
 from langgraph_cli.util import clean_empty_lines, warn_non_wolfi_distro
@@ -255,3 +256,34 @@ def test_format_revisions_table():
     assert "rev-456" in output
     assert "rev-789" in output
     assert "REPLACED" in output
+
+
+def test_format_listeners_table():
+    output = format_listeners_table(
+        [
+            {
+                "id": "listener-1",
+                "compute_id": "prod-cluster",
+                "compute_config": {"k8s_namespaces": ["agents"]},
+            },
+            {
+                "id": "listener-2",
+                "compute_id": "multi-cluster",
+                "compute_config": {"k8s_namespaces": ["agents", "agents-staging"]},
+            },
+            {
+                "id": "listener-3",
+                "compute_id": "broken-cluster",
+            },
+        ]
+    )
+    assert "Listener ID" in output
+    assert "Compute ID" in output
+    assert "Namespaces" in output
+    assert "listener-1" in output
+    assert "prod-cluster" in output
+    assert "agents" in output
+    assert "listener-2" in output
+    assert "agents, agents-staging" in output
+    assert "listener-3" in output
+    assert "broken-cluster" in output
