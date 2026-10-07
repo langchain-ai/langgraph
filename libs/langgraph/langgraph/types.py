@@ -20,7 +20,7 @@ from warnings import warn
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 from typing_extensions import (
     NotRequired,
     TypeAliasType,
@@ -882,6 +882,22 @@ class Command(Generic[N], ToolOutputMixin):
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
 
+_INVALID_RESUME_ATTR = "langgraph_invalid_resume"
+"""Set on the `ValidationError` for a resume value that doesn't match `response_schema`.
+
+`ToolNode` reads it by name, so a graph run by a tool re-raises the error instead of
+reporting it as invalid tool arguments.
+"""
+
+
+def _validate_resume(adapter: TypeAdapter[Any], value: Any) -> Any:
+    try:
+        return adapter.validate_python(value)
+    except ValidationError as exc:
+        setattr(exc, _INVALID_RESUME_ATTR, True)
+        raise
+
+
 @overload
 def interrupt(value: Any, *, response_schema: type[ResponseT]) -> ResponseT: ...
 
@@ -989,6 +1005,8 @@ def interrupt(
     Raises:
         GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
         pydantic.ValidationError: When a resume value does not match a Pydantic model, `TypedDict`, or dataclass `response_schema`.
+            Inside a graph run by a tool, `ToolNode` re-raises it rather than reporting it
+            as invalid tool arguments, so the interrupt can be answered again.
     """
     from langgraph._internal._constants import (
         CONFIG_KEY_CHECKPOINT_NS,
@@ -1012,14 +1030,14 @@ def interrupt(
     if scratchpad.resume:
         if idx < len(scratchpad.resume):
             v = scratchpad.resume[idx]
-            validated = adapter.validate_python(v) if adapter else v
+            validated = _validate_resume(adapter, v) if adapter else v
             conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume[: idx + 1])])
             return validated
     # find current resume value
     v = scratchpad.get_null_resume(True)
     if v is not None:
         assert len(scratchpad.resume) == idx, (scratchpad.resume, idx)
-        validated = adapter.validate_python(v) if adapter else v
+        validated = _validate_resume(adapter, v) if adapter else v
         scratchpad.resume.append(v)
         conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
         return validated

@@ -202,8 +202,10 @@ def test_interrupt_response_schema_rejects_invalid_resume(
     def resume(value: dict[str, Any]) -> Command:
         return Command(resume=value if resume_style == "null" else {pending.id: value})
 
-    with pytest.raises(ValidationError, match="approved"):
+    with pytest.raises(ValidationError, match="approved") as exc_info:
         graph.invoke(resume({"approved": "nope"}), config)
+    # `ToolNode` reads this by name to re-raise the error from a graph run by a tool.
+    assert getattr(exc_info.value, "langgraph_invalid_resume", False)
 
     assert graph.invoke(resume({"approved": False}), config) == {
         "answer": Decision(approved=False)
