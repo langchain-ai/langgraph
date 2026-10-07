@@ -13,6 +13,7 @@ import pytest
 
 import langgraph_cli.deploy as deploy_mod
 from langgraph_cli.deploy import (
+    BuildAndPush,
     ById,
     ByName,
     CustomerRegistrySource,
@@ -21,6 +22,7 @@ from langgraph_cli.deploy import (
     Listener,
     ManagedRegistrySource,
     OnListener,
+    PublishedImage,
     RemoteBuildSource,
     RequestedPlacement,
     Unplaced,
@@ -614,6 +616,7 @@ class TestSelectSource:
     OPTIONS = {
         "push_to": None,
         "image": None,
+        "image_uri": None,
         "image_name": None,
         "tag": None,
         "remote_build_flag": None,
@@ -629,8 +632,10 @@ class TestSelectSource:
                 {"push_to": REPOSITORY},
                 True,
                 CustomerRegistrySource(
-                    reference=ImageReference(REPOSITORY, "latest"),
-                    prebuilt_image=None,
+                    image=BuildAndPush(
+                        reference=ImageReference(REPOSITORY, "latest"),
+                        prebuilt_image=None,
+                    ),
                     requested_placement=RequestedPlacement(),
                 ),
                 id="push_to_selects_the_external_source_with_the_default_tag",
@@ -639,8 +644,10 @@ class TestSelectSource:
                 {"push_to": f"{REPOSITORY}:v2"},
                 True,
                 CustomerRegistrySource(
-                    reference=ImageReference(REPOSITORY, "v2"),
-                    prebuilt_image=None,
+                    image=BuildAndPush(
+                        reference=ImageReference(REPOSITORY, "v2"),
+                        prebuilt_image=None,
+                    ),
                     requested_placement=RequestedPlacement(),
                 ),
                 id="push_to_keeps_a_tag_given_in_the_reference",
@@ -649,8 +656,10 @@ class TestSelectSource:
                 {"push_to": REPOSITORY, "tag": "v3"},
                 True,
                 CustomerRegistrySource(
-                    reference=ImageReference(REPOSITORY, "v3"),
-                    prebuilt_image=None,
+                    image=BuildAndPush(
+                        reference=ImageReference(REPOSITORY, "v3"),
+                        prebuilt_image=None,
+                    ),
                     requested_placement=RequestedPlacement(),
                 ),
                 id="tag_flag_composes_with_push_to",
@@ -659,8 +668,10 @@ class TestSelectSource:
                 {"push_to": REPOSITORY, "image": "app:dev"},
                 False,
                 CustomerRegistrySource(
-                    reference=ImageReference(REPOSITORY, "latest"),
-                    prebuilt_image="app:dev",
+                    image=BuildAndPush(
+                        reference=ImageReference(REPOSITORY, "latest"),
+                        prebuilt_image="app:dev",
+                    ),
                     requested_placement=RequestedPlacement(),
                 ),
                 id="prebuilt_image_is_retagged_for_push_to_without_docker_checks",
@@ -672,11 +683,43 @@ class TestSelectSource:
                 },
                 True,
                 CustomerRegistrySource(
-                    reference=ImageReference(REPOSITORY, "latest"),
-                    prebuilt_image=None,
+                    image=BuildAndPush(
+                        reference=ImageReference(REPOSITORY, "latest"),
+                        prebuilt_image=None,
+                    ),
                     requested_placement=RequestedPlacement("listener-1", "agents"),
                 ),
                 id="push_to_carries_the_requested_placement",
+            ),
+            pytest.param(
+                {"image_uri": f"{REPOSITORY}@sha256:abc123"},
+                True,
+                CustomerRegistrySource(
+                    image=PublishedImage(f"{REPOSITORY}@sha256:abc123"),
+                    requested_placement=RequestedPlacement(),
+                ),
+                id="image_uri_selects_the_published_image_source_by_digest",
+            ),
+            pytest.param(
+                {"image_uri": f"  {REPOSITORY}@sha256:abc123  "},
+                False,
+                CustomerRegistrySource(
+                    image=PublishedImage(f"{REPOSITORY}@sha256:abc123"),
+                    requested_placement=RequestedPlacement(),
+                ),
+                id="image_uri_needs_no_local_docker_and_is_trimmed",
+            ),
+            pytest.param(
+                {
+                    "image_uri": f"{REPOSITORY}@sha256:abc123",
+                    "placement": RequestedPlacement("listener-1", "agents"),
+                },
+                False,
+                CustomerRegistrySource(
+                    image=PublishedImage(f"{REPOSITORY}@sha256:abc123"),
+                    requested_placement=RequestedPlacement("listener-1", "agents"),
+                ),
+                id="image_uri_carries_the_requested_placement",
             ),
             pytest.param(
                 {"remote_build_flag": True},
@@ -762,6 +805,46 @@ class TestSelectSource:
                 {"placement": RequestedPlacement(k8s_namespace="agents")},
                 "only apply when creating a deployment with --push-to",
                 id="namespace_without_push_to",
+            ),
+            pytest.param(
+                {"image_uri": REPOSITORY, "push_to": REPOSITORY},
+                "--image-uri cannot be combined with --push-to.",
+                id="image_uri_with_push_to",
+            ),
+            pytest.param(
+                {"image_uri": REPOSITORY, "image": "app:dev"},
+                "--image-uri cannot be combined with --image.",
+                id="image_uri_with_image",
+            ),
+            pytest.param(
+                {"image_uri": REPOSITORY, "tag": "v2"},
+                "--image-uri cannot be combined with --tag.",
+                id="image_uri_with_tag",
+            ),
+            pytest.param(
+                {"image_uri": REPOSITORY, "remote_build_flag": True},
+                "--image-uri cannot be combined with --remote.",
+                id="image_uri_with_remote",
+            ),
+            pytest.param(
+                {"image_uri": ""},
+                "--image-uri must not be empty.",
+                id="image_uri_empty",
+            ),
+            pytest.param(
+                {"image_uri": "   "},
+                "--image-uri must not be empty.",
+                id="image_uri_blank",
+            ),
+            pytest.param(
+                {"image_uri": f"{REPOSITORY}:v1.2.3"},
+                "--image-uri must pin a digest",
+                id="image_uri_with_a_mutable_tag",
+            ),
+            pytest.param(
+                {"image_uri": REPOSITORY},
+                "--image-uri must pin a digest",
+                id="image_uri_without_any_tag_or_digest",
             ),
         ],
     )
@@ -1164,6 +1247,7 @@ def test_a_deployment_id_with_listener_flags_is_refused_without_probing_docker(
         _select_source(
             push_to="registry.example.com/app",
             image=None,
+            image_uri=None,
             image_name=None,
             tag=None,
             remote_build_flag=None,
