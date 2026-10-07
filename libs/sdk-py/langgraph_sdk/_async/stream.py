@@ -1972,7 +1972,7 @@ class AsyncThreadStream:
                 # Mark that we have observed an active run so thread.output
                 # knows a run exists (handles reattach without run.start).
                 self._run_seen = True
-            elif phase in ("completed", "failed"):
+            elif _is_root_terminal_lifecycle(event):
                 # Why: interrupts describe current-run state. Clear on terminal
                 # lifecycle so a subsequent run.respond() can't fire against a
                 # stale prior-run interrupt_id. Acquire `_interrupts_lock` so
