@@ -3745,14 +3745,14 @@ class Pregel(
             version: Streaming-event schema version. `"v3"` selects the
                 content-block-centric streaming protocol.
             interrupt_before: Nodes to interrupt before, if any.
-                Honored on every async version; type-checked only on
-                the `version="v3"` overloads.
-            interrupt_after: Nodes to interrupt after, if any. Honored
-                on every async version; type-checked only on the
-                `version="v3"` overloads.
-            control: Optional run control used to request cooperative
-                drain. Honored on every async version; type-checked
+                Honored on every version that can run; type-checked
                 only on the `version="v3"` overloads.
+            interrupt_after: Nodes to interrupt after, if any. Honored
+                on every version that can run; type-checked only on
+                the `version="v3"` overloads.
+            control: Optional run control used to request cooperative
+                drain. Honored on every version that can run;
+                type-checked only on the `version="v3"` overloads.
             transformers: Extra transformer classes or configured
                 factories appended after compile-time
                 `stream_transformers`. Factories are called as
@@ -3763,7 +3763,7 @@ class Pregel(
                 them through to `astream` — so execution kwargs such as
                 `context`, `durability`, `interrupt_before`,
                 `interrupt_after` and `control` are honored on every
-                async version. For `version="v3"`, forwarded to the
+                version that can run. For `version="v3"`, forwarded to the
                 underlying `stream(...)` call (e.g. `context`,
                 `durability`, `output_keys`, `print_mode`, `debug`).
                 `stream_mode` and `subgraphs` are not accepted under
