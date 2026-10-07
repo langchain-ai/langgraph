@@ -191,6 +191,7 @@ class PregelLoop:
         Callable[
             [
                 concurrent.futures.Future | None,
+                Sequence[Any],
                 RunnableConfig,
                 Checkpoint,
                 str,
@@ -204,11 +205,13 @@ class PregelLoop:
     submit: Submit
     channels: Mapping[str, BaseChannel]
     # Futures from `checkpointer.put_writes` calls that produced delta-channel
-    # writes. `_checkpointer_put_after_previous` drains this list (swap to a
-    # local `futs` then reset to `[]` and wait/gather) before putting the
-    # next checkpoint, so a checkpoint never becomes durable before the
-    # writes that produced it. Initialised to `[]` in both sync and async
-    # `__enter__`; stays `None` only when no checkpointer.
+    # writes. `_put_checkpoint` hands this list to the save it submits, which
+    # waits for them first, so a checkpoint never becomes durable before the
+    # writes that produced it. If a write or the previous save failed, the
+    # save fails too: a DeltaChannel is rebuilt from its writes along the
+    # parent chain, so a checkpoint saved past either gap reads back short
+    # for good. Initialised to `[]` in both sync and async `__enter__`;
+    # stays `None` only when no checkpointer.
     _delta_write_futs: list[Any] | None = None
 
     # Same pattern as `_delta_write_futs` but for error-handler writes.
@@ -1299,12 +1302,17 @@ class PregelLoop:
             )
             self.checkpoint_previous_versions = channel_versions
 
+            # Take this checkpoint's writes now: saves run in the background
+            # and can start out of order, so a save that took them itself
+            # could get another checkpoint's writes.
+            delta_write_futs, self._delta_write_futs = self._delta_write_futs, []
             # save it, without blocking
             # if there's a previous checkpoint save in progress, wait for it
             # ensuring checkpointers receive checkpoints in order
             self._put_checkpoint_fut = self.submit(
                 self._checkpointer_put_after_previous,
                 getattr(self, "_put_checkpoint_fut", None),
+                delta_write_futs,
                 self.checkpoint_config,
                 copy_checkpoint(self.checkpoint),
                 self.checkpoint_metadata,
@@ -1374,6 +1382,7 @@ class PregelLoop:
             self._put_checkpoint_fut = self.submit(
                 self._checkpointer_put_after_previous,
                 getattr(self, "_put_checkpoint_fut", None),
+                (),
                 stub_put_config,
                 stub_cp,
                 {"step": -2},
@@ -1641,21 +1650,19 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
     def _checkpointer_put_after_previous(
         self,
         prev: concurrent.futures.Future | None,
+        delta_write_futs: Sequence[concurrent.futures.Future],
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
-        if self._delta_write_futs:
-            futs, self._delta_write_futs = self._delta_write_futs, []
-            concurrent.futures.wait(futs)
-        try:
-            if prev is not None:
-                prev.result()
-        finally:
-            cast(BaseCheckpointSaver, self.checkpointer).put(
-                config, checkpoint, metadata, new_versions
-            )
+        for fut in delta_write_futs:
+            fut.result()
+        if prev is not None:
+            prev.result()
+        cast(BaseCheckpointSaver, self.checkpointer).put(
+            config, checkpoint, metadata, new_versions
+        )
 
     def match_cached_writes(self) -> Sequence[PregelExecutableTask]:
         if self.cache is None:
@@ -1896,23 +1903,19 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
     async def _checkpointer_put_after_previous(
         self,
         prev: asyncio.Task | None,
+        delta_write_futs: Sequence[asyncio.Future],
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
-        # Drain DeltaChannel write futures before committing the checkpoint so
-        # ancestor walks never see a checkpoint without its backing writes.
-        if self._delta_write_futs:
-            futs, self._delta_write_futs = self._delta_write_futs, []
-            await asyncio.gather(*futs)
-        try:
-            if prev is not None:
-                await prev
-        finally:
-            await cast(BaseCheckpointSaver, self.checkpointer).aput(
-                config, checkpoint, metadata, new_versions
-            )
+        if delta_write_futs:
+            await asyncio.gather(*delta_write_futs)
+        if prev is not None:
+            await prev
+        await cast(BaseCheckpointSaver, self.checkpointer).aput(
+            config, checkpoint, metadata, new_versions
+        )
 
     async def amatch_cached_writes(self) -> Sequence[PregelExecutableTask]:
         if self.cache is None:
