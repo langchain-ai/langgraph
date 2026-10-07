@@ -453,6 +453,88 @@ def test_deploy_list_command_no_results(monkeypatch) -> None:
     assert result.output.strip() == "No deployments found."
 
 
+def test_deploy_listeners_list_command(monkeypatch) -> None:
+    runner = CliRunner()
+    captured: dict[str, str] = {}
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            captured["host_url"] = host_url
+            captured["api_key"] = api_key
+            captured["tenant_id"] = tenant_id or ""
+
+        def list_listeners(self):
+            return [
+                {
+                    "id": "listener-1",
+                    "compute_id": "prod-cluster",
+                    "compute_config": {"k8s_namespaces": ["agents"]},
+                },
+                {
+                    "id": "listener-2",
+                    "compute_id": "multi-cluster",
+                    "compute_config": {"k8s_namespaces": ["agents", "agents-staging"]},
+                },
+            ]
+
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "listeners",
+            "list",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured == {
+        "host_url": "https://api.example.com",
+        "api_key": "test-key",
+        "tenant_id": "",
+    }
+    assert "Listener ID" in result.output
+    assert "Compute ID" in result.output
+    assert "Namespaces" in result.output
+    assert "listener-1" in result.output
+    assert "prod-cluster" in result.output
+    assert "agents, agents-staging" in result.output
+
+
+def test_deploy_listeners_list_command_no_results(monkeypatch) -> None:
+    runner = CliRunner()
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def list_listeners(self):
+            return []
+
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "listeners",
+            "list",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output.strip() == "No listeners found for this workspace."
+
+
 def test_deploy_revisions_list_command(monkeypatch) -> None:
     runner = CliRunner()
     captured: dict[str, str] = {}

@@ -624,6 +624,41 @@ def format_deployments_table(deployments: Sequence[dict[str, object]]) -> str:
     return "\n".join(lines)
 
 
+def _extract_listener_namespaces(listener: dict[str, object]) -> str:
+    compute_config = listener.get("compute_config")
+    namespaces = (
+        compute_config.get("k8s_namespaces")
+        if isinstance(compute_config, dict)
+        else None
+    )
+    if isinstance(namespaces, list) and namespaces:
+        return ", ".join(str(namespace) for namespace in namespaces)
+    return "-"
+
+
+def format_listeners_table(listeners: Sequence[dict[str, object]]) -> str:
+    headers = ("Listener ID", "Compute ID", "Namespaces")
+    rows = [
+        (
+            str(listener.get("id", "-") or "-"),
+            str(listener.get("compute_id", "-") or "-"),
+            _extract_listener_namespaces(listener),
+        )
+        for listener in listeners
+    ]
+    widths = [
+        max(len(headers[index]), *(len(row[index]) for row in rows))
+        for index in range(len(headers))
+    ]
+
+    def format_row(row: Sequence[str]) -> str:
+        return "  ".join(value.ljust(widths[index]) for index, value in enumerate(row))
+
+    lines = [format_row(headers), format_row(tuple("-" * width for width in widths))]
+    lines.extend(format_row(row) for row in rows)
+    return "\n".join(lines)
+
+
 def format_revisions_table(revisions: Sequence[dict[str, object]]) -> str:
     headers = ("Revision ID", "Status", "Created At")
     latest_deployed_seen = False
@@ -2406,6 +2441,41 @@ def deploy_list(
         click.echo("No deployments found.")
         return
     click.echo(format_deployments_table(deployments))
+
+
+# ---------------------------------------------------------------------------
+# deploy listeners
+# ---------------------------------------------------------------------------
+
+
+@deploy.group(
+    "listeners",
+    cls=NestedHelpGroup,
+    help="[Beta] Inspect listeners available to this workspace.",
+)
+def deploy_listeners() -> None:
+    pass
+
+
+@OPT_HOST_API_KEY
+@OPT_HOST_URL
+@deploy_listeners.command(
+    "list",
+    help=(
+        "[Beta] List listeners available to this workspace.\n\n"
+        "Pass a listener's id to `langgraph deploy --push-to ... "
+        "--listener-id <id>` to deploy through it."
+    ),
+)
+def deploy_listeners_list(api_key: str | None, host_url: str | None) -> None:
+    client = _create_host_backend_client(host_url, api_key)
+    listeners = _call_host_backend_with_optional_tenant(
+        client, lambda c: c.list_listeners()
+    )
+    if not listeners:
+        click.echo("No listeners found for this workspace.")
+        return
+    click.echo(format_listeners_table(listeners))
 
 
 # ---------------------------------------------------------------------------
