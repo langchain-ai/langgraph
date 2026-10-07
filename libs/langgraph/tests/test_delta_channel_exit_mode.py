@@ -17,6 +17,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from typing_extensions import TypedDict
 
+from langgraph._internal._constants import NULL_TASK_ID
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import _messages_delta_reducer
@@ -38,6 +39,7 @@ def test_exit_delta_task_id_is_valid_uuid_and_ordered() -> None:
     assert id1.split("-")[0] == "00000001"
     assert id7.split("-")[0] == "00000007"
     assert id1.endswith("-0270-bf16-1ef8-fb321bef9f3d")
+    assert exit_delta_task_id(0, NULL_TASK_ID) != NULL_TASK_ID
 
     with pytest.raises(ValueError):
         uuid.UUID(f"00000001-{tid}")
@@ -461,6 +463,43 @@ def test_resume_with_a_command_update_replays_its_write_once(
 
     state = graph.get_state(config)
     assert state.values["log"] == state.values["plain"] == ["in", "cmd", "ask", "done"]
+
+
+def test_command_update_on_an_input_checkpoint_matches_a_plain_channel(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    builder = StateGraph(_ResumeState)
+    builder.add_node("node", lambda state: _both("node"))
+    builder.add_edge(START, "node")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "t"}}
+    graph.update_state(config, _both("in"), as_node="__input__")
+
+    graph.invoke(Command(update=_both("cmd")), config, durability=durability)
+
+    history = list(graph.get_state_history(config))
+    assert [s.values.get("log", []) for s in history] == [
+        s.values.get("plain", []) for s in history
+    ]
+    replayed = graph.invoke(None, history[-1].config, durability=durability)
+    assert replayed["log"] == replayed["plain"]
+
+
+def test_exit_command_update_on_a_new_thread_matches_a_plain_channel(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    builder = StateGraph(_ResumeState)
+    builder.add_node("node", lambda state: _both("node"))
+    builder.add_edge(START, "node")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "t"}}
+
+    graph.invoke(Command(update=_both("cmd")), config, durability="exit")
+
+    history = list(graph.get_state_history(config))
+    assert [s.values.get("log", []) for s in history] == [
+        s.values.get("plain", []) for s in history
+    ]
 
 
 class _FlagState(_ResumeState, total=False):
