@@ -26,6 +26,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_ID,
     NS_END,
     NS_SEP,
+    NULL_TASK_ID,
     PUSH,
     SNAPSHOT_BUMPS,
 )
@@ -64,10 +65,14 @@ def exit_delta_task_id(step: int, task_id: str) -> str:
 
     Embeds the superstep in the first UUID group so `ORDER BY task_id, idx`
     preserves chronological order while remaining a valid RFC UUID (required by
-    Postgres `checkpoint_writes.task_id uuid` columns).
+    Postgres `checkpoint_writes.task_id uuid` columns). Never `NULL_TASK_ID`:
+    readers apply writes under it as the anchor checkpoint's own pending writes.
     """
     parts = str(uuid.UUID(task_id)).split("-")
-    return f"{step:08d}-{parts[1]}-{parts[2]}-{parts[3]}-{parts[4]}"
+    synthetic = f"{step:08d}-{parts[1]}-{parts[2]}-{parts[3]}-{parts[4]}"
+    if synthetic == NULL_TASK_ID:
+        return f"{step:08d}-0000-0000-0000-000000000001"
+    return synthetic
 
 
 def exit_delta_late_task_id(step: int, task_id: str) -> str:

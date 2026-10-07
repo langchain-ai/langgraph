@@ -35,7 +35,11 @@ from langgraph_sdk.stream.decoders import (
     validate_interleave_channels,
 )
 from langgraph_sdk.stream.subscription import compute_union_filter, infer_channel
-from langgraph_sdk.stream.sync_controller import SyncStreamController, _SyncSubscription
+from langgraph_sdk.stream.sync_controller import (
+    SyncStreamController,
+    _is_root_terminal_lifecycle,
+    _SyncSubscription,
+)
 from langgraph_sdk.stream.transport import (
     SyncEventStreamHandle,
     SyncProtocolSseTransport,
@@ -1614,7 +1618,7 @@ class SyncThreadStream:
             phase = data.get("event") if isinstance(data, dict) else None
             if phase in ("started", "running"):
                 self._run_seen = True
-            elif phase in ("completed", "failed"):
+            elif _is_root_terminal_lifecycle(event):
                 self.interrupted = False
                 self.interrupts = []
                 run_done = self._run_done
