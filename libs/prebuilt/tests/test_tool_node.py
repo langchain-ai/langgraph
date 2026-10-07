@@ -650,8 +650,9 @@ def _ask_human_call() -> dict[str, list[AnyMessage]]:
     return {"messages": [AIMessage("", tool_calls=[call])]}
 
 
+@pytest.mark.parametrize("wrapped", [False, True], ids=["plain", "wrapped"])
 def test_tool_node_reraises_invalid_resume_from_nested_interrupt(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointSaver, wrapped: bool
 ) -> None:
     asker = _approval_graph()
 
@@ -660,9 +661,16 @@ def test_tool_node_reraises_invalid_resume_from_nested_interrupt(
         """Ask a human for approval."""
         return asker.invoke({})["answer"]
 
+    # `create_agent` always runs tools through a wrapper (its middleware).
+    def pass_through(request, handler):
+        return handler(request)
+
     graph = (
         StateGraph(MessagesState)
-        .add_node("tools", ToolNode([ask_human]))
+        .add_node(
+            "tools",
+            ToolNode([ask_human], wrap_tool_call=pass_through if wrapped else None),
+        )
         .add_edge(START, "tools")
         .compile(checkpointer=sync_checkpointer)
     )
@@ -679,8 +687,9 @@ def test_tool_node_reraises_invalid_resume_from_nested_interrupt(
     assert result["messages"][-1].content == "approved=True"
 
 
+@pytest.mark.parametrize("wrapped", [False, True], ids=["plain", "wrapped"])
 async def test_tool_node_reraises_invalid_resume_from_nested_interrupt_async(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointSaver, wrapped: bool
 ) -> None:
     asker = _approval_graph()
 
@@ -689,9 +698,15 @@ async def test_tool_node_reraises_invalid_resume_from_nested_interrupt_async(
         """Ask a human for approval."""
         return (await asker.ainvoke({}))["answer"]
 
+    async def pass_through(request, handler):
+        return await handler(request)
+
     graph = (
         StateGraph(MessagesState)
-        .add_node("tools", ToolNode([ask_human]))
+        .add_node(
+            "tools",
+            ToolNode([ask_human], awrap_tool_call=pass_through if wrapped else None),
+        )
         .add_edge(START, "tools")
         .compile(checkpointer=async_checkpointer)
     )

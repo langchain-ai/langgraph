@@ -212,6 +212,13 @@ def test_interrupt_response_schema_rejects_invalid_resume(
     }
 
 
+def test_is_invalid_resume_ignores_other_errors() -> None:
+    with pytest.raises(ValidationError) as exc_info:
+        Decision.model_validate({"approved": "nope"})
+    assert not is_invalid_resume(exc_info.value)
+    assert not is_invalid_resume(ValueError("nope"))
+
+
 @pytest.mark.parametrize("resume_style", ["null", "id_map"])
 def test_interrupt_response_schema_invalid_resume_after_earlier_interrupt(
     sync_checkpointer: BaseCheckpointSaver, resume_style: str
