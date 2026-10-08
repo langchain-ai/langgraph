@@ -105,7 +105,16 @@ Durability = Literal["sync", "async", "exit"]
 """Durability mode for the graph execution.
 - `"sync"`: Changes are persisted synchronously before the next step starts.
 - `"async"`: Changes are persisted asynchronously while the next step executes.
-- `"exit"`: Changes are persisted only when the graph exits."""
+- `"exit"`: Changes are persisted only when the graph exits.
+
+Durability controls when LangGraph persists graph/checkpoint state. It does not
+provide exactly-once semantics for external side effects performed by node or
+tool code. If a process fails after an external effect commits but before graph
+state proves completion, recovery may re-execute that code. Applications that
+need bounded effect multiplicity should use a stable logical operation identity
+at the external-effect boundary and reconcile an ambiguous outcome before
+retrying.
+"""
 
 
 class LangSmithTracing(TypedDict, total=False):
