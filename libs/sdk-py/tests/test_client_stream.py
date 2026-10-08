@@ -110,6 +110,78 @@ def test_stream_sse():
         assert len(parts) == 79
 
 
+def _decode_sse(payload: list[bytes]) -> list[StreamPart]:
+    decoder = SSEDecoder()
+    parts: list[StreamPart] = []
+    for line in iter_lines_raw(payload):
+        sse = decoder.decode(line=bytes(line).rstrip(b"\n"))
+        if sse is not None:
+            parts.append(sse)
+    if sse := decoder.decode(b""):
+        parts.append(sse)
+    return parts
+
+
+def test_sse_decoder_strips_one_leading_bom():
+    payload = b'event: values\ndata: {"step": 1}\n\n'
+    bom = b"\xef\xbb\xbf"
+    expected = [StreamPart(event="values", data={"step": 1})]
+
+    assert _decode_sse([payload]) == expected
+    assert _decode_sse([bom + payload]) == expected
+    # A BOM split across chunks is still the start of the stream.
+    assert _decode_sse([b"\xef", b"\xbb", bom[2:] + payload]) == expected
+
+    # A BOM after the first line is data, not a stream preamble.
+    later = (
+        b'event: values\ndata: {"step": 1}\n\n'
+        + bom
+        + b'event: values\ndata: {"step": 2}\n\n'
+    )
+    later_parts = _decode_sse([later])
+    assert later_parts[0] == expected[0]
+    assert later_parts[1].event == ""
+
+
+def test_sync_http_client_stream_strips_leading_bom():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            stream=ListByteStream(
+                [b"\xef", b"\xbb", b'\xbfevent: values\ndata: {"step": 1}\n\n']
+            ),
+        )
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport, base_url="https://example.com") as client:
+        parts = list(SyncHttpClient(client).stream("/stream", "GET"))
+
+    assert parts == [StreamPart(event="values", data={"step": 1})]
+
+
+@pytest.mark.asyncio
+async def test_http_client_stream_strips_leading_bom():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            stream=AsyncListByteStream(
+                [b"\xef", b"\xbb", b'\xbfevent: values\ndata: {"step": 1}\n\n']
+            ),
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="https://example.com"
+    ) as client:
+        parts = [part async for part in HttpClient(client).stream("/stream", "GET")]
+
+    assert parts == [StreamPart(event="values", data={"step": 1})]
+
+
 # --- HTTP client streaming ---
 
 

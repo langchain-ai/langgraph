@@ -12,6 +12,7 @@ import orjson
 from langgraph_sdk.schema import StreamPart
 
 BytesLike = bytes | bytearray | memoryview
+_UTF8_BOM = b"\xef\xbb\xbf"
 
 
 class BytesLineDecoder:
@@ -81,6 +82,7 @@ class SSEDecoder:
         self._data = bytearray()
         self._last_event_id = ""
         self._retry: int | None = None
+        self._checked_bom = False
 
     @property
     def last_event_id(self) -> str | None:
@@ -90,6 +92,13 @@ class SSEDecoder:
 
     def decode(self, line: bytes) -> StreamPart | None:
         # See: https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation
+
+        # WHATWG event-stream interpretation consumes one leading UTF-8 BOM.
+        # A BOM later in the stream is payload, so only the first line is checked.
+        if not self._checked_bom:
+            self._checked_bom = True
+            if line.startswith(_UTF8_BOM):
+                line = line[3:]
 
         if not line:
             if (
