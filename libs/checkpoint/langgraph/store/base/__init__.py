@@ -771,7 +771,12 @@ class BaseStore(ABC):
 
         Returns:
             The retrieved item or `None` if not found.
+
+        Raises:
+            InvalidNamespaceError: If a namespace label is empty, is not a string,
+                or contains a period (`.`).
         """
+        _validate_namespace_labels(namespace)
         return self.batch(
             [GetOp(namespace, str(key), _ensure_refresh(self.ttl_config, refresh_ttl))]
         )[0]
@@ -800,6 +805,10 @@ class BaseStore(ABC):
 
         Returns:
             List of items matching the search criteria.
+
+        Raises:
+            InvalidNamespaceError: If a `namespace_prefix` label is empty, is not a
+                string, or contains a period (`.`).
 
         ???+ example "Examples"
 
@@ -840,6 +849,7 @@ class BaseStore(ABC):
                 Natural language search support depends on your store implementation
                 and requires proper embedding configuration.
         """
+        _validate_namespace_labels(namespace_prefix)
         return self.batch(
             [
                 SearchOp(
@@ -886,6 +896,11 @@ class BaseStore(ABC):
                 None means no expiration. Expired runs will be deleted opportunistically.
                 By default, the expiration timer refreshes on both read operations (get/search)
                 and write operations (put/update), whenever the item is included in the operation.
+
+        Raises:
+            InvalidNamespaceError: If the namespace is empty, its root label is
+                `"langgraph"`, or a label is empty, is not a string, or contains a
+                period (`.`).
 
         Note:
             Indexing support depends on your store implementation.
@@ -940,7 +955,12 @@ class BaseStore(ABC):
         Args:
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
+
+        Raises:
+            InvalidNamespaceError: If a namespace label is empty, is not a string,
+                or contains a period (`.`).
         """
+        _validate_namespace_labels(namespace)
         self.batch([PutOp(namespace, str(key), None, ttl=None)])
 
     def list_namespaces(
@@ -969,6 +989,10 @@ class BaseStore(ABC):
             A list of namespace tuples that match the criteria. Each tuple represents a
                 full namespace path up to `max_depth`.
 
+        Raises:
+            InvalidNamespaceError: If a `prefix` or `suffix` label is empty, is not a
+                string, or contains a period (`.`).
+
         ???+ example "Examples":
 
             Setting `max_depth=3`. Given the namespaces:
@@ -984,6 +1008,8 @@ class BaseStore(ABC):
             # [("a", "b", "c"), ("a", "b", "d"), ("a", "b", "f")]
             ```
         """
+        _validate_namespace_labels(prefix or ())
+        _validate_namespace_labels(suffix or ())
         match_conditions = []
         if prefix:
             match_conditions.append(MatchCondition(match_type="prefix", path=prefix))
@@ -1013,7 +1039,12 @@ class BaseStore(ABC):
 
         Returns:
             The retrieved item or `None` if not found.
+
+        Raises:
+            InvalidNamespaceError: If a namespace label is empty, is not a string,
+                or contains a period (`.`).
         """
+        _validate_namespace_labels(namespace)
         return (
             await self.abatch(
                 [
@@ -1051,6 +1082,10 @@ class BaseStore(ABC):
 
         Returns:
             List of items matching the search criteria.
+
+        Raises:
+            InvalidNamespaceError: If a `namespace_prefix` label is empty, is not a
+                string, or contains a period (`.`).
 
         ???+ example "Examples"
 
@@ -1091,6 +1126,7 @@ class BaseStore(ABC):
                 Natural language search support depends on your store implementation
                 and requires proper embedding configuration.
         """
+        _validate_namespace_labels(namespace_prefix)
         return (
             await self.abatch(
                 [
@@ -1139,6 +1175,11 @@ class BaseStore(ABC):
                 None means no expiration. Expired runs will be deleted opportunistically.
                 By default, the expiration timer refreshes on both read operations (get/search)
                 and write operations (put/update), whenever the item is included in the operation.
+
+        Raises:
+            InvalidNamespaceError: If the namespace is empty, its root label is
+                `"langgraph"`, or a label is empty, is not a string, or contains a
+                period (`.`).
 
         Note:
             Indexing support depends on your store implementation.
@@ -1201,7 +1242,12 @@ class BaseStore(ABC):
         Args:
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
+
+        Raises:
+            InvalidNamespaceError: If a namespace label is empty, is not a string,
+                or contains a period (`.`).
         """
+        _validate_namespace_labels(namespace)
         await self.abatch([PutOp(namespace, str(key), None)])
 
     async def alist_namespaces(
@@ -1230,6 +1276,10 @@ class BaseStore(ABC):
             A list of namespace tuples that match the criteria. Each tuple represents a
                 full namespace path up to `max_depth`.
 
+        Raises:
+            InvalidNamespaceError: If a `prefix` or `suffix` label is empty, is not a
+                string, or contains a period (`.`).
+
         ???+ example "Examples"
 
             Setting `max_depth=3` with existing namespaces:
@@ -1245,6 +1295,8 @@ class BaseStore(ABC):
             # Returns: [("a", "b", "c"), ("a", "b", "d"), ("a", "b", "f")]
             ```
         """
+        _validate_namespace_labels(prefix or ())
+        _validate_namespace_labels(suffix or ())
         match_conditions = []
         if prefix:
             match_conditions.append(MatchCondition(match_type="prefix", path=prefix))
@@ -1263,6 +1315,14 @@ class BaseStore(ABC):
 def _validate_namespace(namespace: tuple[str, ...]) -> None:
     if not namespace:
         raise InvalidNamespaceError("Namespace cannot be empty.")
+    _validate_namespace_labels(namespace)
+    if namespace[0] == "langgraph":
+        raise InvalidNamespaceError(
+            f'Root label for namespace cannot be "langgraph". Got: {namespace}'
+        )
+
+
+def _validate_namespace_labels(namespace: tuple[str, ...]) -> None:
     for label in namespace:
         if not isinstance(label, str):
             raise InvalidNamespaceError(
@@ -1277,10 +1337,27 @@ def _validate_namespace(namespace: tuple[str, ...]) -> None:
             raise InvalidNamespaceError(
                 f"Namespace labels cannot be empty strings. Got {label} in {namespace}"
             )
-    if namespace[0] == "langgraph":
-        raise InvalidNamespaceError(
-            f'Root label for namespace cannot be "langgraph". Got: {namespace}'
-        )
+
+
+def validate_op_namespace(op: Op) -> None:
+    """Validate the namespace labels an op carries before a store executes it.
+
+    `BaseStore` methods check labels before batching, but ops passed directly to
+    `batch`/`abatch` skip those methods. Stores that serialize namespaces as
+    delimited text should call this for every op they execute, so a label such
+    as `"foo.bar"` cannot address the namespace `("foo", "bar")`.
+
+    Raises:
+        InvalidNamespaceError: If a label is empty, is not a string, or contains
+            a period (`.`).
+    """
+    if isinstance(op, (GetOp, PutOp)):
+        _validate_namespace_labels(op.namespace)
+    elif isinstance(op, SearchOp):
+        _validate_namespace_labels(op.namespace_prefix)
+    elif isinstance(op, ListNamespacesOp):
+        for condition in op.match_conditions or ():
+            _validate_namespace_labels(condition.path)
 
 
 def _ensure_refresh(
@@ -1319,4 +1396,5 @@ __all__ = [
     "ensure_embeddings",
     "tokenize_path",
     "get_text_at_path",
+    "validate_op_namespace",
 ]
