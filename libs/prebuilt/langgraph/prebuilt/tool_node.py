@@ -1070,9 +1070,13 @@ class ToolNode(RunnableCallable):
         # Call wrapper with request and execute callable
         try:
             return self._wrap_tool_call(tool_request, execute)
+        except GraphBubbleUp:
+            # Interrupts always propagate, as they do without a wrapper.
+            raise
         except Exception as e:
-            # Wrapper threw an exception
-            if not self._handle_tool_errors:
+            # Wrapper threw an exception. The model can't fix a resume value that
+            # doesn't match an interrupt's `response_schema`, so it's never handled.
+            if not self._handle_tool_errors or is_invalid_resume(e):
                 raise
             # Convert to error message
             content = _handle_tool_error(e, flag=self._handle_tool_errors)
@@ -1234,9 +1238,13 @@ class ToolNode(RunnableCallable):
             # None check was performed above already
             self._wrap_tool_call = cast("ToolCallWrapper", self._wrap_tool_call)
             return self._wrap_tool_call(tool_request, _sync_execute)
+        except GraphBubbleUp:
+            # Interrupts always propagate, as they do without a wrapper.
+            raise
         except Exception as e:
-            # Wrapper threw an exception
-            if not self._handle_tool_errors:
+            # Wrapper threw an exception. The model can't fix a resume value that
+            # doesn't match an interrupt's `response_schema`, so it's never handled.
+            if not self._handle_tool_errors or is_invalid_resume(e):
                 raise
             # Convert to error message
             content = _handle_tool_error(e, flag=self._handle_tool_errors)

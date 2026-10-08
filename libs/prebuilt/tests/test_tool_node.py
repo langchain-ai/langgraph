@@ -655,18 +655,20 @@ def _handle_any(e):  # no annotation: handles every error
 
 
 # A bad answer to an interrupt must fail the run whatever `handle_tool_errors` is,
-# including settings that cover `ValidationError` (a `ValueError`). `create_agent`
-# always runs tools through a wrapper (its middleware), with the default handler.
+# including settings that cover `ValidationError` (a `ValueError`), with or without
+# a wrapper. `create_agent` always runs tools through a wrapper (its middleware).
 _TOOL_NODES = pytest.mark.parametrize(
     ("wrapped", "handle_tool_errors"),
     [
-        (False, None),
-        (False, True),
-        (False, (ValueError,)),
-        (False, _handle_any),
-        (True, None),
+        (wrapped, handler)
+        for wrapped in (False, True)
+        for handler in (None, True, (ValueError,), _handle_any)
     ],
-    ids=["default", "handle_true", "handle_value_error", "untyped_handler", "wrapped"],
+    ids=[
+        f"{wrapped}-{handler}"
+        for wrapped in ("plain", "wrapped")
+        for handler in ("default", "handle_true", "handle_value_error", "untyped")
+    ],
 )
 # The interrupt either runs in a graph the tool starts (a subagent) or in the tool.
 _SHAPE = pytest.mark.parametrize("nested", [True, False], ids=["nested", "direct"])
