@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import builtins
+import json
 import warnings
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from typing import Any, Literal, overload
@@ -1138,7 +1139,9 @@ class RunsClient:
         """
         query_params = {
             "cancel_on_disconnect": cancel_on_disconnect,
-            "stream_mode": stream_mode,
+            "stream_mode": json.dumps(stream_mode)
+            if isinstance(stream_mode, Sequence) and not isinstance(stream_mode, str)
+            else stream_mode,
         }
         if params:
             query_params.update(params)

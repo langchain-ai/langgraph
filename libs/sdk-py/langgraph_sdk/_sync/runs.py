@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import builtins
+import json
 import warnings
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import Any, Literal, overload
@@ -1118,7 +1119,9 @@ class SyncRunsClient:
 
         """
         query_params = {
-            "stream_mode": stream_mode,
+            "stream_mode": json.dumps(stream_mode)
+            if isinstance(stream_mode, Sequence) and not isinstance(stream_mode, str)
+            else stream_mode,
             "cancel_on_disconnect": cancel_on_disconnect,
         }
         if params:
