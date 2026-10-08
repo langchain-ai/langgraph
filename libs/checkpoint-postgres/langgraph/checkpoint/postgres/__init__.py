@@ -18,7 +18,7 @@ from langgraph.checkpoint.base import (
     get_serializable_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.base import SerializerProtocol
-from langgraph.checkpoint.serde.types import _DeltaSnapshot
+from langgraph.checkpoint.serde.types import TASKS, _DeltaSnapshot
 from psycopg import Capabilities, Connection, Cursor, Pipeline
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
@@ -400,6 +400,161 @@ class PostgresSaver(BasePostgresSaver):
                 "DELETE FROM checkpoint_writes WHERE thread_id = %s",
                 (str(thread_id),),
             )
+
+    def prune(
+        self,
+        thread_ids: Sequence[str],
+        *,
+        strategy: str = "keep_latest",
+    ) -> None:
+        """Prune checkpoints for the given threads.
+
+        The `"delete"` strategy removes all checkpoint data for the selected
+        threads. The `"keep_latest"` strategy retains the newest checkpoint
+        in each namespace, together with the writes and blobs needed to load
+        and resume it.
+
+        `"keep_latest"` fails without modifying data if any selected thread
+        contains `DeltaChannel` state. Dependency-aware pruning for delta
+        channels is not implemented yet.
+
+        Args:
+            thread_ids: The thread IDs to prune.
+            strategy: Either `"keep_latest"` or `"delete"`.
+
+        Raises:
+            ValueError: If `strategy` is unsupported.
+            RuntimeError: If `keep_latest` encounters `DeltaChannel` state.
+        """
+        if strategy not in {"delete", "keep_latest"}:
+            raise ValueError(f"Unsupported prune strategy: {strategy!r}")
+        if not thread_ids:
+            return
+
+        selected = list(dict.fromkeys(str(thread_id) for thread_id in thread_ids))
+        with self.lock, _internal.get_connection(self.conn) as conn:
+            if self.pipe:
+                self.pipe.sync()
+            try:
+                with (
+                    conn.transaction(),
+                    conn.cursor(binary=True, row_factory=dict_row) as cur,
+                ):
+                    # Serialize pruning with updates/deletes of checkpoints that
+                    # already exist for the selected threads.
+                    cur.execute(
+                        "SELECT 1 FROM checkpoints "
+                        "WHERE thread_id = ANY(%s) FOR UPDATE",
+                        (selected,),
+                    )
+
+                    if strategy == "keep_latest":
+                        cur.execute(
+                            """
+                            SELECT EXISTS (
+                              SELECT 1
+                              FROM checkpoints c
+                              WHERE c.thread_id = ANY(%s)
+                                AND (
+                                    c.metadata ? 'counters_since_delta_snapshot'
+                                    OR EXISTS (
+                                        SELECT 1
+                                        FROM jsonb_each(
+                                            COALESCE(c.checkpoint -> 'channel_values', '{}'::jsonb)
+                                        ) AS cv(channel, value)
+                                        JOIN checkpoint_blobs b
+                                          ON b.thread_id = c.thread_id
+                                         AND b.checkpoint_ns = c.checkpoint_ns
+                                         AND b.channel = cv.channel
+                                         AND b.version = c.checkpoint
+                                             -> 'channel_versions' ->> cv.channel
+                                        WHERE cv.value = 'true'::jsonb
+                                    )
+                                )
+                            ) AS has_delta_channel
+                            """,
+                            (selected,),
+                        )
+                        delta_result = cur.fetchone()
+                        if delta_result and delta_result["has_delta_channel"]:
+                            raise RuntimeError(
+                                "keep_latest pruning is not supported for threads "
+                                "containing DeltaChannel state"
+                            )
+
+                        cur.execute(
+                            """
+                            WITH ranked AS (
+                                SELECT thread_id, checkpoint_ns, checkpoint_id,
+                                       row_number() OVER (
+                                           PARTITION BY thread_id, checkpoint_ns
+                                           ORDER BY checkpoint_id DESC
+                                       ) AS position
+                                FROM checkpoints
+                                WHERE thread_id = ANY(%s)
+                            )
+                            DELETE FROM checkpoints c
+                            USING ranked r
+                            WHERE r.position > 1
+                              AND c.thread_id = r.thread_id
+                              AND c.checkpoint_ns = r.checkpoint_ns
+                              AND c.checkpoint_id = r.checkpoint_id
+                            """,
+                            (selected,),
+                        )
+                        cur.execute(
+                            """
+                            DELETE FROM checkpoint_writes w
+                            WHERE w.thread_id = ANY(%s)
+                              AND NOT EXISTS (
+                                  SELECT 1
+                                  FROM checkpoints c
+                                  WHERE c.thread_id = w.thread_id
+                                    AND c.checkpoint_ns = w.checkpoint_ns
+                                    AND c.checkpoint_id = w.checkpoint_id
+                              )
+                              AND NOT EXISTS (
+                                  SELECT 1
+                                  FROM checkpoints c
+                                  WHERE c.thread_id = w.thread_id
+                                    AND c.checkpoint_ns = w.checkpoint_ns
+                                    AND c.parent_checkpoint_id = w.checkpoint_id
+                                    AND w.channel = %s
+                              )
+                            """,
+                            (selected, TASKS),
+                        )
+                        cur.execute(
+                            """
+                            DELETE FROM checkpoint_blobs b
+                            WHERE b.thread_id = ANY(%s)
+                              AND NOT EXISTS (
+                                  SELECT 1
+                                  FROM checkpoints c
+                                  WHERE c.thread_id = b.thread_id
+                                    AND c.checkpoint_ns = b.checkpoint_ns
+                                    AND c.checkpoint
+                                        -> 'channel_versions' ->> b.channel = b.version
+                              )
+                            """,
+                            (selected,),
+                        )
+                    else:
+                        cur.execute(
+                            "DELETE FROM checkpoints WHERE thread_id = ANY(%s)",
+                            (selected,),
+                        )
+                        cur.execute(
+                            "DELETE FROM checkpoint_blobs WHERE thread_id = ANY(%s)",
+                            (selected,),
+                        )
+                        cur.execute(
+                            "DELETE FROM checkpoint_writes WHERE thread_id = ANY(%s)",
+                            (selected,),
+                        )
+            finally:
+                if self.pipe:
+                    self.pipe.sync()
 
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:

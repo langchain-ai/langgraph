@@ -14,7 +14,7 @@ from langgraph.checkpoint.base import (
     create_checkpoint,
     empty_checkpoint,
 )
-from langgraph.checkpoint.serde.types import TASKS
+from langgraph.checkpoint.serde.types import TASKS, _DeltaSnapshot
 from psycopg import Connection
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -358,3 +358,151 @@ def test_get_checkpoint_no_channel_values(
 
         checkpoint = saver.get_tuple(config)
         assert checkpoint.checkpoint["channel_values"] == {}
+
+
+def _put_prune_checkpoints(
+    saver: PostgresSaver,
+    thread_id: str,
+    *,
+    checkpoint_ns: str = "",
+    count: int = 3,
+) -> list[RunnableConfig]:
+    config: RunnableConfig = {
+        "configurable": {"thread_id": thread_id, "checkpoint_ns": checkpoint_ns}
+    }
+    stored = []
+    for i in range(count):
+        checkpoint = empty_checkpoint()
+        checkpoint["channel_values"] = {"value": {"index": i}}
+        checkpoint["channel_versions"] = {"value": str(i)}
+        config = saver.put(
+            config,
+            checkpoint,
+            {"source": "loop", "step": i},
+            checkpoint["channel_versions"],
+        )
+        saver.put_writes(config, [("write", i)], task_id=f"task-{i}")
+        stored.append(config)
+    return stored
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
+def test_prune_keep_latest(saver_name: str) -> None:
+    with _saver(saver_name) as saver:
+        root = _put_prune_checkpoints(saver, "thread-1")
+        child = _put_prune_checkpoints(
+            saver, "thread-1", checkpoint_ns="child", count=2
+        )
+        untouched = _put_prune_checkpoints(saver, "thread-2", count=2)
+
+        saver.prune(["thread-1"], strategy="keep_latest")
+
+        assert [
+            item.config
+            for item in saver.list(
+                {"configurable": {"thread_id": "thread-1", "checkpoint_ns": ""}}
+            )
+        ] == [root[-1]]
+        assert [
+            item.config
+            for item in saver.list(
+                {
+                    "configurable": {
+                        "thread_id": "thread-1",
+                        "checkpoint_ns": "child",
+                    }
+                }
+            )
+        ] == [child[-1]]
+        assert [
+            item.config
+            for item in saver.list(
+                {"configurable": {"thread_id": "thread-2", "checkpoint_ns": ""}}
+            )
+        ] == list(reversed(untouched))
+        assert saver.get_tuple(root[-1]).pending_writes == [("task-2", "write", 2)]
+        with saver._cursor() as cur:
+            cur.execute(
+                "SELECT count(*) AS count FROM checkpoint_blobs WHERE thread_id = %s",
+                ("thread-1",),
+            )
+            assert cur.fetchone()["count"] == 2
+
+
+def test_prune_keep_latest_preserves_parent_task_writes() -> None:
+    with _base_saver() as saver:
+        configs = _put_prune_checkpoints(saver, "thread-1", count=2)
+        saver.put_writes(configs[0], [(TASKS, "pending-send")], "pending-task")
+
+        saver.prune(["thread-1"], strategy="keep_latest")
+
+        checkpoint = saver.get_tuple(configs[-1])
+        assert checkpoint is not None
+        assert checkpoint.checkpoint["channel_values"][TASKS] == ["pending-send"]
+
+
+def test_prune_delete() -> None:
+    with _base_saver() as saver:
+        _put_prune_checkpoints(saver, "thread-1")
+        _put_prune_checkpoints(saver, "thread-2", count=2)
+
+        saver.prune(["thread-1"], strategy="delete")
+
+        assert list(saver.list({"configurable": {"thread_id": "thread-1"}})) == []
+        assert (
+            len(
+                list(
+                    saver.list(
+                        {
+                            "configurable": {
+                                "thread_id": "thread-2",
+                                "checkpoint_ns": "",
+                            }
+                        }
+                    )
+                )
+            )
+            == 2
+        )
+        with saver._cursor() as cur:
+            for table in ("checkpoint_blobs", "checkpoint_writes"):
+                cur.execute(
+                    f"SELECT count(*) AS count FROM {table} WHERE thread_id = %s",
+                    ("thread-1",),
+                )
+                assert cur.fetchone()["count"] == 0
+
+
+@pytest.mark.parametrize("delta_marker", ["snapshot", "counter"])
+def test_prune_keep_latest_rejects_delta_channel_atomically(
+    delta_marker: str,
+) -> None:
+    with _base_saver() as saver:
+        ordinary = _put_prune_checkpoints(saver, "ordinary")
+        config: RunnableConfig = {
+            "configurable": {"thread_id": "delta", "checkpoint_ns": ""}
+        }
+        checkpoint = empty_checkpoint()
+        checkpoint["channel_versions"] = {"messages": "1"}
+        metadata: CheckpointMetadata = {"source": "loop", "step": 0}
+        if delta_marker == "snapshot":
+            checkpoint["channel_values"] = {"messages": _DeltaSnapshot(["message"])}
+        else:
+            metadata["counters_since_delta_snapshot"] = {"messages": (1, 1)}
+        saver.put(config, checkpoint, metadata, checkpoint["channel_versions"])
+
+        with pytest.raises(RuntimeError, match="DeltaChannel"):
+            saver.prune(["ordinary", "delta"], strategy="keep_latest")
+
+        assert [
+            item.config
+            for item in saver.list(
+                {"configurable": {"thread_id": "ordinary", "checkpoint_ns": ""}}
+            )
+        ] == list(reversed(ordinary))
+
+
+def test_prune_validates_strategy_before_empty_noop() -> None:
+    with _base_saver() as saver:
+        with pytest.raises(ValueError, match="Unsupported prune strategy"):
+            saver.prune([], strategy="unknown")
