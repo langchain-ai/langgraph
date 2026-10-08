@@ -842,9 +842,10 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
 
             # assign a unique folder name
             container_name = resolved.name
-            if counter[container_name] > 0:
-                container_name += f"_{counter[container_name]}"
-            counter[container_name] += 1
+            count = counter[container_name] + 1
+            counter[container_name] = count
+            if count > 1:
+                container_name += f"_{count - 1}"
             # add to deps
             real_pkgs[resolved] = (local_dep, container_name)
             # set working_dir
