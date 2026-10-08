@@ -29,10 +29,12 @@ from langgraph_sdk.client import (
     get_client,
     get_sync_client,
 )
+from langgraph_sdk.errors import NotFoundError
 from langgraph_sdk.schema import (
     Checkpoint,
     Context,
     QueryParamTypes,
+    Thread,
     ThreadState,
 )
 from langgraph_sdk.schema import (
@@ -438,21 +440,33 @@ class RemoteGraph(PregelProtocol):
 
         return sanitized
 
-    def _get_command(
-        self, input: dict[str, Any] | Any, config: RunnableConfig
-    ) -> CommandSDK | None:
-        """Build the remote command, forwarding a parent graph's resume value."""
-        if isinstance(input, Command):
-            return cast(CommandSDK, asdict(input))
+    @staticmethod
+    def _is_resuming(config: RunnableConfig) -> bool:
+        """Whether a parent graph is re-running this node to resume or retry it."""
         conf = config.get(CONF, {})
-        scratchpad = conf.get(CONFIG_KEY_SCRATCHPAD)
-        if scratchpad is None or not conf.get(CONFIG_KEY_RESUMING):
+        return CONFIG_KEY_SCRATCHPAD in conf and bool(conf.get(CONFIG_KEY_RESUMING))
+
+    @staticmethod
+    def _resume_command(
+        config: RunnableConfig, thread: Thread | None
+    ) -> CommandSDK | None:
+        """Build a command that resumes an interrupted remote thread."""
+        if thread is None or thread["status"] != "interrupted":
             return None
+        pending = [
+            Interrupt(**i)
+            for ints in (thread.get("interrupts") or {}).values()
+            for i in ints
+        ]
+        if not pending:
+            return None
+        conf = config[CONF]
         if resume_map := conf.get(CONFIG_KEY_RESUME_MAP):
-            return {"resume": resume_map}
-        if (resume := scratchpad.get_null_resume(True)) is not None:
+            if any(i.id in resume_map for i in pending):
+                return {"resume": resume_map}
+        elif (resume := conf[CONFIG_KEY_SCRATCHPAD].get_null_resume(True)) is not None:
             return {"resume": resume}
-        return None
+        raise GraphInterrupt(pending)
 
     def get_state(
         self,
@@ -815,10 +829,18 @@ class RemoteGraph(PregelProtocol):
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
         )
-        command = self._get_command(input, merged_config)
+        thread_id = sanitized_config.get("configurable", {}).pop("thread_id", None)
+        command: CommandSDK | None = None
+        if isinstance(input, Command):
+            command = cast(CommandSDK, asdict(input))
+        elif thread_id is not None and self._is_resuming(merged_config):
+            try:
+                thread = sync_client.threads.get(thread_id, headers=headers)
+            except NotFoundError:
+                thread = None
+            command = self._resume_command(merged_config, thread)
         if command is not None:
             input = None
-        thread_id = sanitized_config.get("configurable", {}).pop("thread_id", None)
 
         interrupts: dict[str, Interrupt] = {}
         for chunk in sync_client.runs.stream(
@@ -978,10 +1000,18 @@ class RemoteGraph(PregelProtocol):
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
         )
-        command = self._get_command(input, merged_config)
+        thread_id = sanitized_config.get("configurable", {}).pop("thread_id", None)
+        command: CommandSDK | None = None
+        if isinstance(input, Command):
+            command = cast(CommandSDK, asdict(input))
+        elif thread_id is not None and self._is_resuming(merged_config):
+            try:
+                thread = await client.threads.get(thread_id, headers=headers)
+            except NotFoundError:
+                thread = None
+            command = self._resume_command(merged_config, thread)
         if command is not None:
             input = None
-        thread_id = sanitized_config.get("configurable", {}).pop("thread_id", None)
 
         interrupts: dict[str, Interrupt] = {}
         async for chunk in client.runs.stream(
