@@ -1,3 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
@@ -127,6 +130,75 @@ class TestSqliteSaver:
             )
             assert len(search_results_7) == 1
             assert search_results_7[0].config["configurable"]["thread_id"] == "thread-2"
+
+    @pytest.mark.parametrize("in_memory", [True, False], ids=["memory", "file"])
+    def test_list_pause_does_not_block_put(
+        self, tmp_path: Path, in_memory: bool
+    ) -> None:
+        conn_string = ":memory:" if in_memory else str(tmp_path / "checkpoints.sqlite")
+        with (
+            SqliteSaver.from_conn_string(conn_string) as saver,
+            ThreadPoolExecutor(max_workers=1) as executor,
+        ):
+            stored = saver.put(self.config_1, self.chkpnt_1, self.metadata_1, {})
+            # Close the iterator before shutting down the worker even on failure,
+            # so a blocked put cannot hang the test process.
+            with closing(saver.list(stored)) as history:
+                assert next(history).checkpoint == self.chkpnt_1
+                write = executor.submit(
+                    saver.put, stored, self.chkpnt_2, self.metadata_2, {}
+                )
+                written = write.result(timeout=3)
+                checkpoint = saver.get_tuple(written)
+                assert checkpoint is not None
+                assert checkpoint.checkpoint == self.chkpnt_2
+
+    def test_list_buffers_pending_writes_before_yielding(self) -> None:
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            config: RunnableConfig = {
+                "configurable": {"thread_id": "thread-1", "checkpoint_ns": ""}
+            }
+            older = saver.put(config, self.chkpnt_1, self.metadata_1, {})
+            newer = saver.put(older, self.chkpnt_2, self.metadata_2, {})
+            saver.put_writes(older, [("value", "original")], "task-1")
+
+            with closing(saver.list(config)) as history:
+                first = next(history)
+                assert first.config == newer
+                assert first.parent_config == older
+                # Check liveness before using the saver on the caller thread.
+                # A regression should fail instead of deadlocking the suite.
+                assert not saver.lock.locked()
+                saver.put_writes(older, [("value", "later")], "task-2")
+                saver.delete_thread("thread-1")
+                second = next(history)
+                assert second.config == older
+                assert second.checkpoint == self.chkpnt_1
+                assert second.metadata == self.metadata_1
+                assert second.pending_writes == [("task-1", "value", "original")]
+                assert list(history) == []
+
+            assert saver.get_tuple(older) is None
+
+    def test_list_deserializes_checkpoints_lazily(self) -> None:
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            config: RunnableConfig = {
+                "configurable": {"thread_id": "thread-1", "checkpoint_ns": ""}
+            }
+            older = saver.put(config, self.chkpnt_1, self.metadata_1, {})
+            newer = saver.put(older, self.chkpnt_2, self.metadata_2, {})
+            # A corrupt older checkpoint must not prevent reading the newest.
+            with saver.cursor() as cur:
+                cur.execute(
+                    "UPDATE checkpoints SET checkpoint = ? WHERE checkpoint_id = ?",
+                    (b"\xc1", self.chkpnt_1["id"]),
+                )
+            with closing(saver.list(config)) as history:
+                assert next(history).config == newer
+                with pytest.raises(ValueError):
+                    next(history)
+            assert not saver.lock.locked()
+            assert saver.get_tuple(newer) is not None
 
     def test_search_where(self) -> None:
         # call method / assertions

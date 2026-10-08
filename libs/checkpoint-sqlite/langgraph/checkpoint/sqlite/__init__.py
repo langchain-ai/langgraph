@@ -321,6 +321,10 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         This method retrieves a list of checkpoint tuples from the SQLite database based
         on the provided config. The checkpoints are ordered by checkpoint ID in descending order (newest first).
 
+        Matching rows and pending writes are read before yielding, so a paused
+        iterator does not hold the database lock. Use `limit` to bound the
+        number of rows buffered in memory.
+
         Args:
             config: The config to use for listing the checkpoints.
             filter: Additional filtering criteria for metadata.
@@ -357,7 +361,15 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             param_values = (*param_values, limit)
         with self.cursor(transaction=False) as cur, closing(self.conn.cursor()) as wcur:
             cur.execute(query, param_values)
-            for (
+            rows = []
+            for row in cur:
+                wcur.execute(
+                    pending_writes_sql(self._has_task_path),
+                    row[:3],
+                )
+                rows.append((row, wcur.fetchall()))
+        for (
+            (
                 thread_id,
                 checkpoint_ns,
                 checkpoint_id,
@@ -365,37 +377,35 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 type,
                 checkpoint,
                 metadata,
-            ) in cur:
-                wcur.execute(
-                    pending_writes_sql(self._has_task_path),
-                    (thread_id, checkpoint_ns, checkpoint_id),
-                )
-                yield CheckpointTuple(
+            ),
+            writes,
+        ) in rows:
+            yield CheckpointTuple(
+                {
+                    "configurable": {
+                        "thread_id": thread_id,
+                        "checkpoint_ns": checkpoint_ns,
+                        "checkpoint_id": checkpoint_id,
+                    }
+                },
+                self.serde.loads_typed((type, checkpoint)),
+                cast(
+                    CheckpointMetadata,
+                    json.loads(metadata) if metadata is not None else {},
+                ),
+                (
                     {
                         "configurable": {
                             "thread_id": thread_id,
                             "checkpoint_ns": checkpoint_ns,
-                            "checkpoint_id": checkpoint_id,
+                            "checkpoint_id": parent_checkpoint_id,
                         }
-                    },
-                    self.serde.loads_typed((type, checkpoint)),
-                    cast(
-                        CheckpointMetadata,
-                        json.loads(metadata) if metadata is not None else {},
-                    ),
-                    (
-                        {
-                            "configurable": {
-                                "thread_id": thread_id,
-                                "checkpoint_ns": checkpoint_ns,
-                                "checkpoint_id": parent_checkpoint_id,
-                            }
-                        }
-                        if parent_checkpoint_id
-                        else None
-                    ),
-                    load_pending_writes(wcur, self.serde),
-                )
+                    }
+                    if parent_checkpoint_id
+                    else None
+                ),
+                load_pending_writes(writes, self.serde),
+            )
 
     def put(
         self,
