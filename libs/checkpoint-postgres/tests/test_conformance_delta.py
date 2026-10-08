@@ -1,4 +1,4 @@
-"""Run delta-channel conformance capabilities against AsyncPostgresSaver."""
+"""Run extended conformance capabilities against AsyncPostgresSaver."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from tests.conftest import DEFAULT_URI
 
 
 @pytest.mark.asyncio
-async def test_delta_channel_conformance():
+async def test_extended_conformance():
     @checkpointer_test(name="AsyncPostgresSaver")
     async def postgres_saver():
         async with AsyncPostgresSaver.from_conn_string(DEFAULT_URI) as saver:
@@ -22,6 +22,7 @@ async def test_delta_channel_conformance():
         postgres_saver,
         capabilities={
             "delta_channel_history",
+            "prune",
         },
     )
     for cap, result in report.results.items():
