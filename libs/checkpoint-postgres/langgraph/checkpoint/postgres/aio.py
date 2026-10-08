@@ -423,7 +423,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 return {ch: {"writes": []} for ch in channels}
             checkpoint_id = target.config["configurable"]["checkpoint_id"]
 
-        stage1_sql = _build_delta_stage1_sql(channels, paged=True)
+        stage1_sql = _build_delta_stage1_sql(channels, paged=True, include_cursor=True)
         parent_of: dict[str, str | None] = {}
         ver_by_i_by_cid: list[dict[str, str | None]] = [{} for _ in channels]
         hb_by_i_by_cid: list[dict[str, bool]] = [{} for _ in channels]
@@ -433,7 +433,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         seed_inline_by_ch: dict[str, Any] = {}
         walk_cursor_by_ch: dict[str, str | None] = {}
         seeded: set[str] = set()
-        cursor: str | None = None
+        cursor: str | None = checkpoint_id
 
         async with self._cursor() as cur:
             while True:
@@ -442,7 +442,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     # ver_i, blob channel, blob version, inline_i
                     stage1_params.extend([ch, ch, ch, ch])
                 stage1_params.extend(
-                    [thread_id, checkpoint_ns, cursor, cursor, _DELTA_PAGE_SIZE]
+                    [thread_id, checkpoint_ns, cursor, _DELTA_PAGE_SIZE]
                 )
                 await cur.execute(stage1_sql, stage1_params)
                 page = await cur.fetchall()
@@ -472,6 +472,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 if len(seeded) == len(channels) or len(page) < _DELTA_PAGE_SIZE:
                     break
                 cursor = oldest
+                stage1_sql = _build_delta_stage1_sql(channels, paged=True)
 
         channels_with_chain = [ch for ch in channels if chain_by_ch[ch]]
         channels_with_seed = [ch for ch in channels if seed_ver_by_ch[ch] is not None]
