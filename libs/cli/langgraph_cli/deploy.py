@@ -2536,6 +2536,8 @@ def deploy_listeners() -> None:
 def deploy_listeners_list(
     api_key: str | None, host_url: str | None, json_output: bool
 ) -> None:
+    global _no_input
+    _no_input = json_output
     client = _create_host_backend_client(host_url, api_key)
     listeners = _call_host_backend_with_optional_tenant(
         client, lambda c: c.list_listeners()
