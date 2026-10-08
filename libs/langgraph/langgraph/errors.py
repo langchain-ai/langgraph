@@ -253,7 +253,8 @@ def is_invalid_resume(error: BaseException) -> bool:
     """Whether `error` was raised because a resume value didn't match `response_schema`.
 
     `interrupt()` raises a `pydantic.ValidationError` in that case. `ToolNode` uses
-    this to tell it apart from invalid tool arguments when a tool runs a graph, so
-    the resume fails and the interrupt can be answered again.
+    this to tell it apart from invalid tool arguments when a tool calls `interrupt()`
+    or runs a graph that does, so the resume fails and the interrupt can be answered
+    again.
     """
     return getattr(error, _INVALID_RESUME, False) is True

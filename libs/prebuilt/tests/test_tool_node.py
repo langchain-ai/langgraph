@@ -650,26 +650,59 @@ def _ask_human_call() -> dict[str, list[AnyMessage]]:
     return {"messages": [AIMessage("", tool_calls=[call])]}
 
 
-@pytest.mark.parametrize("wrapped", [False, True], ids=["plain", "wrapped"])
-def test_tool_node_reraises_invalid_resume_from_nested_interrupt(
-    sync_checkpointer: BaseCheckpointSaver, wrapped: bool
+def _handle_any(e):  # no annotation: handles every error
+    return "handled"
+
+
+# A bad answer to an interrupt must fail the run whatever `handle_tool_errors` is,
+# including settings that cover `ValidationError` (a `ValueError`). `create_agent`
+# always runs tools through a wrapper (its middleware), with the default handler.
+_TOOL_NODES = pytest.mark.parametrize(
+    ("wrapped", "handle_tool_errors"),
+    [
+        (False, None),
+        (False, True),
+        (False, (ValueError,)),
+        (False, _handle_any),
+        (True, None),
+    ],
+    ids=["default", "handle_true", "handle_value_error", "untyped_handler", "wrapped"],
+)
+# The interrupt either runs in a graph the tool starts (a subagent) or in the tool.
+_SHAPE = pytest.mark.parametrize("nested", [True, False], ids=["nested", "direct"])
+
+
+@_TOOL_NODES
+@_SHAPE
+def test_tool_node_reraises_invalid_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+    wrapped: bool,
+    nested: bool,
+    handle_tool_errors: Any,
 ) -> None:
     asker = _approval_graph()
 
     @dec_tool
     def ask_human() -> str:
         """Ask a human for approval."""
-        return asker.invoke({})["answer"]
+        if nested:
+            return asker.invoke({})["answer"]
+        approval = interrupt("Approve?", response_schema=_Approval)
+        return f"approved={approval.approved}"
 
-    # `create_agent` always runs tools through a wrapper (its middleware).
     def pass_through(request, handler):
         return handler(request)
 
+    errors = (
+        {} if handle_tool_errors is None else {"handle_tool_errors": handle_tool_errors}
+    )
     graph = (
         StateGraph(MessagesState)
         .add_node(
             "tools",
-            ToolNode([ask_human], wrap_tool_call=pass_through if wrapped else None),
+            ToolNode(
+                [ask_human], wrap_tool_call=pass_through if wrapped else None, **errors
+            ),
         )
         .add_edge(START, "tools")
         .compile(checkpointer=sync_checkpointer)
@@ -687,25 +720,37 @@ def test_tool_node_reraises_invalid_resume_from_nested_interrupt(
     assert result["messages"][-1].content == "approved=True"
 
 
-@pytest.mark.parametrize("wrapped", [False, True], ids=["plain", "wrapped"])
-async def test_tool_node_reraises_invalid_resume_from_nested_interrupt_async(
-    async_checkpointer: BaseCheckpointSaver, wrapped: bool
+@_TOOL_NODES
+@_SHAPE
+async def test_tool_node_reraises_invalid_resume_async(
+    async_checkpointer: BaseCheckpointSaver,
+    wrapped: bool,
+    nested: bool,
+    handle_tool_errors: Any,
 ) -> None:
     asker = _approval_graph()
 
     @dec_tool
     async def ask_human() -> str:
         """Ask a human for approval."""
-        return (await asker.ainvoke({}))["answer"]
+        if nested:
+            return (await asker.ainvoke({}))["answer"]
+        approval = interrupt("Approve?", response_schema=_Approval)
+        return f"approved={approval.approved}"
 
     async def pass_through(request, handler):
         return await handler(request)
 
+    errors = (
+        {} if handle_tool_errors is None else {"handle_tool_errors": handle_tool_errors}
+    )
     graph = (
         StateGraph(MessagesState)
         .add_node(
             "tools",
-            ToolNode([ask_human], awrap_tool_call=pass_through if wrapped else None),
+            ToolNode(
+                [ask_human], awrap_tool_call=pass_through if wrapped else None, **errors
+            ),
         )
         .add_edge(START, "tools")
         .compile(checkpointer=async_checkpointer)

@@ -966,9 +966,9 @@ class ToolNode(RunnableCallable):
                 response = tool.invoke(call_args, config)
             except ValidationError as exc:
                 if is_invalid_resume(exc):
-                    # A graph this tool ran got a resume value that doesn't match its
-                    # `response_schema`. That's not a bad tool argument: fail the run
-                    # so the interrupt can be answered again.
+                    # An `interrupt()` in this tool, or in a graph it ran, got a resume
+                    # value that doesn't match its `response_schema`. That's not a bad
+                    # tool argument: fail the run so the interrupt can be answered again.
                     raise
                 # Filter out errors for injected arguments
                 injected = self._injected_args.get(call["name"])
@@ -995,6 +995,10 @@ class ToolNode(RunnableCallable):
         except GraphBubbleUp:
             raise
         except Exception as e:
+            # The model can't fix a resume value that doesn't match an interrupt's
+            # `response_schema`, so no `handle_tool_errors` setting handles it.
+            if is_invalid_resume(e):
+                raise
             # Determine which exception types are handled
             handled_types: tuple[type[Exception], ...]
             if isinstance(self._handle_tool_errors, type) and issubclass(
@@ -1118,9 +1122,9 @@ class ToolNode(RunnableCallable):
                 response = await tool.ainvoke(call_args, config)
             except ValidationError as exc:
                 if is_invalid_resume(exc):
-                    # A graph this tool ran got a resume value that doesn't match its
-                    # `response_schema`. That's not a bad tool argument: fail the run
-                    # so the interrupt can be answered again.
+                    # An `interrupt()` in this tool, or in a graph it ran, got a resume
+                    # value that doesn't match its `response_schema`. That's not a bad
+                    # tool argument: fail the run so the interrupt can be answered again.
                     raise
                 # Filter out errors for injected arguments
                 injected = self._injected_args.get(call["name"])
@@ -1147,6 +1151,10 @@ class ToolNode(RunnableCallable):
         except GraphBubbleUp:
             raise
         except Exception as e:
+            # The model can't fix a resume value that doesn't match an interrupt's
+            # `response_schema`, so no `handle_tool_errors` setting handles it.
+            if is_invalid_resume(e):
+                raise
             # Determine which exception types are handled
             handled_types: tuple[type[Exception], ...]
             if isinstance(self._handle_tool_errors, type) and issubclass(
