@@ -7,6 +7,7 @@ import pickle
 import re
 import sys
 import tempfile
+import types
 import uuid
 from collections import deque
 from datetime import date, datetime, time, timezone
@@ -33,12 +34,16 @@ from langgraph.checkpoint.serde.event_hooks import (
     register_serde_event_listener,
 )
 from langgraph.checkpoint.serde.jsonplus import (
+    EXT_CONSTRUCTOR_KW_ARGS,
+    EXT_CONSTRUCTOR_POS_ARGS,
+    EXT_CONSTRUCTOR_SINGLE_ARG,
     EXT_METHOD_SINGLE_ARG,
     InvalidModuleError,
     JsonPlusSerializer,
     _msgpack_enc,
     _msgpack_ext_hook_to_json,
     _warned_blocked_types,
+    _warned_unreconstructable_types,
     _warned_unregistered_types,
 )
 from langgraph.store.base import Item
@@ -821,6 +826,7 @@ def _reset_warned_types() -> None:
     # a fresh slate and assertions about warning emission are stable.
     _warned_unregistered_types.clear()
     _warned_blocked_types.clear()
+    _warned_unreconstructable_types.clear()
 
 
 def test_msgpack_pydantic_warns_by_default(caplog: pytest.LogCaptureFixture) -> None:
@@ -1230,3 +1236,58 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     # No blocking should occur - inner is serialized as dict, not ext
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+def test_msgpack_dataclass_from_removed_module_restores_payload(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    @dataclasses.dataclass
+    class SavedObject:
+        value: int
+
+    SavedObject.__module__ = "removed_module"
+    module = types.ModuleType("removed_module")
+    module.SavedObject = SavedObject
+    monkeypatch.setitem(sys.modules, "removed_module", module)
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[("removed_module", "SavedObject")]
+    )
+    dumped = serde.dumps_typed({"state": SavedObject(123)})
+    assert serde.loads_typed(dumped) == {"state": SavedObject(123)}
+
+    monkeypatch.delitem(sys.modules, "removed_module")
+    caplog.set_level(logging.WARNING, logger="langgraph.checkpoint.serde.jsonplus")
+
+    assert serde.loads_typed(dumped) == {"state": {"value": 123}}
+    assert (
+        "could not reconstruct removed_module.savedobject from checkpoint "
+        "(modulenotfounderror)" in caplog.text.lower()
+    )
+
+
+@pytest.mark.parametrize(
+    ("code", "tup", "expected"),
+    [
+        (EXT_CONSTRUCTOR_SINGLE_ARG, ("missing_module", "Thing", "x"), "x"),
+        (EXT_CONSTRUCTOR_POS_ARGS, ("missing_module", "Thing", [1, 2]), [1, 2]),
+        (
+            EXT_CONSTRUCTOR_KW_ARGS,
+            ("missing_module", "Thing", {"value": 123}),
+            {"value": 123},
+        ),
+        (
+            EXT_METHOD_SINGLE_ARG,
+            ("datetime", "datetime", "not-a-date", "fromisoformat"),
+            "not-a-date",
+        ),
+    ],
+)
+def test_msgpack_failed_reconstruction_returns_payload(
+    code: int, tup: tuple, expected: object
+) -> None:
+    serde = JsonPlusSerializer(allowed_msgpack_modules=True)
+    payload = ormsgpack.packb(
+        ormsgpack.Ext(code, _msgpack_enc(tup)), option=ormsgpack.OPT_NON_STR_KEYS
+    )
+
+    assert serde.loads_typed(("msgpack", payload)) == expected
