@@ -49,6 +49,9 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_RESUME_MAP,
+    CONFIG_KEY_RESUMING,
+    CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_TASK_ID,
     INTERRUPT,
@@ -81,6 +84,8 @@ _CONF_DROPLIST = frozenset(
         CONFIG_KEY_CHECKPOINT_ID,
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_TASK_ID,
+        CONFIG_KEY_RESUME_MAP,
+        CONFIG_KEY_RESUMING,
     ),
 )
 
@@ -432,6 +437,22 @@ class RemoteGraph(PregelProtocol):
                     sanitized["configurable"][k] = sanitized_value
 
         return sanitized
+
+    def _get_command(
+        self, input: dict[str, Any] | Any, config: RunnableConfig
+    ) -> CommandSDK | None:
+        """Build the remote command, forwarding a parent graph's resume value."""
+        if isinstance(input, Command):
+            return cast(CommandSDK, asdict(input))
+        conf = config.get(CONF, {})
+        scratchpad = conf.get(CONFIG_KEY_SCRATCHPAD)
+        if scratchpad is None or not conf.get(CONFIG_KEY_RESUMING):
+            return None
+        if resume_map := conf.get(CONFIG_KEY_RESUME_MAP):
+            return {"resume": resume_map}
+        if (resume := scratchpad.get_null_resume(True)) is not None:
+            return {"resume": resume}
+        return None
 
     def get_state(
         self,
@@ -794,13 +815,12 @@ class RemoteGraph(PregelProtocol):
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
         )
-        if isinstance(input, Command):
-            command: CommandSDK | None = cast(CommandSDK, asdict(input))
+        command = self._get_command(input, merged_config)
+        if command is not None:
             input = None
-        else:
-            command = None
         thread_id = sanitized_config.get("configurable", {}).pop("thread_id", None)
 
+        interrupts: dict[str, Interrupt] = {}
         for chunk in sync_client.runs.stream(
             thread_id=thread_id,
             assistant_id=self.assistant_id,
@@ -832,16 +852,23 @@ class RemoteGraph(PregelProtocol):
             if caller_ns := (config or {}).get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS):
                 caller_ns = tuple(caller_ns.split(NS_SEP))
                 ns = caller_ns + ns
+            is_interrupt = (
+                chunk.event.startswith("updates")
+                and isinstance(chunk.data, dict)
+                and INTERRUPT in chunk.data
+            )
+            if interrupts and not is_interrupt:
+                continue
             # stream to parent stream
             if stream is not None and mode in stream.modes:
                 stream((ns, mode, chunk.data))
-            # raise interrupt or errors
-            if chunk.event.startswith("updates"):
-                if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
-                    if caller_ns:
-                        raise GraphInterrupt(
-                            [Interrupt(**i) for i in chunk.data[INTERRUPT]]
-                        )
+            # collect interrupts or raise errors
+            if is_interrupt:
+                if caller_ns:
+                    for i in chunk.data[INTERRUPT]:
+                        item = Interrupt(**i)
+                        interrupts.setdefault(item.id, item)
+                    continue
             elif chunk.event.startswith("error"):
                 raise RemoteException(chunk.data)
             # filter for what was actually requested
@@ -874,6 +901,8 @@ class RemoteGraph(PregelProtocol):
                 yield chunk.data
             else:
                 yield chunk
+        if interrupts:
+            raise GraphInterrupt(list(interrupts.values()))
 
     @overload
     def astream(
@@ -949,13 +978,12 @@ class RemoteGraph(PregelProtocol):
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
         )
-        if isinstance(input, Command):
-            command: CommandSDK | None = cast(CommandSDK, asdict(input))
+        command = self._get_command(input, merged_config)
+        if command is not None:
             input = None
-        else:
-            command = None
         thread_id = sanitized_config.get("configurable", {}).pop("thread_id", None)
 
+        interrupts: dict[str, Interrupt] = {}
         async for chunk in client.runs.stream(
             thread_id=thread_id,
             assistant_id=self.assistant_id,
@@ -987,16 +1015,23 @@ class RemoteGraph(PregelProtocol):
             if caller_ns := (config or {}).get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS):
                 caller_ns = tuple(caller_ns.split(NS_SEP))
                 ns = caller_ns + ns
+            is_interrupt = (
+                chunk.event.startswith("updates")
+                and isinstance(chunk.data, dict)
+                and INTERRUPT in chunk.data
+            )
+            if interrupts and not is_interrupt:
+                continue
             # stream to parent stream
             if stream is not None and mode in stream.modes:
                 stream((ns, mode, chunk.data))
-            # raise interrupt or errors
-            if chunk.event.startswith("updates"):
-                if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
-                    if caller_ns:
-                        raise GraphInterrupt(
-                            [Interrupt(**i) for i in chunk.data[INTERRUPT]]
-                        )
+            # collect interrupts or raise errors
+            if is_interrupt:
+                if caller_ns:
+                    for i in chunk.data[INTERRUPT]:
+                        item = Interrupt(**i)
+                        interrupts.setdefault(item.id, item)
+                    continue
             elif chunk.event.startswith("error"):
                 raise RemoteException(chunk.data)
             # filter for what was actually requested
@@ -1029,6 +1064,8 @@ class RemoteGraph(PregelProtocol):
                 yield chunk.data
             else:
                 yield chunk
+        if interrupts:
+            raise GraphInterrupt(list(interrupts.values()))
 
     def stream_events(
         self,

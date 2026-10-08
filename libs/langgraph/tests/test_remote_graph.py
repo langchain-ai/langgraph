@@ -20,7 +20,7 @@ from langgraph.errors import GraphInterrupt
 from langgraph.graph import END, START, MessagesState, StateGraph, add_messages
 from langgraph.pregel import Pregel
 from langgraph.pregel.remote import RemoteGraph
-from langgraph.types import Interrupt, StateSnapshot
+from langgraph.types import Command, Interrupt, StateSnapshot
 from tests.any_str import AnyStr
 from tests.conftest import NO_DOCKER
 from tests.example_app.example_graph import app
@@ -882,6 +882,133 @@ def test_stream_sanitizes_thread_id():
     assert "configurable" in passed_config
     assert "thread_id" not in passed_config["configurable"]
     assert not passed_config["configurable"]
+
+
+class _ApprovalState(TypedDict, total=False):
+    request: str
+    approved: bool
+    result: str
+
+
+_REMOTE_INTERRUPT_ID = "0123456789abcdef0123456789abcdef"
+
+_REMOTE_INTERRUPT_RUN = [
+    StreamPart(
+        event="updates",
+        data={
+            "__interrupt__": [
+                {"value": {"question": "Approve X?"}, "id": _REMOTE_INTERRUPT_ID}
+            ]
+        },
+    )
+]
+
+_REMOTE_DONE_RUN = [
+    StreamPart(
+        event="values", data={"request": "X", "approved": True, "result": "done"}
+    )
+]
+
+
+def _remote_interrupt_parent(remote_client: MagicMock, next_client: MagicMock):
+    return (
+        StateGraph(_ApprovalState)
+        .add_node(
+            "agent_b",
+            RemoteGraph("agent_b", sync_client=remote_client, client=remote_client),
+        )
+        .add_node(
+            "agent_c",
+            RemoteGraph("agent_c", sync_client=next_client, client=next_client),
+        )
+        .add_edge(START, "agent_b")
+        .add_edge("agent_b", "agent_c")
+        .compile(checkpointer=InMemorySaver())
+    )
+
+
+@pytest.mark.parametrize(
+    "resume",
+    [{"approved": True}, {_REMOTE_INTERRUPT_ID: {"approved": True}}],
+    ids=["value", "interrupt_id"],
+)
+def test_subgraph_resume_is_forwarded_to_remote_thread(resume):
+    remote_client = MagicMock()
+    remote_client.runs.stream.side_effect = [_REMOTE_INTERRUPT_RUN, _REMOTE_DONE_RUN]
+    next_client = MagicMock()
+    next_client.runs.stream.return_value = _REMOTE_DONE_RUN
+    parent = _remote_interrupt_parent(remote_client, next_client)
+    config = {"configurable": {"thread_id": "parent_thread"}}
+
+    out = parent.invoke({"request": "X"}, config)
+    assert out["__interrupt__"] == [
+        Interrupt(value={"question": "Approve X?"}, id=_REMOTE_INTERRUPT_ID)
+    ]
+
+    out = parent.invoke(Command(resume=resume), config)
+    assert "__interrupt__" not in out
+    assert out["result"] == "done"
+
+    first, second = remote_client.runs.stream.call_args_list
+    assert first.kwargs["input"] == {"request": "X"}
+    assert first.kwargs["command"] is None
+    assert second.kwargs["input"] is None
+    assert second.kwargs["command"] == {"resume": resume}
+    assert second.kwargs["thread_id"] == first.kwargs["thread_id"]
+
+    next_kwargs = next_client.runs.stream.call_args.kwargs
+    assert next_kwargs["command"] is None
+    assert next_kwargs["input"] == {"request": "X", "approved": True, "result": "done"}
+
+
+def test_subgraph_surfaces_all_remote_interrupts():
+    second_id = "fedcba9876543210fedcba9876543210"
+    remote_client = MagicMock()
+    remote_client.runs.stream.return_value = [
+        *_REMOTE_INTERRUPT_RUN,
+        StreamPart(event="values", data={"request": "X"}),
+        StreamPart(
+            event="updates",
+            data={"__interrupt__": [{"value": "second", "id": second_id}]},
+        ),
+    ]
+    parent = _remote_interrupt_parent(remote_client, MagicMock())
+    config = {"configurable": {"thread_id": "parent_thread"}}
+
+    out = parent.invoke({"request": "X"}, config)
+
+    assert out["__interrupt__"] == [
+        Interrupt(value={"question": "Approve X?"}, id=_REMOTE_INTERRUPT_ID),
+        Interrupt(value="second", id=second_id),
+    ]
+
+
+async def test_subgraph_resume_is_forwarded_to_remote_thread_async():
+    remote_client = MagicMock()
+    remote_iters = []
+    for parts in (_REMOTE_INTERRUPT_RUN, _REMOTE_DONE_RUN):
+        async_iter = MagicMock()
+        async_iter.__aiter__.return_value = parts
+        remote_iters.append(async_iter)
+    remote_client.runs.stream.side_effect = remote_iters
+    next_client = MagicMock()
+    next_iter = MagicMock()
+    next_iter.__aiter__.return_value = _REMOTE_DONE_RUN
+    next_client.runs.stream.return_value = next_iter
+    parent = _remote_interrupt_parent(remote_client, next_client)
+    config = {"configurable": {"thread_id": "parent_thread"}}
+
+    out = await parent.ainvoke({"request": "X"}, config)
+    assert "__interrupt__" in out
+
+    out = await parent.ainvoke(Command(resume={"approved": True}), config)
+    assert "__interrupt__" not in out
+    assert out["result"] == "done"
+
+    second = remote_client.runs.stream.call_args_list[1]
+    assert second.kwargs["input"] is None
+    assert second.kwargs["command"] == {"resume": {"approved": True}}
+    assert next_client.runs.stream.call_args.kwargs["command"] is None
 
 
 @pytest.mark.anyio
