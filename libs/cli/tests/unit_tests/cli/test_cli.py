@@ -535,6 +535,79 @@ def test_deploy_listeners_list_command_no_results(monkeypatch) -> None:
     assert result.output.strip() == "No listeners found for this workspace."
 
 
+def test_deploy_listeners_list_command_json(monkeypatch) -> None:
+    runner = CliRunner()
+
+    listeners = [
+        {
+            "id": "listener-1",
+            "compute_id": "prod-cluster",
+            "compute_config": {"k8s_namespaces": ["agents"]},
+        },
+        {
+            "id": "listener-2",
+            "compute_id": "multi-cluster",
+            "compute_config": {"k8s_namespaces": ["agents", "agents-staging"]},
+        },
+    ]
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def list_listeners(self):
+            return listeners
+
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "listeners",
+            "list",
+            "--json",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == listeners
+
+
+def test_deploy_listeners_list_command_json_no_results(monkeypatch) -> None:
+    runner = CliRunner()
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def list_listeners(self):
+            return []
+
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "listeners",
+            "list",
+            "--json",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == []
+
+
 def test_deploy_revisions_list_command(monkeypatch) -> None:
     runner = CliRunner()
     captured: dict[str, str] = {}
