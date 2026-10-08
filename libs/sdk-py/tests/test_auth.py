@@ -1,6 +1,20 @@
 import pytest
+from typing_extensions import assert_type
 
 from langgraph_sdk import Auth
+
+
+def test_studio_user_langsmith_id() -> None:
+    def langsmith_id(user: object) -> str | None:
+        if isinstance(user, Auth.types.StudioUser):
+            return assert_type(user.ls_user_id, str | None)
+        return None
+
+    user = Auth.types.StudioUser("login-user", is_authenticated=True)
+    assert langsmith_id(user) is None
+    user.ls_user_id = "langsmith-user"
+    assert langsmith_id(user) == "langsmith-user"
+    assert user.identity == "login-user"
 
 
 def test_handler_multiple_resources_and_actions() -> None:
