@@ -1396,4 +1396,5 @@ __all__ = [
     "ensure_embeddings",
     "tokenize_path",
     "get_text_at_path",
+    "validate_op_namespace",
 ]
