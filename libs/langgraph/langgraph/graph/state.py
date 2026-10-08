@@ -65,7 +65,7 @@ from langgraph.errors import (
     create_error_message,
 )
 from langgraph.graph._branch import BranchSpec
-from langgraph.graph._node import StateNode, StateNodeSpec
+from langgraph.graph._node import ErrorHandlerNode, StateNode, StateNodeSpec
 from langgraph.managed.base import (
     ManagedValueSpec,
     is_managed_value,
@@ -105,7 +105,7 @@ class _NodeDefaults:
 
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None
     cache_policy: CachePolicy | None = None
-    error_handler: StateNode[Any, Any] | None = None
+    error_handler: ErrorHandlerNode[Any, Any] | None = None
     timeout: TimeoutPolicy | None = None
 
 
@@ -274,7 +274,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         *,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
-        error_handler: StateNode[Any, ContextT] | None = None,
+        error_handler: ErrorHandlerNode[Any, ContextT] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
     ) -> Self:
         """Set default node policies that apply to every node in this graph.
@@ -382,7 +382,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
-        error_handler: StateNode[Any, ContextT] | None = None,
+        error_handler: ErrorHandlerNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
         trace_policy: TracePolicy | None = None,
@@ -452,7 +452,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: type[NodeInputT],
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
-        error_handler: StateNode[Any, ContextT] | None = None,
+        error_handler: ErrorHandlerNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
         trace_policy: TracePolicy | None = None,
@@ -527,7 +527,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
-        error_handler: StateNode[Any, ContextT] | None = None,
+        error_handler: ErrorHandlerNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
         trace_policy: TracePolicy | None = None,
@@ -597,7 +597,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: type[NodeInputT],
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
-        error_handler: StateNode[Any, ContextT] | None = None,
+        error_handler: ErrorHandlerNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
         trace_policy: TracePolicy | None = None,
@@ -674,7 +674,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: type[NodeInputT] | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
-        error_handler: StateNode[Any, ContextT] | None = None,
+        error_handler: ErrorHandlerNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
         trace_policy: TracePolicy | None = None,

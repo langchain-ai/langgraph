@@ -7,7 +7,9 @@ from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
+from langgraph.errors import NodeError
 from langgraph.graph import StateGraph
+from langgraph.runtime import Runtime
 from langgraph.types import Command
 
 
@@ -105,6 +107,28 @@ def test_input_state_specified() -> None:
 
     new_graph.invoke({"something": 1})
     new_graph.invoke({"something": 2, "info": ["hello", "world"]})  # type: ignore[arg-type]
+
+
+@pytest.mark.skip("Purely for type checking")
+def test_error_handler_types() -> None:
+    class State(TypedDict):
+        x: int
+
+    class Context(TypedDict):
+        user: str
+
+    def handler(state: State, error: NodeError, runtime: Runtime[Context]) -> State:
+        return {"x": 0}
+
+    def handler_without_runtime(state: State, error: NodeError) -> State:
+        return {"x": 0}
+
+    def node(state: State) -> State:
+        return state
+
+    graph = StateGraph(State, context_schema=Context)
+    graph.set_node_defaults(error_handler=handler)
+    graph.add_node("a", node, error_handler=handler_without_runtime)
 
 
 @pytest.mark.skip("Purely for type checking")

@@ -8,6 +8,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.store.base import BaseStore
 
 from langgraph._internal._typing import EMPTY_SEQ
+from langgraph.errors import NodeError
 from langgraph.runtime import Runtime
 from langgraph.types import (
     CachePolicy,
@@ -70,6 +71,20 @@ class _NodeWithRuntime(Protocol[NodeInputT_contra, ContextT]):
     ) -> Any: ...
 
 
+class _NodeWithError(Protocol[NodeInputT_contra]):
+    def __call__(self, state: NodeInputT_contra, *, error: NodeError) -> Any: ...
+
+
+class _NodeWithErrorAndRuntime(Protocol[NodeInputT_contra, ContextT]):
+    def __call__(
+        self,
+        state: NodeInputT_contra,
+        *,
+        error: NodeError,
+        runtime: Runtime[ContextT],
+    ) -> Any: ...
+
+
 # TODO: we probably don't want to explicitly support the config / store signatures once
 # we move to adding a context arg. Maybe what we do is we add support for kwargs with param spec
 # this is purely for typing purposes though, so can easily change in the coming weeks.
@@ -84,6 +99,12 @@ StateNode: TypeAlias = (
     | _NodeWithConfigWriterStore[NodeInputT]
     | _NodeWithRuntime[NodeInputT, ContextT]
     | Runnable[NodeInputT, Any]
+)
+
+ErrorHandlerNode: TypeAlias = (
+    StateNode[NodeInputT, ContextT]
+    | _NodeWithError[NodeInputT]
+    | _NodeWithErrorAndRuntime[NodeInputT, ContextT]
 )
 
 
