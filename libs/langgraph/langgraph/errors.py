@@ -28,6 +28,7 @@ __all__ = (
     "ParentCommand",
     "EmptyInputError",
     "TaskNotFound",
+    "is_invalid_resume",
 )
 
 
@@ -239,3 +240,21 @@ class NodeTimeoutError(Exception):
         self.kind = kind
         self.idle_timeout = idle_timeout
         self.run_timeout = run_timeout
+
+
+_INVALID_RESUME = "_langgraph_invalid_resume"
+
+
+def _mark_invalid_resume(error: BaseException) -> None:
+    setattr(error, _INVALID_RESUME, True)
+
+
+def is_invalid_resume(error: BaseException) -> bool:
+    """Whether `error` was raised because a resume value didn't match `response_schema`.
+
+    `interrupt()` raises a `pydantic.ValidationError` in that case. `ToolNode` uses
+    this to tell it apart from invalid tool arguments when a tool calls `interrupt()`
+    or runs a graph that does, so the resume fails and the interrupt can be answered
+    again.
+    """
+    return getattr(error, _INVALID_RESUME, False) is True

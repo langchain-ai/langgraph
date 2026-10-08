@@ -6,6 +6,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from pydantic import BaseModel, ValidationError
 from typing_extensions import TypedDict
 
+from langgraph.errors import is_invalid_resume
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, Durability, Interrupt, interrupt
 from tests.any_str import AnyStr
@@ -202,12 +203,20 @@ def test_interrupt_response_schema_rejects_invalid_resume(
     def resume(value: dict[str, Any]) -> Command:
         return Command(resume=value if resume_style == "null" else {pending.id: value})
 
-    with pytest.raises(ValidationError, match="approved"):
+    with pytest.raises(ValidationError, match="approved") as exc_info:
         graph.invoke(resume({"approved": "nope"}), config)
+    assert is_invalid_resume(exc_info.value)
 
     assert graph.invoke(resume({"approved": False}), config) == {
         "answer": Decision(approved=False)
     }
+
+
+def test_is_invalid_resume_ignores_other_errors() -> None:
+    with pytest.raises(ValidationError) as exc_info:
+        Decision.model_validate({"approved": "nope"})
+    assert not is_invalid_resume(exc_info.value)
+    assert not is_invalid_resume(ValueError("nope"))
 
 
 @pytest.mark.parametrize("resume_style", ["null", "id_map"])
