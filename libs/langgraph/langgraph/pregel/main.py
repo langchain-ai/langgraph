@@ -1788,6 +1788,25 @@ class Pregel(
                     )
 
                 if input_writes := deque(map_input(self.input_channels, values)):
+                    # A DeltaChannel reads the writes stored on a checkpoint's
+                    # ancestors, not its own, so they go on the checkpoint this
+                    # update builds on, as a node's writes do.
+                    if (
+                        is_first
+                        and saved is not None
+                        and checkpoint_superseded(checkpointer, config, saved)
+                    ):
+                        fork_pending.update(
+                            ch
+                            for ch, _ in input_writes
+                            if isinstance(self.channels.get(ch), DeltaChannel)
+                        )
+                    elif saved is not None:
+                        checkpointer.put_writes(
+                            checkpoint_config,
+                            input_writes,
+                            str(uuid5(UUID(checkpoint["id"]), INPUT)),
+                        )
                     updated_channels = apply_writes(
                         checkpoint,
                         channels,
@@ -1831,13 +1850,6 @@ class Pregel(
                             checkpoint_previous_versions,
                             next_checkpoint["channel_versions"],
                         ),
-                    )
-
-                    # store the writes
-                    checkpointer.put_writes(
-                        next_config,
-                        input_writes,
-                        str(uuid5(UUID(checkpoint["id"]), INPUT)),
                     )
 
                     return patch_checkpoint_map(
@@ -2280,6 +2292,25 @@ class Pregel(
                     )
 
                 if input_writes := deque(map_input(self.input_channels, values)):
+                    # A DeltaChannel reads the writes stored on a checkpoint's
+                    # ancestors, not its own, so they go on the checkpoint this
+                    # update builds on, as a node's writes do.
+                    if (
+                        is_first
+                        and saved is not None
+                        and await acheckpoint_superseded(checkpointer, config, saved)
+                    ):
+                        fork_pending.update(
+                            ch
+                            for ch, _ in input_writes
+                            if isinstance(self.channels.get(ch), DeltaChannel)
+                        )
+                    elif saved is not None:
+                        await checkpointer.aput_writes(
+                            checkpoint_config,
+                            input_writes,
+                            str(uuid5(UUID(checkpoint["id"]), INPUT)),
+                        )
                     updated_channels = apply_writes(
                         checkpoint,
                         channels,
@@ -2323,13 +2354,6 @@ class Pregel(
                             checkpoint_previous_versions,
                             next_checkpoint["channel_versions"],
                         ),
-                    )
-
-                    # store the writes
-                    await checkpointer.aput_writes(
-                        next_config,
-                        input_writes,
-                        str(uuid5(UUID(checkpoint["id"]), INPUT)),
                     )
 
                     return patch_checkpoint_map(
