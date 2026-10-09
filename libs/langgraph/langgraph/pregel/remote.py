@@ -52,6 +52,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RESUME_MAP,
+    CONFIG_KEY_RESUME_MAP_SENT,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_STREAM,
@@ -87,6 +88,7 @@ _CONF_DROPLIST = frozenset(
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_TASK_ID,
         CONFIG_KEY_RESUME_MAP,
+        CONFIG_KEY_RESUME_MAP_SENT,
         CONFIG_KEY_RESUMING,
     ),
 )
@@ -462,10 +464,16 @@ class RemoteGraph(PregelProtocol):
             return None
         conf = config[CONF]
         if resume_map := conf.get(CONFIG_KEY_RESUME_MAP):
+            sent: set[str] = conf.get(CONFIG_KEY_RESUME_MAP_SENT, set())
             # Do not forward the whole map: it can hold answers for other remotes.
+            # Send each answer once per run: a later interrupt in the same remote
+            # node reuses the id, so a retry would apply the old answer to it.
             if scoped := {
-                i.id: resume_map[i.id] for i in pending if i.id in resume_map
+                i.id: resume_map[i.id]
+                for i in pending
+                if i.id in resume_map and i.id not in sent
             }:
+                sent.update(scoped)
                 return {"resume": scoped}
         elif (resume := conf[CONFIG_KEY_SCRATCHPAD].get_null_resume(True)) is not None:
             return {"resume": resume}
@@ -845,6 +853,7 @@ class RemoteGraph(PregelProtocol):
         if command is not None:
             input = None
 
+        interrupted = False
         interrupts: dict[str, Interrupt] = {}
         for chunk in sync_client.runs.stream(
             thread_id=thread_id,
@@ -882,7 +891,7 @@ class RemoteGraph(PregelProtocol):
                 and isinstance(chunk.data, dict)
                 and INTERRUPT in chunk.data
             )
-            if interrupts and not is_interrupt:
+            if interrupted and not is_interrupt and not chunk.event.startswith("error"):
                 continue
             # stream to parent stream
             if stream is not None and mode in stream.modes:
@@ -890,6 +899,7 @@ class RemoteGraph(PregelProtocol):
             # collect interrupts or raise errors
             if is_interrupt:
                 if caller_ns:
+                    interrupted = True
                     for i in chunk.data[INTERRUPT]:
                         item = Interrupt(**i)
                         interrupts.setdefault(item.id, item)
@@ -926,7 +936,7 @@ class RemoteGraph(PregelProtocol):
                 yield chunk.data
             else:
                 yield chunk
-        if interrupts:
+        if interrupted:
             raise GraphInterrupt(list(interrupts.values()))
 
     @overload
@@ -1016,6 +1026,7 @@ class RemoteGraph(PregelProtocol):
         if command is not None:
             input = None
 
+        interrupted = False
         interrupts: dict[str, Interrupt] = {}
         async for chunk in client.runs.stream(
             thread_id=thread_id,
@@ -1053,7 +1064,7 @@ class RemoteGraph(PregelProtocol):
                 and isinstance(chunk.data, dict)
                 and INTERRUPT in chunk.data
             )
-            if interrupts and not is_interrupt:
+            if interrupted and not is_interrupt and not chunk.event.startswith("error"):
                 continue
             # stream to parent stream
             if stream is not None and mode in stream.modes:
@@ -1061,6 +1072,7 @@ class RemoteGraph(PregelProtocol):
             # collect interrupts or raise errors
             if is_interrupt:
                 if caller_ns:
+                    interrupted = True
                     for i in chunk.data[INTERRUPT]:
                         item = Interrupt(**i)
                         interrupts.setdefault(item.id, item)
@@ -1097,7 +1109,7 @@ class RemoteGraph(PregelProtocol):
                 yield chunk.data
             else:
                 yield chunk
-        if interrupts:
+        if interrupted:
             raise GraphInterrupt(list(interrupts.values()))
 
     def stream_events(

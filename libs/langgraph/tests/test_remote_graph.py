@@ -16,10 +16,12 @@ from langgraph_sdk.schema import StreamPart
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
+from langgraph.channels.last_value import LastValue
 from langgraph.errors import GraphInterrupt
+from langgraph.func import task
 from langgraph.graph import END, START, MessagesState, StateGraph, add_messages
-from langgraph.pregel import Pregel
-from langgraph.pregel.remote import RemoteGraph
+from langgraph.pregel import NodeBuilder, Pregel
+from langgraph.pregel.remote import RemoteException, RemoteGraph
 from langgraph.types import Command, Interrupt, RetryPolicy, StateSnapshot
 from tests.any_str import AnyStr
 from tests.conftest import NO_DOCKER
@@ -1081,6 +1083,124 @@ def test_subgraph_resume_map_is_scoped_to_each_remote():
     }
 
 
+def _resumed_then_dropped():
+    # A remote node's next interrupt() reuses the id of the one just resumed.
+    yield from _REMOTE_INTERRUPT_RUN
+    raise ValueError("transient")
+
+
+def test_subgraph_retry_does_not_resend_resume_map():
+    remote_client, next_client = _sync_clients(
+        [_REMOTE_INTERRUPT_RUN, _resumed_then_dropped()], []
+    )
+    parent = _remote_interrupt_parent(remote_client, next_client)
+    config = {"configurable": {"thread_id": "parent_thread"}}
+    parent.invoke({"request": "X"}, config)
+
+    out = parent.invoke(
+        Command(resume={_REMOTE_INTERRUPT_ID: {"approved": True}}), config
+    )
+
+    assert out["__interrupt__"] == [
+        Interrupt(value={"question": "Approve X?"}, id=_REMOTE_INTERRUPT_ID)
+    ]
+    assert remote_client.runs.stream.call_count == 2
+
+
+def _ancestor_retry_parent(remote_client: MagicMock, via: str = "node"):
+    # A low-level Pregel subgraph has no START step, so an ancestor retry's
+    # RESUMING flag reaches the RemoteGraph task with a fresh node_attempt.
+    remote = RemoteGraph("agent_b", sync_client=remote_client, client=remote_client)
+    inner = Pregel(
+        nodes={
+            "agent_b": NodeBuilder()
+            .subscribe_only("request")
+            .do(remote)
+            .write_to("result")
+        },
+        channels={"request": LastValue(str), "result": LastValue(object)},
+        input_channels=["request"],
+        output_channels=["result"],
+    )
+    if via == "node":
+        p = inner
+    elif via == "task":
+
+        @task
+        def child(request: str):
+            return inner.invoke({"request": request})["result"]
+
+        def p(state: _ApprovalState):
+            return {"result": child(state["request"]).result()}
+
+    else:
+
+        @task
+        async def child(request: str):
+            return (await inner.ainvoke({"request": request}))["result"]
+
+        async def p(state: _ApprovalState):
+            return {"result": await child(state["request"])}
+
+    return (
+        StateGraph(_ApprovalState)
+        .add_node("p", p, retry_policy=_RETRY)
+        .add_edge(START, "p")
+        .compile(checkpointer=InMemorySaver())
+    )
+
+
+@pytest.mark.parametrize("via", ["node", "task"])
+def test_subgraph_ancestor_retry_does_not_resend_resume_map(via):
+    remote_client, _ = _sync_clients(
+        [_REMOTE_INTERRUPT_RUN, _resumed_then_dropped(), _REMOTE_DONE_RUN], []
+    )
+    parent = _ancestor_retry_parent(remote_client, via)
+    config = {"configurable": {"thread_id": "parent_thread"}}
+    parent.invoke({"request": "X"}, config)
+
+    out = parent.invoke(Command(resume={_REMOTE_INTERRUPT_ID: "first"}), config)
+    assert out["__interrupt__"] == [
+        Interrupt(value={"question": "Approve X?"}, id=_REMOTE_INTERRUPT_ID)
+    ]
+
+    parent.invoke(Command(resume={_REMOTE_INTERRUPT_ID: "second"}), config)
+    assert [c.kwargs["command"] for c in remote_client.runs.stream.call_args_list] == [
+        None,
+        {"resume": {_REMOTE_INTERRUPT_ID: "first"}},
+        {"resume": {_REMOTE_INTERRUPT_ID: "second"}},
+    ]
+
+
+def test_subgraph_empty_remote_interrupt_pauses_parent():
+    remote_client, next_client = _sync_clients(
+        [[StreamPart(event="updates", data={"__interrupt__": []})]], []
+    )
+    parent = _remote_interrupt_parent(remote_client, next_client)
+    config = {"configurable": {"thread_id": "parent_thread"}}
+
+    parent.invoke({"request": "X"}, config)
+
+    assert parent.get_state(config).next == ("agent_b",)
+    next_client.runs.stream.assert_not_called()
+
+
+def test_subgraph_remote_error_after_interrupt_is_raised():
+    remote_client, next_client = _sync_clients(
+        [
+            [
+                *_REMOTE_INTERRUPT_RUN,
+                StreamPart(event="error", data={"error": "boom", "message": "x"}),
+            ]
+        ],
+        [],
+    )
+    parent = _remote_interrupt_parent(remote_client, next_client)
+
+    with pytest.raises(RemoteException):
+        parent.invoke({"request": "X"}, {"configurable": {"thread_id": "t"}})
+
+
 def test_subgraph_surfaces_all_remote_interrupts():
     second_id = "fedcba9876543210fedcba9876543210"
     remote_client, next_client = _sync_clients(
@@ -1138,6 +1258,65 @@ async def test_subgraph_resume_is_forwarded_to_remote_thread_async():
     assert second.kwargs["input"] is None
     assert second.kwargs["command"] == {"resume": {"approved": True}}
     assert next_client.runs.stream.call_args.kwargs["command"] is None
+
+
+async def test_subgraph_retry_does_not_resend_resume_map_async():
+    async def run(*parts: StreamPart, error: Exception | None = None):
+        for part in parts:
+            yield part
+        if error:
+            raise error
+
+    remote_client = MagicMock()
+    remote_client.runs.stream.side_effect = [
+        run(*_REMOTE_INTERRUPT_RUN),
+        run(*_REMOTE_INTERRUPT_RUN, error=ValueError("transient")),
+    ]
+    remote_client.threads.get = AsyncMock(return_value=_INTERRUPTED_THREAD)
+    parent = _remote_interrupt_parent(remote_client, MagicMock())
+    config = {"configurable": {"thread_id": "parent_thread"}}
+    await parent.ainvoke({"request": "X"}, config)
+
+    resume = {_REMOTE_INTERRUPT_ID: {"approved": True}}
+    out = await parent.ainvoke(Command(resume=resume), config)
+
+    assert out["__interrupt__"] == [
+        Interrupt(value={"question": "Approve X?"}, id=_REMOTE_INTERRUPT_ID)
+    ]
+    assert remote_client.runs.stream.call_count == 2
+    assert remote_client.runs.stream.call_args.kwargs["command"] == {"resume": resume}
+
+
+@pytest.mark.parametrize("via", ["node", "atask"])
+async def test_subgraph_ancestor_retry_does_not_resend_resume_map_async(via):
+    async def run(*parts: StreamPart, error: Exception | None = None):
+        for part in parts:
+            yield part
+        if error:
+            raise error
+
+    remote_client = MagicMock()
+    remote_client.runs.stream.side_effect = [
+        run(*_REMOTE_INTERRUPT_RUN),
+        run(*_REMOTE_INTERRUPT_RUN, error=ValueError("transient")),
+        run(*_REMOTE_DONE_RUN),
+    ]
+    remote_client.threads.get = AsyncMock(return_value=_INTERRUPTED_THREAD)
+    parent = _ancestor_retry_parent(remote_client, via)
+    config = {"configurable": {"thread_id": "parent_thread"}}
+    await parent.ainvoke({"request": "X"}, config)
+
+    out = await parent.ainvoke(Command(resume={_REMOTE_INTERRUPT_ID: "first"}), config)
+    assert out["__interrupt__"] == [
+        Interrupt(value={"question": "Approve X?"}, id=_REMOTE_INTERRUPT_ID)
+    ]
+
+    await parent.ainvoke(Command(resume={_REMOTE_INTERRUPT_ID: "second"}), config)
+    assert [c.kwargs["command"] for c in remote_client.runs.stream.call_args_list] == [
+        None,
+        {"resume": {_REMOTE_INTERRUPT_ID: "first"}},
+        {"resume": {_REMOTE_INTERRUPT_ID: "second"}},
+    ]
 
 
 @pytest.mark.anyio
