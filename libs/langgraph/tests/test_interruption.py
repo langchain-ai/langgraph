@@ -1,5 +1,7 @@
+import asyncio
+import operator
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated, Any
 
 import pytest
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -251,3 +253,57 @@ def test_interrupt_response_schema_invalid_resume_after_earlier_interrupt(
     assert graph.invoke(resume({"approved": True}), config) == {
         "answer": ["ok", Decision(approved=True)]
     }
+
+
+async def test_invalid_resume_lets_other_answered_tasks_finish(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """An invalid answer fails the resume without cutting off the other answered tasks.
+
+    A task cancelled after its side effect keeps its answer and runs again on the next
+    resume, so the side effect would happen twice.
+    """
+    sent: list[str] = []
+
+    class State(TypedDict):
+        log: Annotated[list[str], operator.add]
+
+    async def send(state: State) -> State:
+        interrupt("send?", response_schema=Decision)
+        sent.append("email")
+        await asyncio.sleep(0.05)  # waiting on the reply to a request already sent
+        return {"log": ["sent"]}
+
+    async def check(state: State) -> State:
+        interrupt("check?", response_schema=Decision)
+        return {"log": ["checked"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("send", send)
+        .add_node("check", check)
+        .add_edge(START, "send")
+        .add_edge(START, "check")
+        .compile(checkpointer=async_checkpointer)
+    )
+    config = {"configurable": {"thread_id": "1"}}
+    await graph.ainvoke({"log": []}, config)
+    ids = {i.value: i.id for i in (await graph.aget_state(config)).interrupts}
+
+    with pytest.raises(ValidationError, match="approved"):
+        await graph.ainvoke(
+            Command(
+                resume={
+                    ids["send?"]: {"approved": True},
+                    ids["check?"]: {"approved": "nope"},
+                }
+            ),
+            config,
+        )
+    pending = [i.value for i in (await graph.aget_state(config)).interrupts]
+    assert (pending, sent) == (["check?"], ["email"])
+
+    result = await graph.ainvoke(
+        Command(resume={ids["check?"]: {"approved": True}}), config
+    )
+    assert (sorted(result["log"]), sent) == (["checked", "sent"], ["email"])

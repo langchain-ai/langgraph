@@ -41,7 +41,7 @@ from langgraph._internal._future import chain_future, run_coroutine_threadsafe
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import MISSING
 from langgraph.constants import TAG_HIDDEN
-from langgraph.errors import GraphBubbleUp, GraphInterrupt
+from langgraph.errors import GraphBubbleUp, GraphInterrupt, is_invalid_resume
 from langgraph.pregel._algo import Call
 from langgraph.pregel._executor import Submit
 from langgraph.pregel._retry import arun_with_retry, run_with_retry
@@ -621,7 +621,11 @@ def _should_stop_others(
     handled_exception_ids: set[int] | None = None,
 ) -> bool:
     """Check if any task failed, if so, cancel all other tasks.
-    GraphInterrupts are not considered failures."""
+    GraphInterrupts are not considered failures.
+
+    Neither is an invalid resume value: it's raised once the other tasks finish, so a
+    task answered in the same resume isn't cut off after its side effects and then run
+    again with its saved answer."""
     for fut in done:
         if fut.cancelled():
             continue
@@ -629,6 +633,7 @@ def _should_stop_others(
             if (
                 id(exc) not in (handled_exception_ids or set())
                 and not isinstance(exc, GraphBubbleUp)
+                and not is_invalid_resume(exc)
                 and fut not in SKIP_RERAISE_SET
             ):
                 return True
