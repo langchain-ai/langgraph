@@ -5034,6 +5034,24 @@ async def test_subgraph_checkpoint_true(
     ]
 
 
+async def test_durability_without_checkpointer(durability: Durability) -> None:
+    class State(TypedDict):
+        count: int
+
+    def add_one(state: State) -> State:
+        return {"count": state["count"] + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("first", add_one)
+    builder.add_node("second", add_one)
+    builder.add_edge(START, "first")
+    builder.add_edge("first", "second")
+    graph = builder.compile()
+
+    with pytest.warns(UserWarning, match="`durability` has no effect"):
+        assert await graph.ainvoke({"count": 0}, durability=durability) == {"count": 2}
+
+
 async def test_subgraph_durability_inherited(
     durability: Durability,
 ) -> None:

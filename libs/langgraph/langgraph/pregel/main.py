@@ -3058,8 +3058,8 @@ class Pregel(
                         )
                     loop.after_tick()
                     emit_graph_lifecycle_events(loop)
-                    # wait for checkpoint
-                    if durability_ == "sync":
+                    # wait for checkpoint (none is saved without a checkpointer)
+                    if durability_ == "sync" and loop.checkpointer:
                         loop._put_checkpoint_fut.result()
             emit_graph_lifecycle_events(loop)
             # emit output
@@ -3530,8 +3530,8 @@ class Pregel(
                                 yield o
                         loop.after_tick()
                         await aemit_graph_lifecycle_events(loop)
-                        # wait for checkpoint
-                        if durability_ == "sync":
+                        # wait for checkpoint (none is saved without a checkpointer)
+                        if durability_ == "sync" and loop.checkpointer:
                             await cast(asyncio.Future, loop._put_checkpoint_fut)
                 finally:
                     # ensure waiter doesn't remain pending on cancel/shutdown
