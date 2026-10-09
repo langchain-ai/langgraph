@@ -55,6 +55,27 @@ class _FailsTheWriteOfBOnce(InMemorySaver):
         await super().aput_writes(config, writes, task_id, task_path)
 
 
+class _FailsTheSaveAfterAOnce(InMemorySaver):
+    failed = False
+
+    def _fail_once(self, checkpoint: Any) -> None:
+        if not self.failed and checkpoint["channel_values"].get("plain") == ["a"]:
+            self.failed = True
+            raise ConnectionError("the checkpoint after a was not saved")
+
+    def put(
+        self, config: Any, checkpoint: Any, metadata: Any, new_versions: Any
+    ) -> Any:
+        self._fail_once(checkpoint)
+        return super().put(config, checkpoint, metadata, new_versions)
+
+    async def aput(
+        self, config: Any, checkpoint: Any, metadata: Any, new_versions: Any
+    ) -> Any:
+        self._fail_once(checkpoint)
+        return await super().aput(config, checkpoint, metadata, new_versions)
+
+
 def _a_then_b_then_c(saver: InMemorySaver) -> Any:
     builder = StateGraph(_State)
     for name in "abc":
@@ -96,6 +117,38 @@ async def test_a_failed_delta_write_is_rerun_not_lost_async(
         assert state.values.get("log", []) == state.values.get("plain", [])
 
     await graph.ainvoke(retry_input, config, durability=durability)
+    assert (await graph.aget_state(config)).values == FINAL
+
+
+@pytest.mark.parametrize("durability", ["sync", "async"])
+def test_a_failed_checkpoint_save_is_rerun_not_built_on(
+    durability: Durability,
+) -> None:
+    graph = _a_then_b_then_c(_FailsTheSaveAfterAOnce())
+    config = {"configurable": {"thread_id": "t"}}
+
+    with pytest.raises(ConnectionError):
+        graph.invoke(INPUT, config, durability=durability)
+    for state in graph.get_state_history(config):
+        assert state.values.get("log", []) == state.values.get("plain", [])
+
+    graph.invoke(None, config, durability=durability)
+    assert graph.get_state(config).values == FINAL
+
+
+@pytest.mark.parametrize("durability", ["sync", "async"])
+async def test_a_failed_checkpoint_save_is_rerun_not_built_on_async(
+    durability: Durability,
+) -> None:
+    graph = _a_then_b_then_c(_FailsTheSaveAfterAOnce())
+    config = {"configurable": {"thread_id": "t"}}
+
+    with pytest.raises(ConnectionError):
+        await graph.ainvoke(INPUT, config, durability=durability)
+    async for state in graph.aget_state_history(config):
+        assert state.values.get("log", []) == state.values.get("plain", [])
+
+    await graph.ainvoke(None, config, durability=durability)
     assert (await graph.aget_state(config)).values == FINAL
 
 
