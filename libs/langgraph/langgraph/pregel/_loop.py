@@ -19,6 +19,7 @@ from typing import (
     TypeVar,
     cast,
 )
+from uuid import UUID, uuid5
 
 from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables import RunnableConfig
@@ -269,6 +270,9 @@ class PregelLoop:
     # `_put_exit_delta_writes` uses this to decide between anchoring on
     # the existing parent (True) or creating a lazy stub (False).
     _has_persisted_parent: bool = False
+    # True iff `__enter__` loaded the thread's latest checkpoint, not one a
+    # `checkpoint_id` addressed, so nothing has been built on it yet.
+    _loaded_latest: bool = False
 
     managed: ManagedValueMapping
     checkpoint: Checkpoint
@@ -1117,16 +1121,26 @@ class PregelLoop:
                         self._exit_delta_writes.append(
                             (self.step, NULL_TASK_ID, "", c, v)
                         )
-            # Persist delta-channel input writes so sub-freq inputs are
-            # recoverable via ancestor walk (mirrors the Command input path).
+            # A DeltaChannel reads its input from the writes stored on the
+            # checkpoint this run starts from, under a task id of their own:
+            # readers apply a checkpoint's NULL_TASK_ID writes as its own state.
+            # A new thread has no checkpoint to store them on, and one a
+            # `checkpoint_id` addressed may have children that would read them,
+            # so then the input checkpoint snapshots the channel instead.
             if self.durability != "exit":
                 delta_input = [
                     (c, v)
                     for c, v in input_writes
                     if isinstance(self.specs.get(c), DeltaChannel)
                 ]
-                if delta_input:
-                    self.put_writes(NULL_TASK_ID, delta_input)
+                if delta_input and self._has_persisted_parent and self._loaded_latest:
+                    self.put_writes(
+                        str(uuid5(UUID(self.checkpoint["id"]), INPUT)), delta_input
+                    )
+                else:
+                    self._delta_channels_forced_snapshot.update(
+                        c for c, _ in delta_input
+                    )
             # save input checkpoint
             self.updated_channels = updated_channels
             self._put_checkpoint({"source": "input"})
@@ -1774,6 +1788,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             # Normal case: fetch the most recent checkpoint for this
             # graph/thread. Returns None on first invocation.
             saved = self.checkpointer.get_tuple(self.checkpoint_config)
+            self._loaded_latest = True
 
         # Capture before the synthetic-empty fallback below overwrites `saved`.
         # `_put_exit_delta_writes` uses this on first run (no persisted parent)
@@ -2030,6 +2045,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             # Normal case: fetch the most recent checkpoint for this
             # graph/thread. Returns None on first invocation.
             saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
+            self._loaded_latest = True
 
         # Capture before the synthetic-empty fallback below overwrites `saved`.
         # `_put_exit_delta_writes` uses this on first run (no persisted parent)
