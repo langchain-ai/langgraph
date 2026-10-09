@@ -2154,3 +2154,128 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
         AIMessage("hi-hi-6", id="1"),
     ]
     assert result["foo"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Tests for retrying on MALFORMED_FUNCTION_CALL finish_reason (#6574)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_malformed_function_call_retries(version: str) -> None:
+    """Agent should retry when LLM returns MALFORMED_FUNCTION_CALL."""
+
+    @dec_tool
+    def search(query: str) -> str:
+        """Search tool."""
+        return f"Results for: {query}"
+
+    tool_call = ToolCall(name="search", args={"query": "test"}, id="call_1")
+
+    # First call: MALFORMED_FUNCTION_CALL with no tool_calls
+    # Second call: successful tool call
+    # Third call: final response (no tool calls)
+    model = FakeToolCallingModel(
+        tool_calls=[
+            [],
+            [tool_call],
+            [],
+        ],
+        response_metadata_list=[
+            {"finish_reason": "MALFORMED_FUNCTION_CALL"},
+            {},
+            {},
+        ],
+    )
+    agent = create_react_agent(model, [search], version=version)
+    result = agent.invoke({"messages": [HumanMessage("test")]})
+
+    messages = result["messages"]
+    # Should have: Human, AIMessage(malformed), AIMessage(tool_call),
+    # ToolMessage, AIMessage(final)
+    assert len(messages) == 5
+    assert isinstance(messages[0], HumanMessage)
+    assert isinstance(messages[1], AIMessage)
+    assert messages[1].tool_calls == []
+    assert isinstance(messages[2], AIMessage)
+    assert len(messages[2].tool_calls) == 1
+    assert isinstance(messages[3], ToolMessage)
+    assert isinstance(messages[4], AIMessage)
+
+
+def test_normal_finish_reason_no_retry() -> None:
+    """Normal finish_reason (e.g. 'stop') should NOT trigger retry."""
+
+    @dec_tool
+    def search(query: str) -> str:
+        """Search tool."""
+        return f"Results for: {query}"
+
+    model = FakeToolCallingModel(
+        tool_calls=[[]],
+        response_metadata_list=[{"finish_reason": "stop"}],
+    )
+    agent = create_react_agent(model, [search])
+    result = agent.invoke({"messages": [HumanMessage("test")]})
+
+    messages = result["messages"]
+    # Should have 2 messages: Human + AIMessage (no retry)
+    assert len(messages) == 2
+    assert isinstance(messages[0], HumanMessage)
+    assert isinstance(messages[1], AIMessage)
+    assert messages[1].tool_calls == []
+
+
+def test_malformed_function_call_logs_warning(caplog: pytest.LogCaptureFixture) -> None:
+    """MALFORMED_FUNCTION_CALL should log a warning."""
+    import logging
+
+    @dec_tool
+    def search(query: str) -> str:
+        """Search tool."""
+        return f"Results for: {query}"
+
+    model = FakeToolCallingModel(
+        tool_calls=[[], []],
+        response_metadata_list=[
+            {"finish_reason": "MALFORMED_FUNCTION_CALL"},
+            {},
+        ],
+    )
+    agent = create_react_agent(model, [search])
+
+    with caplog.at_level(
+        logging.WARNING, logger="langgraph.prebuilt.chat_agent_executor"
+    ):
+        agent.invoke({"messages": [HumanMessage("test")]})
+
+    assert "MALFORMED_FUNCTION_CALL" in caplog.text
+
+
+def test_malformed_function_call_retries_with_pre_model_hook() -> None:
+    """Retry should route through pre_model_hook when configured."""
+
+    @dec_tool
+    def search(query: str) -> str:
+        """Search tool."""
+        return f"Results for: {query}"
+
+    hook_call_count = 0
+
+    def pre_hook(state: dict) -> dict:
+        nonlocal hook_call_count
+        hook_call_count += 1
+        return state
+
+    model = FakeToolCallingModel(
+        tool_calls=[[], []],
+        response_metadata_list=[
+            {"finish_reason": "MALFORMED_FUNCTION_CALL"},
+            {},
+        ],
+    )
+    agent = create_react_agent(model, [search], pre_model_hook=pre_hook)
+    agent.invoke({"messages": [HumanMessage("test")]})
+
+    # pre_model_hook should be called twice: initial + retry
+    assert hook_call_count == 2
