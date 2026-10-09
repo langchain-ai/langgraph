@@ -164,6 +164,40 @@ def test_sync_walk_reads_nothing_newer_than_the_target(
     assert read == _ids_from_target_down(configs)
 
 
+def _empty_checkpoint_id(config: dict) -> dict:
+    return {"configurable": {**config["configurable"], "checkpoint_id": ""}}
+
+
+async def test_async_empty_checkpoint_id_reads_from_the_latest_checkpoint() -> None:
+    async with AsyncPostgresSaver.from_conn_string(DEFAULT_URI) as saver:
+        await saver.setup()
+        configs = await _abuild_chain(saver)
+        latest = await saver.aget_delta_channel_history(
+            config=configs[-1], channels=[CHANNEL]
+        )
+
+        result = await saver.aget_delta_channel_history(
+            config=_empty_checkpoint_id(configs[-1]), channels=[CHANNEL]
+        )
+
+    assert latest[CHANNEL]["writes"]
+    assert result == latest
+
+
+def test_sync_empty_checkpoint_id_reads_from_the_latest_checkpoint() -> None:
+    with PostgresSaver.from_conn_string(DEFAULT_URI) as saver:
+        saver.setup()
+        configs = _build_chain(saver)
+        latest = saver.get_delta_channel_history(config=configs[-1], channels=[CHANNEL])
+
+        result = saver.get_delta_channel_history(
+            config=_empty_checkpoint_id(configs[-1]), channels=[CHANNEL]
+        )
+
+    assert latest[CHANNEL]["writes"]
+    assert result == latest
+
+
 async def test_root_target_has_no_history_and_still_terminates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
