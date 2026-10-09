@@ -1766,6 +1766,7 @@ class Pregel(
                     get_next_version=checkpointer.get_next_version,
                     channels_to_snapshot=channels_to_snapshot,
                     stored_versions=checkpoint_previous_versions,
+                    trigger_to_nodes=self.trigger_to_nodes,
                 )
                 next_config = checkpointer.put(
                     checkpoint_config,
@@ -1822,6 +1823,7 @@ class Pregel(
                         get_next_version=checkpointer.get_next_version,
                         channels_to_snapshot=channels_to_snapshot,
                         stored_versions=checkpoint_previous_versions,
+                        trigger_to_nodes=self.trigger_to_nodes,
                     )
                     next_config = checkpointer.put(
                         checkpoint_config,
@@ -2086,6 +2088,7 @@ class Pregel(
                 else None,
                 channels_to_snapshot=channels_to_snapshot,
                 stored_versions=checkpoint_previous_versions,
+                trigger_to_nodes=self.trigger_to_nodes,
             )
             next_config = checkpointer.put(
                 checkpoint_config,
@@ -2258,6 +2261,7 @@ class Pregel(
                     get_next_version=checkpointer.get_next_version,
                     channels_to_snapshot=channels_to_snapshot,
                     stored_versions=checkpoint_previous_versions,
+                    trigger_to_nodes=self.trigger_to_nodes,
                 )
                 next_config = await checkpointer.aput(
                     checkpoint_config,
@@ -2314,6 +2318,7 @@ class Pregel(
                         get_next_version=checkpointer.get_next_version,
                         channels_to_snapshot=channels_to_snapshot,
                         stored_versions=checkpoint_previous_versions,
+                        trigger_to_nodes=self.trigger_to_nodes,
                     )
                     next_config = await checkpointer.aput(
                         checkpoint_config,
@@ -2577,6 +2582,7 @@ class Pregel(
                 else None,
                 channels_to_snapshot=channels_to_snapshot,
                 stored_versions=checkpoint_previous_versions,
+                trigger_to_nodes=self.trigger_to_nodes,
             )
             next_config = await checkpointer.aput(
                 checkpoint_config,

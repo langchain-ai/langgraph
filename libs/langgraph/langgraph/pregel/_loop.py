@@ -1256,6 +1256,7 @@ class PregelLoop:
             else None,
             channels_to_snapshot=channels_to_snapshot,
             stored_versions=self.checkpoint_previous_versions,
+            trigger_to_nodes=self.trigger_to_nodes,
         )
         for k in channels_to_snapshot:
             new_counters[k] = (0, 0)
