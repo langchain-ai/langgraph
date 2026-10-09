@@ -1287,7 +1287,9 @@ async def test_subgraph_retry_does_not_resend_resume_map_async():
     assert remote_client.runs.stream.call_args.kwargs["command"] == {"resume": resume}
 
 
-@pytest.mark.parametrize("via", ["node", "atask"])
+@pytest.mark.parametrize(
+    "via", ["node", pytest.param("atask", marks=NEEDS_CONTEXTVARS)]
+)
 async def test_subgraph_ancestor_retry_does_not_resend_resume_map_async(via):
     async def run(*parts: StreamPart, error: Exception | None = None):
         for part in parts:
