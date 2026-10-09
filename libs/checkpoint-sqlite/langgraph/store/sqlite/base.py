@@ -28,6 +28,7 @@ from langgraph.store.base import (
     ensure_embeddings,
     get_text_at_path,
     tokenize_path,
+    validate_op_namespace,
 )
 
 _AIO_ERROR_MSG = (
@@ -257,6 +258,7 @@ def _group_ops(ops: Iterable[Op]) -> tuple[dict[type, list[tuple[int, Op]]], int
     grouped_ops: dict[type, list[tuple[int, Op]]] = defaultdict(list)
     tot = 0
     for idx, op in enumerate(ops):
+        validate_op_namespace(op)
         grouped_ops[type(op)].append((idx, op))
         tot += 1
     return grouped_ops, tot
