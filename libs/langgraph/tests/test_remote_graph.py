@@ -1040,6 +1040,47 @@ def test_subgraph_retry_after_consumed_resume_reraises_remote_interrupt():
         assert call.kwargs["command"] == {"resume": {"approved": True}}
 
 
+def test_subgraph_resume_map_is_scoped_to_each_remote():
+    id_a, id_b = _REMOTE_INTERRUPT_ID, "fedcba9876543210fedcba9876543210"
+
+    def client(interrupt_id: str, done: dict) -> MagicMock:
+        pending = [{"value": "q", "id": interrupt_id}]
+        c = MagicMock()
+        c.runs.stream.side_effect = [
+            [StreamPart(event="updates", data={"__interrupt__": pending})],
+            [StreamPart(event="values", data=done)],
+        ]
+        c.threads.get.return_value = {
+            "status": "interrupted",
+            "interrupts": {"task": pending},
+        }
+        return c
+
+    client_a = client(id_a, {"approved": True})
+    client_b = client(id_b, {"result": "done"})
+    parent = (
+        StateGraph(_ApprovalState)
+        .add_node("a", RemoteGraph("a", sync_client=client_a, client=client_a))
+        .add_node("b", RemoteGraph("b", sync_client=client_b, client=client_b))
+        .add_edge(START, "a")
+        .add_edge(START, "b")
+        .compile(checkpointer=InMemorySaver())
+    )
+    config = {"configurable": {"thread_id": "parent_thread"}}
+    parent.invoke({"request": "X"}, config)
+
+    out = parent.invoke(Command(resume={id_a: "answer a", id_b: "answer b"}), config)
+
+    assert out["approved"] is True
+    assert out["result"] == "done"
+    assert client_a.runs.stream.call_args.kwargs["command"] == {
+        "resume": {id_a: "answer a"}
+    }
+    assert client_b.runs.stream.call_args.kwargs["command"] == {
+        "resume": {id_b: "answer b"}
+    }
+
+
 def test_subgraph_surfaces_all_remote_interrupts():
     second_id = "fedcba9876543210fedcba9876543210"
     remote_client, next_client = _sync_clients(

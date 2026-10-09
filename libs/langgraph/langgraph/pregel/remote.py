@@ -462,8 +462,11 @@ class RemoteGraph(PregelProtocol):
             return None
         conf = config[CONF]
         if resume_map := conf.get(CONFIG_KEY_RESUME_MAP):
-            if any(i.id in resume_map for i in pending):
-                return {"resume": resume_map}
+            # Do not forward the whole map: it can hold answers for other remotes.
+            if scoped := {
+                i.id: resume_map[i.id] for i in pending if i.id in resume_map
+            }:
+                return {"resume": scoped}
         elif (resume := conf[CONFIG_KEY_SCRATCHPAD].get_null_resume(True)) is not None:
             return {"resume": resume}
         raise GraphInterrupt(pending)
