@@ -137,6 +137,7 @@ from langgraph.pregel._checkpoint import (
     copy_checkpoint,
     create_checkpoint,
     create_checkpoint_plan_for_update_state_api,
+    delta_channels_overwritten,
     delta_channels_with_pending_writes,
     empty_checkpoint,
     get_updated_channels_from_tasks,
@@ -1796,6 +1797,9 @@ class Pregel(
                         checkpointer.get_next_version,
                         self.trigger_to_nodes,
                     )
+                    fork_pending |= delta_channels_overwritten(
+                        self.channels, input_writes
+                    )
 
                     # apply input write to channels
                     next_step = (
@@ -2035,6 +2039,9 @@ class Pregel(
                     ),
                 )
             updated_channels = get_updated_channels_from_tasks(run_tasks)
+            fork_pending |= delta_channels_overwritten(
+                self.channels, (w for t in run_tasks for w in t.writes)
+            )
             # The base's other children replay whatever is stored on it, so an
             # edit of an older checkpoint stores none of its writes there: the
             # checkpoint written here carries them, its delta channels
@@ -2291,6 +2298,9 @@ class Pregel(
                         checkpointer.get_next_version,
                         self.trigger_to_nodes,
                     )
+                    fork_pending |= delta_channels_overwritten(
+                        self.channels, input_writes
+                    )
 
                     # apply input write to channels
                     next_step = (
@@ -2529,6 +2539,9 @@ class Pregel(
                     ),
                 )
             updated_channels = get_updated_channels_from_tasks(run_tasks)
+            fork_pending |= delta_channels_overwritten(
+                self.channels, (w for t in run_tasks for w in t.writes)
+            )
             # The base's other children replay whatever is stored on it, so an
             # edit of an older checkpoint stores none of its writes there: the
             # checkpoint written here carries them, its delta channels
