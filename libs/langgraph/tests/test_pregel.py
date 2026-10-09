@@ -5932,9 +5932,9 @@ def test_no_redundant_put_writes_for_cached_task(
     put_writes_task_ids: list[str] = []
     orig = PregelLoop.put_writes
 
-    def spy(self, task_id, writes):
+    def spy(self, task_id, writes, **kwargs):
         put_writes_task_ids.append(task_id)
-        return orig(self, task_id, writes)
+        return orig(self, task_id, writes, **kwargs)
 
     with patch.object(PregelLoop, "put_writes", spy):
         result = workflow.invoke(Command(resume="ans"), config=config)

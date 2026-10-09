@@ -439,7 +439,9 @@ class PregelLoop:
             return None
         return self._graph_lifecycle_events.popleft()
 
-    def put_writes(self, task_id: str, writes: WritesT) -> None:
+    def put_writes(
+        self, task_id: str, writes: WritesT, *, cached: bool = False
+    ) -> None:
         """Put writes for a task, to be read by the next tick."""
         if not writes:
             return
@@ -532,7 +534,7 @@ class PregelLoop:
                 self._error_handler_write_futs.append(fut)
         # output writes
         if hasattr(self, "tasks"):
-            self.output_writes(task_id, writes)
+            self.output_writes(task_id, writes, cached=cached)
 
     def _put_pending_writes(self) -> None:
         if self.checkpointer_put_writes is None:
@@ -1684,7 +1686,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
     ) -> PregelExecutableTask | None:
         if pushed := super().accept_push(task, write_idx, call):
             for task in self.match_cached_writes():
-                self.output_writes(task.id, task.writes, cached=True)
+                self.put_writes(task.id, task.writes, cached=True)
         return pushed
 
     def schedule_error_handler(
@@ -1721,13 +1723,15 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         if self._reapplies_pending_writes:
             self._reapply_writes_to_succeeded_nodes({handler_task.id: handler_task})
         for task in self.match_cached_writes():
-            self.output_writes(task.id, task.writes, cached=True)
+            self.put_writes(task.id, task.writes, cached=True)
         return handler_task
 
-    def put_writes(self, task_id: str, writes: WritesT) -> None:
+    def put_writes(
+        self, task_id: str, writes: WritesT, *, cached: bool = False
+    ) -> None:
         """Put writes for a task, to be read by the next tick."""
-        super().put_writes(task_id, writes)
-        if not writes or self.cache is None or not hasattr(self, "tasks"):
+        super().put_writes(task_id, writes, cached=cached)
+        if cached or not writes or self.cache is None or not hasattr(self, "tasks"):
             return
         task = self.tasks.get(task_id)
         if task is None or task.cache_key is None:
@@ -1937,7 +1941,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
     ) -> PregelExecutableTask | None:
         if pushed := super().accept_push(task, write_idx, call):
             for task in await self.amatch_cached_writes():
-                self.output_writes(task.id, task.writes, cached=True)
+                self.put_writes(task.id, task.writes, cached=True)
         return pushed
 
     async def aschedule_error_handler(
@@ -1974,13 +1978,15 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         if self._reapplies_pending_writes:
             self._reapply_writes_to_succeeded_nodes({handler_task.id: handler_task})
         for task in await self.amatch_cached_writes():
-            self.output_writes(task.id, task.writes, cached=True)
+            self.put_writes(task.id, task.writes, cached=True)
         return handler_task
 
-    def put_writes(self, task_id: str, writes: WritesT) -> None:
+    def put_writes(
+        self, task_id: str, writes: WritesT, *, cached: bool = False
+    ) -> None:
         """Put writes for a task, to be read by the next tick."""
-        super().put_writes(task_id, writes)
-        if not writes or self.cache is None or not hasattr(self, "tasks"):
+        super().put_writes(task_id, writes, cached=cached)
+        if cached or not writes or self.cache is None or not hasattr(self, "tasks"):
             return
         task = self.tasks.get(task_id)
         if task is None or task.cache_key is None:

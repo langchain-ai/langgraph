@@ -3038,7 +3038,7 @@ class Pregel(
                 # with channel updates applied only at the transition between steps.
                 while loop.tick():
                     for task in loop.match_cached_writes():
-                        loop.output_writes(task.id, task.writes, cached=True)
+                        loop.put_writes(task.id, task.writes, cached=True)
                     for _ in runner.tick(
                         [t for t in loop.tasks.values() if not t.writes],
                         timeout=self.step_timeout,
@@ -3509,7 +3509,7 @@ class Pregel(
                 try:
                     while loop.tick():
                         for task in await loop.amatch_cached_writes():
-                            loop.output_writes(task.id, task.writes, cached=True)
+                            loop.put_writes(task.id, task.writes, cached=True)
                         async for _ in runner.atick(
                             [t for t in loop.tasks.values() if not t.writes],
                             timeout=self.step_timeout,
