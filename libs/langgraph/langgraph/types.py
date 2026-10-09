@@ -4,6 +4,7 @@ import sys
 from collections import deque
 from collections.abc import Callable, Hashable, Sequence
 from dataclasses import asdict, dataclass
+from datetime import timedelta
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -11,15 +12,23 @@ from typing import (
     Generic,
     Literal,
     NamedTuple,
-    TypeVar,
     final,
+    overload,
 )
 from warnings import warn
 
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
-from typing_extensions import NotRequired, TypeAliasType, TypedDict, Unpack, deprecated
+from pydantic import TypeAdapter, ValidationError
+from typing_extensions import (
+    NotRequired,
+    TypeAliasType,
+    TypedDict,
+    TypeVar,
+    Unpack,
+    deprecated,
+)
 from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._cache import default_cache_key
@@ -31,10 +40,11 @@ from langgraph.warnings import LangGraphDeprecatedSinceV10, LangGraphDeprecatedS
 
 # Local TypeVars for generic stream TypedDicts.
 # We use separate TypeVars here (rather than importing from langgraph.typing)
-# because the typing module TypeVars have defaults that cause mypy issues
+# because the typing module TypeVars have defaults that cause type checker issues
 # when used in standalone type aliases.
 StateT = TypeVar("StateT")
 OutputT = TypeVar("OutputT")
+ResponseT = TypeVar("ResponseT", default=Any)
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
@@ -67,7 +77,10 @@ __all__ = (
     "CheckpointPayload",
     "DebugPayload",
     "RetryPolicy",
+    "TimeoutPolicy",
     "CachePolicy",
+    "TracePolicy",
+    "omit_payload",
     "Interrupt",
     "StateUpdate",
     "PregelTask",
@@ -148,6 +161,16 @@ class TaskPayload(TypedDict):
     """Input data passed to the task."""
     triggers: list[str]
     """List of triggers that caused this task to be executed (e.g. channel writes)."""
+    metadata: NotRequired[dict[str, Any]]
+    """Framework-resolved metadata associated with the task.
+
+    Generic dict carrier following the messages-stream pattern. Populated by
+    `map_debug_tasks` from `task.config["metadata"]` when non-empty, so the
+    same keys `stream_mode="messages"` consumers see (e.g. `lc_agent_name`,
+    `langgraph_node`, `langgraph_step`) are available to stream transformers.
+
+    Consumers should ignore unrecognized keys.
+    """
 
 
 class TaskResultPayload(TypedDict):
@@ -423,6 +446,83 @@ class RetryPolicy(NamedTuple):
     """List of exception classes that should trigger a retry, or a callable that returns `True` for exceptions that should trigger a retry."""
 
 
+def _coerce_timeout_seconds(
+    value: float | timedelta | None, *, field: str
+) -> float | None:
+    if value is None:
+        return None
+    seconds = value.total_seconds() if isinstance(value, timedelta) else float(value)
+    if seconds <= 0:
+        raise ValueError(f"{field} must be greater than 0")
+    return seconds
+
+
+@dataclass(**_DC_KWARGS)
+class TimeoutPolicy:
+    """Configuration for timing out node attempts.
+
+    !!! note "Cooperative cancellation"
+
+        Timeouts rely on asyncio cancellation. If your node uses synchronous
+        time.sleep() or other CPU-bound work that blocks the GIL, the timeout will not
+        be fired until after the event loop has been released.
+
+    !!! note "Inline callback dispatch"
+
+        Under `refresh_on="auto"`, an internal handler refreshes the timeout on any
+        callback event that occurs in the execution of the node or its nested descendants.
+    """
+
+    run_timeout: float | timedelta | None = None
+    """Hard wall-clock cap (in seconds) for a single node attempt.
+
+    This timeout is never refreshed by progress signals or `runtime.heartbeat()`.
+    """
+
+    idle_timeout: float | timedelta | None = None
+    """Maximum time (in seconds) a single node attempt may go without observable progress."""
+
+    refresh_on: Literal["auto", "heartbeat"] = "auto"
+    """Which signals refresh `idle_timeout`.
+
+    `"auto"` refreshes on standard graph progress signals and explicit heartbeats.
+    `"heartbeat"` refreshes only on explicit `runtime.heartbeat()` calls.
+    """
+
+    @classmethod
+    def coerce(
+        cls, value: float | timedelta | TimeoutPolicy | None
+    ) -> TimeoutPolicy | None:
+        """Normalize a timeout value to positive-second policy fields."""
+        if value is None:
+            return None
+        if isinstance(value, TimeoutPolicy):
+            # Fast path: a policy already produced by coerce() has float
+            # timeouts and a validated refresh_on, so we can return it as-is.
+            # `frozen=True` makes this safe to share.
+            rt, it = value.run_timeout, value.idle_timeout
+            if (
+                value.refresh_on in ("auto", "heartbeat")
+                and (rt is None or (type(rt) is float and rt > 0))
+                and (it is None or (type(it) is float and it > 0))
+                and (rt is not None or it is not None)
+            ):
+                return value
+        else:
+            value = cls(run_timeout=value)
+        if value.refresh_on not in ("auto", "heartbeat"):
+            raise ValueError("refresh_on must be 'auto' or 'heartbeat'")
+        run_timeout = _coerce_timeout_seconds(value.run_timeout, field="run_timeout")
+        idle_timeout = _coerce_timeout_seconds(value.idle_timeout, field="idle_timeout")
+        if run_timeout is None and idle_timeout is None:
+            return None
+        return cls(
+            run_timeout=run_timeout,
+            idle_timeout=idle_timeout,
+            refresh_on=value.refresh_on,
+        )
+
+
 KeyFuncT = TypeVar("KeyFuncT", bound=Callable[..., str | bytes])
 
 
@@ -438,12 +538,50 @@ class CachePolicy(Generic[KeyFuncT]):
     """Time to live for the cache entry in seconds. If `None`, the entry never expires."""
 
 
+@dataclass(**_DC_KWARGS)
+class TracePolicy:
+    """Configuration for how a node's run is traced.
+
+    Scope: this only transforms what the node's *own* run records. Child runs created
+    by a traced `bound` runnable and the root graph run are not affected. Plain
+    function nodes are traced with `trace=False`, so they have no such child runs.
+
+    Not intended to redact secrets. To redact inputs/outputs across all runs
+    (children included), use the LangSmith client's
+    `hide_inputs`/`hide_outputs`/`anonymizer` instead.
+
+    Each processor receives the node's raw input/output value (not a normalized
+    kwargs dict) and returns the value to record.
+    """
+
+    process_inputs: Callable[[Any], Any] | None = None
+    """Optional callable to transform the node's input before it is recorded on the
+    node's trace run. Can be used to omit or summarize large payloads
+    (e.g. message history). Not intended to affect the value passed to the node; avoid
+    mutating arguments in place."""
+
+    process_outputs: Callable[[Any], Any] | None = None
+    """Optional callable to transform the node's output before it is recorded on the
+    node's trace run. Can be used to omit or summarize large payloads
+    (e.g. message history). Not intended to affect the value returned by the node; avoid
+    mutating arguments in place."""
+
+
+def omit_payload(_value: Any) -> dict[str, Any]:
+    """`TracePolicy` helper that records an empty payload, dropping the value entirely.
+
+    Use as `process_inputs` and/or `process_outputs` on a `TracePolicy` to keep a node's
+    span and its timing while omitting its inputs/outputs from the trace.
+    """
+    return {}
+
+
 _DEFAULT_INTERRUPT_ID = "placeholder-id"
 
 
 @final
 @dataclass(init=False, slots=True)
-class Interrupt:
+class Interrupt(Generic[ResponseT]):
     """Information about an interrupt that occurred in a node.
 
     !!! version-added "Added in version 0.2.24"
@@ -467,13 +605,22 @@ class Interrupt:
     id: str
     """The ID of the interrupt. Can be used to resume the interrupt directly."""
 
+    response_schema: type[ResponseT] | dict[str, Any] | None = None
+    """Schema for the value expected when resuming this interrupt, if the graph provided one.
+
+    A surfaced interrupt carries JSON Schema (a `dict`); `type[ResponseT]` records the
+    Python type at construction so `Interrupt[Decision]` is meaningful to type checkers."""
+
     def __init__(
         self,
         value: Any,
         id: str = _DEFAULT_INTERRUPT_ID,
+        *,
+        response_schema: type[ResponseT] | dict[str, Any] | None = None,
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         self.value = value
+        self.response_schema = response_schema
 
         if (
             (ns := deprecated_kwargs.get("ns", MISSING)) is not MISSING
@@ -485,8 +632,18 @@ class Interrupt:
             self.id = id
 
     @classmethod
-    def from_ns(cls, value: Any, ns: str) -> Interrupt:
-        return cls(value=value, id=xxh3_128_hexdigest(ns.encode()))
+    def from_ns(
+        cls,
+        value: Any,
+        ns: str,
+        *,
+        response_schema: type[ResponseT] | dict[str, Any] | None = None,
+    ) -> Interrupt[ResponseT]:
+        return cls(
+            value=value,
+            id=xxh3_128_hexdigest(ns.encode()),
+            response_schema=response_schema,
+        )
 
     @property
     @deprecated("`interrupt_id` is deprecated. Use `id` instead.", category=None)
@@ -548,6 +705,7 @@ class PregelExecutableTask:
     path: tuple[str | int | tuple, ...]
     writers: Sequence[Runnable] = ()
     subgraphs: Sequence[PregelProtocol] = ()
+    timeout: TimeoutPolicy | None = None
 
 
 class StateSnapshot(NamedTuple):
@@ -568,7 +726,13 @@ class StateSnapshot(NamedTuple):
     tasks: tuple[PregelTask, ...]
     """Tasks to execute in this step. If already attempted, may contain an error."""
     interrupts: tuple[Interrupt, ...]
-    """Interrupts that occurred in this step that are pending resolution."""
+    """Interrupts that occurred in this step.
+
+    When reading the latest state (`get_state` without a `checkpoint_id`), this
+    contains only interrupts still waiting for an answer. When reading a specific
+    checkpoint or state history, it contains the most recent interrupt each task
+    raised in that step, including ones answered later in the same step.
+    """
 
 
 class Send:
@@ -587,6 +751,8 @@ class Send:
     Attributes:
         node (str): The name of the target node to send the message to.
         arg (Any): The state or message to send to the target node.
+        timeout (TimeoutPolicy | None): Optional timeout policy for this specific
+            pushed task. If omitted, the target node's timeout policy is used.
 
     !!! example
 
@@ -616,33 +782,47 @@ class Send:
         ```
     """
 
-    __slots__ = ("node", "arg")
+    __slots__ = ("node", "arg", "timeout")
 
     node: str
     arg: Any
+    timeout: TimeoutPolicy | None
 
-    def __init__(self, /, node: str, arg: Any) -> None:
+    def __init__(
+        self,
+        /,
+        node: str,
+        arg: Any,
+        *,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
+    ) -> None:
         """
         Initialize a new instance of the `Send` class.
 
         Args:
             node: The name of the target node to send the message to.
             arg: The state or message to send to the target node.
+            timeout: Optional timeout policy for this specific pushed task. A
+                number or `timedelta` is treated as a hard `run_timeout`.
         """
         self.node = node
         self.arg = arg
+        self.timeout = TimeoutPolicy.coerce(timeout)
 
     def __hash__(self) -> int:
-        return hash((self.node, self.arg))
+        return hash((self.node, self.arg, self.timeout))
 
     def __repr__(self) -> str:
-        return f"Send(node={self.node!r}, arg={self.arg!r})"
+        if self.timeout is None:
+            return f"Send(node={self.node!r}, arg={self.arg!r})"
+        return f"Send(node={self.node!r}, arg={self.arg!r}, timeout={self.timeout!r})"
 
     def __eq__(self, value: object) -> bool:
         return (
             isinstance(value, Send)
             and self.node == value.node
             and self.arg == value.arg
+            and self.timeout == value.timeout
         )
 
 
@@ -702,7 +882,27 @@ class Command(Generic[N], ToolOutputMixin):
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
 
-def interrupt(value: Any) -> Any:
+def _validate_resume(adapter: TypeAdapter[Any], value: Any) -> Any:
+    from langgraph.errors import _mark_invalid_resume
+
+    try:
+        return adapter.validate_python(value)
+    except ValidationError as exc:
+        _mark_invalid_resume(exc)
+        raise
+
+
+@overload
+def interrupt(value: Any, *, response_schema: type[ResponseT]) -> ResponseT: ...
+
+
+@overload
+def interrupt(value: Any, *, response_schema: dict[str, Any] | None = None) -> Any: ...
+
+
+def interrupt(
+    value: Any, *, response_schema: dict[str, Any] | type | None = None
+) -> Any:
     """Interrupt the graph with a resumable exception from within a node.
 
     The `interrupt` function enables human-in-the-loop workflows by pausing graph
@@ -772,7 +972,7 @@ def interrupt(value: Any) -> Any:
         for chunk in graph.stream({\"foo\": \"abc\"}, config):
             print(chunk)
 
-        # > {'__interrupt__': (Interrupt(value='what is your age?', id='45fda8478b2ef754419799e10992af06'),)}
+        # > {'__interrupt__': (Interrupt(value='what is your age?', id='45fda8478b2ef754419799e10992af06', response_schema=None),)}
 
         command = Command(resume=\"some input from a human!!!\")
 
@@ -785,12 +985,21 @@ def interrupt(value: Any) -> Any:
 
     Args:
         value: The value to surface to the client when the graph is interrupted.
+        response_schema: Optional schema for the value expected on resume, surfaced
+            to clients so they can render a typed input form. Accepts a JSON Schema
+            `dict` (used as-is, resume values are not validated), or a Pydantic model
+            class, `TypedDict`, or dataclass, which are converted to JSON Schema for
+            clients and used to validate the resume value; the validated object is
+            what `interrupt` returns.
 
     Returns:
-        Any: On subsequent invocations within the same node (same task to be precise), returns the value provided during the first invocation
+        Any: On subsequent invocations within the same node (same task to be precise), returns the value provided during the first invocation,
+            validated against `response_schema` when one that supports validation was given.
 
     Raises:
         GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
+        pydantic.ValidationError: When a resume value does not match a Pydantic model, `TypedDict`, or dataclass `response_schema`.
+            Nothing is saved, so the interrupt can be answered again. `is_invalid_resume` identifies it.
     """
     from langgraph._internal._constants import (
         CONFIG_KEY_CHECKPOINT_NS,
@@ -802,27 +1011,36 @@ def interrupt(value: Any) -> Any:
     from langgraph.errors import GraphInterrupt
 
     conf = get_config()["configurable"]
+    adapter = (
+        None
+        if response_schema is None or isinstance(response_schema, dict)
+        else TypeAdapter(response_schema)
+    )
     # track interrupt index
     scratchpad = conf[CONFIG_KEY_SCRATCHPAD]
     idx = scratchpad.interrupt_counter()
     # find previous resume values
     if scratchpad.resume:
         if idx < len(scratchpad.resume):
-            conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
-            return scratchpad.resume[idx]
+            v = scratchpad.resume[idx]
+            validated = _validate_resume(adapter, v) if adapter else v
+            conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume[: idx + 1])])
+            return validated
     # find current resume value
     v = scratchpad.get_null_resume(True)
     if v is not None:
         assert len(scratchpad.resume) == idx, (scratchpad.resume, idx)
+        validated = _validate_resume(adapter, v) if adapter else v
         scratchpad.resume.append(v)
         conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
-        return v
+        return validated
     # no resume value found
     raise GraphInterrupt(
         (
             Interrupt.from_ns(
                 value=value,
                 ns=conf[CONFIG_KEY_CHECKPOINT_NS],
+                response_schema=adapter.json_schema() if adapter else response_schema,
             ),
         )
     )
@@ -870,3 +1088,9 @@ class Overwrite:
 
     value: Any
     """The value to write directly to the channel, bypassing any reducer."""
+
+    type: Literal["__overwrite__"] = "__overwrite__"
+    """Discriminator field. Lets the channel reducer recognise an `Overwrite`
+    even after its dataclass form is JSON-serialised and the typed instance
+    is lost (e.g. an `orjson`-encoded state update routed through the
+    LangGraph API server)."""

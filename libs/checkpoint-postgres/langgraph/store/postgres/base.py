@@ -4,9 +4,10 @@ import asyncio
 import concurrent.futures
 import json
 import logging
+import re
 import threading
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from typing import (
@@ -35,6 +36,7 @@ from langgraph.store.base import (
     ensure_embeddings,
     get_text_at_path,
     tokenize_path,
+    validate_op_namespace,
 )
 from psycopg import Capabilities, Connection, Cursor, Pipeline
 from psycopg.rows import DictRow, dict_row
@@ -238,6 +240,12 @@ class BasePostgresStore(Generic[C]):
     conn: C
     _deserializer: Callable[[bytes | orjson.Fragment], dict[str, Any]] | None
     index_config: PostgresIndexConfig | None
+    ttl_config: TTLConfig | None
+
+    @property
+    def _omit_expired(self) -> bool:
+        """Whether expired-but-unswept rows should be filtered from reads."""
+        return bool(self.ttl_config and self.ttl_config.get("omit_expired"))
 
     def _get_batch_GET_ops_queries(
         self,
@@ -258,12 +266,17 @@ class BasePostgresStore(Generic[C]):
             namespace_groups[op.namespace].append((idx, op.key))
             refresh_ttls[op.namespace].append(op.refresh_ttl)
 
+        omit_expired = self._omit_expired
+        expiry_clause = (
+            "AND (s.expires_at IS NULL OR s.expires_at > NOW())" if omit_expired else ""
+        )
+
         results = []
         for namespace, items in namespace_groups.items():
             _, keys = zip(*items, strict=False)
             this_refresh_ttls = refresh_ttls[namespace]
 
-            query = """
+            query = f"""
                 WITH passed_in AS (
                     SELECT unnest(%s::text[]) AS key,
                         unnest(%s::bool[])  AS do_refresh
@@ -276,12 +289,14 @@ class BasePostgresStore(Generic[C]):
                     AND s.key    = p.key
                     AND p.do_refresh = TRUE
                     AND s.ttl_minutes IS NOT NULL
+                    {expiry_clause}
                     RETURNING s.key
                 )
                 SELECT s.key, s.value, s.created_at, s.updated_at
                 FROM store s
                 JOIN passed_in p ON s.key = p.key
                 WHERE s.prefix = %s
+                {expiry_clause}
             """
             ns_text = _namespace_to_text(namespace)
             params = (
@@ -340,7 +355,7 @@ class BasePostgresStore(Generic[C]):
                     (
                         _namespace_to_text(op.namespace),
                         op.key,
-                        Jsonb(cast(dict, op.value)),
+                        Jsonb(dict(cast(Mapping[str, Any], op.value))),
                     )
                 )
                 if op.ttl is not None:
@@ -422,6 +437,13 @@ class BasePostgresStore(Generic[C]):
         - embedding_requests: list of (original_index_in_search_ops, text_query)
         """
 
+        omit_expired = self._omit_expired
+        search_expiry_clause = (
+            "AND (store.expires_at IS NULL OR store.expires_at > NOW())"
+            if omit_expired
+            else ""
+        )
+
         queries = []
         embedding_requests = []
         for idx, (_, op) in enumerate(search_ops):
@@ -443,8 +465,9 @@ class BasePostgresStore(Generic[C]):
             ns_condition = "TRUE"
             ns_param: Sequence[str] | None = None
             if op.namespace_prefix:
-                ns_condition = "store.prefix LIKE %s"
-                ns_param = (f"{_namespace_to_text(op.namespace_prefix)}%",)
+                ns_condition, ns_param = _namespace_prefix_condition(
+                    op.namespace_prefix
+                )
             else:
                 ns_param = ()
 
@@ -491,7 +514,7 @@ class BasePostgresStore(Generic[C]):
                             {score_operator} AS neg_score
                         FROM store
                         JOIN store_vectors sv ON store.prefix = sv.prefix AND store.key = sv.key
-                        WHERE {ns_condition} {extra_filters}
+                        WHERE {ns_condition} {extra_filters} {search_expiry_clause}
                         ORDER BY {score_operator} ASC
                         LIMIT %s
                     """
@@ -527,7 +550,7 @@ class BasePostgresStore(Generic[C]):
                 base_query = f"""
                         SELECT store.prefix, store.key, store.value, store.created_at, store.updated_at, NULL AS score
                         FROM store
-                        WHERE {ns_condition} {extra_filters}
+                        WHERE {ns_condition} {extra_filters} {search_expiry_clause}
                         ORDER BY store.updated_at DESC
                         LIMIT %s
                         OFFSET %s
@@ -591,18 +614,23 @@ class BasePostgresStore(Generic[C]):
             """
             params: list[Any] = [op.max_depth, op.max_depth]
 
+            omit_expired = self._omit_expired
             conditions = []
+            if omit_expired:
+                conditions.append("(expires_at IS NULL OR expires_at > NOW())")
             if op.match_conditions:
                 for condition in op.match_conditions:
-                    if condition.match_type == "prefix":
-                        conditions.append("prefix LIKE %s")
+                    if condition.match_type in ("prefix", "suffix"):
+                        if not condition.path:
+                            # An empty path constrains nothing; skipping keeps it a
+                            # no-op rather than emitting a pattern that matches no
+                            # namespace at all.
+                            continue
+                        conditions.append("prefix ~ %s")
                         params.append(
-                            f"{_namespace_to_text(condition.path, handle_wildcards=True)}%"
-                        )
-                    elif condition.match_type == "suffix":
-                        conditions.append("prefix LIKE %s")
-                        params.append(
-                            f"%{_namespace_to_text(condition.path, handle_wildcards=True)}"
+                            _namespace_match_pattern(
+                                condition.path, condition.match_type
+                            )
                         )
                     else:
                         logger.warning(
@@ -1248,13 +1276,57 @@ def _get_index_params(store: Any) -> tuple[str, dict[str, Any]]:
     return kind, sanitized
 
 
-def _namespace_to_text(
-    namespace: tuple[str, ...], handle_wildcards: bool = False
-) -> str:
+def _namespace_to_text(namespace: tuple[str, ...]) -> str:
     """Convert namespace tuple to text string."""
-    if handle_wildcards:
-        namespace = tuple("%" if val == "*" else val for val in namespace)
     return ".".join(namespace)
+
+
+def _escape_like_literal(text: str) -> str:
+    """Escape LIKE metacharacters so `text` is matched literally.
+
+    Namespace labels may contain `_` and `%`, which would otherwise act as
+    wildcards: `("user_1",)` would match `("userX1",)`. Backslash is escaped
+    first so it cannot escape the following character. Requires an explicit
+    `ESCAPE '\\'` clause on the pattern.
+    """
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _namespace_prefix_condition(namespace_prefix: tuple[str, ...]) -> tuple[str, tuple]:
+    """Build the SQL scoping a search to a namespace and its descendants.
+
+    Matches the namespace exactly or requires the `.` separator before any
+    remainder, so a prefix of `("foo",)` does not also match `("foobar",)`.
+
+    Both arms stay index-friendly: equality on the `(prefix, key)` primary key,
+    the anchored LIKE on the `prefix text_pattern_ops` index.
+
+    Only the LIKE arm is escaped -- equality does not interpret metacharacters,
+    so escaping it would stop `("user_1",)` from matching itself.
+    """
+    path = _namespace_to_text(namespace_prefix)
+    condition = r"(store.prefix = %s OR store.prefix LIKE %s ESCAPE '\')"
+    return condition, (path, f"{_escape_like_literal(path)}.%")
+
+
+def _namespace_match_pattern(path: tuple[str, ...], match_type: str) -> str:
+    """Build a POSIX regex matching the dot-joined prefix on whole segments.
+
+    Needed because `LIKE` cannot express "any character except the separator".
+    Matches how `InMemoryStore` compares namespaces element-wise.
+
+    `*` matches exactly one segment. Prefix matches stay open-ended but must end
+    on a separator; suffix matches anchor at the end and begin on one.
+
+    Examples:
+        prefix ("uid", "*", "alice") -> ^uid\\.[^.]+\\.alice(\\.|\\Z)
+        suffix ("alice",)            -> (^|\\.)alice\\Z
+    """
+    segments = ("[^.]+" if part == "*" else re.escape(part) for part in path)
+    body = r"\.".join(segments)
+    if match_type == "suffix":
+        return rf"(^|\.){body}\Z"
+    return rf"^{body}(\.|\Z)"
 
 
 def _row_to_item(
@@ -1315,6 +1387,7 @@ def _group_ops(ops: Iterable[Op]) -> tuple[dict[type, list[tuple[int, Op]]], int
     grouped_ops: dict[type, list[tuple[int, Op]]] = defaultdict(list)
     tot = 0
     for idx, op in enumerate(ops):
+        validate_op_namespace(op)
         grouped_ops[type(op)].append((idx, op))
         tot += 1
     return grouped_ops, tot

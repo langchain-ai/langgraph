@@ -6,9 +6,13 @@ from typing import Any
 from uuid import UUID
 
 from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.base import CheckpointMetadata, PendingWrite
+from langgraph.checkpoint.base import (
+    EXCLUDED_METADATA_KEYS,
+    CheckpointMetadata,
+    PendingWrite,
+)
 
-from langgraph._internal._config import patch_checkpoint_map
+from langgraph._internal._config import filter_to_user_tags, patch_checkpoint_map
 from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
@@ -22,6 +26,7 @@ from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel._io import read_channels
+from langgraph.pregel._task_status import TaskStatus, read_task_statuses
 from langgraph.types import (
     CheckpointPayload,
     PregelExecutableTask,
@@ -33,6 +38,8 @@ from langgraph.types import (
 
 TASK_NAMESPACE = UUID("6ba7b831-9dad-11d1-80b4-00c04fd430c8")
 
+_NOT_STARTED = TaskStatus()
+
 
 def map_debug_tasks(tasks: Iterable[PregelExecutableTask]) -> Iterator[TaskPayload]:
     """Produce "task" events for stream_mode=debug."""
@@ -40,12 +47,31 @@ def map_debug_tasks(tasks: Iterable[PregelExecutableTask]) -> Iterator[TaskPaylo
         if task.config is not None and TAG_HIDDEN in task.config.get("tags", []):
             continue
 
-        yield {
+        payload: TaskPayload = {
             "id": task.id,
             "name": task.name,
             "input": task.input,
             "triggers": task.triggers,
         }
+        # Forward user-meaningful metadata only — drop langgraph's internal
+        # framework keys (langgraph_node/step/triggers/path/checkpoint_ns,
+        # thread_id, ...), which are redundant with the task's own fields and
+        # namespace. Keys like `lc_agent_name`, `ls_integration`, and any
+        # user-supplied metadata ride along. Filtered config tags are folded in
+        # under `tags`, mirroring the messages stream handler. (The comprehension
+        # also yields a fresh dict, so mutating `md` doesn't touch task.config.)
+        if task.config is not None:
+            md = {
+                k: v
+                for k, v in (task.config.get("metadata") or {}).items()
+                if k not in EXCLUDED_METADATA_KEYS
+            }
+            filtered_tags = filter_to_user_tags(task.config.get("tags"))
+            if filtered_tags is not None:
+                md["tags"] = filtered_tags
+            if md:
+                payload["metadata"] = md
+        yield payload
 
 
 def is_multiple_channel_write(value: Any) -> bool:
@@ -188,35 +214,21 @@ def tasks_w_writes(
     pending_writes: list[PendingWrite] | None,
     states: dict[str, RunnableConfig | StateSnapshot] | None,
     output_keys: str | Sequence[str],
+    *,
+    live: bool = False,
 ) -> tuple[PregelTask, ...]:
-    """Apply writes / subgraph states to tasks to be returned in a StateSnapshot."""
-    pending_writes = pending_writes or []
+    """Apply writes / subgraph states to tasks to be returned in a StateSnapshot.
+
+    With `live=True`, tasks report only the interrupts still waiting for an
+    answer, as of the most recent writes. Otherwise tasks report the interrupts
+    they raised in the step, including answered ones, as a record of the step.
+    """
+    statuses = read_task_statuses(pending_writes or [])
     out: list[PregelTask] = []
     for task in tasks:
-        rtn = next(
-            (
-                val
-                for tid, chan, val in pending_writes
-                if tid == task.id and chan == RETURN
-            ),
-            MISSING,
-        )
-        task_error = next(
-            (exc for tid, n, exc in pending_writes if tid == task.id and n == ERROR),
-            None,
-        )
-        task_interrupts = tuple(
-            v
-            for tid, n, vv in pending_writes
-            if tid == task.id and n == INTERRUPT
-            for v in (vv if isinstance(vv, Sequence) else [vv])
-        )
-
-        task_writes = [
-            (chan, val)
-            for tid, chan, val in pending_writes
-            if tid == task.id and chan not in (ERROR, INTERRUPT, RETURN)
-        ]
+        status = statuses.get(task.id, _NOT_STARTED)
+        rtn = next((val for chan, val in status.output if chan == RETURN), MISSING)
+        task_writes = [(chan, val) for chan, val in status.output if chan != RETURN]
 
         if rtn is not MISSING:
             task_result = rtn
@@ -238,19 +250,15 @@ def tasks_w_writes(
             mapped_writes = map_task_result_writes(filtered_writes)
             task_result = mapped_writes if filtered_writes else {}
 
-        has_writes = rtn is not MISSING or any(
-            w[0] == task.id and w[1] not in (ERROR, INTERRUPT) for w in pending_writes
-        )
-
         out.append(
             PregelTask(
                 task.id,
                 task.name,
                 task.path,
-                task_error,
-                task_interrupts,
+                status.error,
+                status.pending_interrupts if live else status.interrupts,
                 states.get(task.id) if states else None,
-                task_result if has_writes else None,
+                task_result if status.finished else None,
             )
         )
     return tuple(out)

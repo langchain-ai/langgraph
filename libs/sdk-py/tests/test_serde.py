@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any
 
 import orjson
@@ -36,7 +37,6 @@ async def test_serde_pydantic():
 
 
 async def test_serde_dataclass():
-    from dataclasses import dataclass
 
     @dataclass
     class TestDataClass:

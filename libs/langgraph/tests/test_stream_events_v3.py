@@ -1,17 +1,22 @@
 """Tests for v2 streaming format (StreamPart TypedDicts).
 
-This file is checked by mypy directly — no subprocess workarounds.
+This file is checked by ty directly.
 Type-narrowing is validated via `assert_type` calls in `_check_type_narrowing`.
 """
 
 from __future__ import annotations
 
+import copy
 import operator
 import sys
 from dataclasses import dataclass
 from typing import Annotated, Any, TypeVar
 
 import pytest
+from langchain_core.language_models.chat_model_stream import (
+    AsyncChatModelStream,
+    ChatModelStream,
+)
 from langchain_core.messages import AIMessage, BaseMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel, ValidationError
@@ -19,9 +24,21 @@ from typing_extensions import TypedDict, assert_type
 
 from langgraph._internal._constants import INTERRUPT
 from langgraph.constants import END, START
+from langgraph.errors import GraphDrained
 from langgraph.func import entrypoint
 from langgraph.graph import StateGraph
 from langgraph.graph.message import MessagesState
+from langgraph.runtime import RunControl
+from langgraph.stream import (
+    AsyncGraphRunStream,
+    AsyncSubgraphRunStream,
+    GraphRunStream,
+    LifecyclePayload,
+    StreamChannel,
+    StreamTransformer,
+    SubgraphRunStream,
+)
+from langgraph.stream._types import ProtocolEvent
 from langgraph.types import (
     CheckpointPayload,
     CheckpointStreamPart,
@@ -228,6 +245,32 @@ class TestV2Stream:
         assert {"values", "updates"} <= types_seen
         for c in chunks:
             _assert_stream_part_shape(c)
+
+    def test_stream_events_v3_accepts_control_for_drain(self) -> None:
+        class DrainState(TypedDict, total=False):
+            value: str
+            skipped: str
+
+        control = RunControl()
+
+        def first_node(state: DrainState) -> dict[str, str]:
+            control.request_drain("sigterm")
+            return {"value": "done"}
+
+        def second_node(state: DrainState) -> dict[str, str]:
+            return {"skipped": "nope"}
+
+        builder = StateGraph(DrainState)
+        builder.add_node("first", first_node)
+        builder.add_node("second", second_node)
+        builder.add_edge(START, "first")
+        builder.add_edge("first", "second")
+        builder.add_edge("second", END)
+        graph = builder.compile()
+
+        run = graph.stream_events({}, control=control, version="v3")
+        with pytest.raises(GraphDrained, match="sigterm"):
+            list(run.values)
 
     def test_subgraphs_ns(self) -> None:
         outer = _make_subgraph()
@@ -1096,7 +1139,7 @@ class TestV2ValidationErrors:
 
     _INVALID_INPUT: dict[str, Any] = {"value": [1, 2, 3], "items": []}
 
-    def test_stream_v2_pydantic_validation_error(self) -> None:
+    def test_stream_events_v3_pydantic_validation_error(self) -> None:
         """Invalid input to stream with v2 + pydantic state raises ValidationError."""
         graph = _make_pydantic_graph()
         with pytest.raises(ValidationError):
@@ -1150,3 +1193,128 @@ def _check_type_narrowing(part: StreamPart[_StateT, _OutputT]) -> None:
         assert_type(part, DebugStreamPart[_StateT])
         assert_type(part["data"], DebugPayload[_StateT])
     assert_type(part["ns"], tuple[str, ...])
+
+
+# --- v3 stream_events return / projection typing checks ---
+# These functions are never called at runtime; `ty` validates the
+# assert_type calls. They pin the public typing surface of
+# stream_events(version="v3") / astream_events(version="v3"): the handle
+# type and the always-registered native projections.
+
+
+class _MarkerTransformer(StreamTransformer):
+    """Native transformer contributing a key this module doesn't declare.
+
+    Stands in for any transformer defined outside this package — projections
+    whose names `GraphRunStream` can't enumerate, so they resolve through
+    `__getattr__` instead of a class annotation.
+    """
+
+    _native = True
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
+        self._log: StreamChannel[str] = StreamChannel()
+
+    def init(self) -> dict[str, Any]:
+        return {"marker": self._log}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        if event["method"] == "values":
+            self._log.push("saw_values")
+        return True
+
+
+def _check_stream_events_v3_typing() -> None:
+    """Compile-time checks for sync v3 typing — never called at runtime."""
+    graph = _make_simple_graph().compile()
+    run = graph.stream_events(_SIMPLE_INPUT, version="v3")
+    assert_type(run, GraphRunStream)
+    assert_type(run.values, StreamChannel[dict[str, Any]])
+    assert_type(run.messages, StreamChannel[ChatModelStream])
+    assert_type(run.lifecycle, StreamChannel[LifecyclePayload])
+    assert_type(run.subgraphs, StreamChannel[SubgraphRunStream])
+    # Opt-in projections from transformers this package ships carry their real
+    # item type even though they are only present once registered.
+    assert_type(run.updates, StreamChannel[dict[str, Any]])
+    assert_type(run.custom, StreamChannel[Any])
+    assert_type(run.checkpoints, StreamChannel[dict[str, Any]])
+    assert_type(run.debug, StreamChannel[dict[str, Any]])
+    assert_type(run.tasks, StreamChannel[dict[str, Any]])
+    # Projections this module can't enumerate resolve through `__getattr__`
+    # as `StreamChannel[Any]` rather than failing with attr-defined.
+    assert_type(run.marker, StreamChannel[Any])
+
+
+async def _check_astream_events_v3_typing() -> None:
+    """Compile-time checks for async v3 typing — never called at runtime."""
+    graph = _make_simple_graph().compile()
+    run = await graph.astream_events(_SIMPLE_INPUT, version="v3")
+    assert_type(run, AsyncGraphRunStream)
+    assert_type(run.values, StreamChannel[dict[str, Any]])
+    assert_type(run.messages, StreamChannel[AsyncChatModelStream])
+    assert_type(run.lifecycle, StreamChannel[LifecyclePayload])
+    assert_type(run.subgraphs, StreamChannel[AsyncSubgraphRunStream])
+    assert_type(run.updates, StreamChannel[dict[str, Any]])
+    assert_type(run.custom, StreamChannel[Any])
+    assert_type(run.checkpoints, StreamChannel[dict[str, Any]])
+    assert_type(run.debug, StreamChannel[dict[str, Any]])
+    assert_type(run.tasks, StreamChannel[dict[str, Any]])
+    assert_type(run.marker, StreamChannel[Any])
+
+
+def test_undeclared_native_projection_is_attached() -> None:
+    """A native projection this module doesn't declare still works at runtime.
+
+    `__getattr__` is a type-checker fallback only — it must not shadow the
+    `setattr` loop that attaches registered native projections.
+    """
+    graph = _make_simple_graph().compile()
+    run = graph.stream_events(
+        _SIMPLE_INPUT, version="v3", transformers=[_MarkerTransformer]
+    )
+
+    marker_iter = iter(run.marker)
+    assert run.output is not None
+    assert run.marker is run.extensions["marker"]
+    assert "saw_values" in list(marker_iter)
+
+
+def test_unregistered_projection_raises_attribute_error() -> None:
+    """An unregistered projection name still fails at runtime.
+
+    The `__getattr__` fallback exists to satisfy type checkers; it must not
+    make unknown names resolve to anything. The message lists what *is*
+    registered so a typo is diagnosable from the traceback alone.
+    """
+    graph = _make_simple_graph().compile()
+    run = graph.stream_events(_SIMPLE_INPUT, version="v3")
+
+    # `marker` type-checks via `__getattr__` but was never registered here.
+    with pytest.raises(AttributeError) as exc_info:
+        run.marker
+
+    message = str(exc_info.value)
+    assert "marker" in message
+    # The always-registered natives are listed as the alternatives.
+    assert "messages" in message
+
+    # Registered projections still resolve, and the run is unaffected.
+    assert isinstance(run.messages, StreamChannel)
+    assert run.output is not None
+
+
+def test_getattr_fallback_does_not_recurse_before_init() -> None:
+    """`__getattr__` reads the mux from `__dict__`, so it is safe pre-init.
+
+    `self._mux` would re-enter `__getattr__` and overflow the stack when the
+    attribute is missing, which is reachable via `hasattr` / `copy` / pickle
+    probing on a partially constructed instance.
+    """
+    bare = GraphRunStream.__new__(GraphRunStream)
+
+    with pytest.raises(AttributeError, match="anything"):
+        bare.anything
+
+    assert hasattr(bare, "anything") is False
+    assert copy.copy(bare) is not None

@@ -6,9 +6,11 @@ import re
 import shlex
 import textwrap
 from collections import Counter
+from collections.abc import Iterable
 from typing import Literal, NamedTuple
 
 import click
+import httpx
 
 from langgraph_cli.schemas import Config, Distros
 from langgraph_cli.uv_lock import python_config_to_docker_uv_lock
@@ -35,6 +37,41 @@ DISALLOWED_BUILD_COMMAND_CHARS = [
 # This blocks background execution (cmd &) while allowing command
 # chaining (cmd1 && cmd2) which is common in build commands.
 _SINGLE_AMPERSAND_RE = re.compile(r"(?<!&)&(?:&&)*(?!&)")
+_GIT_HTTP_AUTHORITY_RES = (
+    re.compile(r"git\+https?://(?P<authority>[^/\s\"']+)", re.I),
+    re.compile(r"\bgit\s*=\s*[\"']https?://(?P<authority>[^/\s\"']+)", re.I),
+)
+_API_VERSION_PATTERN = re.compile(
+    r"^(?P<major>\d+)"
+    r"(?:\.(?P<minor>\d+))?"
+    r"(?:\.(?P<patch>\d+))?"
+    r"(?:(?:\.|)(?:[A-Za-z][0-9A-Za-z]*))?$"
+)
+_API_VERSION_RANGE_PATTERN = re.compile(r"^(?P<operator>~=|>~=)\s*(?P<version>.+)$")
+_API_VERSION_PART_PATTERN = re.compile(
+    r"^(?P<major>\d+)"
+    r"(?:\.(?P<minor>\d+))?"
+    r"(?:\.(?P<patch>\d+))?"
+    r"(?:(?:\.|)(?P<pre>dev|rc)(?P<pre_n>\d+))?$"
+)
+
+
+class _ParsedApiVersion(NamedTuple):
+    release: tuple[int, ...]
+    prerelease: str | None
+    prerelease_number: int
+
+
+class _ApiVersionRange(NamedTuple):
+    floor: _ParsedApiVersion
+    allow_future_stable: bool
+
+
+_PRERELEASE_ORDER = {
+    "dev": 0,
+    "rc": 1,
+    None: 2,
+}
 
 
 def has_disallowed_build_command_content(command: str) -> bool:
@@ -44,6 +81,62 @@ def has_disallowed_build_command_content(command: str) -> bool:
     if _SINGLE_AMPERSAND_RE.search(command):
         return True
     return False
+
+
+def _has_git_http_url_userinfo(dependency: str) -> bool:
+    """Check whether a Git HTTP URL contains userinfo."""
+    return any(
+        "@" in match.group("authority")
+        for pattern in _GIT_HTTP_AUTHORITY_RES
+        for match in pattern.finditer(dependency)
+    )
+
+
+def _validate_git_http_url_userinfo(
+    values: Iterable[str], *, source: pathlib.Path | None = None
+) -> None:
+    """Reject credential-bearing Git HTTP URLs without echoing their values."""
+    if not any(_has_git_http_url_userinfo(value) for value in values):
+        return
+    message = (
+        "Git dependency URLs must not contain credentials or other URL "
+        "userinfo because generated Dockerfiles and image layers can retain "
+        "them. Use a credential-free Git URL and provide short-lived "
+        "credentials through your build environment's secret-backed Git "
+        "credential helper."
+    )
+    if source is not None:
+        message += f" Found in: {source}"
+    raise click.UsageError(message)
+
+
+def _validate_git_http_url_userinfo_files(paths: Iterable[pathlib.Path]) -> None:
+    """Reject credential-bearing Git HTTP URLs in dependency files."""
+    for path in paths:
+        path = path.resolve()
+        if not path.is_file():
+            continue
+        try:
+            contents = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            raise click.UsageError(
+                f"Could not inspect dependency file for embedded credentials: {path}"
+            ) from None
+        _validate_git_http_url_userinfo([contents], source=path)
+
+
+def _validate_local_dependency_files(config_path: pathlib.Path, config: Config) -> None:
+    """Validate dependency files copied into a non-uv Python image."""
+    paths: list[pathlib.Path] = []
+    for dependency in config["dependencies"]:
+        if not isinstance(dependency, str) or not dependency.startswith("."):
+            continue
+        root = (config_path.parent / dependency).resolve()
+        paths.extend(
+            root / name
+            for name in ("requirements.txt", "pyproject.toml", "setup.py", "setup.cfg")
+        )
+    _validate_git_http_url_userinfo_files(paths)
 
 
 MIN_PYTHON_VERSION = "3.11"
@@ -123,6 +216,145 @@ def _parse_node_version(version_str: str) -> int:
         ) from None
 
 
+def _parse_api_version_parts(version_str: str) -> tuple[int, ...]:
+    """Parse an API version into numeric components.
+
+    Supports optional prerelease suffixes, e.g. `0.9.0rc1`.
+    """
+    version_core = version_str.split("-", 1)[0]
+    match = _API_VERSION_PATTERN.fullmatch(version_core)
+    if not match:
+        raise ValueError("Version must be major or major.minor or major.minor.patch.")
+    return tuple(int(part) for part in match.groups() if part is not None)
+
+
+def _parse_api_version(version_str: str) -> _ParsedApiVersion:
+    match = _API_VERSION_PART_PATTERN.fullmatch(version_str)
+    if not match:
+        raise ValueError("Version must be major or major.minor or major.minor.patch.")
+    release = tuple(
+        int(part)
+        for part in (
+            match.group("major"),
+            match.group("minor"),
+            match.group("patch"),
+        )
+        if part is not None
+    )
+    prerelease = match.group("pre")
+    prerelease_number = int(match.group("pre_n") or 0)
+    return _ParsedApiVersion(release, prerelease, prerelease_number)
+
+
+def _api_version_sort_key(
+    version: _ParsedApiVersion,
+) -> tuple[tuple[int, ...], int, int]:
+    return (
+        version.release,
+        _PRERELEASE_ORDER[version.prerelease],
+        version.prerelease_number,
+    )
+
+
+def _api_version_upper_bound(version: _ParsedApiVersion) -> tuple[int, ...]:
+    release = version.release
+    if len(release) <= 2:
+        return (release[0] + 1,)
+    return (release[0], release[1] + 1)
+
+
+def _is_compatible_api_version_candidate(
+    candidate: _ParsedApiVersion,
+    version_range: _ApiVersionRange,
+    upper_bound: tuple[int, ...],
+) -> bool:
+    floor = version_range.floor
+    if _api_version_sort_key(candidate) < _api_version_sort_key(floor):
+        return False
+    outside_compatible_range = candidate.release[: len(upper_bound)] >= upper_bound
+    if outside_compatible_range and not version_range.allow_future_stable:
+        return False
+    if outside_compatible_range and candidate.prerelease is not None:
+        return False
+    if floor.prerelease == "dev" and candidate.prerelease == "dev":
+        return candidate == floor
+    return True
+
+
+def _ensure_compatible_api_version_base_image(base_image: str) -> None:
+    if ":" in base_image:
+        raise click.UsageError(
+            "Compatible api_version ranges cannot be used with a tagged base_image."
+        )
+
+
+def _get_pypi_versions(package_name: str) -> list[str]:
+    try:
+        response = httpx.get(
+            f"https://pypi.org/pypi/{package_name}/json",
+            timeout=10,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise click.UsageError(
+            f"Failed to fetch PyPI versions for {package_name}: {exc}"
+        ) from None
+    payload = response.json()
+    releases = payload.get("releases", {})
+    if not isinstance(releases, dict):
+        raise click.UsageError(
+            f"Failed to fetch PyPI versions for {package_name}: invalid response."
+        )
+    return [version for version in releases if isinstance(version, str)]
+
+
+def _resolve_compatible_api_version(
+    api_version: str,
+    base_image: str,
+    version_distro_tag: str,
+) -> str:
+    match = _API_VERSION_RANGE_PATTERN.fullmatch(api_version)
+    if not match:
+        return api_version
+
+    floor_str = match.group("version").strip()
+    try:
+        floor = _parse_api_version(floor_str)
+    except ValueError:
+        raise click.UsageError(
+            f"Invalid compatible api_version range: {api_version}.\n\n"
+            "Use a compatible version range, e.g.:\n"
+            '  "api_version": "~=0.11.0.dev5"\n'
+            "or a stable-floating range, e.g.:\n"
+            '  "api_version": ">~=0.11.0.dev5"'
+        ) from None
+
+    version_range = _ApiVersionRange(
+        floor=floor,
+        allow_future_stable=match.group("operator") == ">~=",
+    )
+    _ensure_compatible_api_version_base_image(base_image)
+    pypi_versions = _get_pypi_versions("langgraph-api")
+
+    candidates: list[tuple[_ParsedApiVersion, str]] = []
+    upper_bound = _api_version_upper_bound(floor)
+    for candidate_str in pypi_versions:
+        try:
+            candidate = _parse_api_version(candidate_str)
+        except ValueError:
+            continue
+        if _is_compatible_api_version_candidate(candidate, version_range, upper_bound):
+            candidates.append((candidate, candidate_str))
+
+    if not candidates:
+        raise click.UsageError(
+            f"No PyPI releases match compatible api_version range {api_version!r} "
+            f"for {base_image} with {version_distro_tag!r}."
+        )
+
+    return max(candidates, key=lambda item: _api_version_sort_key(item[0]))[1]
+
+
 def _is_node_graph(spec: str | dict) -> bool:
     """Check if a graph is a Node.js graph based on the file extension."""
     if isinstance(spec, dict):
@@ -149,7 +381,9 @@ def _get_source_kind(config: Config) -> str | None:
     return kind if isinstance(kind, str) else None
 
 
-def validate_config(config: Config) -> Config:
+def validate_config(
+    config: Config, *, source_path: pathlib.Path | None = None
+) -> Config:
     """Validate a configuration dictionary."""
 
     graphs = config.get("graphs", {})
@@ -176,12 +410,17 @@ def validate_config(config: Config) -> Config:
             )
     if api_version:
         try:
-            parts = tuple(map(int, api_version.split("-")[0].split(".")))
+            compatible_match = _API_VERSION_RANGE_PATTERN.fullmatch(api_version)
+            parts = _parse_api_version_parts(
+                compatible_match.group("version").strip()
+                if compatible_match
+                else api_version
+            )
             if len(parts) > 3:
                 raise ValueError(
                     "Version must be major or major.minor or major.minor.patch."
                 )
-        except TypeError:
+        except (TypeError, ValueError):
             raise click.UsageError(
                 f"Invalid version format: {api_version}.\n\n"
                 "Pin to a minor version, e.g.:\n"
@@ -238,6 +477,15 @@ def validate_config(config: Config) -> Config:
                 "Consider using uv-based source management instead:\n\n"
                 '  "source": {"kind": "uv", "root": ".."}'
             )
+
+    _validate_git_http_url_userinfo(
+        (
+            dependency
+            for dependency in config["dependencies"]
+            if isinstance(dependency, str)
+        ),
+        source=source_path,
+    )
 
     source = config.get("source")
     source_kind = _get_source_kind(config)
@@ -433,7 +681,7 @@ def validate_config_file(config_path: pathlib.Path) -> Config:
     """Load and validate a configuration file."""
     with open(config_path) as f:
         config = json.load(f)
-    validated = validate_config(config)
+    validated = validate_config(config, source_path=config_path.resolve())
     # Enforce the package.json doesn't enforce an
     # incompatible Node.js version
     if validated.get("node_version"):
@@ -1104,6 +1352,7 @@ def python_config_to_docker(
             api_version=api_version,
             build_tools_to_uninstall=build_tools_to_uninstall,
         )
+    _validate_local_dependency_files(config_path, config)
     if pip_installer == "auto":
         if _image_supports_uv(base_image):
             pip_installer = "uv"
@@ -1314,7 +1563,18 @@ def node_config_to_docker(
 ) -> tuple[str, dict[str, str]]:
     # Calculate paths for monorepo support
     install_root = (
-        pathlib.Path(build_context).resolve() if build_context else config_path.parent
+        pathlib.Path(build_context).resolve()
+        if build_context
+        else config_path.parent.resolve()
+    )
+    config_root = config_path.parent.resolve()
+    dependency_roots = (
+        (install_root, config_root) if install_root != config_root else (install_root,)
+    )
+    _validate_git_http_url_userinfo_files(
+        root / name
+        for root in dependency_roots
+        for name in ("package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml")
     )
     install_cmd = install_command or _get_node_pm_install_cmd(install_root)
     if build_context:
@@ -1412,6 +1672,9 @@ def docker_tag(
 
     # Prepend API version if provided
     if api_version:
+        api_version = _resolve_compatible_api_version(
+            api_version, base_image, f"{language}{version_distro_tag}"
+        )
         full_tag = f"{api_version}-{language}{version_distro_tag}"
     elif "/langgraph-server" in base_image and version_distro_tag not in base_image:
         return f"{base_image}-{language}{version_distro_tag}"

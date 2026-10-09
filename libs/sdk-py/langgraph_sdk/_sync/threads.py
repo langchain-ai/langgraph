@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any
+from typing import Any, Literal, overload
 
+from langgraph_sdk._shared.utilities import _quote_path_param
 from langgraph_sdk._sync.http import SyncHttpClient
+from langgraph_sdk._sync.stream import SyncThreadStream
 from langgraph_sdk.schema import (
     Checkpoint,
     Json,
@@ -88,7 +91,7 @@ class SyncThreadsClient:
         if params:
             query_params.update(params)
         return self.http.get(
-            f"/threads/{thread_id}",
+            f"/threads/{_quote_path_param(thread_id)}",
             headers=headers,
             params=query_params or None,
         )
@@ -168,15 +171,52 @@ class SyncThreadsClient:
 
         return self.http.post("/threads", json=payload, headers=headers, params=params)
 
+    @overload
     def update(
         self,
         thread_id: str,
         *,
         metadata: Mapping[str, Any],
         ttl: int | Mapping[str, Any] | None = None,
+        return_minimal: Literal[False] = False,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> Thread:
+    ) -> Thread: ...
+
+    @overload
+    def update(
+        self,
+        thread_id: str,
+        *,
+        metadata: Mapping[str, Any],
+        ttl: int | Mapping[str, Any] | None = None,
+        return_minimal: Literal[True],
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> None: ...
+
+    @overload
+    def update(
+        self,
+        thread_id: str,
+        *,
+        metadata: Mapping[str, Any],
+        ttl: int | Mapping[str, Any] | None = None,
+        return_minimal: bool,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> Thread | None: ...
+
+    def update(
+        self,
+        thread_id: str,
+        *,
+        metadata: Mapping[str, Any],
+        ttl: int | Mapping[str, Any] | None = None,
+        return_minimal: bool = False,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> Thread | None:
         """Update a thread.
 
         Args:
@@ -185,11 +225,12 @@ class SyncThreadsClient:
             ttl: Optional time-to-live in minutes for the thread. You can pass an
                 integer (minutes) or a mapping with keys `ttl` and optional
                 `strategy` (defaults to "delete").
+            return_minimal: If `True`, request a 204 response with no body.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
         Returns:
-            The created `Thread`.
+            The updated `Thread`, or `None` when `return_minimal=True`.
 
         ???+ example "Example Usage"
 
@@ -208,10 +249,13 @@ class SyncThreadsClient:
                 payload["ttl"] = {"ttl": ttl, "strategy": "delete"}
             else:
                 payload["ttl"] = ttl
+        request_headers = dict(headers or {})
+        if return_minimal:
+            request_headers["Prefer"] = "return=minimal"
         return self.http.patch(
-            f"/threads/{thread_id}",
+            f"/threads/{_quote_path_param(thread_id)}",
             json=payload,
-            headers=headers,
+            headers=request_headers or None,
             params=params,
         )
 
@@ -241,7 +285,9 @@ class SyncThreadsClient:
             ```
 
         """
-        self.http.delete(f"/threads/{thread_id}", headers=headers, params=params)
+        self.http.delete(
+            f"/threads/{_quote_path_param(thread_id)}", headers=headers, params=params
+        )
 
     def search(
         self,
@@ -380,7 +426,10 @@ class SyncThreadsClient:
 
         """
         return self.http.post(
-            f"/threads/{thread_id}/copy", json=None, headers=headers, params=params
+            f"/threads/{_quote_path_param(thread_id)}/copy",
+            json=None,
+            headers=headers,
+            params=params,
         )
 
     def prune(
@@ -535,7 +584,7 @@ class SyncThreadsClient:
         """
         if checkpoint:
             return self.http.post(
-                f"/threads/{thread_id}/state/checkpoint",
+                f"/threads/{_quote_path_param(thread_id)}/state/checkpoint",
                 json={"checkpoint": checkpoint, "subgraphs": subgraphs},
                 headers=headers,
                 params=params,
@@ -545,7 +594,7 @@ class SyncThreadsClient:
             if params:
                 get_params = {**get_params, **dict(params)}
             return self.http.get(
-                f"/threads/{thread_id}/state/{checkpoint_id}",
+                f"/threads/{_quote_path_param(thread_id)}/state/{_quote_path_param(checkpoint_id)}",
                 params=get_params,
                 headers=headers,
             )
@@ -554,7 +603,7 @@ class SyncThreadsClient:
             if params:
                 get_params = {**get_params, **dict(params)}
             return self.http.get(
-                f"/threads/{thread_id}/state",
+                f"/threads/{_quote_path_param(thread_id)}/state",
                 params=get_params,
                 headers=headers,
             )
@@ -616,7 +665,10 @@ class SyncThreadsClient:
         if as_node:
             payload["as_node"] = as_node
         return self.http.post(
-            f"/threads/{thread_id}/state", json=payload, headers=headers, params=params
+            f"/threads/{_quote_path_param(thread_id)}/state",
+            json=payload,
+            headers=headers,
+            params=params,
         )
 
     def get_history(
@@ -666,10 +718,45 @@ class SyncThreadsClient:
         if checkpoint:
             payload["checkpoint"] = checkpoint
         return self.http.post(
-            f"/threads/{thread_id}/history",
+            f"/threads/{_quote_path_param(thread_id)}/history",
             json=payload,
             headers=headers,
             params=params,
+        )
+
+    def stream(
+        self,
+        thread_id: str | None = None,
+        *,
+        assistant_id: str,
+        headers: Mapping[str, str] | None = None,
+        run_start_timeout: float | None = None,
+        transport: Literal["sse", "websocket"] = "sse",
+    ) -> SyncThreadStream:
+        """Open a v3 thread-centric streaming session.
+
+        Args:
+            thread_id: optional explicit thread identifier. Defaults to a
+                fresh UUIDv4.
+            assistant_id: assistant the run will use. Required.
+            headers: optional headers forwarded on every command and SSE
+                request for this stream session.
+            transport: event transport to use, `"sse"` (default) or
+                `"websocket"`.
+
+        Returns:
+            A `SyncThreadStream` to use as a context manager.
+        """
+        if transport not in ("sse", "websocket"):
+            raise ValueError("transport must be 'sse' or 'websocket'.")
+        return SyncThreadStream(
+            http=self.http,
+            thread_id=thread_id if thread_id is not None else str(uuid.uuid4()),
+            assistant_id=assistant_id,
+            headers=headers,
+            run_start_timeout=run_start_timeout,
+            explicit_thread_id=thread_id is not None,
+            transport_kind=transport,
         )
 
     def join_stream(
@@ -711,7 +798,7 @@ class SyncThreadsClient:
         if params:
             query_params.update(params)
         return self.http.stream(
-            f"/threads/{thread_id}/stream",
+            f"/threads/{_quote_path_param(thread_id)}/stream",
             "GET",
             headers={
                 **({"Last-Event-ID": last_event_id} if last_event_id else {}),

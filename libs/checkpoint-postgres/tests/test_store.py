@@ -11,6 +11,7 @@ import pytest
 from langchain_core.embeddings import Embeddings
 from langgraph.store.base import (
     GetOp,
+    InvalidNamespaceError,
     Item,
     ListNamespacesOp,
     MatchCondition,
@@ -20,6 +21,10 @@ from langgraph.store.base import (
 from psycopg import Connection
 
 from langgraph.store.postgres import PostgresStore
+from langgraph.store.postgres.base import (
+    _escape_like_literal,
+    _namespace_match_pattern,
+)
 from tests.conftest import (
     DEFAULT_URI,
     VECTOR_TYPES,
@@ -324,6 +329,127 @@ def test_list_namespaces(store) -> None:
     # Cleanup
     for namespace in test_namespaces:
         store.delete(namespace, "dummy")
+
+
+def test_escape_like_literal() -> None:
+    assert _escape_like_literal("users.alice") == "users.alice"
+    assert _escape_like_literal("user_1") == r"user\_1"
+    assert _escape_like_literal("100%") == r"100\%"
+    assert _escape_like_literal("a\\b") == "a\\\\b"
+    assert _escape_like_literal("") == ""
+
+
+def test_namespace_match_pattern() -> None:
+    assert _namespace_match_pattern(("foo",), "prefix") == r"^foo(\.|\Z)"
+    assert _namespace_match_pattern(("uid", "users"), "prefix") == r"^uid\.users(\.|\Z)"
+    assert (
+        _namespace_match_pattern(("uid", "*", "alice"), "prefix")
+        == r"^uid\.[^.]+\.alice(\.|\Z)"
+    )
+    assert _namespace_match_pattern(("alice",), "suffix") == r"(^|\.)alice\Z"
+
+    # Regex metacharacters in a label are quoted, not interpreted.
+    pattern = _namespace_match_pattern(("a.b+c",), "prefix")
+    assert re.match(pattern, "a.b+c.child")
+    assert not re.match(pattern, "axbbbc")
+
+
+def test_search_namespace_segment_boundary(store) -> None:
+    """Prefix scoping must stop at namespace segment boundaries.
+
+    Namespaces are stored dot-joined, so matching the raw text also returns
+    siblings sharing leading characters. Callers isolate tenants by namespace,
+    so prefix-shaped ids (1 vs 12) would cross-read.
+    """
+    for namespace in [
+        ("foo",),
+        ("foo", "child"),
+        ("foo", "child", "deep"),
+        ("foobar",),
+        ("foobar", "baz"),
+        ("foo2",),
+    ]:
+        store.put(namespace, "k", {"v": 1})
+
+    def _namespaces(prefix: tuple[str, ...]) -> set[tuple[str, ...]]:
+        return {item.namespace for item in store.search(prefix, limit=100)}
+
+    assert _namespaces(("foo",)) == {
+        ("foo",),
+        ("foo", "child"),
+        ("foo", "child", "deep"),
+    }
+    # The sibling scope is independent, not merely narrower.
+    assert _namespaces(("foobar",)) == {("foobar",), ("foobar", "baz")}
+    assert _namespaces(("foo", "child")) == {("foo", "child"), ("foo", "child", "deep")}
+    assert _namespaces(("foo2",)) == {("foo2",)}
+    assert _namespaces(("fo",)) == set()
+
+
+def test_search_empty_prefix_is_unconstrained(store) -> None:
+    """An empty prefix constrains nothing and must return every namespace."""
+    for namespace in [("a",), ("b", "c"), ("d", "e", "f")]:
+        store.put(namespace, "k", {"v": 1})
+
+    assert {item.namespace for item in store.search((), limit=100)} == {
+        ("a",),
+        ("b", "c"),
+        ("d", "e", "f"),
+    }
+
+
+def test_search_namespace_like_metacharacters(store) -> None:
+    """`_` and `%` are legal namespace labels, not LIKE wildcards."""
+    for namespace in [
+        ("user_1",),
+        ("user_1", "child"),
+        ("userX1",),
+        ("a%b",),
+        ("axxb",),
+    ]:
+        store.put(namespace, "k", {"v": 1})
+
+    def _namespaces(prefix: tuple[str, ...]) -> set[tuple[str, ...]]:
+        return {item.namespace for item in store.search(prefix, limit=100)}
+
+    # Also asserts the namespace still matches itself, which catches escaping
+    # the equality arm by mistake.
+    assert _namespaces(("user_1",)) == {("user_1",), ("user_1", "child")}
+    assert _namespaces(("a%b",)) == {("a%b",)}
+
+
+def test_list_namespaces_segment_boundary(store) -> None:
+    for namespace in [
+        ("foo",),
+        ("foo", "child"),
+        ("foobar",),
+        ("foobar", "baz"),
+        ("uid", "users", "alice"),
+        ("uid", "users", "malice"),
+        ("uid", "a", "b", "alice"),
+    ]:
+        store.put(namespace, "k", {"v": 1})
+
+    assert set(store.list_namespaces(prefix=["foo"], limit=100)) == {
+        ("foo",),
+        ("foo", "child"),
+    }
+    # Suffix must align to a segment: "malice" does not end with the "alice"
+    # segment.
+    assert set(store.list_namespaces(suffix=["alice"], limit=100)) == {
+        ("uid", "users", "alice"),
+        ("uid", "a", "b", "alice"),
+    }
+    # "*" spans exactly one segment.
+    assert set(store.list_namespaces(prefix=["uid", "*", "alice"], limit=100)) == {
+        ("uid", "users", "alice"),
+    }
+    # Prefix matching stays open-ended across depth.
+    assert set(store.list_namespaces(prefix=["uid"], limit=100)) == {
+        ("uid", "users", "alice"),
+        ("uid", "users", "malice"),
+        ("uid", "a", "b", "alice"),
+    }
 
 
 def test_search(store) -> None:
@@ -863,6 +989,133 @@ def test_store_ttl(store):
     assert len(res) == 0
 
 
+def _expire_now(store: PostgresStore, ns: tuple[str, ...], key: str) -> None:
+    """Backdate a row's expires_at into the past without deleting it (unswept)."""
+    with store._cursor() as cur:
+        cur.execute(
+            "UPDATE store SET expires_at = NOW() - INTERVAL '1 minute' "
+            "WHERE prefix = %s AND key = %s",
+            (".".join(ns), key),
+        )
+
+
+def _row_exists(store: PostgresStore, ns: tuple[str, ...], key: str) -> bool:
+    with store._cursor() as cur:
+        cur.execute(
+            "SELECT COUNT(*) AS n FROM store WHERE prefix = %s AND key = %s",
+            (".".join(ns), key),
+        )
+        return cur.fetchone()["n"] == 1
+
+
+def _stored_expires_at(store: PostgresStore, ns: tuple[str, ...], key: str):
+    with store._cursor() as cur:
+        cur.execute(
+            "SELECT expires_at FROM store WHERE prefix = %s AND key = %s",
+            (".".join(ns), key),
+        )
+        return cur.fetchone()["expires_at"]
+
+
+def test_omit_expired_filters_read_paths(store: PostgresStore) -> None:
+    store.stop_ttl_sweeper()  # deterministic: no background deletion
+    store.ttl_config["omit_expired"] = True
+
+    expired_ns = ("omit", "expired")
+    control_ns = ("omit", "control")
+    store.put(expired_ns, "e", {"data": "gone"}, ttl=TTL_MINUTES)
+    store.put(control_ns, "c", {"data": "keep"}, ttl=None)
+    _expire_now(store, expired_ns, "e")
+
+    # The row is expired but physically still present (unswept).
+    assert _row_exists(store, expired_ns, "e")
+
+    # get omits it; the never-expiring control is still returned.
+    assert store.get(expired_ns, "e") is None
+    assert store.get(control_ns, "c") is not None
+
+    # search omits it but returns the control.
+    assert store.search(expired_ns) == []
+    assert [i.key for i in store.search(control_ns)] == ["c"]
+
+    # list_namespaces drops the expired-only namespace, keeps the control.
+    namespaces = store.list_namespaces(prefix=("omit",))
+    assert expired_ns not in namespaces
+    assert control_ns in namespaces
+
+
+@pytest.mark.parametrize("omit", [None, False], ids=["default", "explicit-false"])
+def test_omit_expired_disabled_preserves_expired_rows(
+    store: PostgresStore, omit
+) -> None:
+    store.stop_ttl_sweeper()
+    if omit is not None:
+        store.ttl_config["omit_expired"] = omit
+
+    ns = ("keep",)
+    store.put(ns, "k", {"data": "still-here"}, ttl=TTL_MINUTES)
+    _expire_now(store, ns, "k")
+
+    assert store.get(ns, "k", refresh_ttl=False) is not None
+    assert [i.key for i in store.search(ns, refresh_ttl=False)] == ["k"]
+    assert ns in store.list_namespaces(prefix=("keep",))
+
+
+def test_omit_expired_refresh_ttl_only_refreshes_live_rows(
+    store: PostgresStore,
+) -> None:
+    store.stop_ttl_sweeper()
+    store.ttl_config["omit_expired"] = True
+
+    ns = ("refresh",)
+    store.put(ns, "expired", {"n": 0}, ttl=TTL_MINUTES)
+    store.put(ns, "live_get", {"n": 1}, ttl=TTL_MINUTES)
+    store.put(ns, "live_search", {"n": 2}, ttl=TTL_MINUTES)
+    _expire_now(store, ns, "expired")
+
+    expired_before = _stored_expires_at(store, ns, "expired")
+    get_before = _stored_expires_at(store, ns, "live_get")
+    search_before = _stored_expires_at(store, ns, "live_search")
+
+    # refresh_ttl=True must NOT resurrect the expired row (via get or search)...
+    assert store.get(ns, "expired", refresh_ttl=True) is None
+    assert "expired" not in [i.key for i in store.search(ns, refresh_ttl=True)]
+    assert _stored_expires_at(store, ns, "expired") == expired_before
+
+    # ...but must still extend the live rows that were read.
+    assert store.get(ns, "live_get", refresh_ttl=True) is not None
+    assert _stored_expires_at(store, ns, "live_get") > get_before
+    assert _stored_expires_at(store, ns, "live_search") > search_before
+
+
+def test_omit_expired_search_pagination(store: PostgresStore) -> None:
+    store.stop_ttl_sweeper()
+    store.ttl_config["omit_expired"] = True
+
+    ns = ("page",)
+    for k in ("a", "b", "c"):
+        store.put(ns, k, {"k": k}, ttl=TTL_MINUTES)
+    store.put(ns, "expired", {"k": "x"}, ttl=TTL_MINUTES)
+    _expire_now(store, ns, "expired")
+
+    seconds_ago = {"a": 1, "expired": 2, "b": 3, "c": 4}
+    # updated_at DESC orders these a, expired, b, c, so the expired row sits inside
+    # the first limit=2 window. Correct (pre-LIMIT) filtering yields live pages
+    # [a, b] then [c]; post-LIMIT filtering would underfill page 1 to just [a].
+    with store._cursor() as cur:
+        for key, secs in seconds_ago.items():
+            cur.execute(
+                "UPDATE store SET updated_at = NOW() - (%s * INTERVAL '1 second') "
+                "WHERE prefix = %s AND key = %s",
+                (secs, ".".join(ns), key),
+            )
+
+    page1 = store.search(ns, limit=2, offset=0)
+    page2 = store.search(ns, limit=2, offset=2)
+    assert [i.key for i in page1] == ["a", "b"]
+    assert [i.key for i in page2] == ["c"]
+
+
 @pytest.mark.parametrize(
     "vector_type,distance_type",
     [
@@ -899,3 +1152,64 @@ def test_non_ascii(
         assert result3[0].key == "3"
         assert result4[0].key == "4"
         assert result5[0].key == "5"
+
+
+def test_namespace_labels_with_trailing_newline(store) -> None:
+    """Labels may contain newlines, and must not match a differently-named label."""
+    store.put(("users", "alice"), "k", {"v": 1})
+    store.put(("users", "alice\n"), "k", {"v": 2})
+
+    assert set(store.list_namespaces(suffix=["alice"], limit=100)) == {
+        ("users", "alice"),
+    }
+    assert set(store.list_namespaces(prefix=["users", "alice"], limit=100)) == {
+        ("users", "alice"),
+    }
+
+
+@pytest.mark.parametrize("namespace", [("foo.bar",), ("foo", ""), ("foo", 1)])
+@pytest.mark.parametrize(
+    "kind", ["get", "put", "delete", "search", "list_prefix", "list_suffix"]
+)
+def test_batch_rejects_invalid_namespace_labels(
+    store, namespace: tuple, kind: str
+) -> None:
+    """Ops passed straight to `batch` must not reach another namespace.
+
+    Namespaces are stored dot-joined, so `("foo.bar",)` flattens to the same
+    text as `("foo", "bar")`. `BaseStore` methods validate labels themselves,
+    but `batch` takes ops as given.
+    """
+    op = {
+        "get": GetOp(namespace, "key"),
+        "put": PutOp(namespace, "key", {"changed": True}),
+        "delete": PutOp(namespace, "key", None),
+        "search": SearchOp(namespace),
+        "list_prefix": ListNamespacesOp((MatchCondition("prefix", namespace),)),
+        "list_suffix": ListNamespacesOp((MatchCondition("suffix", namespace),)),
+    }[kind]
+    store.put(("foo", "bar"), "key", {"original": True})
+
+    with pytest.raises(InvalidNamespaceError):
+        store.batch([PutOp(("valid",), "key", {}), op])
+
+    item = store.get(("foo", "bar"), "key")
+    assert item is not None and item.value == {"original": True}
+    # The whole batch is rejected before any SQL runs.
+    assert store.get(("valid",), "key") is None
+
+
+def test_batch_allows_empty_search_prefix_and_listing_wildcards(
+    store,
+) -> None:
+    store.put(("foo", "bar"), "key", {"v": 1})
+
+    found, listed = store.batch(
+        [
+            SearchOp(()),
+            ListNamespacesOp((MatchCondition("prefix", ("foo", "*")),)),
+        ]
+    )
+
+    assert [item.namespace for item in found] == [("foo", "bar")]
+    assert listed == [("foo", "bar")]

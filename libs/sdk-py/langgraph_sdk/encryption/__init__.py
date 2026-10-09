@@ -18,6 +18,9 @@ import warnings
 
 from langgraph_sdk.encryption import types
 
+_BlobDecryptorT = typing.TypeVar("_BlobDecryptorT", bound=types.BlobDecryptor)
+_JsonDecryptorT = typing.TypeVar("_JsonDecryptorT", bound=types.JsonDecryptor)
+
 
 class LangGraphBetaWarning(UserWarning):
     """Warning for beta features in LangGraph SDK."""
@@ -141,7 +144,7 @@ class _DecryptDecorators:
     def __init__(self, parent: Encryption):
         self._parent = parent
 
-    def blob(self, fn: types.BlobDecryptor) -> types.BlobDecryptor:
+    def blob(self, fn: _BlobDecryptorT) -> _BlobDecryptorT:
         """Register a blob decryption handler.
 
         The handler will be called to decrypt opaque data like checkpoint blobs.
@@ -149,7 +152,9 @@ class _DecryptDecorators:
         Example:
             ```python
             @encryption.decrypt.blob
-            async def decrypt_blob(ctx: EncryptionContext, blob: bytes) -> bytes:
+            async def decrypt_blob(
+                ctx: EncryptionContext, blob: bytes
+            ) -> bytes | DecryptResult[bytes]:
                 # Decrypt the blob using your encryption service
                 return decrypted_blob
             ```
@@ -170,13 +175,15 @@ class _DecryptDecorators:
         self._parent._blob_decryptor = fn
         return fn
 
-    def json(self, fn: types.JsonDecryptor) -> types.JsonDecryptor:
+    def json(self, fn: _JsonDecryptorT) -> _JsonDecryptorT:
         """Register the JSON decryption handler.
 
         Example:
             ```python
             @encryption.decrypt.json
-            async def decrypt_json(ctx: EncryptionContext, data: dict) -> dict:
+            async def decrypt_json(
+                ctx: EncryptionContext, data: dict
+            ) -> dict | DecryptResult[dict]:
                 # Decrypt the data
                 return decrypt_data(data)
             ```
@@ -369,7 +376,7 @@ class Encryption:
     """Reference to encryption type definitions.
 
     Provides access to all type definitions used in the encryption system,
-    including EncryptionContext, BlobEncryptor, BlobDecryptor,
+    including EncryptionContext, DecryptResult, BlobEncryptor, BlobDecryptor,
     JsonEncryptor, and JsonDecryptor.
     """
 

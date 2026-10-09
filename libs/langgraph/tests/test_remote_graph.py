@@ -10,12 +10,14 @@ from langchain_core.messages import AnyMessage, BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.graph import Edge as DrawableEdge
 from langchain_core.runnables.graph import Node as DrawableNode
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph_sdk.client import get_client, get_sync_client
 from langgraph_sdk.schema import StreamPart
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from langgraph.errors import GraphInterrupt
-from langgraph.graph import StateGraph, add_messages
+from langgraph.graph import END, START, MessagesState, StateGraph, add_messages
 from langgraph.pregel import Pregel
 from langgraph.pregel.remote import RemoteGraph
 from langgraph.types import Interrupt, StateSnapshot
@@ -1097,10 +1099,6 @@ def test_stream_context_base_model():
 )
 @pytest.mark.anyio
 async def test_langgraph_cloud_integration():
-    from langgraph.checkpoint.memory import InMemorySaver
-    from langgraph_sdk.client import get_client, get_sync_client
-
-    from langgraph.graph import END, START, MessagesState, StateGraph
 
     # create RemotePregel instance
     client = get_client(url="http://localhost:8123")

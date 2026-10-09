@@ -1,18 +1,27 @@
 from __future__ import annotations
 
-import ast
-import inspect
+import dis
 import re
-import textwrap
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from functools import partial
+from types import CodeType, FunctionType
 from typing import Any
 
-from langchain_core.runnables import Runnable, RunnableLambda, RunnableSequence
+from langchain_core.runnables import (
+    Runnable,
+    RunnableLambda,
+    RunnableParallel,
+    RunnableSequence,
+)
+from langchain_core.runnables.base import RunnableBindingBase
+from langchain_core.runnables.config import run_in_executor
 from langgraph.checkpoint.base import ChannelVersions
-from typing_extensions import override
 
 from langgraph._internal._runnable import RunnableCallable, RunnableSeq
+from langgraph._internal._timeout import sync_timeout_unsupported
 from langgraph.pregel.protocol import PregelProtocol
+
+_SEQUENCE_TYPES = (RunnableSeq, RunnableSequence)
 
 
 def get_new_channel_versions(
@@ -64,153 +73,147 @@ def find_subgraph_pregel(candidate: Runnable) -> PregelProtocol | None:
     return None
 
 
+def _sequence_steps(runnable: Runnable) -> Sequence[Runnable] | None:
+    if isinstance(runnable, _SEQUENCE_TYPES):
+        return runnable.steps
+    return None
+
+
+def _parallel_steps(runnable: Runnable) -> Sequence[Runnable] | None:
+    if isinstance(runnable, RunnableParallel):
+        return tuple(runnable.steps__.values())
+    return None
+
+
+def _has_method_override(runnable: Runnable, method_name: str) -> bool:
+    method = getattr(type(runnable), method_name, None)
+    return method is not None and method is not getattr(Runnable, method_name)
+
+
+def _is_executor_backed_afunc(afunc: Callable[..., Any] | None) -> bool:
+    return isinstance(afunc, partial) and afunc.func is run_in_executor
+
+
+def _has_native_async(runnable: Runnable) -> bool:
+    if isinstance(runnable, RunnableCallable):
+        return runnable.afunc is not None and not _is_executor_backed_afunc(
+            runnable.afunc
+        )
+    if isinstance(runnable, RunnableLambda):
+        return bool(getattr(runnable, "afunc", False))
+    return _has_method_override(runnable, "ainvoke")
+
+
+def _runnable_has_native_async(runnable: Runnable) -> bool:
+    """Return whether a runnable can be idle-timed without known sync code.
+
+    For custom runnable subclasses, an `ainvoke` override is treated as the
+    async contract. We do not introspect whether that implementation delegates
+    to blocking work internally — e.g. a subclass whose `ainvoke` calls
+    `asyncio.to_thread(self.invoke, ...)` will pass this check but the wrapped
+    sync work is still uncancellable. Idle-timeout enforcement on such a
+    runnable will fire `NodeTimeoutError` correctly, but the background thread
+    will keep running until its sync work returns.
+    """
+
+    while isinstance(runnable, RunnableBindingBase):
+        runnable = runnable.bound
+    steps = _sequence_steps(runnable)
+    if steps is None:
+        steps = _parallel_steps(runnable)
+    if steps is not None:
+        return all(_runnable_has_native_async(step) for step in steps)
+    # Raw callables and the common composition wrappers created by graph
+    # builders fall through here. We do not exhaustively unwrap every Runnable
+    # wrapper — wrappers that provide `ainvoke` are treated as owning the async
+    # contract.
+    return _has_native_async(runnable)
+
+
+def validate_timeout_supported(runnable: Runnable, *, name: str) -> None:
+    if not _runnable_has_native_async(runnable):
+        raise sync_timeout_unsupported(name)
+
+
+# Values treated as dead ends when deciding whether to walk a function's
+# bytecode. A container can hold a graph, but `find_subgraph_pregel` does not
+# look inside one, so skipping it costs nothing while that holds. Matched by
+# exact type, since a subclass of a builtin can carry attributes.
+_LEAF_TYPES = frozenset(
+    {
+        int,
+        float,
+        complex,
+        bool,
+        str,
+        bytes,
+        bytearray,
+        list,
+        tuple,
+        dict,
+        set,
+        frozenset,
+        type(None),
+    }
+)
+
+
 def get_function_nonlocals(func: Callable) -> list[Any]:
-    """Get the nonlocal variables accessed by a function.
+    """Get the values a function reaches from outside its own scope.
 
     Args:
         func: The function to check.
 
     Returns:
-        List[Any]: The nonlocal variables accessed by the function.
+        Every captured cell value, the globals the function names, and each
+        value along an attribute path it loads. Over-approximates: a value can
+        come back without the function reaching it at runtime.
     """
-    try:
-        code = inspect.getsource(func)
-        tree = ast.parse(textwrap.dedent(code))
-        visitor = FunctionNonLocals()
-        visitor.visit(tree)
-        values: list[Any] = []
-        closure = (
-            inspect.getclosurevars(func.__wrapped__)
-            if hasattr(func, "__wrapped__") and callable(func.__wrapped__)
-            else inspect.getclosurevars(func)
-        )
-        candidates = {**closure.globals, **closure.nonlocals}
-        for k, v in candidates.items():
-            if k in visitor.nonlocals:
-                values.append(v)
-            for kk in visitor.nonlocals:
-                if "." in kk and kk.startswith(k):
-                    vv = v
-                    for part in kk.split(".")[1:]:
-                        if vv is None:
-                            break
-                        else:
-                            try:
-                                vv = getattr(vv, part)
-                            except AttributeError:
-                                break
-                    else:
-                        values.append(vv)
-    except (SyntaxError, TypeError, OSError, SystemError):
+    func = getattr(func, "__func__", func)  # bound method -> function
+    wrapped = getattr(func, "__wrapped__", None)
+    if callable(wrapped):
+        func = getattr(wrapped, "__func__", wrapped)
+    if not isinstance(func, FunctionType):
         return []
+    code = func.__code__
 
+    cells: dict[str, Any] = {}
+    for name, cell in zip(code.co_freevars, func.__closure__ or ()):
+        try:
+            cells[name] = cell.cell_contents
+        except ValueError:
+            continue  # empty cell: a recursive def not yet bound
+
+    # Every captured value counts, referenced or not: over-declaring costs an
+    # introspection entry, under-declaring drops the subgraph's checkpoints and
+    # stream events. Checking each cell against the bytecode would cost more and
+    # only trade the cheap error for the expensive one.
+    values: list[Any] = list(cells.values())
+    global_ns = func.__globals__
+    globals_ = {name: global_ns[name] for name in code.co_names if name in global_ns}
+    if all(type(v) in _LEAF_TYPES for v in (*cells.values(), *globals_.values())):
+        return values
+
+    # Nested code objects hold the references made by inner defs, lambdas and
+    # comprehensions, which resolve against the namespaces gathered above.
+    codes = [code]
+    for c in codes:
+        codes.extend(k for k in c.co_consts if isinstance(k, CodeType))
+        value: Any = None
+        for instruction in dis.get_instructions(c):
+            opname = instruction.opname
+            if opname == "LOAD_GLOBAL":
+                value = globals_.get(instruction.argval)
+            elif opname == "LOAD_DEREF":
+                value = cells.get(instruction.argval)
+            elif opname in ("LOAD_ATTR", "LOAD_METHOD"):
+                value = getattr(value, instruction.argval, None)
+            else:
+                value = None  # anything else ends the chain: `a, b.c` is not `a.c`
+                continue
+            if value is not None:
+                values.append(value)
     return values
-
-
-class FunctionNonLocals(ast.NodeVisitor):
-    """Get the nonlocal variables accessed of a function."""
-
-    def __init__(self) -> None:
-        self.nonlocals: set[str] = set()
-
-    @override
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> Any:
-        """Visit a function definition.
-
-        Args:
-            node: The node to visit.
-
-        Returns:
-            Any: The result of the visit.
-        """
-        visitor = NonLocals()
-        visitor.visit(node)
-        self.nonlocals.update(visitor.loads - visitor.stores)
-
-    @override
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> Any:
-        """Visit an async function definition.
-
-        Args:
-            node: The node to visit.
-
-        Returns:
-            Any: The result of the visit.
-        """
-        visitor = NonLocals()
-        visitor.visit(node)
-        self.nonlocals.update(visitor.loads - visitor.stores)
-
-    @override
-    def visit_Lambda(self, node: ast.Lambda) -> Any:
-        """Visit a lambda function.
-
-        Args:
-            node: The node to visit.
-
-        Returns:
-            Any: The result of the visit.
-        """
-        visitor = NonLocals()
-        visitor.visit(node)
-        self.nonlocals.update(visitor.loads - visitor.stores)
-
-
-class NonLocals(ast.NodeVisitor):
-    """Get nonlocal variables accessed."""
-
-    def __init__(self) -> None:
-        self.loads: set[str] = set()
-        self.stores: set[str] = set()
-
-    @override
-    def visit_Name(self, node: ast.Name) -> Any:
-        """Visit a name node.
-
-        Args:
-            node: The node to visit.
-
-        Returns:
-            Any: The result of the visit.
-        """
-        if isinstance(node.ctx, ast.Load):
-            self.loads.add(node.id)
-        elif isinstance(node.ctx, ast.Store):
-            self.stores.add(node.id)
-
-    @override
-    def visit_Attribute(self, node: ast.Attribute) -> Any:
-        """Visit an attribute node.
-
-        Args:
-            node: The node to visit.
-
-        Returns:
-            Any: The result of the visit.
-        """
-        if isinstance(node.ctx, ast.Load):
-            parent = node.value
-            attr_expr = node.attr
-            while isinstance(parent, ast.Attribute):
-                attr_expr = parent.attr + "." + attr_expr
-                parent = parent.value
-            if isinstance(parent, ast.Name):
-                self.loads.add(parent.id + "." + attr_expr)
-                self.loads.discard(parent.id)
-            elif isinstance(parent, ast.Call):
-                if isinstance(parent.func, ast.Name):
-                    self.loads.add(parent.func.id)
-                else:
-                    parent = parent.func
-                    attr_expr = ""
-                    while isinstance(parent, ast.Attribute):
-                        if attr_expr:
-                            attr_expr = parent.attr + "." + attr_expr
-                        else:
-                            attr_expr = parent.attr
-                        parent = parent.value
-                    if isinstance(parent, ast.Name):
-                        self.loads.add(parent.id + "." + attr_expr)
 
 
 def is_xxh3_128_hexdigest(value: str) -> bool:

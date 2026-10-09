@@ -41,6 +41,7 @@ jobs:
             docs
             ci
             deps
+            deps-dev
           requireScope: false
           ignoreLabels: |
             ignore-lint-pr-title

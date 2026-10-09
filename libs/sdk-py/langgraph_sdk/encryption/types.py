@@ -9,9 +9,29 @@ from __future__ import annotations
 
 import typing
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 Json = dict[str, typing.Any]
 """JSON-serializable dictionary type for structured data encryption."""
+
+T = typing.TypeVar("T")
+
+
+@dataclass(frozen=True, slots=True)
+class DecryptResult(typing.Generic[T]):
+    """Decrypted data and optional replacement ciphertext.
+
+    Return this from a decrypt handler when encrypted data should be replaced,
+    such as after rotating its encryption key. Returning plaintext directly
+    remains supported when no replacement is needed.
+
+    Attributes:
+        plaintext: Decrypted data returned to the caller
+        replacement: New encrypted data to persist in place of the input
+    """
+
+    plaintext: T
+    replacement: T | None = None
 
 
 class EncryptionContext:
@@ -57,7 +77,9 @@ Returns:
     Awaitable that resolves to encrypted bytes
 """
 
-BlobDecryptor = Callable[[EncryptionContext, bytes], Awaitable[bytes]]
+BlobDecryptor = Callable[
+    [EncryptionContext, bytes], Awaitable[bytes | DecryptResult[bytes]]
+]
 """Handler for decrypting opaque blob data like checkpoints.
 
 Note: Must be an async function. Decryption typically involves I/O operations
@@ -68,7 +90,8 @@ Args:
     blob: The encrypted bytes to decrypt
 
 Returns:
-    Awaitable that resolves to decrypted bytes
+    Awaitable that resolves to decrypted bytes, or a DecryptResult containing
+    decrypted bytes and replacement ciphertext
 """
 
 JsonEncryptor = Callable[[EncryptionContext, Json], Awaitable[Json]]
@@ -101,7 +124,9 @@ Returns:
     Awaitable that resolves to encrypted JSON dictionary
 """
 
-JsonDecryptor = Callable[[EncryptionContext, Json], Awaitable[Json]]
+JsonDecryptor = Callable[
+    [EncryptionContext, Json], Awaitable[Json | DecryptResult[Json]]
+]
 """Handler for decrypting structured JSON data.
 
 Note: Must be an async function. Decryption typically involves I/O operations
@@ -115,7 +140,8 @@ Args:
     data: The encrypted JSON dictionary
 
 Returns:
-    Awaitable that resolves to decrypted JSON dictionary
+    Awaitable that resolves to a decrypted JSON dictionary, or a DecryptResult
+    containing decrypted JSON and replacement ciphertext
 """
 
 if typing.TYPE_CHECKING:

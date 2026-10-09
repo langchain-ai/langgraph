@@ -2,13 +2,29 @@ import json
 import operator
 import re
 import time
+from copy import deepcopy
 from dataclasses import replace
 from typing import Annotated, Any, Literal, cast
 
 import pytest
-from langchain_core.messages import AIMessage, AnyMessage, ToolCall
+from langchain_core.callbacks import CallbackManagerForLLMRun
+from langchain_core.language_models.fake import FakeStreamingListLLM
+from langchain_core.language_models.fake_chat_models import (
+    FakeMessagesListChatModel,
+)
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    BaseMessage,
+    HumanMessage,
+    ToolCall,
+    ToolMessage,
+)
+from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableConfig, RunnableMap, RunnablePick
 from langchain_core.tools import tool
+from langchain_core.version import VERSION as LANGCHAIN_CORE_VERSION
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
@@ -483,9 +499,6 @@ def test_conditional_state_graph(
     snapshot: SnapshotAssertion,
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    from langchain_core.language_models.fake import FakeStreamingListLLM
-    from langchain_core.prompts import PromptTemplate
-    from langchain_core.tools import tool
 
     class AgentState(TypedDict, total=False):
         input: Annotated[str, UntrackedValue]
@@ -1260,8 +1273,6 @@ def test_conditional_state_graph(
 
 
 def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
-    from langchain_core.messages import AIMessage, HumanMessage
-    from langchain_core.tools import tool
 
     @tool()
     def search_api(query: str) -> str:
@@ -1399,6 +1410,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
                 "ls_integration": "langchain_chat_model",
+                "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
             },
         ),
         (
@@ -1461,6 +1473,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
                 "ls_integration": "langchain_chat_model",
+                "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
             },
         ),
     ]
@@ -1513,6 +1526,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
                 "ls_integration": "langchain_chat_model",
+                "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
             },
         ),
     ]
@@ -1622,17 +1636,6 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
 def test_state_graph_packets(
     sync_checkpointer: BaseCheckpointSaver, mocker: MockerFixture
 ) -> None:
-    from langchain_core.language_models.fake_chat_models import (
-        FakeMessagesListChatModel,
-    )
-    from langchain_core.messages import (
-        AIMessage,
-        BaseMessage,
-        HumanMessage,
-        ToolCall,
-        ToolMessage,
-    )
-    from langchain_core.tools import tool
 
     class AgentState(TypedDict):
         messages: Annotated[list[BaseMessage], add_messages]
@@ -2377,15 +2380,6 @@ def test_message_graph(
     deterministic_uuids: MockerFixture,
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    from copy import deepcopy
-
-    from langchain_core.callbacks import CallbackManagerForLLMRun
-    from langchain_core.language_models.fake_chat_models import (
-        FakeMessagesListChatModel,
-    )
-    from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-    from langchain_core.outputs import ChatGeneration, ChatResult
-    from langchain_core.tools import tool
 
     class FakeFunctionChatModel(FakeMessagesListChatModel):
         def bind_functions(self, functions: list):
@@ -3095,20 +3089,6 @@ def test_root_graph(
     deterministic_uuids: MockerFixture,
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    from copy import deepcopy
-
-    from langchain_core.callbacks import CallbackManagerForLLMRun
-    from langchain_core.language_models.fake_chat_models import (
-        FakeMessagesListChatModel,
-    )
-    from langchain_core.messages import (
-        AIMessage,
-        BaseMessage,
-        HumanMessage,
-        ToolMessage,
-    )
-    from langchain_core.outputs import ChatGeneration, ChatResult
-    from langchain_core.tools import tool
 
     class FakeFunctionChatModel(FakeMessagesListChatModel):
         def bind_functions(self, functions: list):
@@ -5833,7 +5813,6 @@ def test_send_to_nested_graphs(sync_checkpointer: BaseCheckpointSaver) -> None:
 def test_send_react_interrupt(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
 
     ai_message = AIMessage(
         "",
@@ -6224,7 +6203,6 @@ def test_send_react_interrupt(
 def test_send_react_interrupt_control(
     sync_checkpointer: BaseCheckpointSaver, snapshot: SnapshotAssertion
 ) -> None:
-    from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
 
     ai_message = AIMessage(
         "",
@@ -6451,9 +6429,6 @@ def test_send_react_interrupt_control(
 def test_weather_subgraph(
     sync_checkpointer: BaseCheckpointSaver, snapshot: SnapshotAssertion
 ) -> None:
-    from langchain_core.language_models.fake_chat_models import (
-        FakeMessagesListChatModel,
-    )
 
     # setup subgraph
 
@@ -6884,6 +6859,7 @@ def test_weather_subgraph(
                     "ls_provider": "fakemessageslistchatmodel",
                     "ls_model_type": "chat",
                     "ls_integration": "langchain_chat_model",
+                    "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
                 },
             ),
         ),
@@ -6911,6 +6887,7 @@ def test_weather_subgraph(
                     "ls_provider": "fakemessageslistchatmodel",
                     "ls_model_type": "chat",
                     "ls_integration": "langchain_chat_model",
+                    "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
                 },
             ),
         ),
@@ -6947,6 +6924,7 @@ def test_weather_subgraph(
                 "ls_provider": "fakemessageslistchatmodel",
                 "ls_model_type": "chat",
                 "ls_integration": "langchain_chat_model",
+                "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
             },
         ),
     ]

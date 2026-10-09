@@ -2,6 +2,7 @@ import contextlib
 import dataclasses
 import json
 import sys
+import warnings
 from functools import partial
 from typing import (
     Annotated,
@@ -23,14 +24,17 @@ from langchain_core.messages import (
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.tools import BaseTool, InjectedToolArg, ToolException
 from langchain_core.tools import tool as dec_tool
+from langchain_core.tools.base import InjectedToolCallId
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.config import get_stream_writer
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.graph.message import REMOVE_ALL_MESSAGES, add_messages
+from langgraph.runtime import ExecutionInfo, ServerInfo
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
-from langgraph.types import Command, Send
-from pydantic import BaseModel
+from langgraph.types import Command, Send, interrupt
+from pydantic import BaseModel, ValidationError
 from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import TypedDict
 
@@ -41,6 +45,7 @@ from langgraph.prebuilt import (
 )
 from langgraph.prebuilt.tool_node import (
     TOOL_CALL_ERROR_TEMPLATE,
+    ToolCallRequest,
     ToolInvocationError,
     ToolRuntime,
     tools_condition,
@@ -59,7 +64,6 @@ def _create_mock_runtime(store: BaseStore | None = None) -> Mock:
     which is injected by RunnableCallable from config["configurable"]["__pregel_runtime"].
     When testing ToolNode directly (outside a graph), we need to provide this manually.
     """
-    from langgraph.runtime import ExecutionInfo
 
     mock_runtime = Mock()
     mock_runtime.store = store
@@ -623,9 +627,151 @@ def test_tool_node_node_interrupt() -> None:
             assert exc_info.value == "foo"
 
 
+class _Approval(BaseModel):
+    approved: bool
+
+
+class _AskState(TypedDict, total=False):
+    answer: str
+
+
+def _approval_graph():
+    """A graph that asks a human for approval with a typed interrupt."""
+
+    def ask(state: _AskState) -> _AskState:
+        approval = interrupt("Approve?", response_schema=_Approval)
+        return {"answer": f"approved={approval.approved}"}
+
+    return StateGraph(_AskState).add_node("ask", ask).add_edge(START, "ask").compile()
+
+
+def _ask_human_call() -> dict[str, list[AnyMessage]]:
+    call = ToolCall(name="ask_human", args={}, id="call_1")
+    return {"messages": [AIMessage("", tool_calls=[call])]}
+
+
+def _handle_any(e):  # no annotation: handles every error
+    return "handled"
+
+
+# A bad answer to an interrupt must fail the run whatever `handle_tool_errors` is,
+# including settings that cover `ValidationError` (a `ValueError`), with or without
+# a wrapper. `create_agent` always runs tools through a wrapper (its middleware).
+_TOOL_NODES = pytest.mark.parametrize(
+    ("wrapped", "handle_tool_errors"),
+    [
+        (wrapped, handler)
+        for wrapped in (False, True)
+        for handler in (None, True, (ValueError,), _handle_any)
+    ],
+    ids=[
+        f"{wrapped}-{handler}"
+        for wrapped in ("plain", "wrapped")
+        for handler in ("default", "handle_true", "handle_value_error", "untyped")
+    ],
+)
+# The interrupt either runs in a graph the tool starts (a subagent) or in the tool.
+_SHAPE = pytest.mark.parametrize("nested", [True, False], ids=["nested", "direct"])
+
+
+@_TOOL_NODES
+@_SHAPE
+def test_tool_node_reraises_invalid_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+    wrapped: bool,
+    nested: bool,
+    handle_tool_errors: Any,
+) -> None:
+    asker = _approval_graph()
+
+    @dec_tool
+    def ask_human() -> str:
+        """Ask a human for approval."""
+        if nested:
+            return asker.invoke({})["answer"]
+        approval = interrupt("Approve?", response_schema=_Approval)
+        return f"approved={approval.approved}"
+
+    def pass_through(request, handler):
+        return handler(request)
+
+    errors = (
+        {} if handle_tool_errors is None else {"handle_tool_errors": handle_tool_errors}
+    )
+    graph = (
+        StateGraph(MessagesState)
+        .add_node(
+            "tools",
+            ToolNode(
+                [ask_human], wrap_tool_call=pass_through if wrapped else None, **errors
+            ),
+        )
+        .add_edge(START, "tools")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config: RunnableConfig = {"configurable": {"thread_id": "1"}}
+    [pending] = graph.invoke(_ask_human_call(), config)["__interrupt__"]
+
+    # A bad answer isn't a bad tool argument: the run fails without saving, so
+    # the same interrupt can be answered again.
+    with pytest.raises(ValidationError, match="approved"):
+        graph.invoke(Command(resume={pending.id: {"approved": "maybe"}}), config)
+    assert [i.id for i in graph.get_state(config).interrupts] == [pending.id]
+
+    result = graph.invoke(Command(resume={pending.id: {"approved": True}}), config)
+    assert result["messages"][-1].content == "approved=True"
+
+
+@_TOOL_NODES
+@_SHAPE
+async def test_tool_node_reraises_invalid_resume_async(
+    async_checkpointer: BaseCheckpointSaver,
+    wrapped: bool,
+    nested: bool,
+    handle_tool_errors: Any,
+) -> None:
+    asker = _approval_graph()
+
+    @dec_tool
+    async def ask_human() -> str:
+        """Ask a human for approval."""
+        if nested:
+            return (await asker.ainvoke({}))["answer"]
+        approval = interrupt("Approve?", response_schema=_Approval)
+        return f"approved={approval.approved}"
+
+    async def pass_through(request, handler):
+        return await handler(request)
+
+    errors = (
+        {} if handle_tool_errors is None else {"handle_tool_errors": handle_tool_errors}
+    )
+    graph = (
+        StateGraph(MessagesState)
+        .add_node(
+            "tools",
+            ToolNode(
+                [ask_human], awrap_tool_call=pass_through if wrapped else None, **errors
+            ),
+        )
+        .add_edge(START, "tools")
+        .compile(checkpointer=async_checkpointer)
+    )
+    config: RunnableConfig = {"configurable": {"thread_id": "1"}}
+    [pending] = (await graph.ainvoke(_ask_human_call(), config))["__interrupt__"]
+
+    with pytest.raises(ValidationError, match="approved"):
+        await graph.ainvoke(Command(resume={pending.id: {"approved": "maybe"}}), config)
+    state = await graph.aget_state(config)
+    assert [i.id for i in state.interrupts] == [pending.id]
+
+    resume = Command(resume={pending.id: {"approved": True}})
+    result = await graph.ainvoke(resume, config)
+    assert result["messages"][-1].content == "approved=True"
+
+
 @pytest.mark.parametrize("input_type", ["dict", "tool_calls"])
 async def test_tool_node_command(input_type: str) -> None:
-    from langchain_core.tools.base import InjectedToolCallId
 
     @dec_tool
     def transfer_to_bob(tool_call_id: Annotated[str, InjectedToolCallId]):
@@ -934,7 +1080,6 @@ async def test_tool_node_command(input_type: str) -> None:
 
 
 async def test_tool_node_command_list_input() -> None:
-    from langchain_core.tools.base import InjectedToolCallId
 
     @dec_tool
     def transfer_to_bob(tool_call_id: Annotated[str, InjectedToolCallId]):
@@ -1194,7 +1339,6 @@ async def test_tool_node_command_list_input() -> None:
 
 
 def test_tool_node_parent_command_with_send() -> None:
-    from langchain_core.tools.base import InjectedToolCallId
 
     @dec_tool
     def transfer_to_alice(tool_call_id: Annotated[str, InjectedToolCallId]):
@@ -1282,7 +1426,6 @@ def test_tool_node_parent_command_with_send() -> None:
 
 
 async def test_tool_node_command_remove_all_messages() -> None:
-    from langchain_core.tools.base import InjectedToolCallId
 
     @dec_tool
     def remove_all_messages_tool(tool_call_id: Annotated[str, InjectedToolCallId]):
@@ -1621,9 +1764,6 @@ def test_tool_node_stream_writer() -> None:
 
 def test_tool_call_request_setattr_deprecation_warning():
     """Test that ToolCallRequest raises a deprecation warning on direct attribute modification."""
-    import warnings
-
-    from langgraph.prebuilt.tool_node import ToolCallRequest
 
     # Create a mock ToolCall
     tool_call = {"name": "test", "args": {"a": 1}, "id": "call_1", "type": "tool_call"}
@@ -2016,9 +2156,21 @@ async def test_tool_node_inject_runtime_dynamic_tool_via_wrap_tool_call_async() 
     assert tool_message.tool_call_id == "call_dynamic_2"
 
 
-def test_tool_runtime_forwards_execution_info_and_server_info() -> None:
-    """Test that execution_info and server_info are forwarded from Runtime to ToolRuntime."""
-    from langgraph.runtime import ExecutionInfo, ServerInfo
+def test_tool_runtime_defaults_tools_to_empty_list() -> None:
+    runtime = ToolRuntime(
+        state={},
+        context=None,
+        config={},
+        stream_writer=lambda *args, **kwargs: None,
+        tool_call_id=None,
+        store=None,
+    )
+
+    assert runtime.tools == []
+
+
+def test_tool_runtime_forwards_execution_info_server_info_and_tools() -> None:
+    """Test that execution_info, server_info, and tools are forwarded from Runtime to ToolRuntime."""
 
     exec_info = ExecutionInfo(
         thread_id="t-1",
@@ -2043,9 +2195,15 @@ def test_tool_runtime_forwards_execution_info_and_server_info() -> None:
         """Tool that captures runtime info."""
         captured["execution_info"] = runtime.execution_info
         captured["server_info"] = runtime.server_info
+        captured["tools"] = runtime.tools
         return "ok"
 
-    node = ToolNode([info_tool])
+    @dec_tool
+    def other_tool(y: int) -> str:
+        """Another tool available to the runtime."""
+        return str(y)
+
+    node = ToolNode([info_tool, other_tool])
     tool_call = {
         "name": "info_tool",
         "args": {"x": 1},
@@ -2054,18 +2212,21 @@ def test_tool_runtime_forwards_execution_info_and_server_info() -> None:
     }
     msg = AIMessage("", tool_calls=[tool_call])
     config: RunnableConfig = {"configurable": {"__pregel_runtime": mock_runtime}}
-    node.invoke({"messages": [msg]}, config=config)
+    result = node.invoke({"messages": [msg]}, config=config)
 
+    assert result["messages"][-1].content == "ok"
     assert captured["execution_info"] is exec_info
     assert captured["execution_info"].thread_id == "t-1"
     assert captured["execution_info"].task_id == "tk-1"
     assert captured["server_info"] is server_info
     assert captured["server_info"].assistant_id == "asst-1"
+    assert [tool.name for tool in captured["tools"]] == ["info_tool", "other_tool"]
 
 
-async def test_tool_runtime_forwards_execution_info_and_server_info_async() -> None:
-    """Test that execution_info and server_info are forwarded in async path."""
-    from langgraph.runtime import ExecutionInfo, ServerInfo
+async def test_tool_runtime_forwards_execution_info_server_info_and_tools_async() -> (
+    None
+):
+    """Test that execution_info, server_info, and tools are forwarded in async path."""
 
     exec_info = ExecutionInfo(
         thread_id="t-2",
@@ -2090,9 +2251,15 @@ async def test_tool_runtime_forwards_execution_info_and_server_info_async() -> N
         """Async tool that captures runtime info."""
         captured["execution_info"] = runtime.execution_info
         captured["server_info"] = runtime.server_info
+        captured["tools"] = runtime.tools
         return "ok"
 
-    node = ToolNode([info_tool_async])
+    @dec_tool
+    async def other_tool_async(y: int) -> str:
+        """Another async tool available to the runtime."""
+        return str(y)
+
+    node = ToolNode([info_tool_async, other_tool_async])
     tool_call = {
         "name": "info_tool_async",
         "args": {"x": 1},
@@ -2101,12 +2268,17 @@ async def test_tool_runtime_forwards_execution_info_and_server_info_async() -> N
     }
     msg = AIMessage("", tool_calls=[tool_call])
     config: RunnableConfig = {"configurable": {"__pregel_runtime": mock_runtime}}
-    await node.ainvoke({"messages": [msg]}, config=config)
+    result = await node.ainvoke({"messages": [msg]}, config=config)
 
+    assert result["messages"][-1].content == "ok"
     assert captured["execution_info"] is exec_info
     assert captured["execution_info"].thread_id == "t-2"
     assert captured["server_info"] is server_info
     assert captured["server_info"].graph_id == "graph-2"
+    assert [tool.name for tool in captured["tools"]] == [
+        "info_tool_async",
+        "other_tool_async",
+    ]
 
 
 # --- InjectedToolArg security tests ---
@@ -2202,3 +2374,195 @@ def test_tool_node_injected_state_overwrites_llm_value() -> None:
     )
     tool_message = result["messages"][-1]
     assert tool_message.content == "PUBLIC_DATA"
+
+
+class _ReturningTool(BaseTool):
+    """A tool that returns a configured value verbatim."""
+
+    name: str = "list_tool"
+    description: str = "Returns a configured value"
+    return_value: Any = None
+
+    def _run(self, **kwargs: Any) -> Any:
+        return self.return_value
+
+    async def _arun(self, **kwargs: Any) -> Any:
+        return self.return_value
+
+
+def _list_tool_call(outer_id: str = "call-1") -> dict[str, Any]:
+    return {"name": "list_tool", "args": {}, "id": outer_id, "type": "tool_call"}
+
+
+def _invoke_returning(
+    return_value: Any,
+    *,
+    outer_id: str = "call-1",
+    handle_tool_errors: bool = True,
+) -> Any:
+    node = ToolNode(
+        [_ReturningTool(return_value=return_value)],
+        handle_tool_errors=handle_tool_errors,
+    )
+    return node.invoke(
+        {"messages": [AIMessage("", tool_calls=[_list_tool_call(outer_id)])]},
+        config=_create_config_with_runtime(),
+    )
+
+
+def test_tool_node_list_return_command_and_tool_message() -> None:
+    """Valid: tool returns [Command(update={...}), ToolMessage(...)]."""
+    outer_id = "call-1"
+    result = _invoke_returning(
+        [
+            Command(update={"foo": "bar"}),
+            ToolMessage(content="done", tool_call_id=outer_id),
+        ]
+    )
+    assert isinstance(result, list)
+    commands = [r for r in result if isinstance(r, Command)]
+    assert len(commands) == 1
+    assert commands[0].update == {"foo": "bar"}
+    non_commands = [r for r in result if not isinstance(r, Command)]
+    assert len(non_commands) == 1
+    assert isinstance(non_commands[0], dict)
+    msgs = non_commands[0]["messages"]
+    assert len(msgs) == 1
+    assert isinstance(msgs[0], ToolMessage)
+    assert msgs[0].content == "done"
+    assert msgs[0].tool_call_id == outer_id
+
+
+def test_tool_node_list_return_nested_terminator() -> None:
+    """Valid: terminator nested inside Command.update['messages']."""
+    outer_id = "call-1"
+    result = _invoke_returning(
+        [
+            Command(update={"foo": "bar"}),
+            Command(
+                update={
+                    "messages": [ToolMessage(content="done", tool_call_id=outer_id)]
+                }
+            ),
+        ]
+    )
+    assert isinstance(result, list)
+    commands = [r for r in result if isinstance(r, Command)]
+    assert len(commands) == 2
+    updates = [c.update for c in commands]
+    assert {"foo": "bar"} in updates
+    msgs_update = next(u for u in updates if "messages" in (u or {}))
+    assert any(
+        isinstance(m, ToolMessage) and m.tool_call_id == outer_id
+        for m in msgs_update["messages"]
+    )
+
+
+def test_tool_node_list_return_parent_goto_with_terminator() -> None:
+    """Valid: [Command(graph=PARENT, goto=[Send(...)]), ToolMessage(...)]."""
+    outer_id = "call-1"
+    result = _invoke_returning(
+        [
+            Command(graph=Command.PARENT, goto=[Send("child", {})]),
+            ToolMessage(content="ok", tool_call_id=outer_id),
+        ]
+    )
+    assert isinstance(result, list)
+    parent_cmds = [
+        r for r in result if isinstance(r, Command) and r.graph is Command.PARENT
+    ]
+    assert len(parent_cmds) == 1
+    assert isinstance(parent_cmds[0].goto, list)
+    assert any(isinstance(s, Send) for s in parent_cmds[0].goto)
+    non_commands = [r for r in result if not isinstance(r, Command)]
+    assert len(non_commands) == 1
+
+
+def test_tool_node_list_return_no_terminator_raises() -> None:
+    """Invalid: list with no terminating ToolMessage."""
+    with pytest.raises(ValueError, match="0 messages bound to tool_call_id"):
+        _invoke_returning([Command(update={"foo": "bar"})], handle_tool_errors=False)
+
+
+def test_tool_node_list_return_multiple_terminators_raises() -> None:
+    """Invalid: list with two terminating ToolMessages."""
+    outer_id = "call-1"
+    with pytest.raises(ValueError, match="2 messages bound to tool_call_id"):
+        _invoke_returning(
+            [
+                ToolMessage(content="a", tool_call_id=outer_id),
+                ToolMessage(content="b", tool_call_id=outer_id),
+            ],
+            handle_tool_errors=False,
+        )
+
+
+def test_tool_node_list_return_validation_error_handled() -> None:
+    """handle_tool_errors=True converts validation errors to an error ToolMessage."""
+    result = _invoke_returning([Command(update={"foo": "bar"})])
+    assert isinstance(result, dict)
+    msg = result["messages"][0]
+    assert isinstance(msg, ToolMessage)
+    assert msg.status == "error"
+    assert "0 messages bound to tool_call_id" in msg.content
+
+
+async def test_tool_node_list_return_async_smoke() -> None:
+    """Async path parallels sync for the happy case."""
+    outer_id = "call-1"
+    node = ToolNode(
+        [
+            _ReturningTool(
+                return_value=[
+                    Command(update={"foo": "bar"}),
+                    ToolMessage(content="done", tool_call_id=outer_id),
+                ]
+            )
+        ]
+    )
+    result = await node.ainvoke(
+        {"messages": [AIMessage("", tool_calls=[_list_tool_call(outer_id)])]},
+        config=_create_config_with_runtime(),
+    )
+    assert isinstance(result, list)
+    commands = [r for r in result if isinstance(r, Command)]
+    assert len(commands) == 1 and commands[0].update == {"foo": "bar"}
+
+
+def test_tool_node_list_return_mixed_with_regular_tool() -> None:
+    """List-returning tool and a regular tool dispatched from the same AIMessage."""
+    list_tool_id = "call-list"
+    regular_tool_id = "call-regular"
+    list_tool = _ReturningTool(
+        return_value=[
+            Command(update={"foo": "bar"}),
+            ToolMessage(content="list done", tool_call_id=list_tool_id),
+        ]
+    )
+
+    def regular_tool(x: int) -> str:
+        """A normal tool."""
+        return f"regular: {x}"
+
+    tool_calls = [
+        {"name": "list_tool", "args": {}, "id": list_tool_id, "type": "tool_call"},
+        {
+            "name": "regular_tool",
+            "args": {"x": 7},
+            "id": regular_tool_id,
+            "type": "tool_call",
+        },
+    ]
+    node = ToolNode([list_tool, regular_tool])
+    result = node.invoke(
+        {"messages": [AIMessage("", tool_calls=tool_calls)]},
+        config=_create_config_with_runtime(),
+    )
+    assert isinstance(result, list)
+    commands = [r for r in result if isinstance(r, Command)]
+    assert len(commands) == 1
+    assert commands[0].update == {"foo": "bar"}
+    all_msgs = [m for r in result if isinstance(r, dict) for m in r["messages"]]
+    tool_call_ids = {m.tool_call_id for m in all_msgs}
+    assert list_tool_id in tool_call_ids
+    assert regular_tool_id in tool_call_ids

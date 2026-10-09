@@ -76,7 +76,12 @@ __pypackages__/
 
 # Environments
 .env
+.env.*
 .envrc
+*.crt
+*.key
+*.pem
+credentials.json
 .venv
 .venvs
 env/
@@ -98,5 +103,7 @@ dmypy.json
 
 .vercel
 .turbo
+node_modules/
 .editorconfig
 .scratch
+.worktrees/

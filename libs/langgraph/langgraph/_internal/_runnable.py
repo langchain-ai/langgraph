@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import enum
 import inspect
+import logging
 import sys
 import warnings
 from collections.abc import (
@@ -51,15 +52,37 @@ from langgraph._internal._config import (
 )
 from langgraph._internal._constants import (
     CONF,
+    CONFIG_KEY_NODE_ERROR,
     CONFIG_KEY_RUNTIME,
 )
 from langgraph._internal._typing import MISSING
+from langgraph.errors import NodeError
 from langgraph.types import StreamWriter
 
 try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
 except ImportError:
     _StreamingCallbackHandler = None  # type: ignore
+
+logger = logging.getLogger(__name__)
+
+
+def _trace_payload(value: Any, transform: Callable[[Any], Any] | None) -> Any:
+    """Return the payload to record on a run for `value`.
+
+    When `transform` is unset this is a passthrough, so unspecified nodes record exactly
+    as before. When set it always runs (regardless of tracing), but never affects
+    execution: if it raises, the untransformed value is recorded instead.
+    """
+    if transform is None:
+        return value
+    try:
+        return transform(value)
+    except Exception:
+        logger.exception(
+            "trace input/output processor raised; recording untransformed payload"
+        )
+        return value
 
 
 def _set_config_context(
@@ -115,6 +138,19 @@ def set_config_context(
         yield ctx
     finally:
         ctx.run(_unset_config_context, config_token, run)
+
+
+def create_task_in_config_context(
+    coro_factory: Callable[[], Coroutine[Any, Any, Any]], config: RunnableConfig
+) -> asyncio.Task[Any]:
+    """Create an asyncio.Task that inherits `config` as the child runnable context.
+
+    `asyncio.create_task` snapshots the current contextvars onto the new task,
+    so calling `create_task` while the config context is set ensures the task
+    sees `config` via `var_child_runnable_config` and any tracing parent.
+    """
+    with set_config_context(config) as context:
+        return context.run(lambda: asyncio.create_task(coro_factory()))
 
 
 # Before Python 3.11 native StrEnum is not available
@@ -180,6 +216,15 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
         # we never hit this block, we just inject runtime directly
         "N/A",
         inspect.Parameter.empty,
+    ),
+    (
+        "error",
+        (NodeError, "NodeError"),
+        # we never hit this block, we read directly from configurable
+        "N/A",
+        # default to None so non-handler nodes that happen to type a parameter
+        # `error: NodeError` don't blow up; handlers always receive a NodeError.
+        None,
     ),
 )
 """List of kwargs that can be passed to functions, and their corresponding
@@ -354,6 +399,8 @@ class RunnableCallable(Runnable):
             kw_value: Any = MISSING
             if kw == "config":
                 kw_value = config
+            elif kw == "error":
+                kw_value = config.get(CONF, {}).get(CONFIG_KEY_NODE_ERROR, MISSING)
             elif runtime:
                 if kw == "runtime":
                     kw_value = runtime
@@ -426,6 +473,8 @@ class RunnableCallable(Runnable):
             kw_value: Any = MISSING
             if kw == "config":
                 kw_value = config
+            elif kw == "error":
+                kw_value = config.get(CONF, {}).get(CONFIG_KEY_NODE_ERROR, MISSING)
             elif runtime:
                 if kw == "runtime":
                     kw_value = runtime
@@ -544,6 +593,7 @@ class RunnableSeq(Runnable):
         *steps: RunnableLike,
         name: str | None = None,
         trace_inputs: Callable[[Any], Any] | None = None,
+        trace_outputs: Callable[[Any], Any] | None = None,
     ) -> None:
         """Create a new RunnableSeq.
 
@@ -569,6 +619,7 @@ class RunnableSeq(Runnable):
         self.steps = steps_flat
         self.name = name
         self.trace_inputs = trace_inputs
+        self.trace_outputs = trace_outputs
 
     def __or__(
         self,
@@ -630,7 +681,7 @@ class RunnableSeq(Runnable):
         # start the root run
         run_manager = callback_manager.on_chain_start(
             None,
-            self.trace_inputs(input) if self.trace_inputs is not None else input,
+            _trace_payload(input, self.trace_inputs),
             name=config.get("run_name") or self.get_name(),
             run_id=config.pop("run_id", None),
         )
@@ -661,7 +712,7 @@ class RunnableSeq(Runnable):
             run_manager.on_chain_error(e)
             raise
         else:
-            run_manager.on_chain_end(input)
+            run_manager.on_chain_end(_trace_payload(input, self.trace_outputs))
             return input
 
     async def ainvoke(
@@ -677,7 +728,7 @@ class RunnableSeq(Runnable):
         # start the root run
         run_manager = await callback_manager.on_chain_start(
             None,
-            self.trace_inputs(input) if self.trace_inputs is not None else input,
+            _trace_payload(input, self.trace_inputs),
             name=config.get("run_name") or self.get_name(),
             run_id=config.pop("run_id", None),
         )
@@ -714,7 +765,7 @@ class RunnableSeq(Runnable):
             await run_manager.on_chain_error(e)
             raise
         else:
-            await run_manager.on_chain_end(input)
+            await run_manager.on_chain_end(_trace_payload(input, self.trace_outputs))
             return input
 
     def stream(
@@ -730,7 +781,7 @@ class RunnableSeq(Runnable):
         # start the root run
         run_manager = callback_manager.on_chain_start(
             None,
-            self.trace_inputs(input) if self.trace_inputs is not None else input,
+            _trace_payload(input, self.trace_inputs),
             name=config.get("run_name") or self.get_name(),
             run_id=config.pop("run_id", None),
         )
@@ -775,7 +826,7 @@ class RunnableSeq(Runnable):
                 run_manager.on_chain_error(e)
                 raise
             else:
-                run_manager.on_chain_end(output)
+                run_manager.on_chain_end(_trace_payload(output, self.trace_outputs))
 
     async def astream(
         self,
@@ -790,7 +841,7 @@ class RunnableSeq(Runnable):
         # start the root run
         run_manager = await callback_manager.on_chain_start(
             None,
-            self.trace_inputs(input) if self.trace_inputs is not None else input,
+            _trace_payload(input, self.trace_inputs),
             name=config.get("run_name") or self.get_name(),
             run_id=config.pop("run_id", None),
         )
@@ -845,7 +896,9 @@ class RunnableSeq(Runnable):
                     await run_manager.on_chain_error(e)
                     raise
                 else:
-                    await run_manager.on_chain_end(output)
+                    await run_manager.on_chain_end(
+                        _trace_payload(output, self.trace_outputs)
+                    )
         else:
             try:
                 async with AsyncExitStack() as stack:
@@ -875,7 +928,9 @@ class RunnableSeq(Runnable):
                 await run_manager.on_chain_error(e)
                 raise
             else:
-                await run_manager.on_chain_end(output)
+                await run_manager.on_chain_end(
+                    _trace_payload(output, self.trace_outputs)
+                )
 
 
 def _consume_iter(it: Iterator[Any]) -> Any:

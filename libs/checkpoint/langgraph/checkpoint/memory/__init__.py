@@ -6,7 +6,7 @@ import pickle
 import random
 import shutil
 from collections import defaultdict
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from types import TracebackType
 from typing import Any
@@ -20,9 +20,12 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
+    DeltaChannelHistory,
+    PendingWrite,
     SerializerProtocol,
     get_checkpoint_id,
     get_checkpoint_metadata,
+    writes_sort_key,
 )
 
 logger = logging.getLogger(__name__)
@@ -121,16 +124,117 @@ class InMemorySaver(
         return self.stack.__exit__(__exc_type, __exc_value, __traceback)
 
     def _load_blobs(
-        self, thread_id: str, checkpoint_ns: str, versions: ChannelVersions
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        versions: ChannelVersions,
     ) -> dict[str, Any]:
-        channel_values: dict[str, Any] = {}
-        for k, v in versions.items():
-            kk = (thread_id, checkpoint_ns, k, v)
-            if kk in self.blobs:
-                vv = self.blobs[kk]
-                if vv[0] != "empty":
-                    channel_values[k] = self.serde.loads_typed(vv)
-        return channel_values
+        result: dict[str, Any] = {}
+        for k, ver in versions.items():
+            kk = (thread_id, checkpoint_ns, k, ver)
+            if kk not in self.blobs:
+                continue
+            vv = self.blobs[kk]
+            if vv[0] == "empty":
+                continue
+            result[k] = self.serde.loads_typed(vv)
+        return result
+
+    def _ordered_writes(
+        self, thread_id: str, checkpoint_ns: str, checkpoint_id: str
+    ) -> list[tuple[str, str, tuple[str, bytes], str]]:
+        stored = self.writes.get((thread_id, checkpoint_ns, checkpoint_id), {})
+        return [
+            stored[k]
+            for k in sorted(stored, key=lambda k: writes_sort_key(stored[k][3], *k))
+        ]
+
+    def get_delta_channel_history(
+        self, *, config: RunnableConfig, channels: Sequence[str]
+    ) -> Mapping[str, DeltaChannelHistory]:
+        """Override: walk the parent chain ONCE for all requested channels.
+
+        Each channel terminates independently at the nearest ancestor
+        whose stored blob is non-empty. Other channels keep walking until
+        they find their own terminator or hit the root.
+
+        A blob is the value AT its ancestor, prior to the writes stored
+        under that same ancestor (those writes produce its child, which
+        is on the path to the target). This holds for `_DeltaSnapshot`
+        blobs and for pre-delta plain values alike, so the seed
+        ancestor's own writes are always collected. Writes at ancestors
+        older than the seed are subsumed by the seed value and are never
+        reached — the walk terminates there.
+        """
+        if not channels:
+            return {}
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        checkpoint_id = config["configurable"].get("checkpoint_id", "")
+        ns_storage = self.storage.get(thread_id, {}).get(checkpoint_ns, {})
+
+        chain: list[str] = []
+        target_entry = ns_storage.get(checkpoint_id)
+        current: str | None = target_entry[2] if target_entry is not None else None
+        while current is not None:
+            entry = ns_storage.get(current)
+            if entry is None:
+                break
+            chain.append(current)
+            _, _, parent = entry
+            current = parent
+
+        collected_by_ch: dict[str, list[PendingWrite]] = {c: [] for c in channels}
+        seed_by_ch: dict[str, Any] = {}
+        remaining: set[str] = set(channels)
+
+        for cp_id in chain:
+            if not remaining:
+                break
+            entry = ns_storage.get(cp_id)
+            ckpt = self.serde.loads_typed(entry[0]) if entry is not None else None
+
+            terminated_here: set[str] = set()
+            blob_value_by_ch: dict[str, Any] = {}
+            if ckpt is not None:
+                versions = ckpt.get("channel_versions", {})
+                for ch in remaining:
+                    ver = versions.get(ch)
+                    if ver is None:
+                        continue
+                    blob_entry = self.blobs.get((thread_id, checkpoint_ns, ch, ver))
+                    if blob_entry is None or blob_entry[0] == "empty":
+                        continue
+                    blob_value_by_ch[ch] = self.serde.loads_typed(blob_entry)
+                    terminated_here.add(ch)
+
+            for tid, ch, serialized, _ in reversed(
+                self._ordered_writes(thread_id, checkpoint_ns, cp_id)
+            ):
+                if ch not in remaining:
+                    continue
+                collected_by_ch[ch].append(
+                    (tid, ch, self.serde.loads_typed(serialized))
+                )
+
+            for ch in terminated_here:
+                seed_by_ch[ch] = blob_value_by_ch[ch]
+                remaining.discard(ch)
+
+        result: dict[str, DeltaChannelHistory] = {}
+        for ch in channels:
+            entry_h: DeltaChannelHistory = {
+                "writes": list(reversed(collected_by_ch[ch]))
+            }
+            if ch in seed_by_ch:
+                entry_h["seed"] = seed_by_ch[ch]
+            result[ch] = entry_h
+        return result
+
+    async def aget_delta_channel_history(
+        self, *, config: RunnableConfig, channels: Sequence[str]
+    ) -> Mapping[str, DeltaChannelHistory]:
+        return self.get_delta_channel_history(config=config, channels=channels)
 
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the in-memory storage.
@@ -151,7 +255,7 @@ class InMemorySaver(
         if checkpoint_id := get_checkpoint_id(config):
             if saved := self.storage[thread_id][checkpoint_ns].get(checkpoint_id):
                 checkpoint, metadata, parent_checkpoint_id = saved
-                writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
+                writes = self._ordered_writes(thread_id, checkpoint_ns, checkpoint_id)
                 checkpoint_: Checkpoint = self.serde.loads_typed(checkpoint)
                 return CheckpointTuple(
                     config=config,
@@ -181,7 +285,7 @@ class InMemorySaver(
             if checkpoints := self.storage[thread_id][checkpoint_ns]:
                 checkpoint_id = max(checkpoints.keys())
                 checkpoint, metadata, parent_checkpoint_id = checkpoints[checkpoint_id]
-                writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
+                writes = self._ordered_writes(thread_id, checkpoint_ns, checkpoint_id)
                 checkpoint_ = self.serde.loads_typed(checkpoint)
                 return CheckpointTuple(
                     config={
@@ -284,9 +388,9 @@ class InMemorySaver(
                     elif limit is not None:
                         limit -= 1
 
-                    writes = self.writes[
-                        (thread_id, checkpoint_ns, checkpoint_id)
-                    ].values()
+                    writes = self._ordered_writes(
+                        thread_id, checkpoint_ns, checkpoint_id
+                    )
 
                     checkpoint_: Checkpoint = self.serde.loads_typed(checkpoint)
 

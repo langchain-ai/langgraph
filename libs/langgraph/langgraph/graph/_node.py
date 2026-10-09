@@ -9,7 +9,13 @@ from langgraph.store.base import BaseStore
 
 from langgraph._internal._typing import EMPTY_SEQ
 from langgraph.runtime import Runtime
-from langgraph.types import CachePolicy, RetryPolicy, StreamWriter
+from langgraph.types import (
+    CachePolicy,
+    RetryPolicy,
+    StreamWriter,
+    TimeoutPolicy,
+    TracePolicy,
+)
 from langgraph.typing import ContextT, NodeInputT, NodeInputT_contra
 
 
@@ -88,5 +94,10 @@ class StateNodeSpec(Generic[NodeInputT, ContextT]):
     input_schema: type[NodeInputT]
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None
     cache_policy: CachePolicy | None
+    is_error_handler: bool = False
+    error_handler_node: str | None = None
     ends: tuple[str, ...] | dict[str, str] | None = EMPTY_SEQ
     defer: bool = False
+    timeout: TimeoutPolicy | None = None
+    trace_policy: TracePolicy | None = None
+    """Optional policy controlling what this node records on its trace run."""

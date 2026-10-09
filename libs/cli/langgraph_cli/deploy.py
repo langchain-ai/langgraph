@@ -8,10 +8,11 @@ import platform
 import re
 import tempfile
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from typing import Protocol, TypeVar
 
 import click
 import click.exceptions
@@ -19,10 +20,19 @@ from dotenv import dotenv_values, set_key
 
 import langgraph_cli.config
 from langgraph_cli.analytics import log_command
+from langgraph_cli.config import Config
 from langgraph_cli.constants import DEFAULT_CONFIG
+from langgraph_cli.dependency_tracking import find_tracked_packages
 from langgraph_cli.docker import build_docker_image, can_build_locally
-from langgraph_cli.exec import Runner, subp_exec
-from langgraph_cli.host_backend import HostBackendClient, HostBackendError
+from langgraph_cli.exec import CommandRunner, Runner, subp_exec
+from langgraph_cli.host_backend import (
+    MAX_PAGE_SIZE,
+    ControlPlaneEndpoints,
+    HostBackendClient,
+    HostBackendError,
+    SourceName,
+)
+from langgraph_cli.image_reference import DIGEST_SEPARATOR, ImageReference
 from langgraph_cli.progress import Progress
 from langgraph_cli.util import warn_non_wolfi_distro
 
@@ -83,7 +93,25 @@ _API_KEY_ENV_NAMES = (
     "LANGCHAIN_API_KEY",
 )
 
+_T = TypeVar("_T")
+
 _DEPLOYMENT_NAME_ENV = "LANGSMITH_DEPLOYMENT_NAME"
+_DEFAULT_IMAGE_TAG = "latest"
+_DEPLOYMENT_PLATFORM = "linux/amd64"
+_NATIVE_AMD64_MACHINE = "x86_64"
+_PUSH_ATTEMPTS = 3
+_LOCAL_BUILD_TAG_PREFIX = "langgraph-deploy-tmp"
+_OPERATOR_DEFAULT_RESOURCE_SPEC: Mapping[str, object] = {}
+_CUSTOMER_REGISTRY_SOURCE: SourceName = "external_docker"
+_LISTENER_REQUIRED_MARKER = "listener_id' is required"
+_LISTENERS_SHOWN = 10
+_LISTENER_NOT_FOUND_STATUSES = frozenset({404, 422})
+_LISTENERS_DOCS_URL = "https://docs.langchain.com/langsmith/control-plane#listeners"
+_NO_LISTENERS = (
+    "This workspace has no listeners, so --listener-id and --k8s-namespace "
+    "do not apply."
+)
+
 
 _TERMINAL_STATUSES = frozenset(
     [
@@ -115,17 +143,336 @@ class BuildResult:
     show_build_logs_on_failure: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class ById:
+    deployment_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class ByName:
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
+class ByAgent:
+    agent_id: str
+    environment: str
+
+
+DeploymentSelector = ById | ByName | ByAgent
+
+
+@dataclass(frozen=True, slots=True)
+class Listener:
+    id: str
+    compute_id: str
+    namespaces: tuple[str, ...]
+
+    @classmethod
+    def from_resource(cls, resource: Mapping[str, object]) -> "Listener":
+        identifier = str(resource.get("id") or "")
+        if not identifier:
+            raise HostBackendError(
+                "The control plane returned a listener without an id."
+            )
+        compute_config = resource.get("compute_config")
+        namespaces = (
+            compute_config.get("k8s_namespaces")
+            if isinstance(compute_config, Mapping)
+            else None
+        )
+        return cls(
+            identifier,
+            str(resource.get("compute_id", "")),
+            tuple(str(namespace) for namespace in namespaces)
+            if isinstance(namespaces, list)
+            else (),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class Unplaced:
+    @property
+    def summary(self) -> str:
+        return ""
+
+    def source_config(self) -> dict[str, object]:
+        return {}
+
+
+@dataclass(frozen=True, slots=True)
+class OnListener:
+    listener_id: str
+    k8s_namespace: str
+
+    @property
+    def summary(self) -> str:
+        return (
+            f"Deploying through listener {self.listener_id} "
+            f"in namespace {self.k8s_namespace}"
+        )
+
+    def source_config(self) -> dict[str, object]:
+        return {
+            "listener_id": self.listener_id,
+            "listener_config": {"k8s_namespace": self.k8s_namespace},
+        }
+
+
+Placement = Unplaced | OnListener
+
+
+@dataclass(frozen=True, slots=True)
+class RequestedPlacement:
+    listener_id: str | None = None
+    k8s_namespace: str | None = None
+
+    @property
+    def requested(self) -> bool:
+        return self.listener_id is not None or self.k8s_namespace is not None
+
+    def ensure_not_requested(self, deployment_id: str) -> None:
+        if self.requested:
+            raise click.UsageError(
+                "Listener and namespace are fixed when a deployment is created. "
+                f"Deployment {deployment_id} already exists, so drop --listener-id "
+                "and --k8s-namespace, or create a new deployment with a different "
+                "--name."
+            )
+
+    def on(self, listener: Listener) -> Placement:
+        return OnListener(listener.id, self._namespace(listener))
+
+    def among(self, listeners: Sequence[Listener]) -> Placement:
+        if not listeners:
+            if self.requested:
+                raise click.UsageError(_NO_LISTENERS)
+            return Unplaced()
+        if len(listeners) > 1:
+            raise click.UsageError(
+                "This workspace has several listeners. Choose one with "
+                f"--listener-id:\n{_describe_listeners(listeners)}"
+            )
+        return self.on(listeners[0])
+
+    def _namespace(self, listener: Listener) -> str:
+        if not listener.namespaces:
+            raise click.UsageError(
+                f"Listener {listener.id} serves no namespaces. Check its configuration."
+            )
+        if self.k8s_namespace is None:
+            if len(listener.namespaces) == 1:
+                return listener.namespaces[0]
+            raise click.UsageError(
+                f"Listener {listener.id} serves several namespaces. Choose one with "
+                f"--k8s-namespace: {', '.join(listener.namespaces)}"
+            )
+        if self.k8s_namespace not in listener.namespaces:
+            raise click.UsageError(
+                f"Listener {listener.id} does not serve namespace "
+                f"'{self.k8s_namespace}'. Choose one of: "
+                f"{', '.join(listener.namespaces)}"
+            )
+        return self.k8s_namespace
+
+
+def _describe_listeners(listeners: Sequence[Listener]) -> str:
+    shown = listeners[:_LISTENERS_SHOWN]
+    lines = [
+        f"  {listener.id}  cluster {listener.compute_id}  "
+        f"namespaces: {', '.join(listener.namespaces)}"
+        for listener in shown
+    ]
+    if len(listeners) > len(shown):
+        lines.append(f"  ... and {len(listeners) - len(shown)} more")
+    if len(listeners) == MAX_PAGE_SIZE:
+        lines.append(f"  (only the first {MAX_PAGE_SIZE} listeners were read)")
+    return "\n".join(lines)
+
+
+@dataclass(frozen=True, slots=True)
+class ExistingDeployment:
+    id: str
+    source: str | None
+
+
+# ---------------------------------------------------------------------------
+# Structured output emitter
+# ---------------------------------------------------------------------------
+
+_emitter: "_Emitter | None" = None
+_no_input: bool = False
+
+
+class _Emitter:
+    """Dual-mode output: JSON-lines (``--json``) or human-readable click text."""
+
+    def __init__(self, json_mode: bool) -> None:
+        self._json = json_mode
+
+    @property
+    def json_mode(self) -> bool:
+        return self._json
+
+    # -- Structured event helpers ------------------------------------------
+
+    def step(self, step: int, message: str, **extra: object) -> None:
+        if self._json:
+            self._write({"event": "step", "step": step, "message": message, **extra})
+        else:
+            click.secho(f"{step}. {message}", fg="cyan")
+
+    def info(self, message: str, **extra: object) -> None:
+        if self._json:
+            self._write({"event": "info", "message": message, **extra})
+        else:
+            click.secho(f"   {message}", fg="green")
+
+    def warn(self, message: str, **extra: object) -> None:
+        """Warning nested under a step. Text mode indents; JSON mode strips leading whitespace."""
+        if self._json:
+            self._write({"event": "warn", "message": message.lstrip(), **extra})
+        else:
+            click.secho(f"   {message}", fg="yellow")
+
+    def note(self, message: str, **extra: object) -> None:
+        """Top-level banner (pre-step). Text mode does not indent."""
+        if self._json:
+            self._write({"event": "note", "message": message, **extra})
+        else:
+            click.secho(message, fg="yellow")
+
+    def error(self, message: str, **extra: object) -> None:
+        if self._json:
+            self._write({"event": "error", "message": message, **extra})
+        else:
+            click.secho(f"   {message}", fg="red")
+
+    def status_change(
+        self,
+        status: str,
+        elapsed_seconds: float,
+        finished: bool = False,
+    ) -> None:
+        mins, secs = divmod(int(elapsed_seconds), 60)
+        elapsed_str = f"{mins}m {secs:02d}s" if mins else f"{secs}s"
+        if self._json:
+            self._write(
+                {
+                    "event": "status_change",
+                    "status": status,
+                    "elapsed_seconds": round(elapsed_seconds, 1),
+                    "message": f"{status}... ({elapsed_str})",
+                }
+            )
+        else:
+            click.echo(f"   {status}... ({elapsed_str})")
+
+    def log(self, message: str) -> None:
+        if self._json:
+            self._write({"event": "log", "message": message})
+        else:
+            click.echo(f"   | {message}")
+
+    def status_url(self, url: str) -> None:
+        if self._json:
+            self._write({"event": "status_url", "url": url})
+        else:
+            click.secho(f"   View status: {url}", fg="cyan")
+
+    def result(
+        self,
+        status: str,
+        *,
+        deployment_id: str,
+        url: str | None = None,
+        status_url: str | None = None,
+        fallback_status_message: str | None = None,
+    ) -> None:
+        if self._json:
+            if status == "succeeded":
+                message = "Deployment successful!"
+            elif status == "failed":
+                message = "Deployment failed"
+            else:
+                message = "Timed out waiting for deployment."
+            payload: dict = {
+                "event": "result",
+                "status": status,
+                "deployment_id": deployment_id,
+                "message": message,
+            }
+            if url:
+                payload["url"] = url
+            if status_url:
+                payload["status_url"] = status_url
+            self._write(payload)
+        else:
+            if status == "succeeded":
+                click.secho("   Deployment successful!", fg="green")
+                if url:
+                    click.secho(f"   URL: {url}", fg="green")
+                if status_url:
+                    click.secho(f"   View status: {status_url}", fg="green")
+            elif status == "failed":
+                click.secho("   Deployment failed", fg="red")
+                if status_url:
+                    click.secho(f"   View status: {status_url}", fg="red")
+            elif status == "timed_out":
+                click.secho("   Timed out waiting for deployment.", fg="yellow")
+                if status_url:
+                    click.secho(f"   Check status at: {status_url}", fg="yellow")
+                elif fallback_status_message:
+                    click.secho(f"   {fallback_status_message}", fg="yellow")
+
+    def heartbeat(self, status: str, elapsed_seconds: float) -> None:
+        if self._json:
+            mins, secs = divmod(int(elapsed_seconds), 60)
+            elapsed_str = f"{mins}m {secs:02d}s" if mins else f"{secs}s"
+            self._write(
+                {
+                    "event": "heartbeat",
+                    "status": status,
+                    "elapsed_seconds": round(elapsed_seconds, 1),
+                    "message": f"{status}... ({elapsed_str})",
+                }
+            )
+
+    def upload_progress(self, size_mb: float, pct: int) -> None:
+        if self._json:
+            self._write(
+                {
+                    "event": "upload_progress",
+                    "size_mb": round(size_mb, 1),
+                    "pct": pct,
+                }
+            )
+        else:
+            click.echo(f"\r   Uploading ({size_mb:.1f} MB)... {pct}%", nl=False)
+
+    def _write(self, obj: dict) -> None:
+        import sys as _sys
+
+        _sys.stdout.write(json_mod.dumps(obj, default=str) + "\n")
+        _sys.stdout.flush()
+
+
+def _get_emitter() -> _Emitter:
+    """Return the module-level emitter (falls back to text mode)."""
+    return _emitter or _Emitter(json_mode=False)
+
+
 # ---------------------------------------------------------------------------
 # Validators
 # ---------------------------------------------------------------------------
 
 
-def validate_deployment_selector(deployment_id: str | None, name: str | None) -> None:
-    """Ensure either deployment_id or name is provided."""
+def deployment_selector(deployment_id: str | None, name: str | None) -> ById | ByName:
     if deployment_id:
-        return
-    if not name:
-        raise click.UsageError("Either --deployment-id or --name is required.")
+        return ById(deployment_id)
+    if name:
+        return ByName(name)
+    raise click.UsageError("Either --deployment-id or --name is required.")
 
 
 def validate_deploy_commands(
@@ -151,19 +498,26 @@ def validate_deploy_commands(
 # ---------------------------------------------------------------------------
 
 
-def find_deployment_id_by_name(
-    client: HostBackendClient, name: str | None
-) -> str | None:
-    """Return deployment ID for an exact name match, or None if not found."""
-    if not name:
+def _source_of(resource: object) -> str | None:
+    if not isinstance(resource, dict):
         return None
-    existing = client.list_deployments(name_contains=name)
-    if isinstance(existing, dict):
-        for dep in existing.get("resources", []):
-            if isinstance(dep, dict) and dep.get("name") == name:
-                found_id = dep.get("id")
-                if found_id:
-                    return str(found_id)
+    source = resource.get("source")
+    return source if isinstance(source, str) else None
+
+
+def find_deployment_by_name(
+    client: HostBackendClient, name: str
+) -> ExistingDeployment | None:
+    listed = client.list_deployments(name=name, name_contains=name, limit=MAX_PAGE_SIZE)
+    for resource in listed:
+        if resource.get("name") == name and resource.get("id"):
+            return ExistingDeployment(str(resource["id"]), _source_of(resource))
+    if len(listed) >= MAX_PAGE_SIZE:
+        raise click.ClickException(
+            "This workspace has more deployments than the CLI can search, so it "
+            f"cannot tell whether '{name}' already exists. Pass --deployment-id to "
+            "update an existing deployment."
+        )
     return None
 
 
@@ -172,15 +526,16 @@ def find_deployment_id_by_name(
 # ---------------------------------------------------------------------------
 
 
-def normalize_image_name(value: str | None) -> str:
-    """Sanitize a deployment/directory name into a valid Docker repository name.
+def normalize_name(value: str | None) -> str:
+    """Sanitize a deployment/directory name into a valid deployment name.
 
-    Docker repository names must be lowercase and may only contain
-    [a-z0-9._-].  Invalid characters are replaced with hyphens.
+    LangSmith Deployment names only allow lowercase
+    alphanumeric characters and hyphens ([a-z0-9-]).
+    Invalid characters are replaced with hyphens.
     """
     if not value:
         return "app"
-    slug = re.sub(r"[^a-z0-9._-]+", "-", value.lower()).strip("-.")
+    slug = re.sub(r"[^a-z0-9-]+", "-", value.lower()).strip("-")
     return slug or "app"
 
 
@@ -190,12 +545,51 @@ def normalize_image_tag(value: str) -> str:
     Tags may only contain [A-Za-z0-9_.-].  Defaults to "latest" when empty.
     """
     if not value:
-        value = "latest"
+        value = _DEFAULT_IMAGE_TAG
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", value):
         raise click.UsageError(
             "Image tag may only contain characters A-Z, a-z, 0-9, '_', '-', '.'"
         )
     return value
+
+
+def _validate_prebuilt_image(
+    runner: CommandRunner, image: str, *, verbose: bool
+) -> None:
+    """Ensure a prebuilt image exists locally for linux/amd64."""
+    try:
+        stdout, _ = runner.run(
+            subp_exec(
+                "docker",
+                "image",
+                "inspect",
+                "--format",
+                "{{.Os}}/{{.Architecture}}",
+                image,
+                verbose=verbose,
+                collect=True,
+            )
+        )
+    except FileNotFoundError:
+        raise click.ClickException(
+            "Docker is required but not installed.\n"
+            "Install Docker Desktop: https://docs.docker.com/get-docker/"
+        ) from None
+    except click.exceptions.Exit:
+        raise click.ClickException(
+            f"Docker image '{image}' was not found locally. Build or pull the image "
+            "before deploying with --image."
+        ) from None
+
+    image_platform = (stdout or "").strip()
+    if image_platform != _DEPLOYMENT_PLATFORM:
+        detected = image_platform or "unknown"
+        raise click.ClickException(
+            f"Docker image '{image}' targets {detected}, but LangSmith Deployment "
+            f"requires {_DEPLOYMENT_PLATFORM}. Rebuild or pull the image for "
+            f"{_DEPLOYMENT_PLATFORM} before deploying with --image."
+        )
+    _get_emitter().info(f"Image is available for {_DEPLOYMENT_PLATFORM}")
 
 
 def _extract_deployment_url(deployment: dict[str, object]) -> str:
@@ -216,6 +610,41 @@ def format_deployments_table(deployments: Sequence[dict[str, object]]) -> str:
             _extract_deployment_url(deployment),
         )
         for deployment in deployments
+    ]
+    widths = [
+        max(len(headers[index]), *(len(row[index]) for row in rows))
+        for index in range(len(headers))
+    ]
+
+    def format_row(row: Sequence[str]) -> str:
+        return "  ".join(value.ljust(widths[index]) for index, value in enumerate(row))
+
+    lines = [format_row(headers), format_row(tuple("-" * width for width in widths))]
+    lines.extend(format_row(row) for row in rows)
+    return "\n".join(lines)
+
+
+def _extract_listener_namespaces(listener: dict[str, object]) -> str:
+    compute_config = listener.get("compute_config")
+    namespaces = (
+        compute_config.get("k8s_namespaces")
+        if isinstance(compute_config, dict)
+        else None
+    )
+    if isinstance(namespaces, list) and namespaces:
+        return ", ".join(str(namespace) for namespace in namespaces)
+    return "-"
+
+
+def format_listeners_table(listeners: Sequence[dict[str, object]]) -> str:
+    headers = ("Listener ID", "Compute ID", "Namespaces")
+    rows = [
+        (
+            str(listener.get("id", "-") or "-"),
+            str(listener.get("compute_id", "-") or "-"),
+            _extract_listener_namespaces(listener),
+        )
+        for listener in listeners
     ]
     widths = [
         max(len(headers[index]), *(len(row[index]) for row in rows))
@@ -307,9 +736,8 @@ def _resolve_env_path(
     if isinstance(env_field, str):
         env_path = (config_path.parent / env_field).resolve()
         if not env_path.exists():
-            click.secho(
-                f"Warning: env file '{env_field}' specified in langgraph.json not found.",
-                fg="yellow",
+            _get_emitter().note(
+                f"Warning: env file '{env_field}' specified in langgraph.json not found."
             )
             return None
         return env_path
@@ -343,7 +771,7 @@ def _secrets_from_env(
     secrets: list[dict[str, str]] = []
     for name, value in env_vars.items():
         if name in RESERVED_ENV_VARS:
-            click.secho(f"   Skipping reserved env var: {name}", fg="yellow")
+            _get_emitter().note(f"Skipping reserved env var: {name}")
             continue
         if not value:
             continue
@@ -358,12 +786,18 @@ def _secrets_from_env(
 
 def _resolve_build_mode(
     remote_build_flag: bool | None,
+    *,
+    force_local: bool = False,
 ) -> tuple[bool, str | None]:
     """Determine whether to use a remote build.
 
     Returns (use_remote_build, local_build_error).  Raises UsageError when
-    --no-remote is set but the machine cannot build locally.
+    --no-remote is set but the machine cannot build locally. When
+    `force_local` is set, the function short-circuits and always selects a
+    local build.
     """
+    if force_local:
+        return False, None
     local_build_supported, local_build_error = can_build_locally()
 
     if remote_build_flag is True:
@@ -386,93 +820,132 @@ def _resolve_build_mode(
 # ---------------------------------------------------------------------------
 
 
-def _log_deploy_step(step: int, message: str) -> None:
-    click.secho(f"{step}. {message}", fg="cyan")
+def _log_deploy_step(step: int, message: str, **extra: object) -> None:
+    _get_emitter().step(step, message, **extra)
 
 
-def _resolve_deployment(
+def _fetch_deployment(
+    client: HostBackendClient, step: int, selector: ById
+) -> tuple[ExistingDeployment, int]:
+    _log_deploy_step(step, f"Using deployment {selector.deployment_id}")
+    resource = _call_host_backend_with_optional_tenant(
+        client, lambda c: c.get_deployment(selector.deployment_id)
+    )
+    return ExistingDeployment(selector.deployment_id, _source_of(resource)), step + 1
+
+
+def _find_deployment(
     client: HostBackendClient,
     step: int,
-    deployment_id: str | None,
-    name: str | None,
+    selector: ByName | ByAgent,
     *,
     not_found_message: str,
-) -> tuple[str | None, bool, int]:
-    """Resolve an existing deployment by ID or exact name match."""
-    needs_creation = False
-    if deployment_id:
-        _log_deploy_step(step, f"Using deployment {deployment_id}")
-        _call_host_backend_with_optional_tenant(
-            client, lambda c: c.get_deployment(deployment_id)
+) -> tuple[ExistingDeployment | None, int]:
+    if isinstance(selector, ByAgent):
+        _log_deploy_step(
+            step, f"Looking up agent '{selector.agent_id}' in {selector.environment}"
         )
-        return deployment_id, needs_creation, step + 1
-
-    _log_deploy_step(step, f"Looking up deployment '{name}'")
-    found_id = _call_host_backend_with_optional_tenant(
-        client, lambda c: find_deployment_id_by_name(c, name)
-    )
-    if found_id:
-        deployment_id = str(found_id)
-        click.secho(f"   Found existing deployment (ID: {deployment_id})", fg="green")
+        existing = _call_host_backend_with_optional_tenant(
+            client,
+            lambda c: c.list_deployments(
+                agent_id=selector.agent_id,
+                agent_environment=selector.environment,
+                limit=MAX_PAGE_SIZE,
+            ),
+        )
+        if len(existing) > 1:
+            raise click.ClickException(
+                "This control plane does not filter deployments by agent, so the "
+                f"CLI cannot tell which one belongs to '{selector.agent_id}' in "
+                f"{selector.environment}. Deploy by --name instead."
+            )
+        found = next(
+            (
+                ExistingDeployment(str(dep["id"]), _source_of(dep))
+                for dep in existing
+                if dep.get("id") and not dep.get("is_preview")
+            ),
+            None,
+        )
     else:
-        needs_creation = True
-        click.secho(not_found_message, fg="yellow")
-    return deployment_id, needs_creation, step + 1
+        _log_deploy_step(step, f"Looking up deployment '{selector.name}'")
+        found = _call_host_backend_with_optional_tenant(
+            client, lambda c: find_deployment_by_name(c, selector.name)
+        )
+    em = _get_emitter()
+    if found is None:
+        em.warn(not_found_message)
+    else:
+        em.info(f"Found existing deployment (ID: {found.id})")
+    return found, step + 1
+
+
+@dataclass(frozen=True, slots=True)
+class CreatedDeployment:
+    id: str
+    resource: dict[str, object]
 
 
 def _create_deployment(
     client: HostBackendClient,
     step: int,
     *,
-    name: str,
-    deployment_type: str,
+    name: str | None,
     source: str,
-    config_rel: str | None = None,
-    secrets: list[dict[str, str]] | None = None,
-) -> tuple[str, int]:
-    """Create a deployment and return its ID and next step number."""
-    _log_deploy_step(step, f"Creating deployment '{name}'")
-    created = client.create_deployment(
-        name=name,
-        deployment_type=deployment_type,
-        source=source,
-        config_path=config_rel,
-        secrets=secrets,
+    source_config: dict[str, object],
+    source_revision_config: dict[str, object],
+    secrets: list[dict[str, str]],
+    agent: dict[str, str] | None = None,
+) -> tuple[CreatedDeployment, int]:
+    _log_deploy_step(
+        step,
+        f"Creating deployment for agent '{agent['agent_id']}' in {agent['environment']}"
+        if agent is not None
+        else f"Creating deployment '{name}'",
     )
+    try:
+        created = client.create_deployment(
+            name=name,
+            source=source,
+            source_config=source_config,
+            source_revision_config=source_revision_config,
+            secrets=secrets,
+            agent=agent,
+        )
+    except HostBackendError as err:
+        if agent is not None and err.status_code == 409:
+            raise HostBackendError(
+                "This agent already has a deployment in this environment.",
+                status_code=409,
+            ) from None
+        raise
     created_id = created.get("id") if isinstance(created, dict) else None
     if not isinstance(created_id, str) or not created_id:
         raise HostBackendError(
             "POST /v2/deployments succeeded but response missing a valid 'id'"
         )
-    click.secho(f"   Deployment ID: {created_id}", fg="green")
-    return created_id, step + 1
+    if agent is not None:
+        _get_emitter().info(f"Deployment name: {created.get('name')}")
+    _get_emitter().info(f"Deployment ID: {created_id}", deployment_id=created_id)
+    return CreatedDeployment(created_id, created), step + 1
 
 
-def _smith_dashboard_base_url(host_url: str | None) -> str:
-    """Derive the LangSmith dashboard base URL from the API host URL."""
-    from urllib.parse import urlparse
-
-    if not host_url:
-        return "https://smith.langchain.com"
-    parsed = urlparse(host_url)
-    hostname = parsed.hostname or ""
-    if hostname in ("localhost", "127.0.0.1"):
-        return host_url.rstrip("/")
-    if hostname.startswith("eu."):
-        return "https://eu.smith.langchain.com"
-    return "https://smith.langchain.com"
-
-
-def _print_deployment_status_url(
-    updated: object, deployment_id: str, host_url: str | None = None
-) -> None:
-    """Print the deployment status URL when tenant metadata is available."""
+def _get_deployment_status_url(
+    updated: object, deployment_id: str, endpoints: ControlPlaneEndpoints
+) -> str | None:
     tenant_id = updated.get("tenant_id") if isinstance(updated, dict) else None
     if not tenant_id:
-        return
-    base = _smith_dashboard_base_url(host_url)
-    status_url = f"{base}/o/{tenant_id}/host/deployments/{deployment_id}"
-    click.secho(f"   View status: {status_url}", fg="cyan")
+        return None
+    return f"{endpoints.dashboard_url}/o/{tenant_id}/host/deployments/{deployment_id}"
+
+
+def _emit_deployment_status_url(
+    updated: object, deployment_id: str, endpoints: ControlPlaneEndpoints
+) -> str | None:
+    url = _get_deployment_status_url(updated, deployment_id, endpoints)
+    if url:
+        _get_emitter().status_url(url)
+    return url
 
 
 def _poll_revision_status(
@@ -486,18 +959,20 @@ def _poll_revision_status(
     on_interrupt: Callable[[str], None] | None = None,
 ) -> tuple[str, str | None]:
     """Poll latest revision status until terminal status or timeout."""
-    revisions_resp = client.list_revisions(deployment_id, limit=1)
-    resources = (
-        revisions_resp.get("resources", []) if isinstance(revisions_resp, dict) else []
-    )
-    if not resources:
+    em = _get_emitter()
+    revisions = client.list_revisions(deployment_id, limit=1)
+    if not revisions:
         return "", None
 
-    revision_id = str(resources[0]["id"])
+    revision_id = str(revisions[0]["id"])
     last_status = ""
     deadline = time.time() + timeout_seconds
     start_time = time.monotonic()
-    with Progress(message=progress_message, elapsed=True) as set_progress:
+    last_heartbeat = start_time
+    json_mode = em.json_mode
+    with Progress(
+        message=progress_message, elapsed=True, json_mode=json_mode
+    ) as set_progress:
         while time.time() < deadline:
             try:
                 rev = client.get_revision(deployment_id, revision_id)
@@ -514,14 +989,15 @@ def _poll_revision_status(
             if status != last_status:
                 set_progress("")
                 if last_status:
-                    elapsed = time.monotonic() - start_time
-                    mins, secs = divmod(int(elapsed), 60)
-                    elapsed_str = f"{mins}m {secs:02d}s" if mins else f"{secs}s"
-                    click.echo(f"   {last_status}... ({elapsed_str})")
+                    em.status_change(last_status, time.monotonic() - start_time)
                 last_status = status
                 if status in _TERMINAL_STATUSES:
                     break
                 set_progress(f"{status}...")
+                last_heartbeat = time.monotonic()
+            elif json_mode and time.monotonic() - last_heartbeat > 10:
+                em.heartbeat(last_status, time.monotonic() - start_time)
+                last_heartbeat = time.monotonic()
 
             if on_poll is not None:
                 on_poll(status, revision_id, set_progress)
@@ -538,8 +1014,10 @@ def _print_deployment_result(
     last_status: str,
     *,
     dashboard_label: str,
+    status_url: str | None = None,
 ) -> None:
     """Print final deployment status and raise on failure."""
+    em = _get_emitter()
     dep_info = client.get_deployment(deployment_id)
     custom_url = None
     if isinstance(dep_info, dict):
@@ -548,24 +1026,28 @@ def _print_deployment_result(
             custom_url = sc.get("custom_url")
 
     if last_status == "DEPLOYED":
-        click.secho("   Deployment successful!", fg="green")
-        if custom_url:
-            click.secho(f"   URL: {custom_url}", fg="green")
+        em.result(
+            "succeeded",
+            deployment_id=deployment_id,
+            url=custom_url,
+            status_url=status_url,
+        )
     elif last_status in ("BUILD_FAILED", "DEPLOY_FAILED", "CREATE_FAILED"):
-        click.secho(f"   Deployment failed: {last_status}", fg="red")
+        em.result(
+            "failed",
+            deployment_id=deployment_id,
+            status_url=status_url,
+        )
         raise click.exceptions.Exit(1)
     else:
-        click.secho(
-            f"   Timed out waiting for deployment (last status: {last_status}).",
-            fg="yellow",
+        em.result(
+            "timed_out",
+            deployment_id=deployment_id,
+            status_url=status_url,
+            fallback_status_message=(
+                f"Check status in the LangSmith {dashboard_label}."
+            ),
         )
-        if custom_url:
-            click.secho(f"   Check status at: {custom_url}", fg="yellow")
-        else:
-            click.secho(
-                f"   Check status in the LangSmith {dashboard_label}.",
-                fg="yellow",
-            )
 
 
 # ---------------------------------------------------------------------------
@@ -594,14 +1076,16 @@ def _docker_config_for_token(registry_host: str, token: str):
 # ---------------------------------------------------------------------------
 
 _UPLOAD_TIMEOUT_SECONDS = 300
+_BYTES_PER_MIB = 1_048_576
 
 
 class _ProgressReader:
-    """File-like wrapper that displays upload progress via click."""
+    """File-like wrapper that reports upload progress via the emitter."""
 
-    def __init__(self, fobj, file_size: int):
+    def __init__(self, fobj, file_size: int, emitter: "_Emitter"):
         self._fobj = fobj
         self._file_size = file_size
+        self._emitter = emitter
         self._uploaded = 0
 
     def read(self, size=-1):
@@ -611,10 +1095,7 @@ class _ProgressReader:
             pct = (
                 int(self._uploaded * 100 / self._file_size) if self._file_size else 100
             )
-            click.echo(
-                f"\r   Uploading ({self._file_size / 1_048_576:.1f} MB)... {pct}%",
-                nl=False,
-            )
+            self._emitter.upload_progress(self._file_size / _BYTES_PER_MIB, pct)
         return data
 
     def __len__(self):
@@ -626,10 +1107,13 @@ def _upload_to_gcs(signed_url: str, file_path: str, file_size: int) -> None:
     import urllib.error
     import urllib.request
 
+    em = _get_emitter()
+
     with open(file_path, "rb") as f:
+        reader = _ProgressReader(f, file_size, em)
         req = urllib.request.Request(
             signed_url,
-            data=_ProgressReader(f, file_size),
+            data=reader,
             method="PUT",
             headers={
                 "Content-Type": "application/gzip",
@@ -644,7 +1128,8 @@ def _upload_to_gcs(signed_url: str, file_path: str, file_size: int) -> None:
             raise click.ClickException(
                 f"Upload failed with status {err.code}: {detail}"
             ) from None
-    click.echo()
+    if not em.json_mode:
+        click.echo()
 
 
 # ---------------------------------------------------------------------------
@@ -652,78 +1137,164 @@ def _upload_to_gcs(signed_url: str, file_path: str, file_size: int) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_pushed_image_digest(
+    runner: CommandRunner,
+    *,
+    remote_image: str,
+    docker_config_dir: str | None,
+    verbose: bool,
+) -> str:
+    """Return ``{registry}/{repo}@sha256:<hex>`` for a freshly-pushed image.
+
+    Reads ``RepoDigests`` via ``docker image inspect`` — the local daemon
+    records the registry's manifest digest there after a successful push.
+    Falls back to ``remote_image`` with a warning if no matching digest is
+    found, rather than failing the deploy.
+    """
+    reference = ImageReference.parse(remote_image)
+    stdout, _ = runner.run(
+        subp_exec(
+            *_docker_argv(docker_config_dir),
+            "image",
+            "inspect",
+            "--format",
+            "{{json .RepoDigests}}",
+            remote_image,
+            collect=True,
+            verbose=verbose,
+        )
+    )
+    try:
+        digests = json_mod.loads(stdout or "[]") or []
+    except json_mod.JSONDecodeError:
+        digests = []
+    for d in digests:
+        if isinstance(d, str) and reference.matches_digest(d):
+            return d
+    _get_emitter().warn(
+        f"Could not resolve image digest for {remote_image}; "
+        "falling back to the tag-based reference. Re-run with --verbose for details."
+    )
+    return remote_image
+
+
+@dataclass(frozen=True, slots=True)
+class BuildSpec:
+    config: pathlib.Path
+    config_json: Config
+    base_image: str | None
+    api_version: str | None
+    pull: bool
+    docker_build_args: Sequence[str]
+    install_command: str | None
+    build_command: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class DockerBuildCommand:
+    command: tuple[str, ...]
+    flags: tuple[str, ...]
+
+    @classmethod
+    def for_host(cls, machine: str, *, verbose: bool) -> "DockerBuildCommand":
+        if machine == _NATIVE_AMD64_MACHINE:
+            return cls(("docker", "build"), ())
+        flags: tuple[str, ...] = ("--platform", _DEPLOYMENT_PLATFORM, "--load")
+        if not verbose:
+            flags += ("--progress=quiet",)
+        return cls(("docker", "buildx", "build"), flags)
+
+
+def _docker_argv(docker_config_dir: str | None) -> tuple[str, ...]:
+    if docker_config_dir is None:
+        return ("docker",)
+    return ("docker", "--config", docker_config_dir)
+
+
+def _build_image(
+    runner: CommandRunner, spec: BuildSpec, tag: str, *, verbose: bool
+) -> None:
+    build = DockerBuildCommand.for_host(platform.machine(), verbose=verbose)
+    with Progress(message="Building...", elapsed=not verbose):
+        build_docker_image(
+            runner,
+            lambda _msg: None,
+            spec.config,
+            spec.config_json,
+            spec.base_image,
+            spec.api_version,
+            spec.pull,
+            tag,
+            spec.docker_build_args,
+            spec.install_command,
+            spec.build_command,
+            docker_command=build.command,
+            extra_flags=build.flags,
+            verbose=verbose,
+        )
+
+
+def _push_image(
+    runner: CommandRunner,
+    image: str,
+    *,
+    docker_config_dir: str | None,
+    verbose: bool,
+) -> None:
+    for attempt in range(1, _PUSH_ATTEMPTS + 1):
+        try:
+            with Progress(message="Pushing...", elapsed=not verbose):
+                runner.run(
+                    subp_exec(
+                        *_docker_argv(docker_config_dir), "push", image, verbose=verbose
+                    )
+                )
+            return
+        except click.exceptions.Exit:
+            if attempt == _PUSH_ATTEMPTS:
+                raise
+            _get_emitter().warn(
+                f"   Push failed, retrying (attempt {attempt + 1} of {_PUSH_ATTEMPTS})..."
+            )
+
+
+def _image_revision_result(resource: object, no_result_message: str) -> BuildResult:
+    return BuildResult(
+        updated=resource if isinstance(resource, dict) else {},
+        progress_message="Deploying...",
+        timeout_seconds=300,
+        poll_interval_seconds=1,
+        no_result_message=no_result_message,
+    )
+
+
 def _run_local_build(
     *,
     client: HostBackendClient,
     deployment_id: str,
     step: int,
-    config: pathlib.Path,
-    config_json: dict,
+    spec: BuildSpec,
     verbose: bool,
-    pull: bool,
-    api_version: str | None,
-    base_image: str | None,
     image_name: str | None,
+    prebuilt_image: str | None,
     name: str | None,
     tag: str,
-    install_command: str | None,
-    build_command: str | None,
-    docker_build_args: Sequence[str],
     secrets: list[dict[str, str]],
+    tracked_packages: list[str] | None,
 ) -> BuildResult:
     """Build locally with Docker, push to registry, update deployment."""
-    # Use buildx to cross-compile for amd64 when running on a non-x86_64 host
-    # (e.g. Apple Silicon). On amd64 hosts, plain docker build is sufficient.
-    needs_buildx = platform.machine() != "x86_64"
-    local_tag = f"langgraph-deploy-tmp:{int(time.time())}"
+    local_tag = f"{_LOCAL_BUILD_TAG_PREFIX}:{int(time.time())}"
+    image_to_push = prebuilt_image or local_tag
 
     with Runner() as runner:
-        # -- Step: Build image --
-        _log_deploy_step(step, "Building image")
-        if needs_buildx:
-            build_flags: list[str] = [
-                "--platform",
-                "linux/amd64",
-                "--load",
-            ]
-            if not verbose:
-                build_flags.append("--progress=quiet")
-            with Progress(message="Building...", elapsed=not verbose):
-                build_docker_image(
-                    runner,
-                    lambda _msg: None,
-                    config,
-                    config_json,
-                    base_image,
-                    api_version,
-                    pull,
-                    local_tag,
-                    docker_build_args,
-                    install_command,
-                    build_command,
-                    docker_command=("docker", "buildx", "build"),
-                    extra_flags=build_flags,
-                    verbose=verbose,
-                )
+        if prebuilt_image:
+            _log_deploy_step(step, f"Validating image {prebuilt_image}")
+            _validate_prebuilt_image(runner, prebuilt_image, verbose=verbose)
         else:
-            with Progress(message="Building...", elapsed=not verbose):
-                build_docker_image(
-                    runner,
-                    lambda _msg: None,
-                    config,
-                    config_json,
-                    base_image,
-                    api_version,
-                    pull,
-                    local_tag,
-                    docker_build_args,
-                    install_command,
-                    build_command,
-                    verbose=verbose,
-                )
+            _log_deploy_step(step, "Building image")
+            _build_image(runner, spec, local_tag, verbose=verbose)
         step += 1
 
-        # -- Step: Get push token and authenticate --
         _log_deploy_step(step, "Requesting push token")
         try:
             push_data = client.request_push_token(deployment_id)
@@ -751,15 +1322,15 @@ def _run_local_build(
         normalized_registry = registry_url.rstrip("/")
         if "://" in normalized_registry:
             normalized_registry = normalized_registry.split("//", 1)[1]
-        repo_seed = image_name or name or config.parent.name
-        repo_name = normalize_image_name(repo_seed)
-        tag_value = normalize_image_tag(tag)
-        remote_image = f"{normalized_registry}/{repo_name}:{tag_value}"
-
+        repo_seed = image_name or name or spec.config.parent.name
+        remote_image = str(
+            ImageReference(
+                f"{normalized_registry}/{normalize_name(repo_seed)}",
+                tag,
+            )
+        )
         registry_host = normalized_registry.split("/")[0]
 
-        # Use a clean Docker config with only the push token so that
-        # system credential helpers (e.g. gcloud) don't interfere.
         with _docker_config_for_token(registry_host, deployment_token) as cfg:
             _log_deploy_step(step, f"Logging into {registry_host}")
             token_input = (
@@ -769,67 +1340,42 @@ def _run_local_build(
             )
             runner.run(
                 subp_exec(
-                    "docker",
-                    "--config",
-                    cfg,
+                    *_docker_argv(cfg),
                     "login",
                     "-u",
                     "oauth2accesstoken",
                     "--password-stdin",
                     registry_host,
                     input=token_input,
-                    verbose=verbose,
+                    verbose=False,
                 )
             )
             step += 1
 
-            # -- Step: Tag and push --
             _log_deploy_step(step, f"Pushing image {remote_image}")
             runner.run(
-                subp_exec(
-                    "docker",
-                    "tag",
-                    local_tag,
-                    remote_image,
-                    verbose=verbose,
-                )
+                subp_exec("docker", "tag", image_to_push, remote_image, verbose=verbose)
             )
-            max_push_retries = 3
-            for attempt in range(max_push_retries):
-                try:
-                    with Progress(message="Pushing...", elapsed=not verbose):
-                        runner.run(
-                            subp_exec(
-                                "docker",
-                                "--config",
-                                cfg,
-                                "push",
-                                remote_image,
-                                verbose=verbose,
-                            )
-                        )
-                    break
-                except click.exceptions.Exit:
-                    if attempt < max_push_retries - 1:
-                        click.secho(
-                            f"   Push failed, retrying (attempt {attempt + 2} of {max_push_retries})...",
-                            fg="yellow",
-                        )
-                    else:
-                        raise
+            _push_image(runner, remote_image, docker_config_dir=cfg, verbose=verbose)
         step += 1
 
-        # -- Step: Update deployment --
-        _log_deploy_step(step, f"Updating deployment {deployment_id}")
-        updated = client.update_deployment(deployment_id, remote_image, secrets=secrets)
+        resolved_image = _resolve_pushed_image_digest(
+            runner,
+            remote_image=remote_image,
+            docker_config_dir=None,
+            verbose=verbose,
+        )
 
-    return BuildResult(
-        updated=updated if isinstance(updated, dict) else {},
-        progress_message="Deploying...",
-        timeout_seconds=300,
-        poll_interval_seconds=1,
-        no_result_message="Deployment updated",
-    )
+        _log_deploy_step(step, f"Updating deployment {deployment_id}")
+        updated = client.update_deployment(
+            deployment_id,
+            resolved_image,
+            revision_source="internal_docker",
+            secrets=secrets,
+            tracked_packages=tracked_packages,
+        )
+
+    return _image_revision_result(updated, "Deployment updated")
 
 
 def _run_remote_build(
@@ -837,19 +1383,22 @@ def _run_remote_build(
     client: HostBackendClient,
     deployment_id: str,
     step: int,
-    config: pathlib.Path,
-    config_json: dict,
+    spec: BuildSpec,
     verbose: bool,
-    install_command: str | None,
-    build_command: str | None,
     secrets: list[dict[str, str]],
+    tracked_packages: list[str] | None,
 ) -> BuildResult:
     """Upload source tarball and trigger a remote build."""
     from langgraph_cli.archive import create_archive
 
+    em = _get_emitter()
     _log_deploy_step(step, "Creating source archive")
-    with create_archive(config, config_json) as (archive_path, file_size, config_rel):
-        click.secho(f"   Archive created ({file_size / 1_048_576:.1f} MB)", fg="green")
+    with create_archive(spec.config, spec.config_json) as (
+        archive_path,
+        file_size,
+        config_rel,
+    ):
+        em.info(f"Archive created ({file_size / _BYTES_PER_MIB:.1f} MB)")
         step += 1
 
         _log_deploy_step(step, "Requesting upload URL")
@@ -870,8 +1419,9 @@ def _run_remote_build(
         source_tarball_path=object_path,
         config_path=config_rel,
         secrets=secrets,
-        install_command=install_command,
-        build_command=build_command,
+        install_command=spec.install_command,
+        build_command=spec.build_command,
+        tracked_packages=tracked_packages,
     )
 
     log_offset: str | None = None
@@ -897,12 +1447,12 @@ def _run_remote_build(
                 if has_output:
                     set_progress("")
                     if not logs_header_printed:
-                        click.echo(f"   {status} (build logs):")
+                        em.info(f"{status} (build logs):")
                         logs_header_printed = True
                 for entry in entries:
                     msg = entry.get("message", "")
                     if msg:
-                        click.echo(f"   | {msg}")
+                        em.log(msg)
                 log_offset = logs_resp.get("next_offset") or log_offset
                 if has_output:
                     set_progress(f"{status}...")
@@ -910,11 +1460,10 @@ def _run_remote_build(
             pass
 
     def _handle_interrupt(revision_id: str) -> None:
-        click.secho(
-            f"\n   Interrupted. Deployment ID: {deployment_id}, Revision ID: {revision_id}",
-            fg="yellow",
+        em.warn(
+            f"\nInterrupted. Deployment ID: {deployment_id}, Revision ID: {revision_id}"
         )
-        click.secho("   The build will continue remotely.", fg="yellow")
+        em.warn("The build will continue remotely.")
 
     return BuildResult(
         updated=updated if isinstance(updated, dict) else {},
@@ -926,6 +1475,394 @@ def _run_remote_build(
         on_interrupt=_handle_interrupt,
         show_build_logs_on_failure=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# Deployment sources
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class DeployContext:
+    client: HostBackendClient
+    endpoints: ControlPlaneEndpoints
+    spec: BuildSpec
+    verbose: bool
+    selector: DeploymentSelector
+    deployment_type: str
+    secrets: list[dict[str, str]]
+    tracked_packages: list[str] | None
+
+
+@dataclass(frozen=True, slots=True)
+class DeployOutcome:
+    deployment_id: str
+    build_result: BuildResult
+
+
+class DeploymentSource(Protocol):
+    def run(self, ctx: DeployContext) -> DeployOutcome: ...
+
+
+def _resolve_or_create(
+    ctx: DeployContext, *, source: SourceName, not_found_message: str
+) -> tuple[str, int]:
+    if isinstance(ctx.selector, ById):
+        existing, step = _fetch_deployment(ctx.client, 1, ctx.selector)
+        return existing.id, step
+    found, step = _find_deployment(
+        ctx.client, 1, ctx.selector, not_found_message=not_found_message
+    )
+    if found is not None:
+        return found.id, step
+    try:
+        created, step = _create_deployment(
+            ctx.client,
+            step,
+            name=ctx.selector.name if isinstance(ctx.selector, ByName) else None,
+            agent=asdict(ctx.selector) if isinstance(ctx.selector, ByAgent) else None,
+            source=source,
+            source_config={"deployment_type": ctx.deployment_type},
+            source_revision_config={},
+            secrets=ctx.secrets,
+        )
+    except HostBackendError as err:
+        if _needs_a_listener(err):
+            raise ListenerRequiredError(
+                "The image has to come from a registry you manage, so re-run with "
+                "--push-to <registry>/<repository>."
+            ) from None
+        raise
+    return created.id, step
+
+
+class ListenerRequiredError(click.UsageError):
+    def __init__(self, remedy: str) -> None:
+        super().__init__(
+            "This workspace deploys through a listener in your own cluster. "
+            f"{remedy}\nLearn about listeners: {_LISTENERS_DOCS_URL}"
+        )
+
+
+def _needs_a_listener(err: HostBackendError) -> bool:
+    return err.status_code == 400 and _LISTENER_REQUIRED_MARKER in (
+        err.detail or err.message
+    )
+
+
+def _requested_listener(client: HostBackendClient, listener_id: str) -> Listener:
+    try:
+        resource = _call_host_backend_with_optional_tenant(
+            client, lambda c: c.get_listener(listener_id)
+        )
+    except HostBackendError as err:
+        if err.status_code not in _LISTENER_NOT_FOUND_STATUSES:
+            raise
+        available = _available_listeners(client)
+        if not available:
+            raise click.UsageError(_NO_LISTENERS) from None
+        raise click.UsageError(
+            f"Listener {listener_id} was not found in this workspace. "
+            f"Available listeners:\n{_describe_listeners(available)}"
+        ) from None
+    return Listener.from_resource(resource)
+
+
+def _available_listeners(client: HostBackendClient) -> tuple[Listener, ...]:
+    resources = _call_host_backend_with_optional_tenant(
+        client, lambda c: c.list_listeners()
+    )
+    return tuple(Listener.from_resource(resource) for resource in resources)
+
+
+def _ensure_customer_registry_source(existing: ExistingDeployment) -> None:
+    if existing.source != _CUSTOMER_REGISTRY_SOURCE:
+        raise click.UsageError(
+            f"Deployment {existing.id} was not created from an external image "
+            "and cannot be updated with --push-to or --image-uri. Run without "
+            "either flag to keep its current build mode, or use a different "
+            "--name to create a new deployment."
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedRegistrySource:
+    prebuilt_image: str | None
+    image_name: str | None
+    tag: str
+
+    def run(self, ctx: DeployContext) -> DeployOutcome:
+        deployment_id, step = _resolve_or_create(
+            ctx,
+            source="internal_docker",
+            not_found_message="No deployment found. Will create after build.",
+        )
+        build_result = _run_local_build(
+            client=ctx.client,
+            deployment_id=deployment_id,
+            step=step,
+            spec=ctx.spec,
+            verbose=ctx.verbose,
+            image_name=self.image_name,
+            prebuilt_image=self.prebuilt_image,
+            name=ctx.selector.name if isinstance(ctx.selector, ByName) else None,
+            tag=self.tag,
+            secrets=ctx.secrets,
+            tracked_packages=ctx.tracked_packages,
+        )
+        return DeployOutcome(deployment_id, build_result)
+
+
+@dataclass(frozen=True, slots=True)
+class RemoteBuildSource:
+    def run(self, ctx: DeployContext) -> DeployOutcome:
+        deployment_id, step = _resolve_or_create(
+            ctx,
+            source="internal_source",
+            not_found_message="No deployment found. Will create.",
+        )
+        build_result = _run_remote_build(
+            client=ctx.client,
+            deployment_id=deployment_id,
+            step=step,
+            spec=ctx.spec,
+            verbose=ctx.verbose,
+            secrets=ctx.secrets,
+            tracked_packages=ctx.tracked_packages,
+        )
+        return DeployOutcome(deployment_id, build_result)
+
+
+@dataclass(frozen=True, slots=True)
+class BuildAndPush:
+    reference: ImageReference
+    prebuilt_image: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class PublishedImage:
+    image_uri: str
+
+
+ImageSource = BuildAndPush | PublishedImage
+
+
+@dataclass(frozen=True, slots=True)
+class CustomerRegistrySource:
+    image: ImageSource
+    requested_placement: RequestedPlacement
+
+    def run(self, ctx: DeployContext) -> DeployOutcome:
+        if isinstance(ctx.selector, ById):
+            existing, step = _fetch_deployment(ctx.client, 1, ctx.selector)
+            return self._update(ctx, existing, step)
+        found, step = _find_deployment(
+            ctx.client,
+            1,
+            ctx.selector,
+            not_found_message="No deployment found. Will create after push.",
+        )
+        if found is not None:
+            return self._update(ctx, found, step)
+        return self._create(
+            ctx, ctx.selector.name if isinstance(ctx.selector, ByName) else None, step
+        )
+
+    def _update(
+        self, ctx: DeployContext, existing: ExistingDeployment, step: int
+    ) -> DeployOutcome:
+        _ensure_customer_registry_source(existing)
+        self.requested_placement.ensure_not_requested(existing.id)
+        image_uri, step = self._publish(ctx, step)
+        _log_deploy_step(step, f"Updating deployment {existing.id}")
+        updated = ctx.client.update_deployment(
+            existing.id,
+            image_uri,
+            revision_source=None,
+            secrets=ctx.secrets,
+            tracked_packages=ctx.tracked_packages,
+        )
+        return DeployOutcome(
+            existing.id, _image_revision_result(updated, "Deployment updated")
+        )
+
+    def _resolve_placement(self, ctx: DeployContext) -> Placement:
+        requested = self.requested_placement
+        if requested.listener_id is not None:
+            return requested.on(_requested_listener(ctx.client, requested.listener_id))
+        if not (ctx.endpoints.is_cloud or requested.requested):
+            return Unplaced()
+        return requested.among(_available_listeners(ctx.client))
+
+    def _announce(self, placement: Placement) -> None:
+        if isinstance(placement, OnListener):
+            _get_emitter().info(
+                placement.summary,
+                listener_id=placement.listener_id,
+                k8s_namespace=placement.k8s_namespace,
+            )
+
+    def _create(self, ctx: DeployContext, name: str | None, step: int) -> DeployOutcome:
+        placement = self._resolve_placement(ctx)
+        self._announce(placement)
+        image_uri, step = self._publish(ctx, step)
+        try:
+            created, _ = _create_deployment(
+                ctx.client,
+                step,
+                name=name,
+                agent=asdict(ctx.selector)
+                if isinstance(ctx.selector, ByAgent)
+                else None,
+                source=_CUSTOMER_REGISTRY_SOURCE,
+                source_config={
+                    "resource_spec": _OPERATOR_DEFAULT_RESOURCE_SPEC,
+                    **placement.source_config(),
+                },
+                source_revision_config={"image_uri": image_uri},
+                secrets=ctx.secrets,
+            )
+        except HostBackendError as err:
+            if _needs_a_listener(err):
+                raise ListenerRequiredError(
+                    "Re-run with --listener-id and --k8s-namespace.\n"
+                    f"{err.detail or err.message}"
+                ) from None
+            raise
+        return DeployOutcome(
+            created.id, _image_revision_result(created.resource, "Deployment created")
+        )
+
+    def _publish(self, ctx: DeployContext, step: int) -> tuple[str, int]:
+        if isinstance(self.image, PublishedImage):
+            return self.image.image_uri, step
+        image = str(self.image.reference)
+        with Runner() as runner:
+            if self.image.prebuilt_image:
+                _log_deploy_step(step, f"Validating image {self.image.prebuilt_image}")
+                _validate_prebuilt_image(
+                    runner, self.image.prebuilt_image, verbose=ctx.verbose
+                )
+                runner.run(
+                    subp_exec(
+                        "docker",
+                        "tag",
+                        self.image.prebuilt_image,
+                        image,
+                        verbose=ctx.verbose,
+                    )
+                )
+            else:
+                _log_deploy_step(step, f"Building image {image}")
+                _build_image(runner, ctx.spec, image, verbose=ctx.verbose)
+            step += 1
+            _log_deploy_step(step, f"Pushing image {image}")
+            _push_image(runner, image, docker_config_dir=None, verbose=ctx.verbose)
+            step += 1
+            digest = _resolve_pushed_image_digest(
+                runner, remote_image=image, docker_config_dir=None, verbose=ctx.verbose
+            )
+        return digest, step
+
+
+def _require_local_docker() -> None:
+    supported, error = can_build_locally()
+    if not supported:
+        raise click.UsageError(error or "Unable to build locally.")
+
+
+def _push_reference(push_to: str, tag: str | None) -> ImageReference:
+    try:
+        reference = ImageReference.parse(push_to)
+    except ValueError:
+        raise click.UsageError(
+            "--push-to takes a repository with an optional tag, not a digest."
+        ) from None
+    if reference.tag is not None and tag is not None:
+        raise click.UsageError(
+            "--push-to already includes a tag; do not combine it with --tag."
+        )
+    if reference.tag is not None:
+        return reference
+    return reference.with_tag(normalize_image_tag(tag or _DEFAULT_IMAGE_TAG))
+
+
+def _validate_image_uri(image_uri: str) -> str:
+    value = image_uri.strip()
+    if not value:
+        raise click.UsageError("--image-uri must not be empty.")
+    if DIGEST_SEPARATOR not in value:
+        raise click.UsageError(
+            "--image-uri must pin a digest, e.g. "
+            f"repository{DIGEST_SEPARATOR}<sha256 hex>. Kubernetes can cache "
+            "images by tag, so redeploying a mutable tag may silently keep "
+            "running the previous image."
+        )
+    return value
+
+
+def _select_source(
+    *,
+    push_to: str | None,
+    image: str | None,
+    image_uri: str | None,
+    image_name: str | None,
+    tag: str | None,
+    remote_build_flag: bool | None,
+    placement: RequestedPlacement,
+    selector: DeploymentSelector,
+) -> DeploymentSource:
+    if push_to is None and image_uri is None and placement.requested:
+        raise click.UsageError(
+            "--listener-id and --k8s-namespace only apply when creating a "
+            "deployment with --push-to or --image-uri."
+        )
+    if placement.requested and isinstance(selector, ById):
+        raise click.UsageError(
+            "Listener and namespace are fixed when a deployment is created, so "
+            "they cannot be set for an existing --deployment-id. Drop them, or "
+            "create a new deployment with --name."
+        )
+    if image_uri is not None:
+        if push_to is not None:
+            raise click.UsageError("--image-uri cannot be combined with --push-to.")
+        if image is not None:
+            raise click.UsageError("--image-uri cannot be combined with --image.")
+        if tag is not None:
+            raise click.UsageError("--image-uri cannot be combined with --tag.")
+        if remote_build_flag is not None:
+            raise click.UsageError("--image-uri cannot be combined with --remote.")
+        return CustomerRegistrySource(
+            image=PublishedImage(_validate_image_uri(image_uri)),
+            requested_placement=placement,
+        )
+    if push_to is not None:
+        if remote_build_flag is True:
+            raise click.UsageError("--push-to cannot be combined with --remote.")
+        reference = _push_reference(push_to, tag)
+        if image is None:
+            _require_local_docker()
+        return CustomerRegistrySource(
+            image=BuildAndPush(reference=reference, prebuilt_image=image),
+            requested_placement=placement,
+        )
+    if image and remote_build_flag is True:
+        raise click.UsageError("--image cannot be combined with --remote builds.")
+    use_remote_build, local_build_error = _resolve_build_mode(
+        remote_build_flag, force_local=image is not None
+    )
+    if not use_remote_build:
+        return ManagedRegistrySource(
+            prebuilt_image=image,
+            image_name=image_name,
+            tag=normalize_image_tag(tag or _DEFAULT_IMAGE_TAG),
+        )
+    if remote_build_flag is None and local_build_error:
+        em = _get_emitter()
+        em.note(f"{local_build_error}\nUsing remote build instead.")
+        if not em.json_mode:
+            click.echo()
+    return RemoteBuildSource()
 
 
 # ---------------------------------------------------------------------------
@@ -952,18 +1889,32 @@ def _create_host_backend_client(
                 resolved_api_key = val
                 break
     if not resolved_api_key:
+        if _no_input:
+            raise click.ClickException(
+                "No LangSmith API key found. Set LANGSMITH_API_KEY in the "
+                "environment or .env file."
+            )
         click.secho(
             "No LangSmith API key found. Create one at Settings > API Keys in LangSmith.",
             fg="yellow",
         )
         resolved_api_key = click.prompt("Enter LangSmith API key", hide_input=True)
-    return HostBackendClient(host_url, resolved_api_key)
+    tenant_id = env_vars.get("LANGSMITH_TENANT_ID") or os.environ.get(
+        "LANGSMITH_TENANT_ID"
+    )
+    langsmith_endpoint = env_vars.get("LANGSMITH_ENDPOINT") or os.environ.get(
+        "LANGSMITH_ENDPOINT"
+    )
+    endpoints = ControlPlaneEndpoints.resolve(host_url, langsmith_endpoint)
+    return HostBackendClient(
+        endpoints.control_plane_url, resolved_api_key, tenant_id=tenant_id
+    )
 
 
 def _call_host_backend_with_optional_tenant(
     client: HostBackendClient,
-    operation: Callable[[HostBackendClient], object],
-) -> object:
+    operation: Callable[[HostBackendClient], _T],
+) -> _T:
     """Run *operation*, prompting for a workspace ID on org-scoped 403s.
 
     On success the original *client* is returned as-is.  If the user is
@@ -982,6 +1933,12 @@ def _call_host_backend_with_optional_tenant(
                 and err.status_code == 403
                 and "requires workspace specification" in err.message
             ):
+                if _no_input:
+                    raise click.ClickException(
+                        "API key is org-scoped and requires a workspace ID. "
+                        "Set LANGSMITH_TENANT_ID in your .env file or "
+                        "use a workspace-scoped API key."
+                    ) from None
                 click.secho(
                     "Your API key is org-scoped and requires a workspace ID.",
                     fg="yellow",
@@ -990,11 +1947,11 @@ def _call_host_backend_with_optional_tenant(
                     "Find your workspace ID in LangSmith under Settings > Workspaces.",
                     fg="yellow",
                 )
-                client._client.headers["X-Tenant-ID"] = click.prompt("Workspace ID")
+                client.set_tenant(click.prompt("Workspace ID"))
                 prompted_for_tenant = True
                 continue
             if err.status_code == 403 and "not enabled" in err.message.lower():
-                smith_base = _smith_dashboard_base_url(client._base_url)
+                smith_base = client.endpoints.dashboard_url
                 raise HostBackendError(
                     "LangSmith Deployment is not enabled for this organization. "
                     f"Enable it at {smith_base}/host/deployments"
@@ -1030,8 +1987,24 @@ OPT_HOST_DEPLOYMENT_NAME = click.option(
 OPT_HOST_URL = click.option(
     "--host-url",
     envvar="LANGGRAPH_HOST_URL",
-    default="https://api.host.langchain.com",
+    default=None,
     hidden=True,
+)
+
+OPT_AGENT_ID = click.option(
+    "--agent-id",
+    envvar="LANGSMITH_AGENT_ID",
+    show_envvar=True,
+    help="Logical agent ID (requires agent mode enabled for the tenant).",
+)
+
+OPT_AGENT_ENVIRONMENT = click.option(
+    "--agent-environment",
+    "environment",
+    envvar="LANGSMITH_AGENT_ENVIRONMENT",
+    show_envvar=True,
+    type=click.Choice(["development", "staging", "production"]),
+    help="Agent environment (requires agent mode enabled for the tenant).",
 )
 
 OPT_VERBOSE = click.option(
@@ -1132,6 +2105,8 @@ def _deploy_base_options(
         decorators = [
             OPT_HOST_API_KEY,
             OPT_HOST_DEPLOYMENT_NAME,
+            OPT_AGENT_ID,
+            OPT_AGENT_ENVIRONMENT,
             click.option(
                 "--deployment-id",
                 help=(
@@ -1144,7 +2119,10 @@ def _deploy_base_options(
                 type=click.Choice(["dev", "prod"]),
                 default="dev",
                 show_default=True,
-                help="Deployment type (used when creating a new deployment).",
+                help=(
+                    "Deployment type (used when creating a new deployment). "
+                    "Ignored with --push-to."
+                ),
             ),
             click.option(
                 "--no-wait",
@@ -1158,9 +2136,51 @@ def _deploy_base_options(
             click.option(
                 "--tag",
                 "-t",
-                default="latest",
-                show_default=True,
-                help="Tag to use for the pushed deployment image.",
+                default=None,
+                help="Tag to use for the pushed deployment image. [default: latest]",
+            ),
+            click.option(
+                "--image",
+                help=(
+                    "Use an existing local image reference (e.g. repo:tag) and "
+                    "skip building. The image must target linux/amd64."
+                ),
+            ),
+            click.option(
+                "--push-to",
+                help=(
+                    "Push the image to this repository in a registry you manage, "
+                    "then deploy it from there. For self-hosted and hybrid "
+                    "LangSmith. Uses your existing Docker credentials. Builds the "
+                    "project, or retags the local image given with --image. "
+                    "Give the tag here or with --tag (default: latest)."
+                ),
+            ),
+            click.option(
+                "--image-uri",
+                help=(
+                    "Deploy an image that's already in a registry you manage, "
+                    "without building, retagging, or pushing anything. For "
+                    "self-hosted and hybrid LangSmith. Give the full reference, "
+                    "e.g. 123456789.dkr.ecr.us-east-1.amazonaws.com/agents/"
+                    "my-agent:v1.2.3 or ...@sha256:<digest>. Cannot be combined "
+                    "with --push-to, --image, --tag, or --remote."
+                ),
+            ),
+            click.option(
+                "--listener-id",
+                help=(
+                    "Listener that will run the deployment, for workspaces that "
+                    "deploy through a listener in your own cluster. Only used when "
+                    "creating a deployment with --push-to or --image-uri."
+                ),
+            ),
+            click.option(
+                "--k8s-namespace",
+                help=(
+                    "Kubernetes namespace the listener deploys into. Only used when "
+                    "creating a deployment with --push-to or --image-uri."
+                ),
             ),
             click.option(
                 "--config",
@@ -1188,6 +2208,19 @@ def _deploy_base_options(
                     "Force remote or local build. By default, builds remotely "
                     "if Docker is not available locally."
                 ),
+            ),
+            click.option(
+                "--json",
+                "json_output",
+                is_flag=True,
+                default=False,
+                help="Emit structured JSON-lines to stdout instead of human-readable text.",
+            ),
+            click.option(
+                "--no-input",
+                is_flag=True,
+                default=False,
+                help="Never prompt for input; fail with an error if a required value is missing.",
             ),
         ]
         if include_docker_args:
@@ -1231,6 +2264,12 @@ def deploy(ctx: click.Context, **_: object):
     # otherwise, we return None here and click will proceed to actually run the subcommand (list or delete)
     if ctx.invoked_subcommand is not None:
         return
+    if (
+        ctx.params.get("agent_id") is not None
+        or ctx.params.get("environment") is not None
+    ) and ctx.get_parameter_source("name") == click.core.ParameterSource.ENVIRONMENT:
+        # Ignore the inherited name default so it does not conflict with agent mode.
+        ctx.params["name"] = None
     docker_build_args = tuple(ctx.args)
     ctx.args = []  # Prevent Click from re-processing passthrough args later.
     return ctx.forward(_deploy_cmd, docker_build_args=docker_build_args)
@@ -1248,137 +2287,154 @@ def _deploy_cmd(
     deployment_id: str | None,
     deployment_type: str,
     name: str | None,
+    agent_id: str | None,
+    environment: str | None,
     image_name: str | None,
-    tag: str,
+    image: str | None,
+    push_to: str | None,
+    image_uri: str | None,
+    listener_id: str | None,
+    k8s_namespace: str | None,
+    tag: str | None,
     base_image: str | None,
     install_command: str | None,
     build_command: str | None,
     no_wait: bool,
     remote_build_flag: bool | None,
     docker_build_args: Sequence[str],
+    json_output: bool,
+    no_input: bool,
 ):
-    click.secho(
-        "Note: 'langgraph deploy' is in beta. Expect frequent updates and improvements.",
-        fg="yellow",
-    )
-    click.echo()
+    global _emitter, _no_input
+    _emitter = _Emitter(json_mode=json_output)
+    _no_input = no_input
+    em = _emitter
 
-    # -- 1. Preflight --
+    em.note(
+        "Note: 'langgraph deploy' is in beta. Expect frequent updates and improvements."
+    )
+    if not json_output:
+        click.echo()
+
     validate_deploy_commands(install_command, build_command)
+    agent = None
+    if agent_id is not None or environment is not None:
+        em.note("Note: --agent-id and --agent-environment flags are in private beta")
+        if not agent_id or not agent_id.strip() or not environment:
+            raise click.UsageError(
+                "--agent-id and --agent-environment are required together."
+            )
+        if name is not None or deployment_id is not None:
+            raise click.UsageError(
+                "--agent-id and --agent-environment cannot be combined with --name or --deployment-id."
+            )
+        agent = {"agent_id": agent_id, "environment": environment}
+    if not config.exists():
+        message = (
+            "We couldn't find a langgraph.json file. Run `langgraph deploy` from "
+            "the root of a LangSmith Deployment project. To get started, visit "
+            "https://docs.langchain.com/langsmith/deployment-quickstart."
+        )
+        if json_output:
+            em.error(message)
+            raise click.exceptions.Exit(1)
+        raise click.ClickException(message)
     config_json = langgraph_cli.config.validate_config_file(config)
-    warn_non_wolfi_distro(config_json)
+    warn_non_wolfi_distro(config_json, emit=em.note)
 
     env_vars = _parse_env_from_config(config_json, config)
 
-    if not deployment_id and not name:
+    if not agent and not deployment_id and not name:
         name = env_vars.get(_DEPLOYMENT_NAME_ENV)
-    if not deployment_id and not name:
-        default_name = normalize_image_name(pathlib.Path.cwd().name)
-        name = click.prompt("Deployment name", default=default_name)
-        env_path = _resolve_env_path(config_json, config)
-        if env_path is not None:
-            set_key(str(env_path), _DEPLOYMENT_NAME_ENV, name)
-            click.echo(f"Saved deployment name to {env_path}")
+    if not agent and not deployment_id and not name:
+        default_name = normalize_name(pathlib.Path.cwd().name)
+        if no_input:
+            name = default_name
+        else:
+            name = click.prompt("Deployment name", default=default_name)
+    if name and not deployment_id:
+        name = normalize_name(name)
+        if not no_input:
+            env_path = _resolve_env_path(config_json, config)
+            if env_path is not None:
+                set_key(str(env_path), _DEPLOYMENT_NAME_ENV, name)
+                em.info(f"Saved deployment name to {env_path}")
 
     secrets = _secrets_from_env(_env_without_deployment_name(env_vars))
 
-    use_remote_build, local_build_error = _resolve_build_mode(remote_build_flag)
-    if use_remote_build and remote_build_flag is None and local_build_error:
-        click.secho(f"{local_build_error}\nUsing remote build instead.", fg="yellow")
-        click.echo()
-
-    # -- 2. Resolve / create deployment --
-    client = _create_host_backend_client(host_url, api_key, env_vars=env_vars)
-    step = 1
-
-    deployment_id, needs_creation, step = _resolve_deployment(
-        client,
-        step,
-        deployment_id,
-        name,
-        not_found_message=(
-            "   No deployment found. Will create."
-            if use_remote_build
-            else "   No deployment found. Will create after build."
-        ),
+    selector = ByAgent(**agent) if agent else deployment_selector(deployment_id, name)
+    source = _select_source(
+        push_to=push_to,
+        image=image,
+        image_uri=image_uri,
+        image_name=image_name,
+        tag=tag,
+        remote_build_flag=remote_build_flag,
+        placement=RequestedPlacement(listener_id, k8s_namespace),
+        selector=selector,
     )
 
-    if needs_creation:
-        deployment_id, step = _create_deployment(
-            client,
-            step,
-            name=name,
+    client = _create_host_backend_client(host_url, api_key, env_vars=env_vars)
+    try:
+        tracked_packages = find_tracked_packages(config, config_json) or None
+    except Exception as exc:
+        em.warn(f"Skipped tracked-package scan: {exc}")
+        tracked_packages = None
+
+    outcome = source.run(
+        DeployContext(
+            client=client,
+            endpoints=client.endpoints,
+            spec=BuildSpec(
+                config=config,
+                config_json=config_json,
+                base_image=base_image,
+                api_version=api_version,
+                pull=pull,
+                docker_build_args=docker_build_args,
+                install_command=install_command,
+                build_command=build_command,
+            ),
+            verbose=verbose,
+            selector=selector,
             deployment_type=deployment_type,
-            source="internal_source" if use_remote_build else "internal_docker",
             secrets=secrets,
+            tracked_packages=tracked_packages,
         )
-
-    if not deployment_id:
-        raise click.ClickException("Failed to determine deployment ID")
-
-    # -- 3. Build (divergent path) --
-    if use_remote_build:
-        build_result = _run_remote_build(
-            client=client,
-            deployment_id=deployment_id,
-            step=step,
-            config=config,
-            config_json=config_json,
-            verbose=verbose,
-            install_command=install_command,
-            build_command=build_command,
-            secrets=secrets,
-        )
-    else:
-        build_result = _run_local_build(
-            client=client,
-            deployment_id=deployment_id,
-            step=step,
-            config=config,
-            config_json=config_json,
-            verbose=verbose,
-            pull=pull,
-            api_version=api_version,
-            base_image=base_image,
-            image_name=image_name,
-            name=name,
-            tag=tag,
-            install_command=install_command,
-            build_command=build_command,
-            docker_build_args=docker_build_args,
-            secrets=secrets,
-        )
-
-    # -- 4. Shared wait + result --
-    _print_deployment_status_url(build_result.updated, deployment_id, host_url)
+    )
+    dep_status_url = _emit_deployment_status_url(
+        outcome.build_result.updated,
+        outcome.deployment_id,
+        client.endpoints,
+    )
 
     if no_wait:
-        click.secho(f"   {build_result.no_result_message}", fg="green")
+        em.info(outcome.build_result.no_result_message)
         return
 
     last_status, revision_id = _poll_revision_status(
         client,
-        deployment_id,
-        progress_message=build_result.progress_message,
-        timeout_seconds=build_result.timeout_seconds,
-        poll_interval_seconds=build_result.poll_interval_seconds,
-        on_poll=build_result.on_poll,
-        on_interrupt=build_result.on_interrupt,
+        outcome.deployment_id,
+        progress_message=outcome.build_result.progress_message,
+        timeout_seconds=outcome.build_result.timeout_seconds,
+        poll_interval_seconds=outcome.build_result.poll_interval_seconds,
+        on_poll=outcome.build_result.on_poll,
+        on_interrupt=outcome.build_result.on_interrupt,
     )
     if not last_status:
-        click.secho(f"   {build_result.no_result_message}", fg="green")
+        em.info(outcome.build_result.no_result_message)
         return
 
     if (
-        build_result.show_build_logs_on_failure
+        outcome.build_result.show_build_logs_on_failure
         and last_status == "BUILD_FAILED"
         and not verbose
         and revision_id is not None
     ):
-        click.secho("   Last build log lines:", fg="red")
+        em.error("Last build log lines:")
         try:
             logs_resp = client.get_build_logs(
-                deployment_id,
+                outcome.deployment_id,
                 revision_id,
                 {"order": "desc", "limit": 30},
             )
@@ -1387,19 +2443,17 @@ def _deploy_cmd(
                 for entry in entries:
                     msg = entry.get("message", "")
                     if msg:
-                        click.echo(f"   | {msg}")
+                        em.log(msg)
         except Exception:
-            click.secho("   (failed to fetch build logs)", fg="red")
-        click.secho(
-            "   Re-run with --verbose to see full build output.",
-            fg="yellow",
-        )
+            em.error("(failed to fetch build logs)")
+        em.warn("Re-run with --verbose to see full build output.")
 
     _print_deployment_result(
         client,
-        deployment_id,
+        outcome.deployment_id,
         last_status,
         dashboard_label="Deployment dashboard",
+        status_url=dep_status_url,
     )
 
 
@@ -1410,24 +2464,77 @@ def _deploy_cmd(
 
 @OPT_HOST_API_KEY
 @OPT_HOST_URL
+@OPT_AGENT_ID
+@OPT_AGENT_ENVIRONMENT
 @click.option(
     "--name-contains",
     default="",
     help="Only show deployments whose names contain this value.",
 )
 @deploy.command("list", help="[Beta] List LangSmith Deployments.")
-def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -> None:
+def deploy_list(
+    api_key: str | None,
+    host_url: str | None,
+    name_contains: str,
+    agent_id: str | None,
+    environment: str | None,
+) -> None:
+    if agent_id is not None or environment is not None:
+        click.secho(
+            "Note: --agent-id and --agent-environment flags are in private beta",
+            fg="yellow",
+        )
+    if agent_id is not None and not agent_id.strip():
+        raise click.UsageError("--agent-id must not be empty.")
+    filters = {}
+    if agent_id is not None:
+        filters["agent_id"] = agent_id
+    if environment is not None:
+        filters["agent_environment"] = environment
     client = _create_host_backend_client(host_url, api_key)
-    response = _call_host_backend_with_optional_tenant(
+    deployments = _call_host_backend_with_optional_tenant(
         client,
-        lambda c: c.list_deployments(name_contains=name_contains),
+        lambda c: c.list_deployments(name_contains=name_contains, **filters),
     )
-    resources = response.get("resources", []) if isinstance(response, dict) else []
-    deployments = [item for item in resources if isinstance(item, dict)]
     if not deployments:
         click.echo("No deployments found.")
         return
     click.echo(format_deployments_table(deployments))
+
+
+# ---------------------------------------------------------------------------
+# deploy listeners
+# ---------------------------------------------------------------------------
+
+
+@deploy.group(
+    "listeners",
+    cls=NestedHelpGroup,
+    help="[Beta] Inspect listeners available to this workspace.",
+)
+def deploy_listeners() -> None:
+    pass
+
+
+@OPT_HOST_API_KEY
+@OPT_HOST_URL
+@deploy_listeners.command(
+    "list",
+    help=(
+        "[Beta] List listeners available to this workspace.\n\n"
+        "Pass a listener's id to `langgraph deploy --push-to ... "
+        "--listener-id <id>` to deploy through it."
+    ),
+)
+def deploy_listeners_list(api_key: str | None, host_url: str | None) -> None:
+    client = _create_host_backend_client(host_url, api_key)
+    listeners = _call_host_backend_with_optional_tenant(
+        client, lambda c: c.list_listeners()
+    )
+    if not listeners:
+        click.echo("No listeners found for this workspace.")
+        return
+    click.echo(format_listeners_table(listeners))
 
 
 # ---------------------------------------------------------------------------
@@ -1463,12 +2570,10 @@ def deploy_revisions_list(
     api_key: str | None, host_url: str | None, limit: int, deployment_id: str
 ) -> None:
     client = _create_host_backend_client(host_url, api_key)
-    response = _call_host_backend_with_optional_tenant(
+    revisions = _call_host_backend_with_optional_tenant(
         client,
         lambda c: c.list_revisions(deployment_id, limit=limit),
     )
-    resources = response.get("resources", []) if isinstance(response, dict) else []
-    revisions = [item for item in resources if isinstance(item, dict)]
     if not revisions:
         click.echo(f"No revisions found for deployment {deployment_id}.")
         return
@@ -1599,35 +2704,31 @@ def deploy_logs(
     start_time: str | None,
     end_time: str | None,
     follow: bool,
-    host_url: str,
+    host_url: str | None,
 ):
     env_vars = _parse_env_from_config({}, pathlib.Path.cwd() / DEFAULT_CONFIG)
     client = _create_host_backend_client(host_url, api_key, env_vars=env_vars)
     if not deployment_id and not name:
         name = env_vars.get(_DEPLOYMENT_NAME_ENV)
-    validate_deployment_selector(deployment_id, name)
-    if deployment_id:
-        dep_id = deployment_id
+    selector = deployment_selector(deployment_id, name)
+    if isinstance(selector, ById):
+        dep_id = selector.deployment_id
     else:
+        name_to_find = selector.name
         found = _call_host_backend_with_optional_tenant(
-            client, lambda c: find_deployment_id_by_name(c, name)
+            client, lambda c: find_deployment_by_name(c, name_to_find)
         )
-        if not found:
-            raise click.ClickException(f"Deployment '{name}' not found.")
-        dep_id = str(found)
+        if found is None:
+            raise click.ClickException(f"Deployment '{name_to_find}' not found.")
+        dep_id = found.id
 
     if log_type == "build" and not revision_id:
-        revisions_resp = client.list_revisions(dep_id, limit=1)
-        resources = (
-            revisions_resp.get("resources", [])
-            if isinstance(revisions_resp, dict)
-            else []
-        )
-        if not resources:
+        revisions = client.list_revisions(dep_id, limit=1)
+        if not revisions:
             raise click.ClickException(
                 "No revisions found for this deployment. Cannot fetch build logs."
             )
-        revision_id = str(resources[0]["id"])
+        revision_id = str(revisions[0]["id"])
         click.secho(f"Using latest revision: {revision_id}", fg="cyan")
 
     payload: dict = {"limit": limit, "order": "desc"}

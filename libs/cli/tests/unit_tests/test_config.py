@@ -4,6 +4,7 @@ import os
 import pathlib
 import tempfile
 import textwrap
+from unittest.mock import patch
 
 import click
 import pytest
@@ -252,6 +253,243 @@ def test_validate_config():
                 "http": {"app": "../../examples/my_app.py"},
             }
         )
+
+
+@pytest.mark.parametrize(
+    "dependency",
+    [
+        "git+https://user:secret-token@github.com/org/private.git@main",
+        "private-package @ git+http://token@github.com/org/private.git",
+        "git+HTTPS://user%40example.com:secret%2Ftoken@github.com/org/private.git",
+        "git+https://${GIT_TOKEN}@github.com/org/private.git",
+    ],
+)
+def test_validate_config_rejects_git_http_url_userinfo(dependency: str):
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": [dependency],
+                "graphs": {"agent": "./agent.py:graph"},
+            }
+        )
+
+    message = str(exc_info.value)
+    assert "must not contain credentials or other URL userinfo" in message
+    assert "secret-token" not in message
+    assert "secret%2Ftoken" not in message
+
+
+def test_validate_config_file_reports_source_for_git_http_url_userinfo(
+    tmp_path: pathlib.Path,
+):
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "python_version": "3.11",
+                "dependencies": ["git+https://secret-token@github.com/org/private.git"],
+                "graphs": {"agent": "./agent.py:graph"},
+            }
+        )
+    )
+
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config_file(config_path)
+
+    message = str(exc_info.value)
+    assert "secret-token" not in message
+    assert f"Found in: {config_path.resolve()}" in message
+
+
+@pytest.mark.parametrize(
+    "manifest", ["package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml"]
+)
+def test_config_to_docker_rejects_git_http_url_userinfo_in_node_files(
+    tmp_path: pathlib.Path, manifest: str
+):
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text("{}\n")
+    (tmp_path / "agent.js").write_text("export const graph = {};\n")
+    (tmp_path / "package.json").write_text('{"name":"agent"}\n')
+    (tmp_path / manifest).write_text(
+        '"priv": "git+https://user:secret-token@github.com/org/private.git"\n'
+    )
+    config = validate_config(
+        {
+            "node_version": "20",
+            "graphs": {"agent": "./agent.js:graph"},
+        }
+    )
+
+    with pytest.raises(click.UsageError) as exc_info:
+        config_to_docker(
+            config_path,
+            config,
+            base_image="langchain/langgraphjs-api",
+        )
+
+    message = str(exc_info.value)
+    assert "must not contain credentials or other URL userinfo" in message
+    assert "secret-token" not in message
+    assert f"Found in: {(tmp_path / manifest).resolve()}" in message
+
+
+def test_config_to_docker_allows_node_git_urls_without_http_userinfo(
+    tmp_path: pathlib.Path,
+):
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text("{}\n")
+    (tmp_path / "agent.js").write_text("export const graph = {};\n")
+    (tmp_path / "package.json").write_text(
+        '{"dependencies":{"public":"git+https://github.com/org/public.git"}}\n'
+    )
+    config = validate_config(
+        {
+            "node_version": "20",
+            "graphs": {"agent": "./agent.js:graph"},
+        }
+    )
+
+    docker, _ = config_to_docker(
+        config_path,
+        config,
+        base_image="langchain/langgraphjs-api",
+    )
+
+    assert f"ADD . /deps/{tmp_path.name}" in docker
+
+
+def test_config_to_docker_rejects_git_http_url_userinfo_in_node_workspace(
+    tmp_path: pathlib.Path,
+):
+    config_root = tmp_path / "apps" / "agent"
+    config_root.mkdir(parents=True)
+    config_path = config_root / "langgraph.json"
+    config_path.write_text("{}\n")
+    (config_root / "agent.js").write_text("export const graph = {};\n")
+    (config_root / "package.json").write_text(
+        '{"dependencies":{"priv":"git+https://secret-token@github.com/org/private.git"}}\n'
+    )
+    (tmp_path / "package.json").write_text('{"name":"workspace"}\n')
+    config = validate_config(
+        {
+            "node_version": "20",
+            "graphs": {"agent": "./agent.js:graph"},
+        }
+    )
+
+    with pytest.raises(click.UsageError) as exc_info:
+        config_to_docker(
+            config_path,
+            config,
+            base_image="langchain/langgraphjs-api",
+            build_context=str(tmp_path),
+        )
+
+    message = str(exc_info.value)
+    assert "secret-token" not in message
+    assert f"Found in: {(config_root / 'package.json').resolve()}" in message
+
+
+@pytest.mark.parametrize(
+    "dependency",
+    [
+        "git+https://github.com/org/public.git@main",
+        "private-package @ git+https://github.com/org/private.git@main",
+        "git+ssh://git@github.com/org/private.git@main",
+    ],
+)
+def test_validate_config_allows_git_urls_without_http_userinfo(dependency: str):
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": [dependency],
+            "graphs": {"agent": "./agent.py:graph"},
+        }
+    )
+
+    assert config["dependencies"] == [dependency]
+
+
+def test_config_to_docker_rejects_git_http_url_userinfo_in_requirements(
+    tmp_path: pathlib.Path,
+):
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text("{}\n")
+    (tmp_path / "agent.py").write_text("graph = object()\n")
+    (tmp_path / "requirements.txt").write_text(
+        "private @ git+https://secret-token@github.com/org/private.git\n"
+    )
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+        }
+    )
+
+    with pytest.raises(click.UsageError) as exc_info:
+        config_to_docker(
+            config_path,
+            config,
+            base_image="langchain/langgraph-api:0.2.47",
+        )
+
+    message = str(exc_info.value)
+    assert "must not contain credentials or other URL userinfo" in message
+    assert "secret-token" not in message
+    assert f"Found in: {(tmp_path / 'requirements.txt').resolve()}" in message
+
+
+@pytest.mark.parametrize("manifest", ["pyproject.toml", "uv.lock"])
+def test_config_to_docker_rejects_git_http_url_userinfo_in_uv_files(
+    tmp_path: pathlib.Path, manifest: str
+):
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text("{}\n")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "agent.py").write_text("graph = object()\n")
+    pyproject = textwrap.dedent(
+        """
+        [project]
+        name = "agent"
+        version = "0.1.0"
+        dependencies = ["private"]
+
+        [tool.uv.sources]
+        private = { git = "https://github.com/org/private.git" }
+        """
+    ).strip()
+    uv_lock = "# uv lock file\n"
+    if manifest == "pyproject.toml":
+        pyproject = pyproject.replace(
+            "https://github.com", "https://secret-token@github.com"
+        )
+    else:
+        uv_lock += (
+            'source = { git = "https://secret-token@github.com/org/private.git" }\n'
+        )
+    (tmp_path / "pyproject.toml").write_text(pyproject + "\n")
+    (tmp_path / "uv.lock").write_text(uv_lock)
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "graphs": {"agent": "./src/agent.py:graph"},
+            "source": {"kind": "uv"},
+        }
+    )
+
+    with pytest.raises(click.UsageError) as exc_info:
+        config_to_docker(
+            config_path,
+            config,
+            base_image="langchain/langgraph-api:0.2.47",
+        )
+
+    message = str(exc_info.value)
+    assert "must not contain credentials or other URL userinfo" in message
+    assert "secret-token" not in message
 
 
 def test_validate_config_image_distro():
@@ -1402,6 +1640,19 @@ def test_config_to_docker_uv_lock():
             "COPY --from=uv-workspace-root uv.lock /tmp/uv_export/project/uv.lock"
             in docker
         )
+        workspace_pyprojects = [
+            "apps/agent/pyproject.toml",
+            "libs/extra/pyproject.toml",
+            "libs/shared/pyproject.toml",
+        ]
+        export_instruction = "RUN uv export --package agent"
+        for pyproject_path in workspace_pyprojects:
+            copy_instruction = (
+                "COPY --from=uv-workspace-root "
+                f"{pyproject_path} /tmp/uv_export/project/{pyproject_path}"
+            )
+            assert copy_instruction in docker
+            assert docker.index(copy_instruction) < docker.index(export_instruction)
         assert additional_contexts == {"uv-workspace-root": str(project_root.resolve())}
 
         assert (
@@ -1853,6 +2104,364 @@ def test_config_to_docker_uv_lock_supports_single_uv_project_root():
         )
         assert '"agent": "/deps/workspace/src/agent.py:graph"' in docker
         assert additional_contexts == {}
+
+
+def test_config_to_docker_uv_lock_skips_dockerignore_entries():
+    """Entries filtered by .dockerignore / built-in excludes must not appear
+    as ADD lines. Docker fails to compute the cache key for paths that the
+    build context has stripped."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root = tmpdir_path / "single"
+        project_root.mkdir()
+        (project_root / "uv.lock").write_text("# uv lock file\n")
+        (project_root / "pyproject.toml").write_text(
+            textwrap.dedent(
+                """
+                [project]
+                name = "single-app"
+                version = "0.1.0"
+                dependencies = ["httpx>=0.28"]
+
+                [build-system]
+                requires = ["setuptools>=61"]
+                build-backend = "setuptools.build_meta"
+                """
+            ).strip()
+            + "\n"
+        )
+        (project_root / "langgraph.json").write_text("{}\n")
+        (project_root / "src").mkdir()
+        (project_root / "src" / "agent.py").write_text("graph = object()\n")
+        (project_root / "README.md").write_text("# hi\n")
+
+        # Built-in exclusions — must never appear as ADD lines.
+        (project_root / ".git").mkdir()
+        (project_root / ".git" / "HEAD").write_text("ref: refs/heads/main\n")
+        (project_root / ".venv").mkdir()
+        (project_root / ".venv" / "pyvenv.cfg").write_text("home = /usr\n")
+        (project_root / "__pycache__").mkdir()
+        (project_root / "__pycache__" / "x.cpython-311.pyc").write_bytes(b"\x00")
+
+        # .dockerignore excludes .gitignore and a custom path.
+        (project_root / ".dockerignore").write_text(".gitignore\nsecrets.env\n")
+        (project_root / ".gitignore").write_text("*.pyc\n")
+        (project_root / "secrets.env").write_text("TOKEN=abc\n")
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {"agent": "./src/agent.py:graph"},
+                "source": {"kind": "uv"},
+            }
+        )
+        docker, _ = config_to_docker(
+            project_root / "langgraph.json",
+            config,
+            base_image="langchain/langgraph-api:0.2.47",
+        )
+
+        for excluded in (
+            "ADD .git ",
+            "ADD .gitignore ",
+            "ADD .venv ",
+            "ADD __pycache__ ",
+            "ADD secrets.env ",
+        ):
+            assert excluded not in docker, (
+                f"{excluded!r} should be filtered out of Dockerfile:\n{docker}"
+            )
+
+        # The .dockerignore itself is still part of the context and should be
+        # ADDed (Docker needs it at build time, and archive.py includes it).
+        assert "ADD .dockerignore /deps/workspace/.dockerignore" in docker
+        assert "ADD src /deps/workspace/src" in docker
+        assert "ADD README.md /deps/workspace/README.md" in docker
+
+
+def test_config_to_docker_uv_lock_does_not_apply_gitignore():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root = tmpdir_path / "single"
+        project_root.mkdir()
+        (project_root / "uv.lock").write_text("# uv lock file\n")
+        (project_root / "pyproject.toml").write_text(
+            textwrap.dedent(
+                """
+                [project]
+                name = "single-app"
+                version = "0.1.0"
+                dependencies = ["httpx>=0.28"]
+
+                [build-system]
+                requires = ["setuptools>=61"]
+                build-backend = "setuptools.build_meta"
+                """
+            ).strip()
+            + "\n"
+        )
+        (project_root / "langgraph.json").write_text("{}\n")
+        (project_root / "src").mkdir()
+        (project_root / "src" / "agent.py").write_text("graph = object()\n")
+        (project_root / "README.md").write_text("# hi\n")
+        (project_root / ".gitignore").write_text("README.md\n")
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {"agent": "./src/agent.py:graph"},
+                "source": {"kind": "uv"},
+            }
+        )
+        docker, _ = config_to_docker(
+            project_root / "langgraph.json",
+            config,
+            base_image="langchain/langgraph-api:0.2.47",
+        )
+
+        assert "ADD README.md /deps/workspace/README.md" in docker
+
+
+def test_config_to_docker_uv_lock_skips_dockerignore_entries_in_workspace():
+    """Multi-member workspace: ignore patterns must filter root-level entries
+    AND entries encountered while recursing into directories that contain
+    workspace members (the `descendant_member_roots` branch)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root, config_path = _write_uv_lock_workspace(
+            tmpdir_path,
+            agent_dependencies=["workspace-root", "shared", "httpx>=0.28"],
+            root_sources="[tool.uv.sources]\nshared = { workspace = true }\nworkspace-root = { workspace = true }",
+            agent_sources="[tool.uv.sources]\nshared = { workspace = true }\nworkspace-root = { workspace = true }",
+        )
+        root_src = project_root / "src" / "workspace_root"
+        root_src.mkdir(parents=True)
+        (root_src / "__init__.py").write_text("__all__ = []\n")
+        (project_root / "README.md").write_text("workspace root package\n")
+
+        # A non-member sibling of the `apps/agent` member that should be
+        # filtered out via .dockerignore. This exercises the recursion into
+        # `apps/` where `apps/agent` is kept (it's a member) but its sibling is
+        # filtered.
+        (project_root / "apps" / "scratch.txt").write_text("scratch\n")
+        # A root-level path that .dockerignore excludes.
+        (project_root / "secrets.env").write_text("TOKEN=abc\n")
+        (project_root / ".dockerignore").write_text("secrets.env\napps/scratch.txt\n")
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {
+                    "agent": "../../apps/agent/src/agent/graph.py:graph",
+                },
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
+            }
+        )
+        docker, _ = config_to_docker(
+            config_path, config, base_image="langchain/langgraph-api:0.2.47"
+        )
+
+        assert "COPY --from=uv-workspace-root src /deps/workspace/src" in docker
+        assert (
+            "COPY --from=uv-workspace-root README.md /deps/workspace/README.md"
+            in docker
+        )
+        assert (
+            "COPY --from=uv-workspace-root .dockerignore /deps/workspace/.dockerignore"
+            in docker
+        )
+        assert "secrets.env" not in docker
+        assert "apps/scratch.txt" not in docker
+        # Workspace members themselves are still copied via their own per-member
+        # COPY line — the sibling filter must not disturb this.
+        assert (
+            "COPY --from=uv-workspace-root apps/agent /deps/workspace/apps/agent"
+            in docker
+        )
+
+
+def test_config_to_docker_uv_lock_preserves_negated_dockerignore_descendants():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root = tmpdir_path / "single"
+        project_root.mkdir()
+        (project_root / "uv.lock").write_text("# uv lock file\n")
+        (project_root / "pyproject.toml").write_text(
+            textwrap.dedent(
+                """
+                [project]
+                name = "single-app"
+                version = "0.1.0"
+                dependencies = ["httpx>=0.28"]
+
+                [build-system]
+                requires = ["setuptools>=61"]
+                build-backend = "setuptools.build_meta"
+                """
+            ).strip()
+            + "\n"
+        )
+        (project_root / "langgraph.json").write_text("{}\n")
+        (project_root / "src").mkdir()
+        (project_root / "src" / "agent.py").write_text("graph = object()\n")
+        (project_root / "assets").mkdir()
+        (project_root / "assets" / "keep.txt").write_text("keep\n")
+        (project_root / "assets" / "drop.txt").write_text("drop\n")
+        (project_root / ".dockerignore").write_text("assets/\n!assets/keep.txt\n")
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {"agent": "./src/agent.py:graph"},
+                "source": {"kind": "uv"},
+            }
+        )
+        docker, _ = config_to_docker(
+            project_root / "langgraph.json",
+            config,
+            base_image="langchain/langgraph-api:0.2.47",
+        )
+
+        assert "ADD assets /deps/workspace/assets" not in docker
+        assert "ADD assets/keep.txt /deps/workspace/assets/keep.txt" in docker
+        assert "assets/drop.txt" not in docker
+
+
+def test_config_to_docker_uv_lock_prunes_unrelated_ignored_subtrees():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root = tmpdir_path / "single"
+        project_root.mkdir()
+        (project_root / "uv.lock").write_text("# uv lock file\n")
+        (project_root / "pyproject.toml").write_text(
+            textwrap.dedent(
+                """
+                [project]
+                name = "single-app"
+                version = "0.1.0"
+                dependencies = ["httpx>=0.28"]
+
+                [build-system]
+                requires = ["setuptools>=61"]
+                build-backend = "setuptools.build_meta"
+                """
+            ).strip()
+            + "\n"
+        )
+        (project_root / "langgraph.json").write_text("{}\n")
+        (project_root / "src").mkdir()
+        (project_root / "src" / "agent.py").write_text("graph = object()\n")
+        (project_root / "assets").mkdir()
+        (project_root / "assets" / "keep.txt").write_text("keep\n")
+        (project_root / "vendor").mkdir()
+        (project_root / "vendor" / "huge.txt").write_text("large\n")
+        (project_root / ".dockerignore").write_text(
+            "vendor/\nassets/\n!assets/keep.txt\n"
+        )
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {"agent": "./src/agent.py:graph"},
+                "source": {"kind": "uv"},
+            }
+        )
+
+        original_iterdir = pathlib.Path.iterdir
+
+        def guarded_iterdir(self):
+            if self == project_root / "vendor":
+                raise AssertionError("should not walk unrelated ignored subtree")
+            return original_iterdir(self)
+
+        with patch.object(
+            pathlib.Path, "iterdir", autospec=True, side_effect=guarded_iterdir
+        ):
+            docker, _ = config_to_docker(
+                project_root / "langgraph.json",
+                config,
+                base_image="langchain/langgraph-api:0.2.47",
+            )
+
+        assert "ADD assets/keep.txt /deps/workspace/assets/keep.txt" in docker
+        assert "vendor/huge.txt" not in docker
+
+
+def test_config_to_docker_uv_lock_never_reincludes_always_excluded_subtrees():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root = tmpdir_path / "single"
+        project_root.mkdir()
+        (project_root / "uv.lock").write_text("# uv lock file\n")
+        (project_root / "pyproject.toml").write_text(
+            textwrap.dedent(
+                """
+                [project]
+                name = "single-app"
+                version = "0.1.0"
+                dependencies = ["httpx>=0.28"]
+
+                [build-system]
+                requires = ["setuptools>=61"]
+                build-backend = "setuptools.build_meta"
+                """
+            ).strip()
+            + "\n"
+        )
+        (project_root / "langgraph.json").write_text("{}\n")
+        (project_root / "src").mkdir()
+        (project_root / "src" / "agent.py").write_text("graph = object()\n")
+        (project_root / ".venv" / "pkg").mkdir(parents=True)
+        (project_root / ".venv" / "pkg" / "keep.txt").write_text("keep\n")
+        (project_root / "node_modules" / "pkg").mkdir(parents=True)
+        (project_root / "node_modules" / "pkg" / "package.json").write_text("{}\n")
+        (project_root / ".dockerignore").write_text(
+            "!.venv/pkg/keep.txt\n!node_modules/pkg/package.json\n"
+        )
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {"agent": "./src/agent.py:graph"},
+                "source": {"kind": "uv"},
+            }
+        )
+        docker, _ = config_to_docker(
+            project_root / "langgraph.json",
+            config,
+            base_image="langchain/langgraph-api:0.2.47",
+        )
+
+        assert ".venv/pkg/keep.txt" not in docker
+        assert "node_modules/pkg/package.json" not in docker
+        assert "ADD src /deps/workspace/src" in docker
+
+
+def test_config_to_docker_uv_lock_rejects_ignored_workspace_member():
+    """A workspace member matched by .dockerignore cannot be copied into the
+    build context — uv.lock requires it, so fail loudly with a clear message."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root, config_path = _write_uv_lock_workspace(
+            tmpdir_path,
+            agent_sources="[tool.uv.sources]\nshared = { workspace = true }",
+        )
+        (project_root / ".dockerignore").write_text("libs/shared\n")
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {"agent": "../../apps/agent/src/agent/graph.py:graph"},
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
+                "auth": {"path": "../../libs/shared/src/shared/auth.py:create_auth"},
+            }
+        )
+        with pytest.raises(
+            click.UsageError, match=r"Workspace member 'shared' at libs/shared"
+        ):
+            config_to_docker(
+                config_path, config, base_image="langchain/langgraph-api:0.2.47"
+            )
 
 
 def test_config_to_docker_uv_lock_rejects_invalid_source_package_type():
@@ -2583,6 +3192,180 @@ def test_docker_tag_with_api_version(in_config: bool):
         api_version=version if not in_config else None,
     )
     assert tag == f"langchain/langgraph-server:{version}-py3.11"
+
+
+@pytest.mark.parametrize("in_config", [False, True])
+@pytest.mark.parametrize("version", ["0.9.0rc1", "0.9.0.dev1"])
+def test_docker_tag_with_prerelease_api_version(version: str, in_config: bool):
+    """Test docker_tag with prerelease and dev api_version values."""
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "api_version": version if in_config else None,
+        }
+    )
+
+    tag = docker_tag(config, api_version=version if not in_config else None)
+    assert tag == f"langchain/langgraph-api:{version}-py3.11"
+
+
+def test_docker_tag_with_compatible_api_version_promotes_to_latest_patch():
+    config = validate_config(
+        {
+            "python_version": "3.12",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "image_distro": "wolfi",
+            "api_version": "~=0.11.0.dev5",
+        }
+    )
+
+    with patch(
+        "langgraph_cli.config._get_pypi_versions",
+        return_value=[
+            "0.11.0.dev5",
+            "0.11.0.dev6",
+            "0.11.0rc1",
+            "0.11.0",
+            "0.11.1rc1",
+            "0.11.1",
+            "0.12.0rc1",
+        ],
+    ) as get_versions:
+        tag = docker_tag(config)
+
+    get_versions.assert_called_once_with("langgraph-api")
+    assert tag == "langchain/langgraph-api:0.11.1-py3.12-wolfi"
+
+
+def test_docker_tag_with_compatible_api_version_freezes_dev_until_rc():
+    config = validate_config(
+        {
+            "python_version": "3.12",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "api_version": "~=0.11.0.dev5",
+        }
+    )
+
+    with patch(
+        "langgraph_cli.config._get_pypi_versions",
+        return_value=[
+            "0.11.0.dev5",
+            "0.11.0.dev6",
+            "0.11.0.dev7",
+        ],
+    ):
+        tag = docker_tag(config)
+
+    assert tag == "langchain/langgraph-api:0.11.0.dev5-py3.12"
+
+
+def test_docker_tag_with_stable_floating_api_version_promotes_to_future_stable():
+    config = validate_config(
+        {
+            "python_version": "3.12",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "image_distro": "wolfi",
+            "api_version": ">~=0.11.0.dev5",
+        }
+    )
+
+    with patch(
+        "langgraph_cli.config._get_pypi_versions",
+        return_value=[
+            "0.11.0.dev5",
+            "0.11.0.dev6",
+            "0.11.0rc1",
+            "0.11.0",
+            "0.11.1",
+            "0.12.0rc1",
+            "0.12.0",
+            "0.13.0.dev1",
+            "0.13.0",
+        ],
+    ) as get_versions:
+        tag = docker_tag(config)
+
+    get_versions.assert_called_once_with("langgraph-api")
+    assert tag == "langchain/langgraph-api:0.13.0-py3.12-wolfi"
+
+
+def test_docker_tag_with_stable_floating_api_version_ignores_future_prereleases():
+    config = validate_config(
+        {
+            "python_version": "3.12",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "api_version": ">~=0.11.0.dev5",
+        }
+    )
+
+    with patch(
+        "langgraph_cli.config._get_pypi_versions",
+        return_value=[
+            "0.11.0.dev5",
+            "0.11.0",
+            "0.12.0rc1",
+            "0.12.0.dev1",
+        ],
+    ):
+        tag = docker_tag(config)
+
+    assert tag == "langchain/langgraph-api:0.11.0-py3.12"
+
+
+def test_validate_config_rejects_unrecognized_api_version_range_operator():
+    with pytest.raises(click.UsageError, match="Invalid version format"):
+        validate_config(
+            {
+                "python_version": "3.12",
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+                "api_version": "~>=0.11.0.dev5",
+            }
+        )
+
+
+def test_docker_tag_with_compatible_api_version_supports_node_images():
+    config = validate_config(
+        {
+            "node_version": "20",
+            "graphs": {"agent": "./agent.js:graph"},
+            "image_distro": "wolfi",
+            "api_version": "~=1.2.4",
+        }
+    )
+
+    with patch(
+        "langgraph_cli.config._get_pypi_versions",
+        return_value=[
+            "1.2.4",
+            "1.2.5",
+            "1.3.0",
+        ],
+    ) as get_versions:
+        tag = docker_tag(config)
+
+    get_versions.assert_called_once_with("langgraph-api")
+    assert tag == "langchain/langgraphjs-api:1.2.5-node20-wolfi"
+
+
+def test_docker_tag_with_compatible_api_version_rejects_tagged_base_image():
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "api_version": "~=0.11.0.dev5",
+        }
+    )
+
+    with pytest.raises(click.UsageError, match="tagged base_image"):
+        docker_tag(config, base_image="langchain/langgraph-api:0.11.0")
 
 
 def test_config_to_docker_with_api_version():

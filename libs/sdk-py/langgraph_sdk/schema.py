@@ -295,6 +295,8 @@ class Interrupt(TypedDict):
     """The value associated with the interrupt."""
     id: str
     """The ID of the interrupt. Can be used to resume the interrupt."""
+    response_schema: NotRequired[dict[str, Any]]
+    """JSON Schema for the value expected when resuming this interrupt, if the graph provided one."""
 
 
 class Thread(TypedDict):
@@ -963,7 +965,7 @@ class _BaseModelLike(Protocol):
     ) -> dict[str, Any]: ...
 
 
-_JSONLike: TypeAlias = None | str | int | float | bool
+_JSONLike: TypeAlias = str | int | float | bool | None
 _JSONMap: TypeAlias = Mapping[
     str, Union[_JSONLike, list[_JSONLike], "_JSONMap", list["_JSONMap"]]
 ]

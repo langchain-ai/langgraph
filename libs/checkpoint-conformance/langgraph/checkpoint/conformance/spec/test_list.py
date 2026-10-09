@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import traceback
 from collections.abc import Callable
+from typing import cast
 from uuid import uuid4
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -335,8 +336,9 @@ async def test_list_metadata_custom_keys(
         results.append(tup)
 
     assert len(results) == 1
-    assert results[0].metadata["score"] == 42
-    assert results[0].metadata["run_id"] == "run-abc"
+    metadata = cast(dict[str, object], results[0].metadata)
+    assert metadata["score"] == 42
+    assert metadata["run_id"] == "run-abc"
 
 
 ALL_LIST_TESTS = [

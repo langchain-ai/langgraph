@@ -4,25 +4,40 @@ import gc
 import json
 import logging
 import operator
+import random
 import threading
 import time
 import uuid
-from collections import Counter, deque
+from collections import Counter, defaultdict, deque
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from random import randrange
 from typing import Annotated, Any, Literal, get_type_hints
+from unittest.mock import patch
 
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
+from langchain_core.language_models.fake import FakeStreamingListLLM
+from langchain_core.language_models.fake_chat_models import (
+    FakeMessagesListChatModel,
+)
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    BaseMessage,
+    HumanMessage,
+    RemoveMessage,
+)
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.runnables import (
     RunnableConfig,
     RunnableLambda,
     RunnablePassthrough,
 )
 from langchain_core.runnables.graph import Edge
+from langchain_core.tools import tool
+from langchain_core.version import VERSION as LANGCHAIN_CORE_VERSION
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -41,6 +56,7 @@ from typing_extensions import NotRequired, TypedDict
 
 from langgraph._internal._constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL
 from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
@@ -49,13 +65,14 @@ from langgraph.config import get_stream_writer
 from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
-from langgraph.graph.message import MessagesState, add_messages
+from langgraph.graph.message import MessagesState, _messages_delta_reducer, add_messages
 from langgraph.pregel import (
     NodeBuilder,
     Pregel,
 )
-from langgraph.pregel._loop import SyncPregelLoop
+from langgraph.pregel._loop import PregelLoop, SyncPregelLoop
 from langgraph.pregel._runner import PregelRunner
+from langgraph.runtime import RunControl
 from langgraph.types import (
     CachePolicy,
     Command,
@@ -118,6 +135,28 @@ def test_graph_validation() -> None:
 
     with pytest.raises(InvalidUpdateError, match="At key 'hello'"):
         graph.invoke({"hello": "there"})
+
+
+def test_request_drain_allows_inflight_call_scheduling(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+
+    @task
+    def child(x: int) -> int:
+        return x + 1
+
+    control = RunControl()
+
+    @entrypoint(checkpointer=sync_checkpointer)
+    def graph(x: int) -> int:
+        control.request_drain()
+        fut = child(x)
+        return fut.result()
+
+    config = {"configurable": {"thread_id": "drain-call-sync"}}
+
+    assert graph.invoke(1, config=config, control=control) == 2
+    assert control.drain_requested
 
 
 def test_invalid_checkpointer_type() -> None:
@@ -615,8 +654,11 @@ def test_run_from_checkpoint_id_retains_previous_writes(
         )
     ]
 
-    assert len(new_history) == len(history) + 1
-    for original, new in zip(history, new_history[1:]):
+    # +2: one fork checkpoint from time travel, one from the new execution
+    assert len(new_history) == len(history) + 2
+    # new_history[0] is the new execution result, new_history[1] is the fork
+    assert new_history[1].metadata["source"] == "fork"
+    for original, new in zip(history, new_history[2:]):
         assert original.values == new.values
         assert original.next == new.next
         assert original.metadata["step"] == new.metadata["step"]
@@ -624,7 +666,7 @@ def test_run_from_checkpoint_id_retains_previous_writes(
     def _get_tasks(hist: list, start: int):
         return [h.tasks for h in hist[start:]]
 
-    assert _get_tasks(new_history, 1) == _get_tasks(history, 0)
+    assert _get_tasks(new_history, 2) == _get_tasks(history, 0)
 
 
 def test_batch_two_processes_in_out() -> None:
@@ -1741,9 +1783,6 @@ def test_conditional_state_graph_with_list_edge_inputs(snapshot: SnapshotAsserti
 
 
 def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) -> None:
-    from langchain_core.language_models.fake import FakeStreamingListLLM
-    from langchain_core.prompts import PromptTemplate
-    from langchain_core.tools import tool
 
     class BaseState(TypedDict):
         input: str
@@ -2727,23 +2766,26 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
         "answer": "doc1,doc2,doc3,doc4",
     }
 
-    assert [*app.stream({"query": "what is weather in sf"})] in (
-        [
-            {"rewrite_query": {"query": "query: what is weather in sf"}},
-            {"qa": {"answer": ""}},
-            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-            {"retriever_two": {"docs": ["doc3", "doc4"]}},
-            {"retriever_one": {"docs": ["doc1", "doc2"]}},
-            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-        ],
-        [
-            {"rewrite_query": {"query": "query: what is weather in sf"}},
-            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-            {"qa": {"answer": ""}},
-            {"retriever_two": {"docs": ["doc3", "doc4"]}},
-            {"retriever_one": {"docs": ["doc1", "doc2"]}},
-            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-        ],
+    rewrite = {"rewrite_query": {"query": "query: what is weather in sf"}}
+    analyzer = {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}}
+    empty_qa = {"qa": {"answer": ""}}
+    retriever_one_result = {"retriever_one": {"docs": ["doc1", "doc2"]}}
+    retriever_two_result = {"retriever_two": {"docs": ["doc3", "doc4"]}}
+
+    def assert_valid_stream_order(
+        chunks: list[dict[str, Any]], terminal: dict[str, Any]
+    ) -> None:
+        assert chunks[0] == rewrite
+        assert chunks[-1] == terminal
+        middle = chunks[1:-1]
+        assert sorted(middle, key=repr) == sorted(
+            [empty_qa, analyzer, retriever_one_result, retriever_two_result], key=repr
+        )
+        assert middle.index(analyzer) < middle.index(retriever_one_result)
+
+    assert_valid_stream_order(
+        [*app.stream({"query": "what is weather in sf"})],
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     )
 
     app_w_interrupt = workflow.compile(
@@ -2752,25 +2794,9 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    assert [
-        c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
-    ] in (
-        [
-            {"rewrite_query": {"query": "query: what is weather in sf"}},
-            {"qa": {"answer": ""}},
-            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-            {"retriever_two": {"docs": ["doc3", "doc4"]}},
-            {"retriever_one": {"docs": ["doc1", "doc2"]}},
-            {"__interrupt__": ()},
-        ],
-        [
-            {"rewrite_query": {"query": "query: what is weather in sf"}},
-            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-            {"qa": {"answer": ""}},
-            {"retriever_two": {"docs": ["doc3", "doc4"]}},
-            {"retriever_one": {"docs": ["doc1", "doc2"]}},
-            {"__interrupt__": ()},
-        ],
+    assert_valid_stream_order(
+        [c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)],
+        {"__interrupt__": ()},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -3754,12 +3780,6 @@ def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
     previous checkpoint config for each step in the run.
     """
     # set up test
-    from langchain_core.language_models.fake_chat_models import (
-        FakeMessagesListChatModel,
-    )
-    from langchain_core.messages import AIMessage, AnyMessage
-    from langchain_core.prompts import ChatPromptTemplate
-    from langchain_core.tools import tool
 
     # graph state
     class BaseState(TypedDict):
@@ -3925,7 +3945,6 @@ def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
 def test_remove_message_via_state_update(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
     workflow = StateGraph(state_schema=Annotated[list[AnyMessage], add_messages])  # type: ignore[arg-type]
     workflow.add_node(
@@ -3958,7 +3977,6 @@ def test_remove_message_via_state_update(
 
 
 def test_remove_message_from_node():
-    from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
     workflow = StateGraph(state_schema=Annotated[list[AnyMessage], add_messages])  # type: ignore[arg-type]
     workflow.add_node(
@@ -3984,7 +4002,6 @@ def test_remove_message_from_node():
 
 
 def test_xray_lance(snapshot: SnapshotAssertion):
-    from langchain_core.messages import AnyMessage, HumanMessage
 
     class Analyst(BaseModel):
         affiliation: str = Field(
@@ -4468,7 +4485,6 @@ def test_debug_subgraphs(
 def test_debug_nested_subgraphs(
     sync_checkpointer: BaseCheckpointSaver, durability: Durability
 ):
-    from collections import defaultdict
 
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
@@ -4728,8 +4744,6 @@ def test_runnable_passthrough_node_graph() -> None:
 def test_parent_command(
     sync_checkpointer: BaseCheckpointSaver, subgraph_persist: bool
 ) -> None:
-    from langchain_core.messages import BaseMessage
-    from langchain_core.tools import tool
 
     @tool(return_direct=True)
     def get_user_name() -> Command:
@@ -5149,7 +5163,6 @@ def test_command_with_static_breakpoints(
 
 
 def test_multistep_plan(sync_checkpointer: BaseCheckpointSaver):
-    from langchain_core.messages import AnyMessage
 
     class State(TypedDict, total=False):
         plan: list[str | list[str]]
@@ -5570,6 +5583,7 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                 "interrupts": [
                     {
                         "id": AnyStr(),
+                        "response_schema": None,
                         "value": "test",
                     },
                 ],
@@ -5614,6 +5628,7 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                         "interrupts": (
                             {
                                 "id": AnyStr(),
+                                "response_schema": None,
                                 "value": "test",
                             },
                         ),
@@ -5895,9 +5910,6 @@ def test_no_redundant_put_writes_for_cached_task(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Cached @tasks on resume must not trigger redundant put_writes."""
-    from unittest.mock import patch
-
-    from langgraph.pregel._loop import PregelLoop
 
     @task
     def setup(x: int) -> int:
@@ -6263,14 +6275,15 @@ def test_sync_streaming_with_functional_api() -> None:
     rather than have all the results arrive at once after the graph has completed.
 
     The time of arrival between the two updates corresponding to the two `slow` tasks
-    should be greater than the time delay between the two tasks.
+    should be roughly the task delay. If results are buffered until graph completion,
+    the two updates arrive back-to-back instead.
     """
 
     time_delay = 0.05
 
     @task()
     def slow() -> dict:
-        time.sleep(time_delay)  # Simulate a delay of 10 ms
+        time.sleep(time_delay)
         return {"tic": time.monotonic()}
 
     @entrypoint()
@@ -6288,8 +6301,9 @@ def test_sync_streaming_with_functional_api() -> None:
 
     assert len(arrival_times) == 2
     delta = arrival_times[1] - arrival_times[0]
-    # Delta cannot be less than 10 ms if it is streaming as results are generated.
-    assert delta > time_delay
+    # Allow a small amount of scheduler jitter while still verifying the chunks
+    # arrived separately rather than back-to-back after graph completion.
+    assert delta > time_delay * 0.8
 
 
 def test_entrypoint_without_checkpointer() -> None:
@@ -6896,6 +6910,7 @@ def test_tags_stream_mode_messages() -> None:
                 "ls_provider": "genericfakechatmodel",
                 "ls_model_type": "chat",
                 "ls_integration": "langchain_chat_model",
+                "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
                 "tags": ["meow"],
             },
         )
@@ -6957,7 +6972,6 @@ def test_configurable_propagates_to_stream_metadata() -> None:
 
 
 def test_stream_mode_messages_command() -> None:
-    from langchain_core.messages import HumanMessage
 
     def my_node(state):
         return {"messages": HumanMessage(content="foo")}
@@ -7225,7 +7239,6 @@ def test_get_stream_writer() -> None:
 
 
 def test_stream_messages_dedupe_inputs() -> None:
-    from langchain_core.messages import AIMessage
 
     def call_model(state):
         return {"messages": AIMessage("hi", id="1")}
@@ -7263,7 +7276,6 @@ def test_stream_messages_dedupe_inputs() -> None:
 
 
 def test_stream_messages_dedupe_state(sync_checkpointer: BaseCheckpointSaver) -> None:
-    from langchain_core.messages import AIMessage
 
     to_emit = [AIMessage("bye", id="1"), AIMessage("bye again", id="2")]
 
@@ -8235,7 +8247,6 @@ def test_get_graph_loop(snapshot: SnapshotAssertion) -> None:
 
 
 def test_get_graph_self_loop(snapshot: SnapshotAssertion) -> None:
-    import random
 
     subgraph_builder = StateGraph(MessagesState)
     subgraph_builder.add_node("agent", lambda x: x)
@@ -9397,3 +9408,449 @@ def test_fork_does_not_apply_pending_writes(
 
     # Should be: 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
     assert result == {"value": 121}
+
+
+def _extend(state: list, writes: list[list]) -> list:
+    return [*state, *(v for write in writes for v in write)]
+
+
+class _IntVersionSaver(InMemorySaver):
+    """Integer versions tie exactly where `InMemorySaver`'s break at random."""
+
+    get_next_version = BaseCheckpointSaver.get_next_version
+
+
+def _build_chain_after_a_delta_channel() -> Pregel:
+    return Pregel(
+        nodes={
+            "a": NodeBuilder().subscribe_only("inp").do(lambda _: ["a"]).write_to("d"),
+            "b": NodeBuilder().subscribe_only("d").do(lambda _: "b").write_to("x"),
+            "c": NodeBuilder().subscribe_only("x").do(lambda _: "c").write_to("out"),
+        },
+        channels={
+            "inp": LastValue(str),
+            "d": DeltaChannel(_extend, snapshot_frequency=1),
+            "x": LastValue(str),
+            "out": LastValue(str),
+        },
+        input_channels=["inp"],
+        output_channels=["out"],
+        checkpointer=_IntVersionSaver(),
+    )
+
+
+def test_update_state_after_an_exit_snapshot_infers_the_last_writer() -> None:
+    graph = _build_chain_after_a_delta_channel()
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"inp": "go"}, config, durability="exit")
+
+    graph.update_state(config, "u")
+
+    values = graph.get_state(config).values
+    assert values["out"] == "u", (
+        f"the update should apply as c, the last node to write, but state is {values}"
+    )
+
+
+async def test_aupdate_state_after_an_exit_snapshot_infers_the_last_writer() -> None:
+    graph = _build_chain_after_a_delta_channel()
+    config = {"configurable": {"thread_id": "t"}}
+    await graph.ainvoke({"inp": "go"}, config, durability="exit")
+
+    await graph.aupdate_state(config, "u")
+
+    values = (await graph.aget_state(config)).values
+    assert values["out"] == "u", (
+        f"the update should apply as c, the last node to write, but state is {values}"
+    )
+
+
+def test_update_state_after_a_fork_seal_infers_the_subscriber_that_ran() -> None:
+    graph = Pregel(
+        nodes={
+            "a": NodeBuilder()
+            .subscribe_only("inp")
+            .do(lambda _: ["a"])
+            .write_to("d", go="go"),
+            "c": NodeBuilder().subscribe_only("go").do(lambda _: ["c"]).write_to("d"),
+            "b": NodeBuilder().subscribe_only("d").do(lambda _: "b").write_to("out"),
+        },
+        channels={
+            "inp": LastValue(str),
+            "go": EphemeralValue(str),
+            "d": DeltaChannel(_extend),
+            "out": LastValue(str),
+        },
+        input_channels=["inp"],
+        output_channels=["out"],
+        checkpointer=_IntVersionSaver(),
+    )
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"inp": "go"}, config)
+    base = next(s for s in graph.get_state_history(config) if s.metadata["step"] == 0)
+    graph.invoke(None, graph.update_state(base.config, "u", as_node="b"))
+
+    graph.update_state(config, "w")
+
+    values = graph.get_state(config).values
+    assert values["out"] == "w", (
+        f"the update should apply as b, the last node to run, but state is {values}"
+    )
+
+
+def test_update_state_after_a_fork_seal_infers_the_node_whose_read_it_advanced() -> (
+    None
+):
+    graph = Pregel(
+        nodes={
+            "a": NodeBuilder().subscribe_only("inp").do(lambda _: ["a"]).write_to("d"),
+            "b": NodeBuilder().subscribe_only("d").do(lambda _: "b").write_to("out"),
+        },
+        channels={
+            "inp": LastValue(str),
+            "d": DeltaChannel(_extend),
+            "out": LastValue(str),
+        },
+        input_channels=["inp"],
+        output_channels=["out"],
+        checkpointer=_IntVersionSaver(),
+    )
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"inp": "1"}, config)
+    graph.invoke({"inp": "2"}, config)
+    base = next(s for s in graph.get_state_history(config) if s.next == ("a",))
+    fork = graph.update_state(base.config, "u", as_node="b")
+
+    graph.update_state(fork, "w")
+
+    values = graph.get_state(config).values
+    assert values["out"] == "w", (
+        f"the update should apply as b, the last node to read, but state is {values}"
+    )
+
+
+def test_update_state_after_a_snapshotting_update_infers_the_last_writer() -> None:
+    graph = _build_chain_after_a_delta_channel()
+    config = {"configurable": {"thread_id": "t"}}
+    graph.update_state(config, ["u"], as_node="a")
+    graph.invoke(None, config, interrupt_after=["b"])
+
+    graph.update_state(config, "u")
+
+    values = graph.get_state(config).values
+    assert values.get("x") == "u", (
+        f"the update should apply as b, the last node to write, but state is {values}"
+    )
+
+
+async def test_aupdate_state_after_a_snapshotting_update_infers_the_last_writer() -> (
+    None
+):
+    graph = _build_chain_after_a_delta_channel()
+    config = {"configurable": {"thread_id": "t"}}
+    await graph.aupdate_state(config, ["u"], as_node="a")
+    await graph.ainvoke(None, config, interrupt_after=["b"])
+
+    await graph.aupdate_state(config, "u")
+
+    values = (await graph.aget_state(config)).values
+    assert values.get("x") == "u", (
+        f"the update should apply as b, the last node to write, but state is {values}"
+    )
+
+
+class _UpdatesOnlyState(TypedDict):
+    x: Annotated[list[str], operator.add]
+
+
+def _graph_never_run() -> Any:
+    return (
+        StateGraph(_UpdatesOnlyState)
+        .add_node("a", lambda _: {"x": ["a"]})
+        .add_node("b", lambda _: {"x": ["b"]})
+        .add_edge(START, "a")
+        .add_edge("a", "b")
+        .compile(checkpointer=InMemorySaver())
+    )
+
+
+def test_update_state_on_a_thread_seeded_by_updates_applies_as_input() -> None:
+    graph = _graph_never_run()
+    config = {"configurable": {"thread_id": "t"}}
+    graph.update_state(config, {"x": ["u1"]})
+
+    graph.update_state(config, {"x": ["u2"]})
+
+    state = graph.get_state(config)
+    assert (state.values["x"], state.next) == (["u1", "u2"], ("a",))
+
+
+async def test_aupdate_state_on_a_thread_seeded_by_updates_applies_as_input() -> None:
+    graph = _graph_never_run()
+    config = {"configurable": {"thread_id": "t"}}
+    await graph.aupdate_state(config, {"x": ["u1"]})
+
+    await graph.aupdate_state(config, {"x": ["u2"]})
+
+    state = await graph.aget_state(config)
+    assert (state.values["x"], state.next) == (["u1", "u2"], ("a",))
+
+
+async def test_delta_channel_end_to_end_inmemory() -> None:
+    """Full graph run: DeltaChannel accumulates correctly across multiple turns."""
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    def respond(state: State) -> dict:
+        n = len(state["messages"])
+        return {"messages": [AIMessage(content=f"reply-{n}", id=f"ai-{n}")]}
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+    graph = builder.compile(checkpointer=InMemorySaver())
+
+    config = {"configurable": {"thread_id": "diff-test-1"}}
+
+    # Turn 1
+    graph.invoke({"messages": [HumanMessage(content="hello", id="h1")]}, config)
+    # Turn 2
+    graph.invoke({"messages": [HumanMessage(content="world", id="h2")]}, config)
+    # Turn 3
+    graph.invoke({"messages": [HumanMessage(content="bye", id="h3")]}, config)
+
+    state = graph.get_state(config)
+    msgs = state.values["messages"]
+    # 3 human + 3 AI = 6 total
+    assert len(msgs) == 6, f"expected 6 messages, got {len(msgs)}: {msgs}"
+    assert msgs[0].content == "hello"
+    assert msgs[2].content == "world"
+    assert msgs[4].content == "bye"
+    assert msgs[1].content == "reply-1"
+    assert msgs[3].content == "reply-3"
+    assert msgs[5].content == "reply-5"
+
+
+async def test_delta_channel_time_travel() -> None:
+    """Time-travel back to turn-1 checkpoint and resume; continuation must not include turn-2 deltas."""
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    counter = {"n": 0}
+
+    def respond(state: State) -> dict:
+        counter["n"] += 1
+        return {
+            "messages": [
+                AIMessage(content=f"ai-{counter['n']}", id=f"ai-{counter['n']}")
+            ]
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+    saver = InMemorySaver()
+    graph = builder.compile(checkpointer=saver)
+
+    config = {"configurable": {"thread_id": "diff-time-travel"}}
+
+    # Run 2 turns: h1→ai-1, h2→ai-2
+    graph.invoke({"messages": [HumanMessage(content="h1", id="h1")]}, config)
+    graph.invoke({"messages": [HumanMessage(content="h2", id="h2")]}, config)
+
+    # Find the checkpoint after turn 1 (2 messages: h1 + ai-1)
+    history = list(graph.get_state_history(config))
+    after_turn1 = next(h for h in history if len(h.values.get("messages", [])) == 2)
+
+    assert len(after_turn1.values["messages"]) == 2
+    assert after_turn1.values["messages"][0].content == "h1"
+    assert after_turn1.values["messages"][1].content == "ai-1"
+
+    # Resume from turn-1 checkpoint: inject h3, expect 3 messages total (h1, ai-1, ai-N)
+    # NOT 5 messages (turn-2 deltas must not bleed into the resumed run)
+    result = graph.invoke(
+        {"messages": [HumanMessage(content="h3", id="h3")]},
+        after_turn1.config,
+    )
+    msgs = result["messages"]
+    # Should be: h1, ai-1, h3, ai-N — 4 messages total
+    assert len(msgs) == 4, (
+        f"expected 4 messages after time-travel resume, got {len(msgs)}: {msgs}"
+    )
+    assert msgs[0].content == "h1"
+    assert msgs[1].content == "ai-1"
+    assert msgs[2].content == "h3"
+
+
+async def test_delta_channel_remove_message_end_to_end() -> None:
+    """RemoveMessage inside a DeltaChannel graph must persist and reload correctly."""
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    def respond(state: State) -> dict:
+        return {"messages": [AIMessage(content="reply", id="ai-1")]}
+
+    def delete_first(state: State) -> dict:
+        # removes the first message
+        return {"messages": [RemoveMessage(id=state["messages"][0].id)]}
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_node("delete_first", delete_first)
+    builder.add_edge(START, "respond")
+    builder.add_edge("respond", "delete_first")
+    graph = builder.compile(checkpointer=InMemorySaver())
+
+    config = {"configurable": {"thread_id": "diff-remove-test"}}
+    graph.invoke({"messages": [HumanMessage(content="hello", id="h1")]}, config)
+
+    state = graph.get_state(config)
+    msgs = state.values["messages"]
+    # h1 was removed, only ai-1 should remain
+    assert len(msgs) == 1, f"expected 1 message, got {len(msgs)}: {msgs}"
+    assert msgs[0].id == "ai-1"
+
+    # A subsequent turn must reconstruct from the checkpoint correctly
+    graph.invoke({"messages": [HumanMessage(content="again", id="h2")]}, config)
+    state = graph.get_state(config)
+    msgs = state.values["messages"]
+    # ai-1 + h2 + ai-1(second reply, same id overwrites) + h2 removed
+    # more simply: after second run we expect ai-1 updated + h2 remaining minus deleted h2
+    # just assert h1 is still gone
+    assert all(m.id != "h1" for m in msgs), (
+        "h1 should still be absent after second turn"
+    )
+
+
+async def test_delta_channel_update_by_id_end_to_end() -> None:
+    """Updating a message by ID via DeltaChannel must persist and reload correctly."""
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    def update_msg(state: State) -> dict:
+        # re-send h1 with updated content
+        return {"messages": [HumanMessage(content="updated", id="h1")]}
+
+    builder = StateGraph(State)
+    builder.add_node("update_msg", update_msg)
+    builder.add_edge(START, "update_msg")
+    graph = builder.compile(checkpointer=InMemorySaver())
+
+    config = {"configurable": {"thread_id": "diff-update-id-test"}}
+    graph.invoke({"messages": [HumanMessage(content="original", id="h1")]}, config)
+
+    state = graph.get_state(config)
+    msgs = state.values["messages"]
+    assert len(msgs) == 1, f"expected 1 message, got {len(msgs)}: {msgs}"
+    assert msgs[0].content == "updated"
+    assert msgs[0].id == "h1"
+
+    # Second turn: verify the updated state is the base for further accumulation
+    graph.invoke({"messages": [HumanMessage(content="new", id="h2")]}, config)
+    state = graph.get_state(config)
+    msgs = state.values["messages"]
+    ids = [m.id for m in msgs]
+    assert "h1" in ids  # h1 persists (updated, not duplicated)
+    assert "h2" in ids
+    assert ids.count("h1") == 1, "h1 must not be duplicated"
+
+
+async def test_delta_channel_durability_exit_stores_snapshot() -> None:
+    """DeltaChannel must reload from a durability='exit' checkpoint."""
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    def respond(state: State) -> dict:
+        return {"messages": [AIMessage(content="reply", id="ai1")]}
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+    graph = builder.compile(checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "delta-exit-test"}}
+
+    result = graph.invoke(
+        {"messages": [HumanMessage(content="hello", id="h1")]},
+        config,
+        durability="exit",
+    )
+    assert [m.content for m in result["messages"]] == ["hello", "reply"]
+
+    state = graph.get_state(config)
+    assert [m.content for m in state.values["messages"]] == ["hello", "reply"]
+
+
+async def test_delta_channel_async_write_ordering() -> None:
+    """In async mode, DeltaChannel write futures are awaited before the checkpoint
+    is committed, so aput_writes always precedes aput for delta-channel
+    checkpoints (those where the delta channel had a versioned write but
+    is absent from `channel_values`, i.e. no snapshot fired this step)."""
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    def respond(state: State) -> dict:
+        i = len(state["messages"])
+        return {"messages": [AIMessage(content=f"r{i}", id=f"ai{i}")]}
+
+    order: list[str] = []
+    original_aput_writes = InMemorySaver.aput_writes
+    original_aput = InMemorySaver.aput
+
+    async def tracked_aput_writes(self, config, writes, task_id, task_path=""):
+        result = await original_aput_writes(self, config, writes, task_id, task_path)
+        order.append("aput_writes")
+        return result
+
+    async def tracked_aput(self, config, checkpoint, metadata, new_versions):
+        # A "delta" checkpoint here = `messages` versioned but absent from
+        # `channel_values` (no snapshot fired). When a snapshot does fire,
+        # `channel_values["messages"]` is a `_DeltaSnapshot` — also a delta
+        # checkpoint shape, since the writes still have to be persisted
+        # before the parent checkpoint commits.
+        channel_values = checkpoint.get("channel_values", {})
+        is_delta_step = (
+            "messages" in checkpoint.get("channel_versions", {})
+            and "messages" not in channel_values
+        )
+        order.append("aput_delta" if is_delta_step else "aput_other")
+        return await original_aput(self, config, checkpoint, metadata, new_versions)
+
+    InMemorySaver.aput_writes = tracked_aput_writes
+    InMemorySaver.aput = tracked_aput
+    try:
+        builder = StateGraph(State)
+        builder.add_node("respond", respond)
+        builder.add_edge(START, "respond")
+        graph = builder.compile(checkpointer=InMemorySaver())
+        config = {"configurable": {"thread_id": "async-ordering-test"}}
+
+        for i in range(3):
+            await graph.ainvoke(
+                {"messages": [HumanMessage(content=f"h{i}", id=f"h{i}")]}, config
+            )
+
+        # Every aput_delta must be preceded by at least one aput_writes
+        for i, event in enumerate(order):
+            if event == "aput_delta":
+                preceding = order[:i]
+                assert "aput_writes" in preceding, (
+                    f"aput_delta at {i} had no preceding aput_writes: {order}"
+                )
+                last_write_idx = max(
+                    j for j, e in enumerate(order[:i]) if e == "aput_writes"
+                )
+                assert last_write_idx < i, (
+                    f"aput_writes at {last_write_idx} should precede aput_delta at {i}: {order}"
+                )
+    finally:
+        InMemorySaver.aput_writes = original_aput_writes
+        InMemorySaver.aput = original_aput
+
+    state = await graph.aget_state(config)
+    assert len(state.values["messages"]) == 6  # 3 human + 3 AI

@@ -7,6 +7,7 @@ import textwrap
 from contextlib import contextmanager
 from pathlib import Path
 
+import click
 from click.testing import CliRunner
 
 import langgraph_cli.deploy as deploy_module
@@ -319,6 +320,56 @@ def test_top_level_help_truncates_command_descriptions_to_single_line() -> None:
     assert "[Beta] List LangSmith Deployments." in deploy_list_line
 
 
+def test_deploy_missing_config_shows_actionable_error(tmp_path, monkeypatch) -> None:
+    runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(cli, ["deploy"])
+
+    assert result.exit_code == 1
+    assert "We couldn't find a langgraph.json file." in result.output
+    assert "Run `langgraph deploy` from the root" in result.output
+    assert "https://docs.langchain.com/langsmith/deployment-quickstart" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_deploy_missing_config_emits_json_error(tmp_path, monkeypatch) -> None:
+    runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(cli, ["deploy", "--json"])
+
+    assert result.exit_code == 1
+    events = [json.loads(line) for line in result.output.splitlines()]
+    assert events[-1]["event"] == "error"
+    assert "We couldn't find a langgraph.json file." in events[-1]["message"]
+
+
+def test_dev_command_requires_ssl_certfile_and_keyfile_together(tmp_path) -> None:
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text(
+        json.dumps({"dependencies": [], "graphs": {"agent": "./agent.py:graph"}}),
+        encoding="utf-8",
+    )
+    certfile = tmp_path / "cert.pem"
+    certfile.write_text("cert", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "dev",
+            "--config",
+            str(config_path),
+            "--ssl-certfile",
+            str(certfile),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Both --ssl-certfile and --ssl-keyfile must be provided" in result.output
+
+
 def test_deploy_list_command(monkeypatch) -> None:
     runner = CliRunner()
     captured: dict[str, str] = {}
@@ -331,20 +382,18 @@ def test_deploy_list_command(monkeypatch) -> None:
 
         def list_deployments(self, name_contains: str = ""):
             captured["name_contains"] = name_contains
-            return {
-                "resources": [
-                    {
-                        "id": "dep-123",
-                        "name": "alpha",
-                        "source_config": {"custom_url": "https://alpha.example.com"},
-                    },
-                    {
-                        "id": "dep-456",
-                        "name": "beta",
-                        "source_config": {"custom_url": "https://beta.example.com"},
-                    },
-                ]
-            }
+            return [
+                {
+                    "id": "dep-123",
+                    "name": "alpha",
+                    "source_config": {"custom_url": "https://alpha.example.com"},
+                },
+                {
+                    "id": "dep-456",
+                    "name": "beta",
+                    "source_config": {"custom_url": "https://beta.example.com"},
+                },
+            ]
 
     monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
@@ -384,7 +433,7 @@ def test_deploy_list_command_no_results(monkeypatch) -> None:
             pass
 
         def list_deployments(self, name_contains: str = ""):
-            return {"resources": []}
+            return []
 
     monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
@@ -404,6 +453,88 @@ def test_deploy_list_command_no_results(monkeypatch) -> None:
     assert result.output.strip() == "No deployments found."
 
 
+def test_deploy_listeners_list_command(monkeypatch) -> None:
+    runner = CliRunner()
+    captured: dict[str, str] = {}
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            captured["host_url"] = host_url
+            captured["api_key"] = api_key
+            captured["tenant_id"] = tenant_id or ""
+
+        def list_listeners(self):
+            return [
+                {
+                    "id": "listener-1",
+                    "compute_id": "prod-cluster",
+                    "compute_config": {"k8s_namespaces": ["agents"]},
+                },
+                {
+                    "id": "listener-2",
+                    "compute_id": "multi-cluster",
+                    "compute_config": {"k8s_namespaces": ["agents", "agents-staging"]},
+                },
+            ]
+
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "listeners",
+            "list",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured == {
+        "host_url": "https://api.example.com",
+        "api_key": "test-key",
+        "tenant_id": "",
+    }
+    assert "Listener ID" in result.output
+    assert "Compute ID" in result.output
+    assert "Namespaces" in result.output
+    assert "listener-1" in result.output
+    assert "prod-cluster" in result.output
+    assert "agents, agents-staging" in result.output
+
+
+def test_deploy_listeners_list_command_no_results(monkeypatch) -> None:
+    runner = CliRunner()
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def list_listeners(self):
+            return []
+
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "listeners",
+            "list",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output.strip() == "No listeners found for this workspace."
+
+
 def test_deploy_revisions_list_command(monkeypatch) -> None:
     runner = CliRunner()
     captured: dict[str, str] = {}
@@ -417,20 +548,18 @@ def test_deploy_revisions_list_command(monkeypatch) -> None:
         def list_revisions(self, deployment_id: str, limit: int = 1):
             captured["deployment_id"] = deployment_id
             captured["limit"] = str(limit)
-            return {
-                "resources": [
-                    {
-                        "id": "rev-123",
-                        "status": "CREATING",
-                        "created_at": "2023-11-07T05:31:56Z",
-                    },
-                    {
-                        "id": "rev-456",
-                        "status": "DEPLOYED",
-                        "created_at": "2023-11-08T10:00:00Z",
-                    },
-                ]
-            }
+            return [
+                {
+                    "id": "rev-123",
+                    "status": "CREATING",
+                    "created_at": "2023-11-07T05:31:56Z",
+                },
+                {
+                    "id": "rev-456",
+                    "status": "DEPLOYED",
+                    "created_at": "2023-11-08T10:00:00Z",
+                },
+            ]
 
     monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
@@ -471,7 +600,7 @@ def test_deploy_revisions_list_command_no_results(monkeypatch) -> None:
             pass
 
         def list_revisions(self, deployment_id: str, limit: int = 1):
-            return {"resources": []}
+            return []
 
     monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
@@ -504,7 +633,7 @@ def test_deploy_revisions_list_command_with_explicit_limit(monkeypatch) -> None:
         def list_revisions(self, deployment_id: str, limit: int = 1):
             captured["deployment_id"] = deployment_id
             captured["limit"] = str(limit)
-            return {"resources": []}
+            return []
 
     monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
@@ -576,7 +705,8 @@ def test_deploy_delete_command(monkeypatch) -> None:
         "deployment_id": "dep-123",
     }
     assert (
-        "Are you sure you want to delete deployment ID dep-123? (Y/n):" in result.output
+        "Are you sure you want to delete deployment ID dep-123? (Y/n):"
+        in click.unstyle(result.output)
     )
     assert result.output.strip().endswith("Deleted deployment dep-123.")
 

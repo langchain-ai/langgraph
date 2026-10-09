@@ -8,7 +8,9 @@ import httpx
 import pytest
 from typing_extensions import assert_type
 
+from langgraph_sdk._async.runs import _wrap_stream_v2
 from langgraph_sdk._shared.utilities import _sse_to_v2_dict
+from langgraph_sdk._sync.runs import _wrap_stream_v2_sync
 from langgraph_sdk.client import HttpClient, SyncHttpClient
 from langgraph_sdk.schema import (
     CheckpointPayload,
@@ -214,7 +216,7 @@ def test_sync_http_client_stream_recovers_after_disconnect():
     assert parts == [
         StreamPart(event="values", data={"step": 1}, id="1"),
         StreamPart(event="values", data={"step": 2}, id="2"),
-        StreamPart(event="end", data=None, id="2"),
+        StreamPart(event="end", data=None, id="2"),  # ty: ignore[invalid-argument-type]
     ]
 
 
@@ -286,7 +288,7 @@ async def test_http_client_stream_recovers_after_disconnect():
     assert parts == [
         StreamPart(event="values", data={"step": 1}, id="1"),
         StreamPart(event="values", data={"step": 2}, id="2"),
-        StreamPart(event="end", data=None, id="2"),
+        StreamPart(event="end", data=None, id="2"),  # ty: ignore[invalid-argument-type]
     ]
 
 
@@ -380,7 +382,6 @@ def test_sse_to_v2_dict_values_with_interrupts() -> None:
 
 @pytest.mark.asyncio
 async def test_async_stream_v2_client_side_conversion() -> None:
-    from langgraph_sdk._async.runs import _wrap_stream_v2
 
     async def mock_stream() -> Any:
         yield StreamPart(event="metadata", data={"run_id": "r1"})
@@ -388,7 +389,7 @@ async def test_async_stream_v2_client_side_conversion() -> None:
             event="values", data={"messages": [{"role": "user", "content": "hi"}]}
         )
         yield StreamPart(event="updates|sub:abc", data={"node": {"out": 1}})
-        yield StreamPart(event="end", data=None)  # type: ignore[arg-type]
+        yield StreamPart(event="end", data=None)  # ty: ignore[invalid-argument-type]
 
     parts: list[StreamPartV2] = [part async for part in _wrap_stream_v2(mock_stream())]
     assert len(parts) == 3
@@ -415,12 +416,11 @@ async def test_async_stream_v2_client_side_conversion() -> None:
 
 
 def test_sync_stream_v2_client_side_conversion() -> None:
-    from langgraph_sdk._sync.runs import _wrap_stream_v2_sync
 
     def mock_stream() -> Any:
         yield StreamPart(event="metadata", data={"run_id": "r1"})
         yield StreamPart(event="values", data={"state": "full"})
-        yield StreamPart(event="end", data=None)  # type: ignore[arg-type]
+        yield StreamPart(event="end", data=None)  # ty: ignore[invalid-argument-type]
 
     parts: list[StreamPartV2] = list(_wrap_stream_v2_sync(mock_stream()))
     assert len(parts) == 2
@@ -444,7 +444,7 @@ def test_sync_stream_v2_client_side_conversion() -> None:
 
 
 def _check_v2_type_narrowing(part: StreamPartV2) -> None:
-    """Compile-time type narrowing checks — validates mypy narrows the union."""
+    """Compile-time type narrowing checks."""
     if part["type"] == "values":
         assert_type(part, ValuesStreamPart)
         assert_type(part["data"], dict[str, Any])

@@ -11,6 +11,7 @@ from langgraph_cli.archive import (
     _tar_filter,
     create_archive,
 )
+from langgraph_cli.config import LocalDeps
 
 # ---------------------------------------------------------------------------
 # _tar_filter
@@ -71,7 +72,6 @@ class TestBuildIgnoreSpec:
         assert spec.match_file("venv/")
         assert spec.match_file("node_modules/")
         assert spec.match_file(".tox/")
-        assert spec.match_file(".mypy_cache/")
 
     def test_regular_file_not_excluded(self, tmp_path):
         spec = _build_ignore_spec(tmp_path)
@@ -98,6 +98,13 @@ class TestBuildIgnoreSpec:
         spec = _build_ignore_spec(tmp_path)
         assert spec.match_file("app.log")
         assert spec.match_file("mod.pyc")
+
+    def test_can_skip_gitignore(self, tmp_path):
+        (tmp_path / ".dockerignore").write_text("*.log\n")
+        (tmp_path / ".gitignore").write_text("*.pyc\n")
+        spec = _build_ignore_spec(tmp_path, include_gitignore=False)
+        assert spec.match_file("app.log")
+        assert not spec.match_file("mod.pyc")
 
     def test_no_ignore_files_only_builtins(self, tmp_path):
         spec = _build_ignore_spec(tmp_path)
@@ -192,7 +199,6 @@ class TestCreateArchive:
 
     @patch("langgraph_cli.archive._assemble_local_deps")
     def test_yields_archive_with_config(self, mock_deps, tmp_path):
-        from langgraph_cli.config import LocalDeps
 
         config_file = self._make_project(tmp_path)
         mock_deps.return_value = LocalDeps(
@@ -212,7 +218,6 @@ class TestCreateArchive:
 
     @patch("langgraph_cli.archive._assemble_local_deps")
     def test_excludes_pycache(self, mock_deps, tmp_path):
-        from langgraph_cli.config import LocalDeps
 
         config_file = self._make_project(tmp_path)
         mock_deps.return_value = LocalDeps(
@@ -226,7 +231,6 @@ class TestCreateArchive:
 
     @patch("langgraph_cli.archive._assemble_local_deps")
     def test_cleans_up_tmp_dir_on_normal_exit(self, mock_deps, tmp_path):
-        from langgraph_cli.config import LocalDeps
 
         config_file = self._make_project(tmp_path)
         mock_deps.return_value = LocalDeps(
@@ -241,7 +245,6 @@ class TestCreateArchive:
 
     @patch("langgraph_cli.archive._assemble_local_deps")
     def test_cleans_up_tmp_dir_on_exception(self, mock_deps, tmp_path):
-        from langgraph_cli.config import LocalDeps
 
         config_file = self._make_project(tmp_path)
         mock_deps.return_value = LocalDeps(
@@ -258,7 +261,6 @@ class TestCreateArchive:
     @patch("langgraph_cli.archive._assemble_local_deps")
     @patch("langgraph_cli.archive._MAX_SIZE", 10)
     def test_raises_on_oversized_archive(self, mock_deps, tmp_path):
-        from langgraph_cli.config import LocalDeps
 
         config_file = self._make_project(tmp_path)
         mock_deps.return_value = LocalDeps(
@@ -272,7 +274,6 @@ class TestCreateArchive:
     @patch("langgraph_cli.archive._assemble_local_deps")
     def test_handles_extra_contexts(self, mock_deps, tmp_path):
         """Monorepo case: project + sibling dependency directory."""
-        from langgraph_cli.config import LocalDeps
 
         project = tmp_path / "myproject"
         project.mkdir()

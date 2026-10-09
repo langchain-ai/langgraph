@@ -88,13 +88,13 @@ def test_constants_deprecation() -> None:
         LangGraphDeprecatedSinceV10,
         match="Importing Send from langgraph.constants is deprecated. Please use 'from langgraph.types import Send' instead.",
     ):
-        from langgraph.constants import Send  # noqa: F401
+        from langgraph.constants import Send  # noqa: PLC0415, F401
 
     with pytest.warns(
         LangGraphDeprecatedSinceV10,
         match="Importing Interrupt from langgraph.constants is deprecated. Please use 'from langgraph.types import Interrupt' instead.",
     ):
-        from langgraph.constants import Interrupt  # noqa: F401
+        from langgraph.constants import Interrupt  # noqa: PLC0415, F401
 
 
 def test_pregel_types_deprecation() -> None:
@@ -102,7 +102,7 @@ def test_pregel_types_deprecation() -> None:
         LangGraphDeprecatedSinceV10,
         match="Importing from langgraph.pregel.types is deprecated. Please use 'from langgraph.types import ...' instead.",
     ):
-        from langgraph.pregel.types import StateSnapshot  # noqa: F401
+        from langgraph.pregel.types import StateSnapshot  # noqa: PLC0415, F401
 
 
 def test_config_schema_deprecation() -> None:
@@ -195,7 +195,7 @@ def test_deprecated_import() -> None:
         LangGraphDeprecatedSinceV10,
         match="Importing PREVIOUS from langgraph.constants is deprecated. This constant is now private and should not be used directly.",
     ):
-        from langgraph.constants import PREVIOUS  # noqa: F401
+        from langgraph.constants import PREVIOUS  # noqa: PLC0415, F401
 
 
 @pytest.mark.filterwarnings(
