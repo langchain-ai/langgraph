@@ -32,6 +32,7 @@ from langgraph._internal._constants import (
 )
 from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.binop import _get_overwrite
 from langgraph.channels.delta import DeltaChannel
 from langgraph.managed.base import ManagedValueMapping, ManagedValueSpec
 
@@ -149,6 +150,21 @@ def delta_channels_with_pending_writes(
         ch
         for _, ch, _ in pending_writes or ()
         if isinstance(specs.get(ch), DeltaChannel)
+    }
+
+
+def delta_channels_overwritten(
+    specs: Mapping[str, Any], writes: Iterable[tuple[str, Any]]
+) -> set[str]:
+    """DeltaChannels an `Overwrite` among `writes` resets.
+
+    They snapshot on the checkpoint the writes produce, as the loop does for a
+    node's `Overwrite`, so no read replays across the reset.
+    """
+    return {
+        ch
+        for ch, value in writes
+        if isinstance(specs.get(ch), DeltaChannel) and _get_overwrite(value)[0]
     }
 
 
