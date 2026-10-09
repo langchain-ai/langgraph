@@ -156,10 +156,12 @@ def delta_channels_with_pending_writes(
 def delta_channels_overwritten(
     specs: Mapping[str, Any], writes: Iterable[tuple[str, Any]]
 ) -> set[str]:
-    """DeltaChannels an `Overwrite` among `writes` resets.
+    """Return the names of the DeltaChannels that `writes` set with an `Overwrite`.
 
-    They snapshot on the checkpoint the writes produce, as the loop does for a
-    node's `Overwrite`, so no read replays across the reset.
+    `update_state` saves a full snapshot of these channels in the checkpoint it
+    creates, like the loop does when a node returns an `Overwrite`. Otherwise,
+    reading the channel later starts from an older snapshot and replays the
+    writes the `Overwrite` threw away.
     """
     return {
         ch
