@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime, timezone
 from inspect import signature
 from typing import Any, Literal, cast
@@ -256,6 +256,7 @@ def create_checkpoint(
     get_next_version: GetNextVersion | None = None,
     channels_to_snapshot: set[str] | None = None,
     stored_versions: ChannelVersions | None = None,
+    trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
 ) -> Checkpoint:
     """Build a new Checkpoint from the previous one and live channel state.
 
@@ -314,7 +315,9 @@ def create_checkpoint(
         id=id or str(uuid6(clock_seq=step)),
         channel_values=values,
         channel_versions=channel_versions,
-        versions_seen=_mark_bumps_seen(checkpoint["versions_seen"], bumped),
+        versions_seen=_mark_bumps_seen(
+            checkpoint["versions_seen"], bumped, trigger_to_nodes or {}
+        ),
         updated_channels=None if updated_channels is None else sorted(updated_channels),
     )
 
@@ -322,19 +325,27 @@ def create_checkpoint(
 def _mark_bumps_seen(
     versions_seen: dict[str, ChannelVersions],
     bumped: Mapping[str, tuple[Any, Any]],
+    trigger_to_nodes: Mapping[str, Sequence[str]],
 ) -> dict[str, ChannelVersions]:
     """Advance whoever had seen a bumped channel's old version to the new one.
 
     A bump that only stores a snapshot is not a write. Left unseen, it would
-    re-fire `interrupt_before` and rerun the channel's subscribers. For each
-    entry it advances, `SNAPSHOT_BUMPS` keeps the new version and the one the
-    node really read, so `versions_seen_without_bumps` can put the read back.
+    re-fire `interrupt_before` and rerun the channel's subscribers. A channel
+    bumped from no version was never written, so it also goes to the
+    subscribers that never ran: they have no entry, and would start on the bump.
+    For each entry it advances, `SNAPSHOT_BUMPS` keeps the new version and the
+    one the node really read, so `versions_seen_without_bumps` can put the read
+    back.
     """
     if not bumped:
         return versions_seen
     out = dict(versions_seen)
+    for k, (old, _) in bumped.items():
+        if old is None:
+            for node in trigger_to_nodes.get(k, ()):
+                out.setdefault(node, {})
     marks = dict(versions_seen.get(SNAPSHOT_BUMPS, {}))
-    for node, seen in versions_seen.items():
+    for node, seen in out.items():
         if node == SNAPSHOT_BUMPS:
             continue
         for k, (old, new) in bumped.items():
