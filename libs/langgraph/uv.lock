@@ -1787,6 +1787,7 @@ dependencies = [
     { name = "pathspec" },
     { name = "python-dotenv" },
     { name = "tomli", marker = "python_full_version < '3.11' or python_full_version >= '3.14'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11' or python_full_version >= '3.14'" },
 ]
 
 [package.optional-dependencies]
@@ -1805,6 +1806,7 @@ requires-dist = [
     { name = "pathspec", specifier = ">=0.11.0" },
     { name = "python-dotenv", specifier = ">=0.8.0" },
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0.1" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'", specifier = ">=4.0" },
 ]
 provides-extras = ["inmem"]
 
