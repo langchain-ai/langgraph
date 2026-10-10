@@ -27,6 +27,11 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
     def __eq__(self, value: object) -> bool:
         return isinstance(value, AnyValue)
 
+    def __repr__(self) -> str:
+        if self.value is MISSING:
+            return f"AnyValue(typ={self.typ!r}, key={self.key!r}, value=MISSING)"
+        return f"AnyValue(typ={self.typ!r}, key={self.key!r}, value={self.value!r})"
+
     @property
     def ValueType(self) -> type[Value]:
         """The type of the value stored in the channel."""
