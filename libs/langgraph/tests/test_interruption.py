@@ -1,5 +1,6 @@
 import asyncio
 import operator
+import sys
 from dataclasses import dataclass
 from typing import Annotated, Any
 
@@ -255,6 +256,10 @@ def test_interrupt_response_schema_invalid_resume_after_earlier_interrupt(
     }
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 async def test_invalid_resume_lets_other_answered_tasks_finish(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
