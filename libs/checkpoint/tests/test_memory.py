@@ -420,6 +420,19 @@ class TestInMemorySaverDeltaChannel:
         assert "seed" not in result
         assert result["writes"] == []
 
+    def test_get_channel_writes_without_checkpoint_id_reads_the_latest(self) -> None:
+        saver = InMemorySaver()
+        thread: RunnableConfig = {
+            "configurable": {"thread_id": "t1", "checkpoint_ns": ""}
+        }
+        parent = saver.put(thread, empty_checkpoint(), {}, {})
+        saver.put_writes(parent, [("messages", "hi")], "task1")
+        saver.put(parent, empty_checkpoint(), {}, {})
+
+        result = saver.get_delta_channel_history(config=thread, channels=["messages"])
+
+        assert result == {"messages": {"writes": [("task1", "messages", "hi")]}}
+
 
 class TestBaseFallbackGetChannelWrites:
     """Exercises the `BaseCheckpointSaver.get_delta_channel_history` default
