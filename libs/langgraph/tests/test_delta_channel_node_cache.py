@@ -1,5 +1,5 @@
 """A node served from the node cache saves its writes like a node that ran,
-without writing them back to the cache."""
+without writing them back to the cache, and a node that fails isn't cached."""
 
 import operator
 from typing import Annotated, Any
@@ -87,3 +87,36 @@ async def test_a_cache_hit_saves_its_writes_without_caching_them_again_async(
     assert cache.sets == 1, "the cache hit was written back to the cache"
     async for state in graph.aget_state_history(config):
         assert state.values.get("log", []) == state.values.get("plain", [])
+
+
+def _cached_node_that_fails(runs: list[str]) -> Any:
+    def fail(state: _State) -> dict:
+        runs.append("b")
+        raise ValueError("b failed")
+
+    builder = StateGraph(_State)
+    builder.add_node("b", fail, cache_policy=CachePolicy())
+    builder.add_edge(START, "b")
+    return builder.compile(checkpointer=InMemorySaver(), cache=InMemoryCache())
+
+
+def test_a_node_that_fails_is_not_cached() -> None:
+    runs: list[str] = []
+    graph = _cached_node_that_fails(runs)
+
+    for thread in ("1", "2"):
+        with pytest.raises(ValueError, match="b failed"):
+            graph.invoke(INPUT, {"configurable": {"thread_id": thread}})
+
+    assert runs == ["b", "b"]
+
+
+async def test_a_node_that_fails_is_not_cached_async() -> None:
+    runs: list[str] = []
+    graph = _cached_node_that_fails(runs)
+
+    for thread in ("1", "2"):
+        with pytest.raises(ValueError, match="b failed"):
+            await graph.ainvoke(INPUT, {"configurable": {"thread_id": thread}})
+
+    assert runs == ["b", "b"]

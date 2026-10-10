@@ -160,6 +160,12 @@ def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
     return StreamProtocol(__call__, {mode for s in streams for mode in s.modes})
 
 
+def _cacheable(writes: WritesT) -> bool:
+    # A cache hit skips the node, so a cached error would skip it without
+    # raising: only a node that finished goes to the cache.
+    return not any(c in (INTERRUPT, ERROR) for c, _ in writes)
+
+
 class PregelLoop:
     config: RunnableConfig
     store: BaseStore | None
@@ -1734,7 +1740,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         if cached or not writes or self.cache is None or not hasattr(self, "tasks"):
             return
         task = self.tasks.get(task_id)
-        if task is None or task.cache_key is None:
+        if task is None or task.cache_key is None or not _cacheable(writes):
             return
         self.submit(
             self.cache.set,
@@ -1989,10 +1995,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         if cached or not writes or self.cache is None or not hasattr(self, "tasks"):
             return
         task = self.tasks.get(task_id)
-        if task is None or task.cache_key is None:
-            return
-        if writes[0][0] in (INTERRUPT, ERROR):
-            # only cache successful tasks
+        if task is None or task.cache_key is None or not _cacheable(writes):
             return
         self.submit(
             self.cache.aset,
