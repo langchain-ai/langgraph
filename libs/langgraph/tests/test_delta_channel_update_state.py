@@ -632,3 +632,98 @@ async def test_aupdate_as_input_to_an_older_checkpoint_stays_out_of_its_other_br
     values = (await graph.aget_state(edited)).values
     assert values["log"] == values["plain"]
     assert (await graph.aget_state(other_branch.config)).values == other_branch.values
+
+
+def _message_ids(graph: Any, config: dict) -> list[str | None]:
+    return [m.id for m in graph.get_state(config).values["messages"]]
+
+
+async def _amessage_ids(graph: Any, config: dict) -> list[str | None]:
+    return [m.id for m in (await graph.aget_state(config)).values["messages"]]
+
+
+def _messages_input_graph() -> Any:
+    node = (
+        NodeBuilder()
+        .subscribe_only("go")
+        .do(lambda _: [HumanMessage("n", id="n")])
+        .write_to("messages")
+    )
+    return Pregel(
+        nodes={"n": node},
+        channels={
+            "messages": DeltaChannel(_messages_delta_reducer),
+            "go": LastValue(int),
+        },
+        input_channels=["messages", "go"],
+        output_channels=["messages"],
+        checkpointer=InMemorySaver(),
+    )
+
+
+def test_update_state_gives_a_message_an_id_that_every_read_keeps() -> None:
+    graph = _build_graph(InMemorySaver())
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"messages": [HumanMessage("a", id="a")]}, config)
+
+    graph.update_state(config, {"messages": [HumanMessage("b")]})
+
+    first, second = _message_ids(graph, config), _message_ids(graph, config)
+    assert first[-1] is not None
+    assert first == second
+
+
+async def test_aupdate_state_gives_a_message_an_id_that_every_read_keeps() -> None:
+    graph = _build_graph(InMemorySaver())
+    config = {"configurable": {"thread_id": "t"}}
+    await graph.ainvoke({"messages": [HumanMessage("a", id="a")]}, config)
+
+    await graph.aupdate_state(config, {"messages": [HumanMessage("b")]})
+
+    first, second = (
+        await _amessage_ids(graph, config),
+        await _amessage_ids(graph, config),
+    )
+    assert first[-1] is not None
+    assert first == second
+
+
+def test_update_state_on_an_older_checkpoint_gives_a_message_an_id() -> None:
+    graph = _build_graph(InMemorySaver())
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"messages": [HumanMessage("a", id="a")]}, config)
+    older = graph.get_state(config).config
+    graph.invoke({"messages": [HumanMessage("c", id="c")]}, config)
+
+    branch = graph.update_state(older, {"messages": [HumanMessage("b")]})
+
+    assert _message_ids(graph, branch)[-1] is not None
+
+
+def test_update_as_input_gives_a_message_an_id_that_every_read_keeps() -> None:
+    graph = _messages_input_graph()
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"messages": [HumanMessage("a", id="a")], "go": 1}, config)
+
+    graph.update_state(config, {"messages": [HumanMessage("b")]}, as_node="__input__")
+
+    first, second = _message_ids(graph, config), _message_ids(graph, config)
+    assert first[-1] is not None
+    assert first == second
+
+
+async def test_aupdate_as_input_gives_a_message_an_id_that_every_read_keeps() -> None:
+    graph = _messages_input_graph()
+    config = {"configurable": {"thread_id": "t"}}
+    await graph.ainvoke({"messages": [HumanMessage("a", id="a")], "go": 1}, config)
+
+    await graph.aupdate_state(
+        config, {"messages": [HumanMessage("b")]}, as_node="__input__"
+    )
+
+    first, second = (
+        await _amessage_ids(graph, config),
+        await _amessage_ids(graph, config),
+    )
+    assert first[-1] is not None
+    assert first == second

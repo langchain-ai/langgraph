@@ -153,6 +153,7 @@ from langgraph.pregel._loop import (
 from langgraph.pregel._messages import (
     StreamMessagesHandler,
     StreamMessagesHandlerV2,
+    ensure_message_ids,
 )
 from langgraph.pregel._read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel._retry import RetryPolicy
@@ -1790,25 +1791,22 @@ class Pregel(
                     )
 
                 if input_writes := deque(map_input(self.input_channels, values)):
-                    # A DeltaChannel reads the writes stored on a checkpoint's
-                    # ancestors, not its own, so they go on the checkpoint this
-                    # update builds on, as a node's writes do.
-                    if (
-                        is_first
-                        and saved is not None
-                        and checkpoint_superseded(checkpointer, config, saved)
-                    ):
-                        fork_pending.update(
-                            ch
-                            for ch, _ in input_writes
-                            if isinstance(self.channels.get(ch), DeltaChannel)
-                        )
-                    elif saved is not None:
-                        checkpointer.put_writes(
-                            checkpoint_config,
-                            input_writes,
-                            str(uuid5(UUID(checkpoint["id"]), INPUT)),
-                        )
+                    _store_or_fork_delta_writes(
+                        checkpointer,
+                        config,
+                        saved,
+                        checkpoint_config,
+                        self.channels,
+                        [
+                            (
+                                str(uuid5(UUID(checkpoint["id"]), INPUT)),
+                                input_writes,
+                                None,
+                            )
+                        ],
+                        fork_pending,
+                        is_first=is_first,
+                    )
                     updated_channels = apply_writes(
                         checkpoint,
                         channels,
@@ -2054,30 +2052,19 @@ class Pregel(
             fork_pending |= delta_channels_overwritten(
                 self.channels, (w for t in run_tasks for w in t.writes)
             )
-            # The base's other children replay whatever is stored on it, so an
-            # edit of an older checkpoint stores none of its writes there: the
-            # checkpoint written here carries them, its delta channels
-            # snapshotted. Later supersteps address the checkpoint just written.
-            if (
-                is_first
-                and saved is not None
-                and checkpoint_superseded(checkpointer, config, saved)
-            ):
-                fork_pending.update(
-                    ch
-                    for ch in updated_channels
-                    if isinstance(self.channels.get(ch), DeltaChannel)
-                )
-            elif saved is not None:
-                for task_id, task in zip(run_task_ids, run_tasks):
-                    channel_writes = [w for w in task.writes if w[0] != PUSH]
-                    if channel_writes:
-                        checkpointer.put_writes(
-                            checkpoint_config,
-                            channel_writes,
-                            task_id,
-                            **_task_path_kwarg(checkpointer.put_writes, task),
-                        )
+            _store_or_fork_delta_writes(
+                checkpointer,
+                config,
+                saved,
+                checkpoint_config,
+                self.channels,
+                [
+                    (task_id, [w for w in task.writes if w[0] != PUSH], task)
+                    for task_id, task in zip(run_task_ids, run_tasks)
+                ],
+                fork_pending,
+                is_first=is_first,
+            )
             apply_writes(
                 checkpoint,
                 channels,
@@ -2303,25 +2290,22 @@ class Pregel(
                     )
 
                 if input_writes := deque(map_input(self.input_channels, values)):
-                    # A DeltaChannel reads the writes stored on a checkpoint's
-                    # ancestors, not its own, so they go on the checkpoint this
-                    # update builds on, as a node's writes do.
-                    if (
-                        is_first
-                        and saved is not None
-                        and await acheckpoint_superseded(checkpointer, config, saved)
-                    ):
-                        fork_pending.update(
-                            ch
-                            for ch, _ in input_writes
-                            if isinstance(self.channels.get(ch), DeltaChannel)
-                        )
-                    elif saved is not None:
-                        await checkpointer.aput_writes(
-                            checkpoint_config,
-                            input_writes,
-                            str(uuid5(UUID(checkpoint["id"]), INPUT)),
-                        )
+                    await _astore_or_fork_delta_writes(
+                        checkpointer,
+                        config,
+                        saved,
+                        checkpoint_config,
+                        self.channels,
+                        [
+                            (
+                                str(uuid5(UUID(checkpoint["id"]), INPUT)),
+                                input_writes,
+                                None,
+                            )
+                        ],
+                        fork_pending,
+                        is_first=is_first,
+                    )
                     updated_channels = apply_writes(
                         checkpoint,
                         channels,
@@ -2566,30 +2550,19 @@ class Pregel(
             fork_pending |= delta_channels_overwritten(
                 self.channels, (w for t in run_tasks for w in t.writes)
             )
-            # The base's other children replay whatever is stored on it, so an
-            # edit of an older checkpoint stores none of its writes there: the
-            # checkpoint written here carries them, its delta channels
-            # snapshotted. Later supersteps address the checkpoint just written.
-            if (
-                is_first
-                and saved is not None
-                and await acheckpoint_superseded(checkpointer, config, saved)
-            ):
-                fork_pending.update(
-                    ch
-                    for ch in updated_channels
-                    if isinstance(self.channels.get(ch), DeltaChannel)
-                )
-            elif saved is not None:
-                for task_id, task in zip(run_task_ids, run_tasks):
-                    channel_writes = [w for w in task.writes if w[0] != PUSH]
-                    if channel_writes:
-                        await checkpointer.aput_writes(
-                            checkpoint_config,
-                            channel_writes,
-                            task_id,
-                            **_task_path_kwarg(checkpointer.aput_writes, task),
-                        )
+            await _astore_or_fork_delta_writes(
+                checkpointer,
+                config,
+                saved,
+                checkpoint_config,
+                self.channels,
+                [
+                    (task_id, [w for w in task.writes if w[0] != PUSH], task)
+                    for task_id, task in zip(run_task_ids, run_tasks)
+                ],
+                fork_pending,
+                is_first=is_first,
+            )
             apply_writes(
                 checkpoint,
                 channels,
@@ -4296,6 +4269,88 @@ def _task_path_kwarg(put_writes: Callable[..., Any], task: PregelTaskWrites) -> 
     if not put_writes_accepts_task_path(put_writes):
         return {}
     return {"task_path": task_path_str(task.path)}
+
+
+_UpdateWrites = Sequence[tuple[str, Sequence[tuple[str, Any]], PregelTaskWrites | None]]
+
+
+def _delta_writes(
+    channels: Mapping[str, BaseChannel | ManagedValueSpec], writes: _UpdateWrites
+) -> list[tuple[str, Any]]:
+    """Give the update's DeltaChannel writes message ids, as the loop's
+    `put_writes` does, so every read of them returns the same ids."""
+    delta = [
+        (ch, value)
+        for _, task_writes, _ in writes
+        for ch, value in task_writes
+        if isinstance(channels.get(ch), DeltaChannel)
+    ]
+    for _, value in delta:
+        ensure_message_ids(value)
+    return delta
+
+
+def _store_or_fork_delta_writes(
+    checkpointer: BaseCheckpointSaver,
+    config: RunnableConfig,
+    saved: CheckpointTuple | None,
+    checkpoint_config: RunnableConfig,
+    channels: Mapping[str, BaseChannel | ManagedValueSpec],
+    writes: _UpdateWrites,
+    fork_pending: set[str],
+    *,
+    is_first: bool,
+) -> None:
+    """Save an update's writes where its DeltaChannels will read them.
+
+    A DeltaChannel rebuilds its value from the writes saved on a checkpoint's
+    ancestors, so the writes go on the checkpoint the update builds on. If the
+    thread already moved past that checkpoint, its other children would read
+    them too, so the new checkpoint snapshots those channels instead. `writes`
+    holds `(task_id, writes, task)` per task; `task` is `None` for input.
+    """
+    delta = _delta_writes(channels, writes)
+    if saved is None:
+        return
+    if is_first and checkpoint_superseded(checkpointer, config, saved):
+        fork_pending.update(ch for ch, _ in delta)
+        return
+    for task_id, task_writes, task in writes:
+        if task_writes:
+            checkpointer.put_writes(
+                checkpoint_config,
+                task_writes,
+                task_id,
+                **(_task_path_kwarg(checkpointer.put_writes, task) if task else {}),
+            )
+
+
+async def _astore_or_fork_delta_writes(
+    checkpointer: BaseCheckpointSaver,
+    config: RunnableConfig,
+    saved: CheckpointTuple | None,
+    checkpoint_config: RunnableConfig,
+    channels: Mapping[str, BaseChannel | ManagedValueSpec],
+    writes: _UpdateWrites,
+    fork_pending: set[str],
+    *,
+    is_first: bool,
+) -> None:
+    """Async `_store_or_fork_delta_writes`."""
+    delta = _delta_writes(channels, writes)
+    if saved is None:
+        return
+    if is_first and await acheckpoint_superseded(checkpointer, config, saved):
+        fork_pending.update(ch for ch, _ in delta)
+        return
+    for task_id, task_writes, task in writes:
+        if task_writes:
+            await checkpointer.aput_writes(
+                checkpoint_config,
+                task_writes,
+                task_id,
+                **(_task_path_kwarg(checkpointer.aput_writes, task) if task else {}),
+            )
 
 
 def _update_task_id(checkpoint_id: str, i: int) -> str:
