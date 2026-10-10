@@ -7,7 +7,7 @@ import sys
 import threading
 import time
 import weakref
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
@@ -686,8 +686,6 @@ async def arun_with_retry(
     task: PregelExecutableTask,
     retry_policy: Sequence[RetryPolicy] | None,
     stream: bool = False,
-    match_cached_writes: Callable[[], Awaitable[Sequence[PregelExecutableTask]]]
-    | None = None,
     configurable: dict[str, Any] | None = None,
 ) -> None:
     """Run a task asynchronously with retries."""
@@ -711,11 +709,6 @@ async def arun_with_retry(
                 )
             },
         )
-    if match_cached_writes is not None and task.cache_key is not None:
-        for t in await match_cached_writes():
-            if t is task:
-                # if the task is already cached, return
-                return
     while True:
         runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
         if isinstance(runtime, Runtime):
