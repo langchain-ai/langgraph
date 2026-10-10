@@ -258,7 +258,13 @@ class InMemorySaver(
                 writes = self._ordered_writes(thread_id, checkpoint_ns, checkpoint_id)
                 checkpoint_: Checkpoint = self.serde.loads_typed(checkpoint)
                 return CheckpointTuple(
-                    config=config,
+                    config={
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "checkpoint_ns": checkpoint_ns,
+                            "checkpoint_id": checkpoint_id,
+                        }
+                    },
                     checkpoint={
                         **checkpoint_,
                         "channel_values": self._load_blobs(

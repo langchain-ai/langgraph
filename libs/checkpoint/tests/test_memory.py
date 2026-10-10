@@ -720,3 +720,49 @@ class TestPreDeltaBlobTerminator:
         assert "PRE-DELTA-WRITE" in values
         # And the pending write at the target is never folded in.
         assert "PENDING-AT-TARGET" not in values
+
+
+def test_get_tuple_by_checkpoint_id_returns_checkpoint_ns() -> None:
+    """Regression test for langchain-ai/langgraph#9271.
+
+    When a checkpoint is addressed by `checkpoint_id` (without an explicit
+    `checkpoint_ns` in the lookup config), `get_tuple` must still return a
+    config that carries `checkpoint_ns`. Otherwise a subsequent `put` /
+    `update_state` raises `KeyError: 'checkpoint_ns'`.
+    """
+    memory_saver = InMemorySaver()
+
+    checkpoint = empty_checkpoint()
+    checkpoint["channel_values"] = {"foo": "bar"}
+    checkpoint["channel_versions"] = {"foo": 1}
+
+    # Put a checkpoint in the default (empty) namespace. This is the common
+    # path used by `update_state` / `put`.
+    new_config = memory_saver.put(
+        {"configurable": {"thread_id": "thread-1", "checkpoint_ns": ""}},
+        checkpoint,
+        {},
+        {"foo": 1},
+    )
+    checkpoint_id = new_config["configurable"]["checkpoint_id"]
+
+    # Look the checkpoint up by checkpoint_id only, mimicking a caller that
+    # does `graph.get_state({"configurable": {"thread_id": ..., "checkpoint_id": ...}})`
+    # and then feeds the returned `snapshot.config` back into `update_state`.
+    by_id_config: RunnableConfig = {
+        "configurable": {"thread_id": "thread-1", "checkpoint_id": checkpoint_id}
+    }
+    result = memory_saver.get_tuple(by_id_config)
+    assert result is not None
+
+    # The returned config must contain checkpoint_ns so downstream `put` works.
+    assert result.config["configurable"]["checkpoint_ns"] == ""
+
+    # A subsequent put using the returned config must not raise KeyError.
+    next_config = memory_saver.put(
+        result.config,
+        empty_checkpoint(),
+        {},
+        {"foo": 2},
+    )
+    assert next_config["configurable"]["checkpoint_ns"] == ""
