@@ -44,6 +44,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_REPLAY_STATE,
     CONFIG_KEY_RESUME_MAP,
+    CONFIG_KEY_RESUME_MAP_SENT,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SCRATCHPAD,
@@ -995,6 +996,7 @@ class PregelLoop:
                     and all(is_xxh3_128_hexdigest(k) for k in resume)
                 ):
                     self.config[CONF][CONFIG_KEY_RESUME_MAP] = resume
+                    self.config[CONF][CONFIG_KEY_RESUME_MAP_SENT] = set()
                 else:
                     if len(self._pending_interrupts()) > 1:
                         raise RuntimeError(
