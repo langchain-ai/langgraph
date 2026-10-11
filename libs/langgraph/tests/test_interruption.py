@@ -1,8 +1,10 @@
+import operator
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated, Any
 
 import pytest
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel, ValidationError
 from typing_extensions import TypedDict
 
@@ -251,3 +253,71 @@ def test_interrupt_response_schema_invalid_resume_after_earlier_interrupt(
     assert graph.invoke(resume({"approved": True}), config) == {
         "answer": ["ok", Decision(approved=True)]
     }
+
+
+def test_interrupt_node_name_is_one_node() -> None:
+    """A node-name string interrupts that node.
+
+    `"no" in "node_one"` is true, so `interrupt_after="node_one"` used to
+    pause after a node named `"no"`. `compile(interrupt_after="node_one")`
+    and `compile(interrupt_after=("node_one",))` raised TypeError while
+    joining the interrupt lists.
+    """
+
+    class State(TypedDict):
+        ran: Annotated[list[str], operator.add]
+
+    def node(name: str):
+        def _run(state: State) -> State:
+            return {"ran": [name]}
+
+        return _run
+
+    builder = StateGraph(State)
+    builder.add_node("no", node("no"))
+    builder.add_node("node_one", node("node_one"))
+    builder.add_node("two", node("two"))
+    builder.add_edge(START, "no")
+    builder.add_edge("no", "node_one")
+    builder.add_edge("node_one", "two")
+    builder.add_edge("two", END)
+
+    compiled = builder.compile(checkpointer=InMemorySaver(), interrupt_after="node_one")
+    assert "node_one" in compiled.interrupt_after_nodes
+    assert "no" not in compiled.interrupt_after_nodes
+
+    config = {"configurable": {"thread_id": "compile-str"}}
+    assert compiled.invoke({"ran": []}, config) == {"ran": ["no", "node_one"]}
+    assert compiled.get_state(config).next == ("two",)
+
+    compiled_tuple = builder.compile(
+        checkpointer=InMemorySaver(), interrupt_after=("node_one",)
+    )
+    config = {"configurable": {"thread_id": "compile-tuple"}}
+    assert compiled_tuple.invoke({"ran": []}, config)["ran"] == ["no", "node_one"]
+    assert compiled_tuple.get_state(config).next == ("two",)
+
+    graph = builder.compile(checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "invoke-after"}}
+    assert graph.invoke({"ran": []}, config, interrupt_after="node_one")["ran"] == [
+        "no",
+        "node_one",
+    ]
+    assert graph.get_state(config).next == ("two",)
+
+    config = {"configurable": {"thread_id": "invoke-before"}}
+    assert graph.invoke({"ran": []}, config, interrupt_before="node_one")["ran"] == [
+        "no"
+    ]
+    assert graph.get_state(config).next == ("node_one",)
+
+    config = {"configurable": {"thread_id": "invoke-list"}}
+    assert graph.invoke({"ran": []}, config, interrupt_after=["node_one"])["ran"] == [
+        "no",
+        "node_one",
+    ]
+    assert graph.get_state(config).next == ("two",)
+
+    config = {"configurable": {"thread_id": "star"}}
+    assert graph.invoke({"ran": []}, config, interrupt_after="*")["ran"] == ["no"]
+    assert graph.get_state(config).next == ("node_one",)

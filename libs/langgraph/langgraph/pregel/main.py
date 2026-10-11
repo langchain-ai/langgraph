@@ -164,7 +164,11 @@ from langgraph.pregel._utils import (
     get_new_channel_versions,
     validate_timeout_supported,
 )
-from langgraph.pregel._validate import validate_graph, validate_keys
+from langgraph.pregel._validate import (
+    normalize_interrupt_nodes,
+    validate_graph,
+    validate_keys,
+)
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.pregel.debug import get_bolded_text, get_colored_text, tasks_w_writes
 from langgraph.pregel.protocol import PregelProtocol, StreamChunk, StreamProtocol
@@ -821,8 +825,8 @@ class Pregel(
         self.stream_eager = stream_eager
         self.output_channels = output_channels
         self.stream_channels = stream_channels
-        self.interrupt_after_nodes = interrupt_after_nodes
-        self.interrupt_before_nodes = interrupt_before_nodes
+        self.interrupt_after_nodes = normalize_interrupt_nodes(interrupt_after_nodes)
+        self.interrupt_before_nodes = normalize_interrupt_nodes(interrupt_before_nodes)
         self.input_channels = input_channels
         self.step_timeout = step_timeout
         self.debug = debug if debug is not None else get_debug()
@@ -2668,8 +2672,12 @@ class Pregel(
             output_keys = self.stream_channels_asis
         else:
             validate_keys(output_keys, self.channels)
-        interrupt_before = interrupt_before or self.interrupt_before_nodes
-        interrupt_after = interrupt_after or self.interrupt_after_nodes
+        interrupt_before = normalize_interrupt_nodes(
+            interrupt_before or self.interrupt_before_nodes
+        )
+        interrupt_after = normalize_interrupt_nodes(
+            interrupt_after or self.interrupt_after_nodes
+        )
         if isinstance(stream_mode, str):
             stream_modes = {stream_mode}
         else:

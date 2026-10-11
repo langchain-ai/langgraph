@@ -75,6 +75,7 @@ from langgraph.pregel._call import get_runnable_for_task, identifier
 from langgraph.pregel._io import read_channels
 from langgraph.pregel._log import logger
 from langgraph.pregel._read import INPUT_CACHE_KEY_TYPE, PregelNode
+from langgraph.pregel._validate import normalize_interrupt_nodes
 from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
 from langgraph.types import (
     All,
@@ -167,7 +168,10 @@ def should_interrupt(
         version > seen.get(chan, null_version)  # type: ignore[operator]
         for chan, version in checkpoint["channel_versions"].items()
     )
-    # and any triggered node is in interrupt_nodes list
+    # and any triggered node is in interrupt_nodes list.
+    # A node name is a str, which is a sequence of characters; normalize so
+    # `"no"` does not match `interrupt_after="node_one"`.
+    interrupt_nodes = normalize_interrupt_nodes(interrupt_nodes)
     return (
         [
             task

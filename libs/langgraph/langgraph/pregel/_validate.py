@@ -10,6 +10,22 @@ from langgraph.pregel._read import PregelNode
 from langgraph.types import All
 
 
+def normalize_interrupt_nodes(
+    nodes: All | Sequence[str] | None,
+) -> All | Sequence[str]:
+    """Treat a bare node name as a one-element sequence.
+
+    `"*"` is unchanged and means every node. A name such as `"node_one"` must
+    stay one name: membership on the raw string is true for any substring, so
+    a node named `"no"` would match `interrupt_after="node_one"`.
+    """
+    if nodes is None:
+        return ()
+    if isinstance(nodes, str):
+        return "*" if nodes == "*" else (nodes,)
+    return nodes
+
+
 def validate_graph(
     nodes: Mapping[str, PregelNode],
     channels: dict[str, BaseChannel],
@@ -97,6 +113,8 @@ def validate_graph(
                 f"in known channels: '{repr(sorted(channels))[:100]}'"
             )
 
+    interrupt_after_nodes = normalize_interrupt_nodes(interrupt_after_nodes)
+    interrupt_before_nodes = normalize_interrupt_nodes(interrupt_before_nodes)
     if interrupt_after_nodes != "*":
         for n in interrupt_after_nodes:
             if n not in nodes:

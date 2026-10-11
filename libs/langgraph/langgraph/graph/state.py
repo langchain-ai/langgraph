@@ -72,6 +72,7 @@ from langgraph.managed.base import (
 )
 from langgraph.pregel import Pregel
 from langgraph.pregel._read import ChannelRead, PregelNode
+from langgraph.pregel._validate import normalize_interrupt_nodes
 from langgraph.pregel._write import (
     ChannelWrite,
     ChannelWriteEntry,
@@ -1214,7 +1215,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 across invocations (e.g., for conversation memory).
 
             interrupt_before: An optional list of node names to interrupt before.
+                A single node name is accepted too. `"*"` means every node.
             interrupt_after: An optional list of node names to interrupt after.
+                A single node name is accepted too. `"*"` means every node.
             debug: A flag indicating whether to enable debug mode.
             name: The name to use for the compiled graph.
             transformers: Optional sequence of `StreamTransformer` classes or
@@ -1253,16 +1256,18 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 checkpointer, serde_allowlist
             )
 
-        # assign default values
-        interrupt_before = interrupt_before or []
-        interrupt_after = interrupt_after or []
+        # A node name is a str, and str is a sequence of characters.
+        # Normalize before concatenating so `"node_one"` stays one name.
+        interrupt_before = normalize_interrupt_nodes(interrupt_before or [])
+        interrupt_after = normalize_interrupt_nodes(interrupt_after or [])
 
         # validate the graph
         self.validate(
             interrupt=(
-                (interrupt_before if interrupt_before != "*" else []) + interrupt_after
-                if interrupt_after != "*"
-                else []
+                []
+                if interrupt_after == "*"
+                else ([] if interrupt_before == "*" else list(interrupt_before))
+                + list(interrupt_after)
             )
         )
 

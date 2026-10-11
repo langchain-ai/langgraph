@@ -22,6 +22,7 @@ from langgraph.pregel._algo import (
 from langgraph.pregel._checkpoint import channels_from_checkpoint, empty_checkpoint
 from langgraph.pregel._io import map_input
 from langgraph.pregel._read import PregelNode
+from langgraph.pregel._validate import normalize_interrupt_nodes
 from langgraph.pregel._write import ChannelWrite
 from langgraph.types import All, Checkpointer
 
@@ -217,6 +218,8 @@ def draw_graph(
 
     # assemble the graph
     graph = Graph()
+    interrupt_before_nodes = normalize_interrupt_nodes(interrupt_before_nodes)
+    interrupt_after_nodes = normalize_interrupt_nodes(interrupt_after_nodes)
     # add nodes
     for name, node in nodes.items():
         metadata = dict(node.metadata or {})
