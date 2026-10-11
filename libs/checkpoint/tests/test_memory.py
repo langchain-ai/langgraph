@@ -78,6 +78,28 @@ class TestMemorySaver:
         }
         self.metadata_3: CheckpointMetadata = {}
 
+    def _save_pagination_checkpoints(self) -> list[str]:
+        checkpoint_ids = []
+        for checkpoint_id, source in (
+            ("1", "input"),
+            ("2", "loop"),
+            ("3", "input"),
+            ("4", "loop"),
+        ):
+            config: RunnableConfig = {
+                "configurable": {
+                    "thread_id": "pagination-thread",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": checkpoint_id,
+                }
+            }
+            checkpoint = empty_checkpoint()
+            saved_config = self.memory_saver.put(
+                config, checkpoint, {"source": source}, checkpoint["channel_versions"]
+            )
+            checkpoint_ids.append(saved_config["configurable"]["checkpoint_id"])
+        return checkpoint_ids
+
     def test_combined_metadata(self) -> None:
         config: RunnableConfig = {
             "configurable": {
@@ -152,7 +174,112 @@ class TestMemorySaver:
             search_results_5[1].config["configurable"]["checkpoint_ns"],
         } == {"", "inner"}
 
-        # TODO: test before and limit params
+    def test_search_before_and_limit(self) -> None:
+        checkpoint_ids = self._save_pagination_checkpoints()
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "pagination-thread",
+                "checkpoint_ns": "",
+            }
+        }
+
+        before_results = list(
+            self.memory_saver.list(
+                config,
+                before={
+                    "configurable": {
+                        "thread_id": "pagination-thread",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": checkpoint_ids[2],
+                    }
+                },
+            )
+        )
+        assert [
+            result.config["configurable"]["checkpoint_id"] for result in before_results
+        ] == checkpoint_ids[1::-1]
+
+        limited_results = list(
+            self.memory_saver.list(config, filter={"source": "loop"}, limit=1)
+        )
+        assert [
+            result.config["configurable"]["checkpoint_id"] for result in limited_results
+        ] == [checkpoint_ids[3]]
+
+        paginated_results = list(
+            self.memory_saver.list(
+                config,
+                filter={"source": "loop"},
+                before={
+                    "configurable": {
+                        "thread_id": "pagination-thread",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": checkpoint_ids[3],
+                    }
+                },
+                limit=1,
+            )
+        )
+        assert [
+            result.config["configurable"]["checkpoint_id"]
+            for result in paginated_results
+        ] == [checkpoint_ids[1]]
+
+    async def test_asearch_before_and_limit(self) -> None:
+        checkpoint_ids = self._save_pagination_checkpoints()
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "pagination-thread",
+                "checkpoint_ns": "",
+            }
+        }
+
+        before_results = [
+            result
+            async for result in self.memory_saver.alist(
+                config,
+                before={
+                    "configurable": {
+                        "thread_id": "pagination-thread",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": checkpoint_ids[2],
+                    }
+                },
+            )
+        ]
+        assert [
+            result.config["configurable"]["checkpoint_id"] for result in before_results
+        ] == checkpoint_ids[1::-1]
+
+        limited_results = [
+            result
+            async for result in self.memory_saver.alist(
+                config, filter={"source": "loop"}, limit=1
+            )
+        ]
+        assert [
+            result.config["configurable"]["checkpoint_id"] for result in limited_results
+        ] == [checkpoint_ids[3]]
+
+        paginated_results = [
+            result
+            async for result in self.memory_saver.alist(
+                config,
+                filter={"source": "loop"},
+                before={
+                    "configurable": {
+                        "thread_id": "pagination-thread",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": checkpoint_ids[3],
+                    }
+                },
+                limit=1,
+            )
+        ]
+        assert [
+            result.config["configurable"]["checkpoint_id"]
+            for result in paginated_results
+        ] == [checkpoint_ids[1]]
 
     async def test_asearch(self) -> None:
         # set up test
