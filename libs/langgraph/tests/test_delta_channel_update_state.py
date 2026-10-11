@@ -31,7 +31,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import _messages_delta_reducer
 from langgraph.pregel import NodeBuilder, Pregel
-from langgraph.types import StateSnapshot, StateUpdate
+from langgraph.types import Overwrite, StateSnapshot, StateUpdate
 
 pytestmark = pytest.mark.anyio
 
@@ -684,6 +684,20 @@ async def test_aupdate_state_gives_a_message_an_id_that_every_read_keeps() -> No
         await _amessage_ids(graph, config),
         await _amessage_ids(graph, config),
     )
+    assert first[-1] is not None
+    assert first == second
+
+
+def test_update_state_gives_a_message_in_an_overwrite_an_id_that_every_read_keeps() -> (
+    None
+):
+    graph = _build_graph(InMemorySaver())
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"messages": [HumanMessage("a", id="a")]}, config)
+
+    graph.update_state(config, {"messages": Overwrite([HumanMessage("b")])})
+
+    first, second = _message_ids(graph, config), _message_ids(graph, config)
     assert first[-1] is not None
     assert first == second
 

@@ -17,6 +17,7 @@ from typing_extensions import TypedDict
 
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import Overwrite
 
 pytestmark = pytest.mark.anyio
 
@@ -137,4 +138,25 @@ def test_delta_channel_dict_style_message_gets_stable_id() -> None:
     )
     assert len(set(ids)) == 1, (
         f"dict-style HumanMessage id must be stable across get_state() calls; got {ids}"
+    )
+
+
+def test_delta_channel_message_in_an_overwrite_gets_stable_id() -> None:
+    graph = _build_graph(InMemorySaver())
+    config = {"configurable": {"thread_id": "overwrite-id-stability"}}
+
+    graph.invoke({"messages": Overwrite([HumanMessage(content="hello")])}, config)
+
+    ids = [
+        next(
+            m.id
+            for m in graph.get_state(config).values["messages"]
+            if isinstance(m, HumanMessage)
+        )
+        for _ in range(3)
+    ]
+
+    assert ids[0] is not None, "a message inside an Overwrite should get a UUID"
+    assert len(set(ids)) == 1, (
+        f"its id must be stable across get_state() calls; got {ids}"
     )
