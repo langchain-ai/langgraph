@@ -236,6 +236,56 @@ async def test_stateless_state_resets_with_interrupt_async(
     ]
 
 
+@NEEDS_CONTEXTVARS
+async def test_stateless_resume_keeps_completed_sibling_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Tests that resuming a stateless subgraph does not re-run a node that
+    completed in the same super-step as the node that interrupted. Its saved
+    write is reused, as it is when the same nodes run in a graph that is not
+    nested.
+    """
+
+    class State(TypedDict, total=False):
+        approved: bool
+        answer: str
+
+    agent_calls = 0
+
+    def gate(state: State) -> dict:
+        return {"approved": interrupt("approve?")}
+
+    def agent(state: State) -> dict:
+        nonlocal agent_calls
+        agent_calls += 1
+        return {"answer": f"reply {agent_calls}"}
+
+    # gate and agent run in parallel, in the same super-step.
+    inner = (
+        StateGraph(State)
+        .add_node("gate", gate)
+        .add_node("agent", agent)
+        .add_edge(START, "gate")
+        .add_edge(START, "agent")
+        .compile()
+    )
+    parent = (
+        StateGraph(State)
+        .add_node("block", inner)
+        .add_edge(START, "block")
+        .compile(checkpointer=async_checkpointer)
+    )
+    config = {"configurable": {"thread_id": str(uuid4())}}
+
+    result = await parent.ainvoke({}, config)
+    assert "__interrupt__" in result
+    assert agent_calls == 1
+
+    result = await parent.ainvoke(Command(resume=True), config)
+    assert result == {"approved": True, "answer": "reply 1"}
+    assert agent_calls == 1
+
+
 # -- checkpointer=False --
 
 

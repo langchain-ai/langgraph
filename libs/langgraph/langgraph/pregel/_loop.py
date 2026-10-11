@@ -395,6 +395,14 @@ class PregelLoop:
             )
         else:
             self.checkpoint_config = self.config
+        if self.is_nested:
+            # The parent sets the checkpoint id key on every subgraph config,
+            # so a subgraph is replaying only when the parent time-travels.
+            self.is_replaying = (
+                self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS)
+                in self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
+                or self.config[CONF].get(CONFIG_KEY_REPLAY_STATE) is not None
+            )
         if thread_id := self.checkpoint_config[CONF].get(CONFIG_KEY_THREAD_ID):
             if not isinstance(thread_id, str):
                 self.checkpoint_config = patch_configurable(
