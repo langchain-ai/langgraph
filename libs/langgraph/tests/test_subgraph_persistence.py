@@ -16,7 +16,7 @@ from typing_extensions import TypedDict
 
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import MessagesState
-from langgraph.types import Command, Interrupt, interrupt
+from langgraph.types import Command, Interrupt, RetryPolicy, interrupt
 from tests.any_str import AnyStr
 
 
@@ -685,3 +685,64 @@ def test_child_with_own_thread_id_keeps_namespace(
     parent.invoke({"result": ""}, config=parent_config)
     state2 = child.get_state(child_config)
     assert state2.values.get("count") == 2
+
+
+def test_subgraph_namespace_is_reused_across_parent_retries(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class ChildState(TypedDict):
+        count: int
+
+    child_runs = {"research": 0, "review": 0}
+
+    def build_child(name: str):
+        def child_node(state: ChildState) -> dict:
+            child_runs[name] += 1
+            return {"count": state.get("count", 0) + 1}
+
+        return (
+            StateGraph(ChildState)
+            .add_node("run", child_node)
+            .add_edge(START, "run")
+            .compile(checkpointer=True, name=name.upper())
+        )
+
+    research = build_child("research")
+    review = build_child("review")
+    attempts = 0
+
+    def parent_node(state: ParentState) -> dict:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 2:
+            review_result = review.invoke({})
+        research_result = research.invoke({})
+        if attempts < 3:
+            raise ConnectionError("retry research")
+        if attempts != 2:
+            review_result = review.invoke({})
+        return {"result": f"{research_result['count']}:{review_result['count']}"}
+
+    parent = (
+        StateGraph(ParentState)
+        .add_node(
+            "RESEARCH",
+            parent_node,
+            retry_policy=RetryPolicy(
+                max_attempts=3,
+                initial_interval=0,
+                jitter=False,
+                retry_on=ConnectionError,
+            ),
+        )
+        .add_edge(START, "RESEARCH")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    result = parent.invoke(
+        {"result": ""}, {"configurable": {"thread_id": str(uuid4())}}
+    )
+
+    assert result == {"result": "1:1"}
+    assert attempts == 3
+    assert child_runs == {"research": 1, "review": 1}

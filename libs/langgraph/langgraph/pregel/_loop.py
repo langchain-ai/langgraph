@@ -355,19 +355,28 @@ class PregelLoop:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: PregelScratchpad | None = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
         if isinstance(scratchpad, PregelScratchpad):
-            # if count is > 0, append to checkpoint_ns
-            # if count is 0, leave as is
-            if cnt := scratchpad.subgraph_counter():
+            subgraph_id = id(nodes)
+            invocation = scratchpad.next_subgraph_invocation(subgraph_id)
+            binding_key = (subgraph_id, invocation)
+            if (
+                namespace := scratchpad.subgraph_namespace_bindings.get(binding_key)
+            ) is None:
+                cnt = scratchpad.subgraph_counter()
+                namespace = (
+                    NS_SEP.join(
+                        (
+                            config[CONF][CONFIG_KEY_CHECKPOINT_NS],
+                            str(cnt),
+                        )
+                    )
+                    if cnt
+                    else config[CONF][CONFIG_KEY_CHECKPOINT_NS]
+                )
+                scratchpad.subgraph_namespace_bindings[binding_key] = namespace
+            if namespace != config[CONF][CONFIG_KEY_CHECKPOINT_NS]:
                 self.config = patch_configurable(
                     self.config,
-                    {
-                        CONFIG_KEY_CHECKPOINT_NS: NS_SEP.join(
-                            (
-                                config[CONF][CONFIG_KEY_CHECKPOINT_NS],
-                                str(cnt),
-                            )
-                        )
-                    },
+                    {CONFIG_KEY_CHECKPOINT_NS: namespace},
                 )
         if not self.is_nested and config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
             self.config = patch_configurable(

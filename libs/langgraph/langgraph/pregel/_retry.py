@@ -28,6 +28,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_RUNTIME,
+    CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_TASK_ID,
@@ -36,6 +37,7 @@ from langgraph._internal._constants import (
     NS_SEP,
 )
 from langgraph._internal._runnable import create_task_in_config_context
+from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._timeout import sync_timeout_unsupported
 from langgraph.errors import (
     GraphBubbleUp,
@@ -678,6 +680,9 @@ def run_with_retry(
                 f"Retrying task {task.name} after {sleep_time:.2f} seconds (attempt {attempts}) after {exc.__class__.__name__} {exc}",
                 exc_info=exc,
             )
+            scratchpad = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
+            if isinstance(scratchpad, PregelScratchpad):
+                scratchpad.reset_subgraph_invocations()
             # signal subgraphs to resume (if available)
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
 
@@ -834,6 +839,9 @@ async def arun_with_retry(
                 f"Retrying task {task.name} after {sleep_time:.2f} seconds (attempt {attempts}) after {exc.__class__.__name__} {exc}",
                 exc_info=exc,
             )
+            scratchpad = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
+            if isinstance(scratchpad, PregelScratchpad):
+                scratchpad.reset_subgraph_invocations()
             # signal subgraphs to resume (if available)
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
 
