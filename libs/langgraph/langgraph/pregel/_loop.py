@@ -1360,6 +1360,14 @@ class PregelLoop:
         ):
             return
 
+        # A checkpoint a `checkpoint_id` addressed may already have children,
+        # which read the writes stored on it, so then the channels this run
+        # wrote snapshot instead.
+        if self._has_persisted_parent and not self._loaded_latest:
+            self._delta_channels_forced_snapshot.update(
+                w[3] for w in self._exit_delta_writes
+            )
+
         counters = dict(
             self.checkpoint_metadata.get("counters_since_delta_snapshot") or {}
         )
