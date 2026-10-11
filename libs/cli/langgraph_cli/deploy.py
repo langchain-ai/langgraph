@@ -2518,6 +2518,13 @@ def deploy_listeners() -> None:
 
 @OPT_HOST_API_KEY
 @OPT_HOST_URL
+@click.option(
+    "--json",
+    "json_output",
+    is_flag=True,
+    default=False,
+    help="Emit the listeners as a JSON array instead of a table.",
+)
 @deploy_listeners.command(
     "list",
     help=(
@@ -2526,11 +2533,18 @@ def deploy_listeners() -> None:
         "--listener-id <id>` to deploy through it."
     ),
 )
-def deploy_listeners_list(api_key: str | None, host_url: str | None) -> None:
+def deploy_listeners_list(
+    api_key: str | None, host_url: str | None, json_output: bool
+) -> None:
+    global _no_input
+    _no_input = json_output
     client = _create_host_backend_client(host_url, api_key)
     listeners = _call_host_backend_with_optional_tenant(
         client, lambda c: c.list_listeners()
     )
+    if json_output:
+        click.echo(json_mod.dumps(listeners))
+        return
     if not listeners:
         click.echo("No listeners found for this workspace.")
         return
