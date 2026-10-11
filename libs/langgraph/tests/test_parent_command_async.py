@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import operator
+from typing import Annotated
+
 import pytest
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import TypedDict
 
+from langgraph.errors import NodeError
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
@@ -55,3 +59,42 @@ async def test_parent_command_from_nested_subgraph() -> None:
 
     assert await graph.ainvoke({"jump_from_idx": 1}) == {"jump_from_idx": 1}
     assert await graph.ainvoke({"jump_from_idx": 2}) == {"jump_from_idx": 2}
+
+
+async def test_parent_command_from_subgraph_error_handler() -> None:
+    class State(TypedDict):
+        log: Annotated[list[str], operator.add]
+
+    async def fail(state: State) -> State:
+        raise RuntimeError("child failed")
+
+    async def handle(state: State, error: NodeError) -> Command:
+        # Route to the parent graph from the error handler.
+        return Command(
+            update={"log": [f"handled:{error.node}"]},
+            goto="recover",
+            graph=Command.PARENT,
+        )
+
+    async def recover(state: State) -> State:
+        return {"log": ["recovered"]}
+
+    child_builder: StateGraph[State] = StateGraph(State)
+    child_builder.add_node("fail", fail, error_handler=handle)
+    child_builder.add_edge(START, "fail")
+    child = child_builder.compile()
+
+    parent_builder: StateGraph[State] = StateGraph(State)
+
+    async def child_entry(state: State, config: RunnableConfig) -> State:
+        await child.ainvoke(state, config)
+        return state
+
+    parent_builder.add_node("child_entry", child_entry, destinations=("recover",))
+    parent_builder.add_node("recover", recover)
+    parent_builder.add_edge(START, "child_entry")
+    parent_builder.add_edge("recover", END)
+
+    graph = parent_builder.compile()
+
+    assert await graph.ainvoke({"log": []}) == {"log": ["handled:fail", "recovered"]}

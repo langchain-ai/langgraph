@@ -626,7 +626,15 @@ def run_with_retry(
                 break
             elif cmd.graph == Command.PARENT:
                 # this command is for the parent graph, assign it to the parent.
-                exc.args = (replace(cmd, graph=_checkpoint_ns_for_parent_command(ns)),)
+                parent_ns = _checkpoint_ns_for_parent_command(ns)
+                if task.path[-2:-1] == ("node_error_handler",):
+                    # A node error handler task runs one frame *below* its failed
+                    # node (see prepare_node_error_handler_task), so a
+                    # Command.PARENT emitted by it must shed the failed node's
+                    # frame as well to address the boundary of the graph the
+                    # failed node belongs to.
+                    parent_ns = _checkpoint_ns_for_parent_command(parent_ns)
+                exc.args = (replace(cmd, graph=parent_ns),)
             # bubble up
             raise
         except GraphBubbleUp:
@@ -766,7 +774,15 @@ async def arun_with_retry(
                 break
             elif cmd.graph == Command.PARENT:
                 # this command is for the parent graph, assign it to the parent.
-                exc.args = (replace(cmd, graph=_checkpoint_ns_for_parent_command(ns)),)
+                parent_ns = _checkpoint_ns_for_parent_command(ns)
+                if task.path[-2:-1] == ("node_error_handler",):
+                    # A node error handler task runs one frame *below* its failed
+                    # node (see prepare_node_error_handler_task), so a
+                    # Command.PARENT emitted by it must shed the failed node's
+                    # frame as well to address the boundary of the graph the
+                    # failed node belongs to.
+                    parent_ns = _checkpoint_ns_for_parent_command(parent_ns)
+                exc.args = (replace(cmd, graph=parent_ns),)
             _finish_timed_attempt(config, attempt_ctx)
             # bubble up the exception to the parent graph
             raise
