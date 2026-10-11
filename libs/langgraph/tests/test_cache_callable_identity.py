@@ -27,8 +27,14 @@ class State(TypedDict):
 
 NodePairFactory = Callable[[], tuple[Any, Any]]
 
+
+class _CacheIdentityCollision(AssertionError):
+    """Graph B returned graph A's output for the same input."""
+
+
 KNOWN_CACHE_IDENTITY_COLLISION = pytest.mark.xfail(
     strict=True,
+    raises=_CacheIdentityCollision,
     reason="Known cache callable-identity collision tracked by #8753",
 )
 
@@ -131,13 +137,19 @@ def _compile(node: Any, cache: InMemoryCache) -> Any:
     return builder.compile(cache=cache)
 
 
+def _assert_graph_b_result(result: State) -> None:
+    if result == {"out": "A"}:
+        raise _CacheIdentityCollision("graph B returned graph A's output")
+    assert result == {"out": "B"}
+
+
 def _assert_sync_isolated(node_a: Any, node_b: Any) -> None:
     cache = InMemoryCache()
     graph_a = _compile(node_a, cache)
     graph_b = _compile(node_b, cache)
 
     assert graph_a.invoke({"out": "input"}) == {"out": "A"}
-    assert graph_b.invoke({"out": "input"}) == {"out": "B"}
+    _assert_graph_b_result(graph_b.invoke({"out": "input"}))
 
 
 async def _assert_async_isolated(node_a: Any, node_b: Any) -> None:
@@ -146,7 +158,7 @@ async def _assert_async_isolated(node_a: Any, node_b: Any) -> None:
     graph_b = _compile(node_b, cache)
 
     assert await graph_a.ainvoke({"out": "input"}) == {"out": "A"}
-    assert await graph_b.ainvoke({"out": "input"}) == {"out": "B"}
+    _assert_graph_b_result(await graph_b.ainvoke({"out": "input"}))
 
 
 def test_cache_keeps_distinct_top_level_named_functions_separate() -> None:
