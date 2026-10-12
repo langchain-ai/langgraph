@@ -661,24 +661,41 @@ def _messages_input_graph() -> Any:
     )
 
 
-def test_update_state_gives_a_message_an_id_that_every_read_keeps() -> None:
+# Writes of "b" in shapes `_messages_delta_reducer` accepts.
+MESSAGE_SHAPES = [
+    pytest.param(lambda: [HumanMessage("b")], id="message"),
+    pytest.param(lambda: ["b"], id="string"),
+    pytest.param(lambda: "b", id="bare string"),
+    pytest.param(lambda: [("user", "b")], id="tuple"),
+    pytest.param(lambda: {"role": "user", "content": "b"}, id="bare dict"),
+    pytest.param(lambda: Overwrite([HumanMessage("b")]), id="Overwrite"),
+]
+
+
+@pytest.mark.parametrize("write", MESSAGE_SHAPES)
+def test_update_state_gives_a_message_of_any_shape_an_id_that_every_read_keeps(
+    write: Any,
+) -> None:
     graph = _build_graph(InMemorySaver())
     config = {"configurable": {"thread_id": "t"}}
     graph.invoke({"messages": [HumanMessage("a", id="a")]}, config)
 
-    graph.update_state(config, {"messages": [HumanMessage("b")]})
+    graph.update_state(config, {"messages": write()})
 
     first, second = _message_ids(graph, config), _message_ids(graph, config)
     assert first[-1] is not None
     assert first == second
 
 
-async def test_aupdate_state_gives_a_message_an_id_that_every_read_keeps() -> None:
+@pytest.mark.parametrize("write", MESSAGE_SHAPES)
+async def test_aupdate_state_gives_a_message_of_any_shape_an_id_that_every_read_keeps(
+    write: Any,
+) -> None:
     graph = _build_graph(InMemorySaver())
     config = {"configurable": {"thread_id": "t"}}
     await graph.ainvoke({"messages": [HumanMessage("a", id="a")]}, config)
 
-    await graph.aupdate_state(config, {"messages": [HumanMessage("b")]})
+    await graph.aupdate_state(config, {"messages": write()})
 
     first, second = (
         await _amessage_ids(graph, config),
@@ -688,14 +705,13 @@ async def test_aupdate_state_gives_a_message_an_id_that_every_read_keeps() -> No
     assert first == second
 
 
-def test_update_state_gives_a_message_in_an_overwrite_an_id_that_every_read_keeps() -> (
-    None
-):
-    graph = _build_graph(InMemorySaver())
+@pytest.mark.parametrize("write", MESSAGE_SHAPES)
+def test_update_as_input_gives_a_message_of_any_shape_an_id(write: Any) -> None:
+    graph = _messages_input_graph()
     config = {"configurable": {"thread_id": "t"}}
-    graph.invoke({"messages": [HumanMessage("a", id="a")]}, config)
+    graph.invoke({"messages": [HumanMessage("a", id="a")], "go": 1}, config)
 
-    graph.update_state(config, {"messages": Overwrite([HumanMessage("b")])})
+    graph.update_state(config, {"messages": write()}, as_node="__input__")
 
     first, second = _message_ids(graph, config), _message_ids(graph, config)
     assert first[-1] is not None
@@ -712,18 +728,6 @@ def test_update_state_on_an_older_checkpoint_gives_a_message_an_id() -> None:
     branch = graph.update_state(older, {"messages": [HumanMessage("b")]})
 
     assert _message_ids(graph, branch)[-1] is not None
-
-
-def test_update_as_input_gives_a_message_an_id_that_every_read_keeps() -> None:
-    graph = _messages_input_graph()
-    config = {"configurable": {"thread_id": "t"}}
-    graph.invoke({"messages": [HumanMessage("a", id="a")], "go": 1}, config)
-
-    graph.update_state(config, {"messages": [HumanMessage("b")]}, as_node="__input__")
-
-    first, second = _message_ids(graph, config), _message_ids(graph, config)
-    assert first[-1] is not None
-    assert first == second
 
 
 async def test_aupdate_as_input_gives_a_message_an_id_that_every_read_keeps() -> None:

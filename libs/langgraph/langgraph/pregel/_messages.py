@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable, Iterator, Sequence
+from collections.abc import (
+    AsyncIterator,
+    Callable,
+    Iterator,
+    Mapping,
+    MutableSequence,
+    Sequence,
+)
 from dataclasses import fields, is_dataclass
 from typing import (
     Any,
@@ -10,7 +17,7 @@ from typing import (
 from uuid import UUID, uuid4
 
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.messages import BaseMessage, ToolMessage
+from langchain_core.messages import AnyMessage, BaseMessage, RemoveMessage, ToolMessage
 from langchain_core.messages.utils import convert_to_messages
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 from pydantic import BaseModel
@@ -18,9 +25,10 @@ from pydantic import BaseModel
 from langgraph._internal._config import filter_to_user_tags
 from langgraph._internal._constants import NS_SEP
 from langgraph.channels.binop import _get_overwrite
+from langgraph.channels.delta import DeltaChannel
 from langgraph.constants import TAG_HIDDEN, TAG_NOSTREAM
 from langgraph.pregel.protocol import StreamChunk
-from langgraph.types import Command
+from langgraph.types import Command, Overwrite
 
 try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
@@ -409,6 +417,74 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
             self.stream((meta[0], "messages", (event, v2_meta)))
 
 
+# Defined here rather than in `langgraph.graph.message`, which re-exports it:
+# `ensure_message_ids` has to recognize it, and importing that module from the
+# loop would be an import cycle.
+def _messages_delta_reducer(
+    state: list[AnyMessage], writes: list[list[AnyMessage]]
+) -> list[AnyMessage]:
+    """**Experimental.** Batch reducer for use with `DeltaChannel`.
+
+    Processes all writes in one pass — dedup by ID, `RemoveMessage`
+    tombstoning — without calling `add_messages`.
+
+    This reducer is batching-invariant, as required by `DeltaChannel`:
+    `reducer(reducer(state, xs), ys) == reducer(state, xs + ys)`.
+
+    Raw dict / string / tuple inputs are coerced to typed `BaseMessage`
+    objects so that HTTP-driven graphs work without a separate coercion
+    step. This is not full `add_messages` parity — `REMOVE_ALL_MESSAGES`,
+    unknown-id `RemoveMessage` errors, missing-id UUID assignment, and
+    `BaseMessageChunk` conversion are not handled here.
+
+    Example::
+
+        from typing import Annotated
+        from langgraph.channels.delta import DeltaChannel
+        from langgraph.graph.message import _messages_delta_reducer
+
+        class State(TypedDict):
+            messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+    """
+
+    # Each write is either a list of message-likes or a single message-like
+    # (BaseMessage / dict / str / tuple). Only lists flatten; everything
+    # else is one message.
+    flat: list[Any] = []
+    for w in writes:
+        if isinstance(w, list):
+            flat.extend(w)
+        else:
+            flat.append(w)
+    # Steady state: the reducer's own output is already typed, so skip
+    # `convert_to_messages` on state when the first element is a BaseMessage.
+    # Only raw input (initial dicts, deserialized blobs) hits the slow path.
+    if state and isinstance(state[0], BaseMessage):
+        state_msgs = state
+    else:
+        state_msgs = cast("list[AnyMessage]", convert_to_messages(state))
+    msgs = cast("list[AnyMessage]", convert_to_messages(flat))
+
+    index: dict[str, int] = {
+        m.id: i for i, m in enumerate(state_msgs) if m.id is not None
+    }
+    result: list[AnyMessage | None] = list(state_msgs)
+    for msg in msgs:
+        mid = msg.id
+        if mid is None:
+            result.append(msg)
+        elif isinstance(msg, RemoveMessage):
+            if mid in index:
+                result[index[mid]] = None
+                del index[mid]
+        elif mid in index:
+            result[index[mid]] = msg
+        else:
+            index[mid] = len(result)
+            result.append(msg)
+    return [m for m in result if m is not None]
+
+
 # Known role values (OpenAI-style) and type values (LangChain serialisation)
 # that identify a dict as a message. Checked before coercing to BaseMessage so
 # we don't accidentally touch unrelated dicts that happen to have a "role" key.
@@ -424,49 +500,103 @@ def _is_message_dict(item: dict) -> bool:
     return item.get("role") in _MESSAGE_ROLES or item.get("type") in _MESSAGE_TYPES
 
 
-def ensure_message_ids(value: Any) -> None:
-    """Coerce message-like write values to typed BaseMessages with stable IDs.
+def ensure_message_ids(
+    channels: Mapping[str, Any], writes: Sequence[tuple[str, Any]]
+) -> None:
+    """Give the messages written to DeltaChannels stable ids.
 
-    Called in put_writes() before DeltaChannel writes are submitted to the
-    checkpointer. Without this the checkpoint may store raw dicts or id=None
-    BaseMessages; every get_state() replay then produces a different UUID and
-    the same message appears with a different ID in each LangSmith trace.
+    A `DeltaChannel` replays its saved writes on every read, and its reducer
+    may not assign missing ids (`_messages_delta_reducer` doesn't), so a
+    message saved without an id comes back without one, or with a new one on
+    every read, and nothing can target it by id, for example `RemoveMessage`.
 
-    Handles five input shapes:
-    - BaseMessage objects: assign a UUID if id is None.
-    - Dicts with a known "role" (OpenAI-style) or "type" (LangChain format) at
-      the root level: stamp "id" into the dict in-place. The reducer's
-      convert_to_messages call will forward the id to the resulting BaseMessage.
-    - Lists of the above: apply the same logic to each element, replacing dict
-      items with coerced BaseMessages so the shared list reference seen by
-      checkpoint_pending_writes and the background thread both get typed messages.
-    - Tuples of the above: apply the same logic to each element. A tuple can't
-      take a coerced message, so its dicts only get "id" stamped.
-    - An `Overwrite` of any of the above: apply the same logic to its value.
+    In a channel whose reducer is `_messages_delta_reducer`, every message-like
+    it accepts (a message, a dict, a string, a `(role, content)` tuple; alone,
+    in a list or in an `Overwrite`) becomes a message with an id. Other
+    DeltaChannels may hold other data, so there only message objects get ids,
+    plus message dicts outside an `Overwrite`: one in a list becomes a message.
+    Anything that can't become a message is left as it is, so it fails where
+    it always has: a message dict in a list raises here, anything else when
+    the reducer reads it. An empty id counts as missing.
 
-    Mutating synchronously here (before the background thread is submitted) is
-    safe: the serialised bytes always reflect the post-coercion state.
+    A write that changes is replaced in `writes`: lists and dicts the caller
+    passed in are never changed, only the ids of message objects.
     """
-    if isinstance(value, BaseMessage):
-        if value.id is None:
-            value.id = str(uuid4())
-    elif isinstance(value, dict) and _is_message_dict(value):
-        if not value.get("id"):
-            value["id"] = str(uuid4())
-    elif isinstance(value, list):
-        for i, item in enumerate(value):
-            if isinstance(item, BaseMessage):
-                if item.id is None:
-                    item.id = str(uuid4())
-            elif isinstance(item, dict) and _is_message_dict(item):
-                msg = convert_to_messages([item])[0]
-                if msg.id is None:
-                    msg.id = str(uuid4())
-                value[i] = msg
-    elif isinstance(value, tuple):
-        for item in value:
-            ensure_message_ids(item)
-    else:
-        is_overwrite, overwrite_value = _get_overwrite(value)
-        if is_overwrite:
-            ensure_message_ids(overwrite_value)
+    for i, (ch, value) in enumerate(writes):
+        spec = channels.get(ch)
+        if not isinstance(spec, DeltaChannel):
+            continue
+        if spec.reducer is _messages_delta_reducer:
+            new_value = _with_message_ids(value)
+        else:
+            new_value = _with_base_message_ids(value)
+        if new_value is not value:
+            cast(MutableSequence[tuple[str, Any]], writes)[i] = (ch, new_value)
+
+
+def _with_message_ids(value: Any) -> Any:
+    is_overwrite, overwrite_value = _get_overwrite(value)
+    if not is_overwrite:
+        if isinstance(value, list):
+            return _map_messages(value, _list_item_with_id)
+        return _message_with_id(value)
+    if isinstance(overwrite_value, (list, tuple)):
+        items = _map_messages(overwrite_value, _message_with_id)
+        if items is not overwrite_value:
+            return Overwrite(items)
+    return value
+
+
+def _with_base_message_ids(value: Any) -> Any:
+    is_overwrite, overwrite_value = _get_overwrite(value)
+    if is_overwrite:
+        if isinstance(overwrite_value, (list, tuple)):
+            for item in overwrite_value:
+                _stamp_message_id(item)
+        return value
+    if isinstance(value, list):
+        return _map_messages(value, _base_list_item_with_id)
+    if isinstance(value, dict) and _is_message_dict(value) and not value.get("id"):
+        return {**value, "id": str(uuid4())}
+    _stamp_message_id(value)
+    return value
+
+
+def _map_messages(items: list | tuple, fn: Callable[[Any], Any]) -> list | tuple:
+    mapped = [fn(item) for item in items]
+    if all(new is old for new, old in zip(mapped, items)):
+        return items
+    return mapped if isinstance(items, list) else tuple(mapped)
+
+
+def _list_item_with_id(item: Any) -> Any:
+    if isinstance(item, dict) and _is_message_dict(item):
+        return _message_with_id(item, strict=True)
+    return _message_with_id(item)
+
+
+def _base_list_item_with_id(item: Any) -> Any:
+    if isinstance(item, dict) and _is_message_dict(item):
+        return _message_with_id(item, strict=True)
+    _stamp_message_id(item)
+    return item
+
+
+def _message_with_id(item: Any, *, strict: bool = False) -> Any:
+    if isinstance(item, BaseMessage):
+        _stamp_message_id(item)
+        return item
+    try:
+        message = convert_to_messages([item])[0]
+    except Exception:
+        if strict:
+            raise
+        return item
+    if not message.id:
+        message.id = str(uuid4())
+    return message
+
+
+def _stamp_message_id(item: Any) -> None:
+    if isinstance(item, BaseMessage) and item.id is None:
+        item.id = str(uuid4())
