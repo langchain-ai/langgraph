@@ -2404,6 +2404,36 @@ async def test_imp_nested(
 
 
 @NEEDS_CONTEXTVARS
+async def test_imp_nested_max_concurrency() -> None:
+    running = 0
+    max_running = 0
+
+    @task
+    async def submapper(input: int) -> str:
+        nonlocal running, max_running
+        running += 1
+        max_running = max(max_running, running)
+        await asyncio.sleep(0.01)
+        running -= 1
+        return str(input)
+
+    @task
+    async def mapper(input: int) -> str:
+        subs = await asyncio.gather(submapper(input), submapper(input))
+        return "".join(subs)
+
+    @entrypoint()
+    async def graph(input: list[int]) -> list[str]:
+        return await asyncio.gather(*[mapper(i) for i in input])
+
+    # every slot ends up held by a task waiting on a nested task
+    assert await asyncio.wait_for(
+        graph.ainvoke([0, 1, 2], {"max_concurrency": 2}), 10
+    ) == ["00", "11", "22"]
+    assert max_running <= 2
+
+
+@NEEDS_CONTEXTVARS
 async def test_imp_task_cancel(
     async_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:

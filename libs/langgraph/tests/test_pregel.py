@@ -1394,6 +1394,31 @@ def test_imp_nested(
     ]
 
 
+def test_imp_nested_max_concurrency() -> None:
+    @task
+    def submapper(input: int) -> str:
+        return str(input)
+
+    @task
+    def mapper(input: int) -> str:
+        return submapper(input).result() * 2
+
+    @entrypoint()
+    def graph(input: list[int]) -> list[str]:
+        futures = [mapper(i) for i in input]
+        return [f.result() for f in futures]
+
+    # every worker ends up held by a task waiting on a nested task
+    result: list[list[str]] = []
+    run = threading.Thread(
+        target=lambda: result.append(graph.invoke([0, 1, 2], {"max_concurrency": 3})),
+        daemon=True,
+    )
+    run.start()
+    run.join(10)
+    assert result == [["00", "11", "22"]]
+
+
 def test_imp_stream_order(
     sync_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:

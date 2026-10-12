@@ -16,6 +16,7 @@ from collections.abc import (
     Mapping,
     Sequence,
 )
+from contextvars import copy_context
 from functools import partial
 from typing import (
     Any,
@@ -83,6 +84,9 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
     counter: int
     done: set[F]
     lock: threading.Lock
+    # One slot per task (by id), which a `call()` task can run in when the
+    # concurrency limit is reached, so a task can always wait on its children.
+    slots: dict[str, asyncio.Semaphore]
 
     def __init__(
         self,
@@ -101,6 +105,7 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
         self.should_stop = should_stop
         self.counter = 0
         self.done: set[F] = set()
+        self.slots = {}
 
     def __setitem__(
         self,
@@ -699,6 +704,41 @@ def _panic_or_proceed(
         raise timeout_exc_cls("Timed out")
 
 
+class _CallFuture(concurrent.futures.Future):
+    """Future for a `call()` task that the waiting thread can run itself.
+
+    The task is queued on the executor, but if no worker has picked it up by
+    the time its result is requested, it runs in the requesting thread instead.
+    Otherwise a task waiting on a child holds the worker the child needs."""
+
+    def __init__(self, run: Callable[[], None] | None = None) -> None:
+        super().__init__()
+        self.run = run
+
+    def result(self, timeout: float | None = None) -> Any:
+        if self.run is not None and timeout is None:
+            self.run()
+        return super().result(timeout)
+
+    def exception(self, timeout: float | None = None) -> BaseException | None:
+        if self.run is not None and timeout is None:
+            self.run()
+        return super().exception(timeout)
+
+
+def _run_call(
+    fut: concurrent.futures.Future, claim: threading.Lock, fn: Callable[[], Any]
+) -> None:
+    """Run a `call()` task and resolve its future, unless it was already
+    picked up elsewhere or cancelled."""
+    if not claim.acquire(blocking=False) or not fut.set_running_or_notify_cancel():
+        return
+    try:
+        fut.set_result(fn())
+    except BaseException as exc:
+        fut.set_exception(exc)
+
+
 def _call(
     task: weakref.ref[PregelExecutableTask],
     func: Callable[[Any], Awaitable[Any] | Any],
@@ -758,34 +798,48 @@ def _call(
                 fut.set_result(None)
         else:
             # schedule the next task
-            fut = submit()(  # type: ignore[misc]
-                run_with_retry,
-                next_task,
-                retry_policy,
-                configurable={
-                    CONFIG_KEY_CALL: partial(
-                        _call,
-                        weakref.ref(next_task),
-                        futures=futures,
-                        retry_policy=retry_policy,
-                        callbacks=callbacks,
-                        schedule_task=schedule_task,
-                        submit=submit,
-                    ),
-                },
-                __reraise_on_exit__=False,
-                # starting a new task in the next tick ensures
-                # updates from this tick are committed/streamed first
-                __next_tick__=True,
+            fut = _CallFuture()
+            fut.run = partial(
+                _run_call,
+                fut,
+                threading.Lock(),
+                partial(
+                    copy_context().run,
+                    run_with_retry,
+                    next_task,
+                    retry_policy,
+                    configurable={
+                        CONFIG_KEY_CALL: partial(
+                            _call,
+                            weakref.ref(next_task),
+                            futures=futures,
+                            retry_policy=retry_policy,
+                            callbacks=callbacks,
+                            schedule_task=schedule_task,
+                            submit=submit,
+                        ),
+                    },
+                ),
             )
             # exceptions for call() tasks are raised into the parent task
             # so we should not re-raise at the end of the tick
             SKIP_RERAISE_SET.add(fut)
             futures()[fut] = next_task  # type: ignore[index]
+            # chain before submitting, as otherwise the returned future could
+            # be resolved while commit() is still running in the worker
+            ret = chain_future(fut, _CallFuture(fut.run))
+            submit()(  # type: ignore[misc]
+                fut.run,
+                __reraise_on_exit__=False,
+                # starting a new task in the next tick ensures
+                # updates from this tick are committed/streamed first
+                __next_tick__=True,
+            )
+            return ret
     fut = cast(asyncio.Future | concurrent.futures.Future, fut)
     # return a chained future to ensure commit() callback is called
     # before the returned future is resolved, to ensure stream order etc
-    return chain_future(fut, concurrent.futures.Future())
+    return chain_future(fut, _CallFuture(getattr(fut, "run", None)))
 
 
 def _acall(
@@ -929,6 +983,10 @@ async def _acall_impl(
                         # starting a new task in the next tick ensures
                         # updates from this tick are committed/streamed first
                         __next_tick__=True,
+                        __parent_slot__=futures().slots.setdefault(  # type: ignore[union-attr]
+                            task().id,  # type: ignore[union-attr]
+                            asyncio.Semaphore(1),
+                        ),
                     ),
                 )
                 # exceptions for call() tasks are raised into the parent task

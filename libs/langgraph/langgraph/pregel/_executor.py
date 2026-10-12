@@ -33,6 +33,7 @@ class Submit(Protocol[P, T]):
         __cancel_on_exit__: bool = False,
         __reraise_on_exit__: bool = True,
         __next_tick__: bool = False,
+        __parent_slot__: asyncio.Semaphore | None = None,
         **kwargs: P.kwargs,
     ) -> concurrent.futures.Future[T]: ...
 
@@ -59,6 +60,7 @@ class BackgroundExecutor(AbstractContextManager):
         __cancel_on_exit__: bool = False,  # for sync, can cancel only if not started
         __reraise_on_exit__: bool = True,
         __next_tick__: bool = False,
+        __parent_slot__: asyncio.Semaphore | None = None,  # not used in sync version
         **kwargs: P.kwargs,
     ) -> concurrent.futures.Future[T]:
         ctx = copy_context()
@@ -147,11 +149,12 @@ class AsyncBackgroundExecutor(AbstractAsyncContextManager):
         __cancel_on_exit__: bool = False,
         __reraise_on_exit__: bool = True,
         __next_tick__: bool = False,  # noop in async (always True)
+        __parent_slot__: asyncio.Semaphore | None = None,
         **kwargs: P.kwargs,
     ) -> asyncio.Future[T]:
         coro = cast(Coroutine[None, None, T], fn(*args, **kwargs))
         if self.semaphore:
-            coro = gated(self.semaphore, coro)
+            coro = gated(self.semaphore, coro, __parent_slot__)
         if CONTEXT_NOT_SUPPORTED:
             task = run_coroutine_threadsafe(
                 coro, self.loop, name=__name__, lazy=__next_tick__
@@ -211,10 +214,34 @@ class AsyncBackgroundExecutor(AbstractAsyncContextManager):
                     pass
 
 
-async def gated(semaphore: asyncio.Semaphore, coro: Coroutine[None, None, T]) -> T:
-    """A coroutine that waits for a semaphore before running another coroutine."""
-    async with semaphore:
+async def gated(
+    semaphore: asyncio.Semaphore,
+    coro: Coroutine[None, None, T],
+    parent_slot: asyncio.Semaphore | None = None,
+) -> T:
+    """A coroutine that waits for a semaphore before running another coroutine.
+
+    If `parent_slot` is passed, runs as soon as either of the two is free, so
+    that a task waiting on a child doesn't hold the slot the child needs."""
+    if parent_slot is None:
+        async with semaphore:
+            return await coro
+    waiters = {asyncio.ensure_future(s.acquire()): s for s in (semaphore, parent_slot)}
+    try:
+        await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
+    except BaseException:
+        for waiter, s in waiters.items():
+            if not waiter.cancel():
+                s.release()
+        raise
+    # keep the first one acquired, give back or stop waiting for the other
+    slot, *rest = [s for waiter, s in waiters.items() if not waiter.cancel()]
+    for s in rest:
+        s.release()
+    try:
         return await coro
+    finally:
+        slot.release()
 
 
 def next_tick(fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
