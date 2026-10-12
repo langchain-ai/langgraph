@@ -685,10 +685,6 @@ class PregelLoop:
             self.status = "done"
             return False
 
-        if self.control is not None and self.control.drain_requested:
-            self.status = "draining"
-            return False
-
         # if there are pending writes from a previous loop, apply them
         if self._reapplies_pending_writes and self.checkpoint_pending_writes:
             self._reapply_writes_to_succeeded_nodes(self.tasks)
@@ -700,6 +696,13 @@ class PregelLoop:
         ):
             self.status = "interrupt_before"
             raise GraphInterrupt()
+
+        # stop before running the next tasks if a drain was requested. after
+        # the breakpoint check: a resume passes the next step's breakpoints,
+        # so draining in front of one would skip it
+        if self.control is not None and self.control.drain_requested:
+            self.status = "draining"
+            return False
 
         # produce debug output
         self._emit("tasks", map_debug_tasks, self.tasks.values())
