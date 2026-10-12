@@ -1419,6 +1419,38 @@ def test_imp_nested_max_concurrency() -> None:
     assert result == [["00", "11", "22"]]
 
 
+def test_imp_nested_chain_max_concurrency() -> None:
+    @task
+    def render(input: int) -> str:
+        return str(input)
+
+    @task
+    def inner(input: int) -> str:
+        return render(input).result()
+
+    @task
+    def middle(input: int) -> str:
+        return inner(input).result()
+
+    @task
+    def outer(input: int) -> str:
+        return middle(input).result()
+
+    @entrypoint()
+    def graph(input: int) -> str:
+        return outer(input).result()
+
+    # each level of the chain waits on the next one, with fewer workers than levels
+    result: list[str] = []
+    run = threading.Thread(
+        target=lambda: result.append(graph.invoke(7, {"max_concurrency": 4})),
+        daemon=True,
+    )
+    run.start()
+    run.join(10)
+    assert result == ["7"]
+
+
 def test_imp_stream_order(
     sync_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:

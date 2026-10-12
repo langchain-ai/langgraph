@@ -2434,6 +2434,32 @@ async def test_imp_nested_max_concurrency() -> None:
 
 
 @NEEDS_CONTEXTVARS
+async def test_imp_nested_chain_max_concurrency() -> None:
+    @task
+    async def render(input: int) -> str:
+        return str(input)
+
+    @task
+    async def inner(input: int) -> str:
+        return await render(input)
+
+    @task
+    async def middle(input: int) -> str:
+        return await inner(input)
+
+    @task
+    async def outer(input: int) -> str:
+        return await middle(input)
+
+    @entrypoint()
+    async def graph(input: int) -> str:
+        return await outer(input)
+
+    # each level of the chain waits on the next one, with fewer slots than levels
+    assert await asyncio.wait_for(graph.ainvoke(7, {"max_concurrency": 2}), 10) == "7"
+
+
+@NEEDS_CONTEXTVARS
 async def test_imp_task_cancel(
     async_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
