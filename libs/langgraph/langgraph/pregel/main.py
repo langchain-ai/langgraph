@@ -2059,7 +2059,7 @@ class Pregel(
                 checkpoint_config,
                 self.channels,
                 [
-                    (task_id, [w for w in task.writes if w[0] != PUSH], task)
+                    (task_id, task.writes, task)
                     for task_id, task in zip(run_task_ids, run_tasks)
                 ],
                 fork_pending,
@@ -2557,7 +2557,7 @@ class Pregel(
                 checkpoint_config,
                 self.channels,
                 [
-                    (task_id, [w for w in task.writes if w[0] != PUSH], task)
+                    (task_id, task.writes, task)
                     for task_id, task in zip(run_task_ids, run_tasks)
                 ],
                 fork_pending,
@@ -4274,22 +4274,6 @@ def _task_path_kwarg(put_writes: Callable[..., Any], task: PregelTaskWrites) -> 
 _UpdateWrites = Sequence[tuple[str, Sequence[tuple[str, Any]], PregelTaskWrites | None]]
 
 
-def _delta_writes(
-    channels: Mapping[str, BaseChannel | ManagedValueSpec], writes: _UpdateWrites
-) -> list[tuple[str, Any]]:
-    """Give the update's DeltaChannel writes message ids, as the loop's
-    `put_writes` does, so every read of them returns the same ids."""
-    delta = [
-        (ch, value)
-        for _, task_writes, _ in writes
-        for ch, value in task_writes
-        if isinstance(channels.get(ch), DeltaChannel)
-    ]
-    for _, value in delta:
-        ensure_message_ids(value)
-    return delta
-
-
 def _store_or_fork_delta_writes(
     checkpointer: BaseCheckpointSaver,
     config: RunnableConfig,
@@ -4307,19 +4291,28 @@ def _store_or_fork_delta_writes(
     ancestors, so the writes go on the checkpoint the update builds on. If the
     thread already moved past that checkpoint, its other children would read
     them too, so the new checkpoint snapshots those channels instead. `writes`
-    holds `(task_id, writes, task)` per task; `task` is `None` for input.
+    holds `(task_id, writes, task)` per task; `task` is `None` for input. A
+    task's `PUSH` writes are left out: the update saves them on the checkpoint
+    it creates. The messages in `writes` get their ids first, in place, as the
+    loop's `put_writes` does, so pass the writes the update then applies.
     """
-    delta = _delta_writes(channels, writes)
+    for _, task_writes, _ in writes:
+        ensure_message_ids(channels, task_writes)
     if saved is None:
         return
     if is_first and checkpoint_superseded(checkpointer, config, saved):
-        fork_pending.update(ch for ch, _ in delta)
+        fork_pending.update(
+            ch
+            for _, task_writes, _ in writes
+            for ch, _ in task_writes
+            if isinstance(channels.get(ch), DeltaChannel)
+        )
         return
     for task_id, task_writes, task in writes:
-        if task_writes:
+        if channel_writes := [w for w in task_writes if w[0] != PUSH]:
             checkpointer.put_writes(
                 checkpoint_config,
-                task_writes,
+                channel_writes,
                 task_id,
                 **(_task_path_kwarg(checkpointer.put_writes, task) if task else {}),
             )
@@ -4337,17 +4330,23 @@ async def _astore_or_fork_delta_writes(
     is_first: bool,
 ) -> None:
     """Async `_store_or_fork_delta_writes`."""
-    delta = _delta_writes(channels, writes)
+    for _, task_writes, _ in writes:
+        ensure_message_ids(channels, task_writes)
     if saved is None:
         return
     if is_first and await acheckpoint_superseded(checkpointer, config, saved):
-        fork_pending.update(ch for ch, _ in delta)
+        fork_pending.update(
+            ch
+            for _, task_writes, _ in writes
+            for ch, _ in task_writes
+            if isinstance(channels.get(ch), DeltaChannel)
+        )
         return
     for task_id, task_writes, task in writes:
-        if task_writes:
+        if channel_writes := [w for w in task_writes if w[0] != PUSH]:
             await checkpointer.aput_writes(
                 checkpoint_config,
-                task_writes,
+                channel_writes,
                 task_id,
                 **(_task_path_kwarg(checkpointer.aput_writes, task) if task else {}),
             )

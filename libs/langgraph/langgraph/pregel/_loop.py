@@ -458,6 +458,9 @@ class PregelLoop:
         # deduplicate writes to special channels, last write wins
         if all(w[0] in WRITES_IDX_MAP for w in writes):
             writes = list({w[0]: w for w in writes}.values())
+        # Before the writes are saved, kept in `checkpoint_pending_writes` or
+        # applied, so all of them hold the same message ids.
+        ensure_message_ids(self.specs, writes)
         if task_id == NULL_TASK_ID:
             # writes for the null task are accumulated
             self.checkpoint_pending_writes = [
@@ -494,14 +497,6 @@ class PregelLoop:
 
         # save writes
         self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
-        # Assign stable IDs to any id=None BaseMessages in DeltaChannel writes
-        # before the background thread serialises them. Without this, reducers
-        # that assign IDs inside apply_writes() race with serialisation and
-        # store id=None, causing get_state() replays to produce a different UUID
-        # on every call.
-        for c, v in writes_to_save:
-            if isinstance(self.specs.get(c), DeltaChannel):
-                ensure_message_ids(v)
         if self.durability != "exit" and self.checkpointer_put_writes is not None:
             config = patch_configurable(
                 self.checkpoint_config,
@@ -1023,6 +1018,8 @@ class PregelLoop:
             # save writes
             for tid, ws in writes.items():
                 if forks:
+                    # These skip `put_writes`, which gives messages their ids.
+                    ensure_message_ids(self.specs, ws)
                     carried.extend((tid, c, v) for c, v in ws)
                 else:
                     self.put_writes(tid, ws)
@@ -1087,6 +1084,9 @@ class PregelLoop:
             )
         # map inputs to channel updates
         elif input_writes := deque(map_input(input_keys, self.input)):
+            # Before the input is applied, so this run reads the message ids
+            # that are saved with it.
+            ensure_message_ids(self.specs, input_writes)
             # discard any unfinished tasks from previous checkpoint
             discard_tasks = prepare_next_tasks(
                 self.checkpoint,
