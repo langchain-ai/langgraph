@@ -432,7 +432,7 @@ def ensure_message_ids(value: Any) -> None:
     BaseMessages; every get_state() replay then produces a different UUID and
     the same message appears with a different ID in each LangSmith trace.
 
-    Handles four input shapes:
+    Handles five input shapes:
     - BaseMessage objects: assign a UUID if id is None.
     - Dicts with a known "role" (OpenAI-style) or "type" (LangChain format) at
       the root level: stamp "id" into the dict in-place. The reducer's
@@ -440,6 +440,8 @@ def ensure_message_ids(value: Any) -> None:
     - Lists of the above: apply the same logic to each element, replacing dict
       items with coerced BaseMessages so the shared list reference seen by
       checkpoint_pending_writes and the background thread both get typed messages.
+    - Tuples of the above: apply the same logic to each element. A tuple can't
+      take a coerced message, so its dicts only get "id" stamped.
     - An `Overwrite` of any of the above: apply the same logic to its value.
 
     Mutating synchronously here (before the background thread is submitted) is
@@ -461,6 +463,9 @@ def ensure_message_ids(value: Any) -> None:
                 if msg.id is None:
                     msg.id = str(uuid4())
                 value[i] = msg
+    elif isinstance(value, tuple):
+        for item in value:
+            ensure_message_ids(item)
     else:
         is_overwrite, overwrite_value = _get_overwrite(value)
         if is_overwrite:

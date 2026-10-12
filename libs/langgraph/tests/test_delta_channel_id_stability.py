@@ -141,11 +141,14 @@ def test_delta_channel_dict_style_message_gets_stable_id() -> None:
     )
 
 
-def test_delta_channel_message_in_an_overwrite_gets_stable_id() -> None:
+@pytest.mark.parametrize("container", [list, tuple])
+def test_delta_channel_message_in_an_overwrite_gets_stable_id(container: type) -> None:
     graph = _build_graph(InMemorySaver())
     config = {"configurable": {"thread_id": "overwrite-id-stability"}}
 
-    graph.invoke({"messages": Overwrite([HumanMessage(content="hello")])}, config)
+    graph.invoke(
+        {"messages": Overwrite(container([HumanMessage(content="hello")]))}, config
+    )
 
     ids = [
         next(
