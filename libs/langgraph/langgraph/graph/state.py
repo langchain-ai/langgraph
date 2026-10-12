@@ -1905,20 +1905,20 @@ def _is_field_binop(typ: type[Any]) -> BinaryOperatorAggregate | None:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
         if len(meta) >= 1 and callable(meta[-1]):
-            sig = signature(meta[-1])
-            params = list(sig.parameters.values())
-            if (
-                sum(
-                    p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
-                    for p in params
-                )
-                == 2
-            ):
+            try:
+                sig = signature(meta[-1])
+            except ValueError:
+                # e.g. set.union on Python < 3.13 exposes no signature;
+                # accept it and defer validation to the first update
                 return BinaryOperatorAggregate(typ, meta[-1])
-            else:
+            try:
+                # reducers are invoked as operator(current, update)
+                sig.bind(None, None)
+            except TypeError as exc:
                 raise ValueError(
                     f"Invalid reducer signature. Expected (a, b) -> c. Got {sig}"
-                )
+                ) from exc
+            return BinaryOperatorAggregate(typ, meta[-1])
     return None
 
 

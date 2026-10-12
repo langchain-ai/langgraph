@@ -15,6 +15,7 @@ from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.graph.state import (
     StateGraph,
     _get_node_name,
+    _is_field_binop,
     _is_field_channel,
     _warn_invalid_state_schema,
 )
@@ -371,3 +372,84 @@ def test_is_field_channel() -> None:
     # No channel cases
     assert _is_field_channel(int) is None
     assert _is_field_channel(Annotated[int, "just_metadata"]) is None
+
+
+@pytest.mark.parametrize(
+    ("typ", "reducer"),
+    [
+        pytest.param(set, set.union, id="builtin-set-union"),
+        pytest.param(
+            int,
+            lambda current, update, extra=0: current + update,
+            id="defaulted-third-param",
+        ),
+        pytest.param(list, lambda current, *updates: current, id="variadic-star-args"),
+        pytest.param(int, operator.add, id="operator-add"),
+        pytest.param(list, lambda x, y: x + y, id="two-positional-lambda"),
+    ],
+)
+def test_is_field_binop_accepts_valid_reducers(typ: Any, reducer: Any) -> None:
+    """Reducers callable as operator(current, update) are accepted (#9176)."""
+    annotation = Annotated[typ, reducer]
+    result = _is_field_binop(annotation)
+    assert isinstance(result, BinaryOperatorAggregate)
+    assert result.typ is annotation
+
+
+@pytest.mark.parametrize(
+    ("typ", "reducer"),
+    [
+        pytest.param(
+            int,
+            lambda current, update, other: current,
+            id="three-required-positional",
+        ),
+        pytest.param(
+            int,
+            lambda current, update, *, flag: current,
+            id="required-keyword-only",
+        ),
+        pytest.param(int, lambda current: current, id="one-positional"),
+    ],
+)
+def test_is_field_binop_rejects_invalid_reducers(typ: Any, reducer: Any) -> None:
+    """Reducers that cannot take (current, update) still raise (#9176)."""
+    with pytest.raises(ValueError, match="Invalid reducer signature"):
+        _is_field_binop(Annotated[typ, reducer])
+
+
+def test_state_graph_construction_accepts_valid_reducers() -> None:
+    """StateGraph builds with the reducers reported as rejected (#9176)."""
+
+    class Schema(TypedDict):
+        items: Annotated[set, set.union]
+        score: Annotated[int, lambda current, update, extra=0: current + update]
+        data: Annotated[list, lambda current, *updates: current]
+
+    graph = StateGraph(Schema)
+    for key in ("items", "score", "data"):
+        assert isinstance(graph.channels[key], BinaryOperatorAggregate)
+
+
+def test_state_graph_construction_rejects_invalid_reducer() -> None:
+    """StateGraph still rejects a reducer that needs a third argument (#9176)."""
+
+    class Schema(TypedDict):
+        value: Annotated[int, lambda current, update, other: current]
+
+    with pytest.raises(ValueError, match="Invalid reducer signature"):
+        StateGraph(Schema)
+
+
+def test_state_graph_updates_set_union_reducer() -> None:
+    """An accepted reducer also merges state at runtime (#9176)."""
+
+    class Schema(TypedDict):
+        items: Annotated[set, set.union]
+
+    builder = StateGraph(Schema)
+    builder.add_node("add_three", lambda state: {"items": {3}})
+    builder.set_entry_point("add_three")
+    builder.set_finish_point("add_three")
+    result = builder.compile().invoke({"items": {1, 2}})
+    assert result["items"] == {1, 2, 3}
