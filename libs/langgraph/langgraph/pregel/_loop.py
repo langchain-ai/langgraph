@@ -57,6 +57,7 @@ from langgraph._internal._constants import (
     NS_END,
     NS_SEP,
     NULL_TASK_ID,
+    PULL,
     PUSH,
     RESUME,
     TASKS,
@@ -816,9 +817,10 @@ class PregelLoop:
     def _accepts_inserted_input(self) -> bool:
         """Whether queued input can be applied before the next step.
 
-        Only in a top-level `StateGraph` with steps left, only when every next
-        task is a node declared in `insert_before`, and never on the step a
-        resume continues: the resume applies to the state it paused on.
+        Only in a top-level `StateGraph`, only when every next task is a node
+        declared in `insert_before` that reads the state (not a `Send`, which
+        gets its own argument), and never on the step a resume continues: the
+        resume applies to the state it paused on.
         """
         return (
             self.control is not None
@@ -826,9 +828,11 @@ class PregelLoop:
             and not self.is_nested
             and bool(self.insert_before)
             and bool(self.insert_channels)
-            and self.step < self.stop
             and not self.config[CONF].get(CONFIG_KEY_RESUMING, False)
-            and all(task.name in self.insert_before for task in self.tasks.values())
+            and all(
+                task.path[0] == PULL and task.name in self.insert_before
+                for task in self.tasks.values()
+            )
         )
 
     def _apply_inserted_input(self) -> bool:
@@ -878,6 +882,8 @@ class PregelLoop:
                 {"source": "input", "inserted_inputs": applied},
             )
         )
+        # the checkpoint took a step, but no node ran: keep the recursion budget
+        self.stop += 1
         return True
 
     def _inserted_writes(self, input_id: str, value: Any) -> list[tuple[str, Any]]:

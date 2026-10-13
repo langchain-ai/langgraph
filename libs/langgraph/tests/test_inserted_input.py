@@ -8,7 +8,7 @@ from typing_extensions import TypedDict
 from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import RunControl
-from langgraph.types import Command, interrupt
+from langgraph.types import Command, Send, interrupt
 
 
 class State(TypedDict, total=False):
@@ -292,4 +292,42 @@ def test_inserted_input_is_not_applied_without_steps_left() -> None:
     with pytest.raises(GraphRecursionError):
         graph.invoke({"log": ["user"]}, {"recursion_limit": 1}, control=control)
 
+    assert control.take_inputs() == [("insert-1", {"log": ["inserted"]})]
+
+
+def test_inserted_input_keeps_the_recursion_budget() -> None:
+    control = RunControl()
+    graph = _tools_then_model(control).compile(insert_before=["model"])
+    # the smallest limit the graph runs within without inserted input
+    config = {"recursion_limit": 3}
+    _tools_then_model(RunControl()).compile().invoke({"log": ["user"]}, config)
+
+    result = graph.invoke({"log": ["user"]}, config, control=control)
+
+    assert result["seen"] == ["user", "tools", "inserted"]
+
+
+def test_inserted_input_waits_for_a_node_started_by_send() -> None:
+    control = RunControl()
+
+    def tools(state: State) -> State:
+        control.submit_input("insert-1", {"log": ["inserted"]})
+        return {"log": ["tools"]}
+
+    def model(state: State) -> State:
+        return {"seen": list(state["log"])}
+
+    builder = StateGraph(State)
+    builder.add_node("tools", tools)
+    builder.add_node("model", model)
+    builder.add_edge(START, "tools")
+    builder.add_conditional_edges("tools", lambda _: [Send("model", {"log": ["sent"]})])
+    builder.add_edge("model", END)
+
+    result = builder.compile(insert_before=["model"]).invoke(
+        {"log": ["user"]}, control=control
+    )
+
+    # `model` reads its `Send` argument, so the input would never reach it
+    assert result["seen"] == ["sent"]
     assert control.take_inputs() == [("insert-1", {"log": ["inserted"]})]
