@@ -34,6 +34,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_THREAD_ID,
     CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
     NS_SEP,
+    RETURN,
 )
 from langgraph._internal._runnable import create_task_in_config_context
 from langgraph._internal._timeout import sync_timeout_unsupported
@@ -682,6 +683,18 @@ def run_with_retry(
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
 
 
+def _pluck_return_value(task: PregelExecutableTask) -> Any:
+    """Read the value a `@task` wrote to the `RETURN` channel from its writes.
+
+    `@task` calls are wrapped in a `ChannelWrite([ChannelWriteEntry(RETURN)])`, so
+    their result lands in `task.writes` rather than being returned by `astream`.
+    When a task runs in streaming mode we consume `astream` instead of `ainvoke`,
+    so the result has to be read back from the writes for the caller awaiting the
+    task future to see it.
+    """
+    return next((v for c, v in task.writes if c == RETURN), None)
+
+
 async def arun_with_retry(
     task: PregelExecutableTask,
     retry_policy: Sequence[RetryPolicy] | None,
@@ -733,7 +746,9 @@ async def arun_with_retry(
                 if stream:
                     async for _ in task.proc.astream(task.input, config):
                         pass
-                    break
+                    # in streaming mode the result is emitted through
+                    # `task.writes`, so read it back for awaiting callers
+                    return _pluck_return_value(task)
                 return await task.proc.ainvoke(task.input, config)
             result = await _arun_with_timeout(
                 task, config, resolved_timeout, attempt_ctx, stream=stream
@@ -741,7 +756,7 @@ async def arun_with_retry(
             _finish_timed_attempt(config, attempt_ctx)
             if stream:
                 # if successful, end
-                break
+                return _pluck_return_value(task)
             return result
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
