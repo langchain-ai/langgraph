@@ -1874,7 +1874,10 @@ def _create_host_backend_client(
     host_url: str | None,
     api_key: str | None,
     env_vars: dict[str, str] | None = None,
+    *,
+    no_input: bool | None = None,
 ) -> HostBackendClient:
+    effective_no_input = _no_input if no_input is None else no_input
     if env_vars is None:
         env_vars = _parse_env_from_config({}, pathlib.Path.cwd() / DEFAULT_CONFIG)
     resolved_api_key = api_key
@@ -1889,7 +1892,7 @@ def _create_host_backend_client(
                 resolved_api_key = val
                 break
     if not resolved_api_key:
-        if _no_input:
+        if effective_no_input:
             raise click.ClickException(
                 "No LangSmith API key found. Set LANGSMITH_API_KEY in the "
                 "environment or .env file."
@@ -1914,6 +1917,8 @@ def _create_host_backend_client(
 def _call_host_backend_with_optional_tenant(
     client: HostBackendClient,
     operation: Callable[[HostBackendClient], _T],
+    *,
+    no_input: bool | None = None,
 ) -> _T:
     """Run *operation*, prompting for a workspace ID on org-scoped 403s.
 
@@ -1922,6 +1927,7 @@ def _call_host_backend_with_optional_tenant(
     in-place so all subsequent calls through the same instance are
     tenant-aware.
     """
+    effective_no_input = _no_input if no_input is None else no_input
     prompted_for_tenant = False
 
     while True:
@@ -1933,7 +1939,7 @@ def _call_host_backend_with_optional_tenant(
                 and err.status_code == 403
                 and "requires workspace specification" in err.message
             ):
-                if _no_input:
+                if effective_no_input:
                     raise click.ClickException(
                         "API key is org-scoped and requires a workspace ID. "
                         "Set LANGSMITH_TENANT_ID in your .env file or "
@@ -2536,11 +2542,9 @@ def deploy_listeners() -> None:
 def deploy_listeners_list(
     api_key: str | None, host_url: str | None, json_output: bool
 ) -> None:
-    global _no_input
-    _no_input = json_output
-    client = _create_host_backend_client(host_url, api_key)
+    client = _create_host_backend_client(host_url, api_key, no_input=json_output)
     listeners = _call_host_backend_with_optional_tenant(
-        client, lambda c: c.list_listeners()
+        client, lambda c: c.list_listeners(), no_input=json_output
     )
     if json_output:
         click.echo(json_mod.dumps(listeners))

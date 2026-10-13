@@ -537,9 +537,6 @@ def test_deploy_listeners_list_command_no_results(monkeypatch) -> None:
 
 
 def test_deploy_listeners_list_command_json(monkeypatch) -> None:
-    # --json sets the module-level _no_input global as a side effect; pin
-    # the "before" value so monkeypatch restores it after this test.
-    monkeypatch.setattr(deploy_module, "_no_input", False)
     runner = CliRunner()
 
     listeners = [
@@ -583,9 +580,6 @@ def test_deploy_listeners_list_command_json(monkeypatch) -> None:
 
 
 def test_deploy_listeners_list_command_json_no_results(monkeypatch) -> None:
-    # --json sets the module-level _no_input global as a side effect; pin
-    # the "before" value so monkeypatch restores it after this test.
-    monkeypatch.setattr(deploy_module, "_no_input", False)
     runner = CliRunner()
 
     class FakeClient:
@@ -619,10 +613,6 @@ def test_deploy_listeners_list_command_json_org_scoped_403(monkeypatch) -> None:
     """With --json, an org-scoped 403 must raise cleanly instead of
     prompting for a workspace ID, which would write to stdout and hang
     waiting for input that a scripted invocation never provides."""
-    # deploy_listeners_list sets the module-level _no_input global as a
-    # side effect; pin its "before" value so monkeypatch restores it after
-    # this test instead of leaking True into whichever test runs next.
-    monkeypatch.setattr(deploy_module, "_no_input", False)
     runner = CliRunner()
 
     class FakeClient:
