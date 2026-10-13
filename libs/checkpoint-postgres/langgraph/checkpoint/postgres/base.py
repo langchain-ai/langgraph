@@ -160,6 +160,114 @@ INSERT_CHECKPOINT_WRITES_SQL = """
 """
 
 
+PRUNE_STRATEGIES = ("keep_latest", "delete")
+
+PRUNE_DELETE_THREADS_SQL = (
+    "DELETE FROM checkpoints WHERE thread_id = ANY(%s)",
+    "DELETE FROM checkpoint_blobs WHERE thread_id = ANY(%s)",
+    "DELETE FROM checkpoint_writes WHERE thread_id = ANY(%s)",
+)
+
+# The prune statements below never join two sets of a thread's rows: a join is
+# planned from per-thread row estimates, which are worst for the few huge
+# threads worth pruning, and can go quadratic. They look rows up by primary key
+# instead (`LATERAL ... LIMIT 1`, `= ANY`), and keep_latest works one namespace
+# at a time.
+
+# A `DeltaChannel` leaves update counters in checkpoint metadata, or a
+# snapshot: an inline `true` marker with a blob behind it, which a plain `True`
+# value never has.
+PRUNE_DELTA_THREADS_SQL = """
+SELECT thread_id FROM checkpoints
+WHERE thread_id = ANY(%s) AND metadata ? 'counters_since_delta_snapshot'
+UNION
+SELECT c.thread_id
+FROM checkpoints c
+CROSS JOIN LATERAL jsonb_each(c.checkpoint -> 'channel_values') AS v
+CROSS JOIN LATERAL (
+    SELECT 1 FROM checkpoint_blobs b
+    WHERE b.thread_id = c.thread_id
+    AND b.checkpoint_ns = c.checkpoint_ns
+    AND b.channel = v.key
+    AND b.version = c.checkpoint -> 'channel_versions' ->> v.key
+    LIMIT 1
+) AS snapshot
+WHERE c.thread_id = ANY(%s) AND v.value = 'true'::jsonb
+"""
+
+# Per namespace, the oldest checkpoint keep_latest keeps: the newest one, or
+# its parent when the newest predates v4 and reads its pending sends from the
+# parent's writes.
+PRUNE_HEADS_SQL = f"""
+SELECT
+    h.checkpoint_ns,
+    CASE WHEN (c.checkpoint ->> 'v')::int < 4 AND EXISTS (
+        SELECT 1 FROM checkpoint_writes w
+        WHERE w.thread_id = %s
+        AND w.checkpoint_ns = h.checkpoint_ns
+        AND w.checkpoint_id = c.parent_checkpoint_id
+        AND w.channel = '{TASKS}'
+    ) THEN c.parent_checkpoint_id ELSE h.checkpoint_id END AS keep_from
+FROM (
+    SELECT DISTINCT ON (checkpoint_ns) checkpoint_ns, checkpoint_id
+    FROM checkpoints
+    WHERE thread_id = %s
+    ORDER BY checkpoint_ns DESC, checkpoint_id DESC
+) AS h
+CROSS JOIN LATERAL (
+    SELECT checkpoint, parent_checkpoint_id FROM checkpoints
+    WHERE thread_id = %s
+    AND checkpoint_ns = h.checkpoint_ns
+    AND checkpoint_id = h.checkpoint_id
+) AS c
+"""
+
+# Deleting only below the newest checkpoint read above leaves alone whatever a
+# concurrent run saves meanwhile.
+PRUNE_CHECKPOINTS_SQL = """
+WITH deleted AS (
+    DELETE FROM checkpoints
+    WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id < %s
+    RETURNING checkpoint -> 'channel_versions' AS versions
+)
+SELECT DISTINCT v.key AS channel, v.value AS version
+FROM deleted
+CROSS JOIN LATERAL jsonb_each_text(deleted.versions) AS v
+"""
+
+PRUNE_WRITES_SQL = """
+DELETE FROM checkpoint_writes
+WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id < %s
+"""
+
+PRUNE_REFERENCED_BLOBS_SQL = """
+SELECT DISTINCT v.key AS channel, v.value AS version
+FROM checkpoints c
+CROSS JOIN LATERAL jsonb_each_text(c.checkpoint -> 'channel_versions') AS v
+WHERE c.thread_id = %s AND c.checkpoint_ns = %s
+"""
+
+PRUNE_BLOBS_SQL = """
+DELETE FROM checkpoint_blobs
+WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s AND version = ANY(%s)
+"""
+
+
+def _garbage_blobs(
+    freed: Sequence[Mapping[str, Any]], referenced: Sequence[Mapping[str, Any]]
+) -> dict[str, list[str]]:
+    """Only blobs a deleted checkpoint used: a put that commits after `referenced`
+    was read isn't in it, so deleting every blob missing from it would take that
+    put's new blobs.
+    """
+    kept = {(r["channel"], r["version"]) for r in referenced}
+    garbage: dict[str, list[str]] = {}
+    for r in freed:
+        if (r["channel"], r["version"]) not in kept:
+            garbage.setdefault(r["channel"], []).append(r["version"])
+    return garbage
+
+
 class _DeltaStage2Row(TypedDict, total=False):
     """One row from `_build_delta_stage2_sql` (a UNION ALL of writes and blobs)."""
 

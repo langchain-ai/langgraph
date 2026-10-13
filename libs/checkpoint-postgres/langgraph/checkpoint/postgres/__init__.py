@@ -27,10 +27,19 @@ from psycopg_pool import ConnectionPool
 from langgraph.checkpoint.postgres import _internal
 from langgraph.checkpoint.postgres.base import (
     _DELTA_PAGE_SIZE,
+    PRUNE_BLOBS_SQL,
+    PRUNE_CHECKPOINTS_SQL,
+    PRUNE_DELETE_THREADS_SQL,
+    PRUNE_DELTA_THREADS_SQL,
+    PRUNE_HEADS_SQL,
+    PRUNE_REFERENCED_BLOBS_SQL,
+    PRUNE_STRATEGIES,
+    PRUNE_WRITES_SQL,
     BasePostgresSaver,
     _build_delta_stage1_sql,
     _build_delta_stage2_sql,
     _DeltaStage2Row,
+    _garbage_blobs,
 )
 from langgraph.checkpoint.postgres.shallow import ShallowPostgresSaver
 
@@ -399,6 +408,82 @@ class PostgresSaver(BasePostgresSaver):
             cur.execute(
                 "DELETE FROM checkpoint_writes WHERE thread_id = %s",
                 (str(thread_id),),
+            )
+
+    def prune(
+        self,
+        thread_ids: Sequence[str],
+        *,
+        strategy: str = "keep_latest",
+    ) -> None:
+        """Prune checkpoints for the given threads.
+
+        `"delete"` removes every checkpoint, write and blob of the threads, in
+        one transaction.
+
+        `"keep_latest"` keeps the latest checkpoint of each namespace (plus its
+        parent when it predates v4 and has pending sends), with its pending
+        writes and the blobs it references, and deletes everything older. Each
+        thread is pruned in its own transaction. Checkpoints saved while it runs
+        are kept, so a run appending to the thread meanwhile is safe; forking or
+        replaying from a checkpoint being deleted is not.
+
+        `"keep_latest"` refuses threads that use a `DeltaChannel`, since it
+        rebuilds the latest value from older checkpoints: if any requested
+        thread does, nothing is pruned. A thread that starts using one while the
+        batch runs is refused at its turn, after the threads before it.
+
+        Args:
+            thread_ids: The thread IDs to prune.
+            strategy: `"keep_latest"` or `"delete"`.
+
+        Raises:
+            TypeError: If `thread_ids` is a single string.
+            ValueError: If `strategy` is unknown.
+            NotImplementedError: If `strategy` is `"keep_latest"` and a thread
+                uses a `DeltaChannel`.
+        """
+        if isinstance(thread_ids, str):
+            raise TypeError("thread_ids must be a sequence of thread IDs, not a str")
+        if strategy not in PRUNE_STRATEGIES:
+            raise ValueError(f"Unknown prune strategy: {strategy!r}")
+        thread_ids = [str(t) for t in thread_ids]
+        if not thread_ids:
+            return
+        if strategy == "delete":
+            with self._cursor() as cur, cur.connection.transaction():
+                for sql in PRUNE_DELETE_THREADS_SQL:
+                    cur.execute(sql, (thread_ids,))
+            return
+        with self._cursor() as cur:
+            self._refuse_delta_threads(cur, thread_ids)
+        for thread_id in thread_ids:
+            with self._cursor() as cur, cur.connection.transaction():
+                cur.execute(PRUNE_HEADS_SQL, (thread_id, thread_id, thread_id))
+                heads = cur.fetchall()
+                # A run may have written this thread's first DeltaChannel
+                # checkpoint since the batch check. Checking after reading the
+                # heads sees it before anything it rebuilds from is deleted.
+                self._refuse_delta_threads(cur, [thread_id])
+                for head in heads:
+                    ns, keep_from = head["checkpoint_ns"], head["keep_from"]
+                    cur.execute(PRUNE_CHECKPOINTS_SQL, (thread_id, ns, keep_from))
+                    freed = cur.fetchall()
+                    cur.execute(PRUNE_WRITES_SQL, (thread_id, ns, keep_from))
+                    if not freed:
+                        continue
+                    cur.execute(PRUNE_REFERENCED_BLOBS_SQL, (thread_id, ns))
+                    garbage = _garbage_blobs(freed, cur.fetchall())
+                    for channel, versions in garbage.items():
+                        cur.execute(PRUNE_BLOBS_SQL, (thread_id, ns, channel, versions))
+
+    def _refuse_delta_threads(
+        self, cur: Cursor[DictRow], thread_ids: Sequence[str]
+    ) -> None:
+        cur.execute(PRUNE_DELTA_THREADS_SQL, (thread_ids, thread_ids))
+        if delta := sorted(r["thread_id"] for r in cur.fetchall()):
+            raise NotImplementedError(
+                f"keep_latest can't prune threads that use a DeltaChannel: {', '.join(delta)}"
             )
 
     @contextmanager
