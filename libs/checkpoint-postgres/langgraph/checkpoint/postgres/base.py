@@ -176,10 +176,14 @@ PRUNE_DELETE_THREADS_SQL = (
 
 # A `DeltaChannel` leaves update counters in checkpoint metadata, or a
 # snapshot: an inline `true` marker with a blob behind it, which a plain `True`
-# value never has.
+# value never has. LangGraph.js inlines no values, but marks the threads its
+# DeltaChannel graphs start with `delta_writes_versioned`.
 PRUNE_DELTA_THREADS_SQL = """
 SELECT thread_id FROM checkpoints
-WHERE thread_id = ANY(%s) AND metadata ? 'counters_since_delta_snapshot'
+WHERE thread_id = ANY(%s) AND (
+    metadata ? 'counters_since_delta_snapshot'
+    OR metadata ? 'delta_writes_versioned'
+)
 UNION
 SELECT c.thread_id
 FROM checkpoints c
@@ -238,6 +242,12 @@ CROSS JOIN LATERAL jsonb_each_text(deleted.versions) AS v
 PRUNE_WRITES_SQL = """
 DELETE FROM checkpoint_writes
 WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id < %s
+"""
+
+PRUNE_PARENTS_SQL = """
+UPDATE checkpoints SET parent_checkpoint_id = NULL
+WHERE thread_id = %s AND checkpoint_ns = %s
+AND checkpoint_id >= %s AND parent_checkpoint_id < %s
 """
 
 PRUNE_REFERENCED_BLOBS_SQL = """

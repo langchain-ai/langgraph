@@ -14,7 +14,7 @@ from typing_extensions import TypedDict
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import _messages_delta_reducer, add_messages
-from langgraph.types import Command, interrupt
+from langgraph.types import Command, StateSnapshot, interrupt
 from tests.conftest import NO_DOCKER
 from tests.conftest_checkpointer import (
     DEFAULT_POSTGRES_URI,
@@ -117,8 +117,22 @@ async def _acheckpoint_ids(checkpointer: Any, thread_id: str) -> list[str]:
     return [c.checkpoint["id"] async for c in checkpointer.alist(_config(thread_id))]
 
 
-def _run_once_after(saver: PostgresSaver, sql: str, action: Callable[[], Any]) -> None:
-    pending = [action]
+def _parentless(snapshot: StateSnapshot) -> StateSnapshot:
+    return snapshot._replace(
+        parent_config=None,
+        tasks=tuple(
+            t._replace(state=_parentless(t.state))
+            if isinstance(t.state, StateSnapshot)
+            else t
+            for t in snapshot.tasks
+        ),
+    )
+
+
+def _run_once_after(
+    saver: PostgresSaver, sql: str, action: Callable[[], Any], *, nth: int = 1
+) -> None:
+    seen = 0
     cursor = saver._cursor
 
     class Hooked:
@@ -129,9 +143,12 @@ def _run_once_after(saver: PostgresSaver, sql: str, action: Callable[[], Any]) -
             return getattr(self.cur, name)
 
         def execute(self, query: Any, params: Any = None, **kwargs: Any) -> None:
+            nonlocal seen
             self.cur.execute(query, params, **kwargs)
-            if query is sql and pending:
-                pending.pop()()
+            if query is sql:
+                seen += 1
+                if seen == nth:
+                    action()
 
     @contextmanager
     def hooked(**kwargs: Any):
@@ -158,7 +175,7 @@ def test_keep_latest_keeps_the_state_and_the_thread_runs_on_like_its_twin(
         assert _checkpoint_ids(checkpointer, "pruned") == [
             before.config["configurable"]["checkpoint_id"]
         ]
-        assert graph.get_state(_config("pruned")) == before
+        assert graph.get_state(_config("pruned")) == _parentless(before)
         for thread_id in ("pruned", "twin"):
             graph.invoke(_say(3), _config(thread_id), durability=durability)
         assert (
@@ -183,7 +200,7 @@ def test_keep_latest_keeps_a_pending_interrupt_resumable(
 
         checkpointer.prune(["pruned"])
 
-        assert graph.get_state(_config("pruned")) == before
+        assert graph.get_state(_config("pruned")) == _parentless(before)
         for thread_id in ("pruned", "twin"):
             graph.invoke(Command(resume="yes 2"), _config(thread_id))
         assert (
@@ -210,7 +227,7 @@ def test_keep_latest_keeps_writes_of_tasks_that_finished_before_a_failure(
 
         checkpointer.prune(["pruned"])
 
-        assert graph.get_state(_config("pruned")) == before
+        assert graph.get_state(_config("pruned")) == _parentless(before)
         left_runs = calls["left"]
         graph.invoke(None, _config("pruned"))
         assert calls["left"] == left_runs, "a task that had finished ran again"
@@ -247,7 +264,7 @@ def test_keep_latest_keeps_an_interrupted_subgraph_resumable(
         checkpointer.prune(["pruned"])
 
         assert len(_checkpoint_ids(checkpointer, "pruned")) == len(namespaces)
-        assert graph.get_state(_config("pruned"), subgraphs=True) == before
+        assert graph.get_state(_config("pruned"), subgraphs=True) == _parentless(before)
         for thread_id in ("pruned", "twin"):
             graph.invoke(Command(resume="yes 2"), _config(thread_id))
         assert (
@@ -309,6 +326,35 @@ def test_keep_latest_refuses_a_thread_that_switches_to_a_delta_channel_mid_batch
         )
 
 
+def test_keep_latest_keeps_a_delta_channel_turn_saved_after_the_thread_check() -> None:
+    with (
+        _checkpointer_postgres() as checkpointer,
+        PostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + checkpointer.conn.info.dbname
+        ) as pruner,
+    ):
+        graph, delta_graph = _graph(checkpointer), _delta_graph(checkpointer)
+        for i in range(3):
+            for thread_id in ("switched", "twin"):
+                graph.invoke(_say(i), _config(thread_id))
+        head = _checkpoint_ids(checkpointer, "switched")[0]
+        _run_once_after(
+            pruner,
+            PRUNE_DELTA_THREADS_SQL,
+            lambda: delta_graph.invoke(_say(3), _config("switched")),
+            nth=2,
+        )
+
+        pruner.prune(["switched"])
+
+        assert _checkpoint_ids(checkpointer, "switched")[-1] == head
+        delta_graph.invoke(_say(3), _config("twin"))
+        assert (
+            delta_graph.get_state(_config("switched")).values
+            == delta_graph.get_state(_config("twin")).values
+        )
+
+
 @pytest.mark.parametrize("make_checkpointer", SYNC)
 def test_keep_latest_refuses_a_batch_with_a_delta_channel_thread(
     make_checkpointer: Any,
@@ -347,7 +393,7 @@ async def test_akeep_latest_keeps_a_pending_interrupt_resumable(
         assert await _acheckpoint_ids(checkpointer, "pruned") == [
             before.config["configurable"]["checkpoint_id"]
         ]
-        assert await graph.aget_state(_config("pruned")) == before
+        assert await graph.aget_state(_config("pruned")) == _parentless(before)
         for thread_id in ("pruned", "twin"):
             await graph.ainvoke(Command(resume="yes 2"), _config(thread_id))
         assert (await graph.aget_state(_config("pruned"))).values == (

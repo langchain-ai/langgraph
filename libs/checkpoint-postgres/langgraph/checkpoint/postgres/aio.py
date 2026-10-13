@@ -32,6 +32,7 @@ from langgraph.checkpoint.postgres.base import (
     PRUNE_DELETE_THREADS_SQL,
     PRUNE_DELTA_THREADS_SQL,
     PRUNE_HEADS_SQL,
+    PRUNE_PARENTS_SQL,
     PRUNE_REFERENCED_BLOBS_SQL,
     PRUNE_STRATEGIES,
     PRUNE_WRITES_SQL,
@@ -416,6 +417,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     await cur.execute(PRUNE_CHECKPOINTS_SQL, (thread_id, ns, keep_from))
                     freed = await cur.fetchall()
                     await cur.execute(PRUNE_WRITES_SQL, (thread_id, ns, keep_from))
+                    await cur.execute(
+                        PRUNE_PARENTS_SQL, (thread_id, ns, keep_from, keep_from)
+                    )
                     if not freed:
                         continue
                     await cur.execute(PRUNE_REFERENCED_BLOBS_SQL, (thread_id, ns))

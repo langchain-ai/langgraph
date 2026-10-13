@@ -120,9 +120,13 @@ async def _second_saver(saver: AsyncPostgresSaver):
 
 
 def _run_once_after(
-    saver: AsyncPostgresSaver, sql: str, action: Callable[[], Awaitable[Any]]
+    saver: AsyncPostgresSaver,
+    sql: str,
+    action: Callable[[], Awaitable[Any]],
+    *,
+    nth: int = 1,
 ) -> None:
-    pending = [action]
+    seen = 0
     cursor = saver._cursor
 
     class Hooked:
@@ -133,9 +137,12 @@ def _run_once_after(
             return getattr(self.cur, name)
 
         async def execute(self, query: Any, params: Any = None, **kwargs: Any) -> None:
+            nonlocal seen
             await self.cur.execute(query, params, **kwargs)
-            if query is sql and pending:
-                await pending.pop()()
+            if query is sql:
+                seen += 1
+                if seen == nth:
+                    await action()
 
     @asynccontextmanager
     async def hooked(**kwargs: Any):
@@ -157,11 +164,19 @@ async def _delta_thread(saver: Any, thread_id: str, evidence: str) -> None:
             {"m": "2"},
             metadata={"counters_since_delta_snapshot": {"m": [1, 1]}},
         )
-    else:
+    elif evidence == "snapshot":
         first = await _put(
             saver, thread_id, None, 0, {"m": _DeltaSnapshot([1])}, {"m": "1"}
         )
         await _put(saver, thread_id, first, 1, {}, {"m": "2"})
+    else:
+        marker = {"delta_writes_versioned": True}
+        first = await _put(
+            saver, thread_id, None, 0, {"m": [1]}, {"m": "1"}, metadata=marker
+        )
+        await _put(
+            saver, thread_id, first, 1, {"m": [1, 2]}, {"m": "2"}, metadata=marker
+        )
 
 
 @pytest.mark.parametrize("name", SAVERS)
@@ -190,11 +205,13 @@ async def test_keep_latest_keeps_each_namespace_head_with_its_writes_and_blobs(
             for ch, ver in (("a", "3"), ("s", "1"))
         ]
         for ns, head in heads.items():
-            assert await _call(saver, "get_tuple", head) == before[ns]
+            assert await _call(saver, "get_tuple", head) == before[ns]._replace(
+                parent_config=None
+            )
         assert await _rows(saver, other_id) == other_before
 
 
-@pytest.mark.parametrize("evidence", ["counters", "snapshot"])
+@pytest.mark.parametrize("evidence", ["counters", "snapshot", "versioned"])
 @pytest.mark.parametrize("name", SAVERS)
 async def test_keep_latest_refuses_a_batch_with_a_delta_channel_thread(
     name: str, evidence: str
@@ -249,6 +266,8 @@ async def test_keep_latest_keeps_the_parent_holding_a_pre_v4_heads_sends(
         ]
         loaded = await _call(saver, "get_tuple", head)
         assert loaded.checkpoint["channel_values"][TASKS] == ["send-2"]
+        assert loaded.parent_config == second
+        assert (await _call(saver, "get_tuple", second)).parent_config is None
 
 
 @pytest.mark.parametrize("name", SAVERS)
@@ -351,6 +370,7 @@ async def test_keep_latest_keeps_a_checkpoint_saved_while_it_runs(after: str) ->
             "a": [1, 2, 3, 4],
             "s": ["shared"],
         }
+        assert loaded.parent_config == head
 
 
 async def test_keep_latest_refuses_a_thread_that_turns_delta_after_the_batch_check() -> (
@@ -376,3 +396,38 @@ async def test_keep_latest_refuses_a_thread_that_turns_delta_after_the_batch_che
             await saver.aprune([thread_id])
 
         assert len((await _rows(saver, thread_id))["checkpoints"]) == 4
+
+
+async def test_keep_latest_keeps_the_history_of_a_delta_checkpoint_saved_after_the_thread_check() -> (
+    None
+):
+    async with _saver("aio_base") as saver, _second_saver(saver) as other:
+        thread_id = str(uuid4())
+        head = await _three_checkpoints(saver, thread_id)
+        saved: list[dict] = []
+
+        async def save_a_delta_checkpoint() -> None:
+            saved.append(
+                await _put(
+                    other,
+                    thread_id,
+                    head,
+                    3,
+                    {},
+                    {"a": "4", "s": "1"},
+                    metadata={"counters_since_delta_snapshot": {"a": [1, 1]}},
+                )
+            )
+
+        _run_once_after(saver, PRUNE_DELTA_THREADS_SQL, save_a_delta_checkpoint, nth=2)
+        await saver.aprune([thread_id])
+
+        assert (await _rows(saver, thread_id))["checkpoints"] == [
+            ("", head["configurable"]["checkpoint_id"]),
+            ("", saved[0]["configurable"]["checkpoint_id"]),
+        ]
+        history = await saver.aget_delta_channel_history(
+            config=saved[0], channels=["a"]
+        )
+        assert history["a"]["seed"] == [1, 2, 3]
+        assert [value for _, _, value in history["a"]["writes"]] == [2]

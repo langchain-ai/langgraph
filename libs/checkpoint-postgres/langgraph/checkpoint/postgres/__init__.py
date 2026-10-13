@@ -32,6 +32,7 @@ from langgraph.checkpoint.postgres.base import (
     PRUNE_DELETE_THREADS_SQL,
     PRUNE_DELTA_THREADS_SQL,
     PRUNE_HEADS_SQL,
+    PRUNE_PARENTS_SQL,
     PRUNE_REFERENCED_BLOBS_SQL,
     PRUNE_STRATEGIES,
     PRUNE_WRITES_SQL,
@@ -423,15 +424,16 @@ class PostgresSaver(BasePostgresSaver):
 
         `"keep_latest"` keeps the latest checkpoint of each namespace (plus its
         parent when it predates v4 and has pending sends), with its pending
-        writes and the blobs it references, and deletes everything older. Each
+        writes and the blobs it references, and deletes everything older. A
+        kept checkpoint whose parent it deletes is left with no parent. Each
         thread is pruned in its own transaction. Checkpoints saved while it runs
         are kept, so a run appending to the thread meanwhile is safe; forking or
         replaying from a checkpoint being deleted is not.
 
         `"keep_latest"` refuses threads that use a `DeltaChannel`, since it
         rebuilds the latest value from older checkpoints: if any requested
-        thread does, nothing is pruned. A thread that starts using one while the
-        batch runs is refused at its turn, after the threads before it.
+        thread does, nothing is pruned. A thread that starts using one before
+        its turn in the batch is refused then, after the threads before it.
 
         Args:
             thread_ids: The thread IDs to prune.
@@ -470,6 +472,9 @@ class PostgresSaver(BasePostgresSaver):
                     cur.execute(PRUNE_CHECKPOINTS_SQL, (thread_id, ns, keep_from))
                     freed = cur.fetchall()
                     cur.execute(PRUNE_WRITES_SQL, (thread_id, ns, keep_from))
+                    cur.execute(
+                        PRUNE_PARENTS_SQL, (thread_id, ns, keep_from, keep_from)
+                    )
                     if not freed:
                         continue
                     cur.execute(PRUNE_REFERENCED_BLOBS_SQL, (thread_id, ns))
