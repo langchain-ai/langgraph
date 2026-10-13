@@ -1,4 +1,5 @@
 import operator
+import sys
 from collections.abc import Callable
 from contextlib import contextmanager
 from typing import Annotated, Any
@@ -29,6 +30,11 @@ pytestmark = [
     pytest.mark.anyio,
     pytest.mark.skipif(NO_DOCKER, reason="needs Postgres"),
 ]
+
+NEEDS_CONTEXTVARS = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 
 SYNC = [
     _checkpointer_postgres,
@@ -322,6 +328,7 @@ def test_keep_latest_refuses_a_batch_with_a_delta_channel_thread(
         assert delta_graph.get_state(_config("delta")) == delta_before
 
 
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("make_checkpointer", ASYNC)
 async def test_akeep_latest_keeps_a_pending_interrupt_resumable(
     make_checkpointer: Any,
