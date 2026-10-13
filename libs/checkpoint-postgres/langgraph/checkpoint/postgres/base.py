@@ -178,10 +178,13 @@ class _DeltaStage2Row(TypedDict, total=False):
 # `_build_delta_stage2_sql` document their shapes.
 
 
-def _build_delta_stage1_sql(channels: Sequence[str], *, paged: bool) -> str:
+def _build_delta_stage1_sql(
+    channels: Sequence[str], *, paged: bool, include_cursor: bool = False
+) -> str:
     """Build stage 1 SQL with K parallel version lookups + seed probes.
 
-    For channels=["messages", "files"] (with `paged=True`) the result is::
+    For channels=["messages", "files"] (with `paged=True, include_cursor=True`)
+    the result is::
 
         SELECT checkpoint_id, parent_checkpoint_id,
                checkpoint -> 'channel_versions' ->> %s AS ver_0,
@@ -197,7 +200,7 @@ def _build_delta_stage1_sql(channels: Sequence[str], *, paged: bool) -> str:
                checkpoint -> 'channel_values' -> %s AS inline_1
         FROM checkpoints
         WHERE thread_id = %s AND checkpoint_ns = %s
-          AND (%s::text IS NULL OR checkpoint_id < %s)
+          AND checkpoint_id <= %s
         ORDER BY checkpoint_id DESC
         LIMIT %s
 
@@ -238,9 +241,16 @@ def _build_delta_stage1_sql(channels: Sequence[str], *, paged: bool) -> str:
     and uses safe identifiers).
 
     Caller must extend params with `[ch_0 x4, ch_1 x4, ..., thread_id, ns,
-    cursor, cursor, page_size]` when `paged=True` — four per channel: the
-    version lookup, the blob's channel, the version the blob must match, and the
-    inline lookup.
+    cursor, page_size]` when `paged=True` — four per channel: the version
+    lookup, the blob's channel, the version the blob must match, and the inline
+    lookup.
+
+    Pages run newest-first from the target down. The first page passes the
+    target as the cursor with `include_cursor=True`, so it opens with the
+    target's own row, whose parent starts the walk; each later page continues
+    below the oldest row read. A checkpoint's ancestors have smaller ids (uuid6
+    is time-ordered, which `get_tuple` also relies on to find the latest
+    checkpoint), so no row newer than the target is part of its chain.
 
     When `paged=False`, the WHERE has no cursor predicate and there's no
     LIMIT/ORDER BY — kept as a non-public helper for tests/diagnostics.
@@ -264,7 +274,7 @@ def _build_delta_stage1_sql(channels: Sequence[str], *, paged: bool) -> str:
     )
     if paged:
         sql += (
-            " AND (%s::text IS NULL OR checkpoint_id < %s)"
+            f" AND checkpoint_id {'<=' if include_cursor else '<'} %s"
             " ORDER BY checkpoint_id DESC LIMIT %s"
         )
     return sql
@@ -413,8 +423,8 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
               materialized at this point),
           (c) the next ancestor cid isn't in `parent_of` yet (waiting for
               a later page; the cursor stays put), or
-          (d) the target's own row isn't in `parent_of` yet (the walk has
-              not started; no cursor is set, so a later page retries).
+          (d) the target's own row isn't in `parent_of` (the target doesn't
+              exist, so the walk never starts).
 
         Mutates `chain_by_ch`, `seed_ver_by_ch`, `seed_inline_by_ch`,
         `walk_cursor_by_ch`, and `seeded` in place.
@@ -422,8 +432,9 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         for i, ch in enumerate(channels):
             if ch in seeded:
                 continue
-            # Pages start at the thread head, so the target may not have
-            # loaded yet; a `None` cursor would read as "target is a root".
+            # The first page opens with the target's row, so it's missing only
+            # when the target doesn't exist; a `None` cursor would read as
+            # "target is a root".
             if ch not in walk_cursor_by_ch:
                 if target_id not in parent_of:
                     continue
