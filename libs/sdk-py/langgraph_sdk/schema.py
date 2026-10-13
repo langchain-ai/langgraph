@@ -78,13 +78,14 @@ Specifies behavior on disconnection:
 - "continue": Continue the operation even if disconnected.
 """
 
-MultitaskStrategy = Literal["reject", "interrupt", "rollback", "enqueue"]
+MultitaskStrategy = Literal["reject", "interrupt", "rollback", "enqueue", "insert"]
 """
 Defines how to handle multiple tasks:
 - "reject": Reject new tasks when busy.
 - "interrupt": Interrupt current task for new ones.
 - "rollback": Roll back current task and start new one.
 - "enqueue": Queue new tasks for later execution.
+- "insert": Add input to the current task at its next safe step; held while interrupted.
 """
 
 OnConflictBehavior = Literal["raise", "do_nothing"]

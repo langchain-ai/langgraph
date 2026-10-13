@@ -252,7 +252,7 @@ class SyncRunsClient:
                 Must be one of 'delete' or 'keep'.
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
-                Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+                Must be one of 'reject', 'interrupt', 'rollback', 'enqueue', or 'insert'.
             if_not_exists: How to handle missing thread. Defaults to 'reject'.
                 Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
@@ -463,7 +463,7 @@ class SyncRunsClient:
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
-                Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+                Must be one of 'reject', 'interrupt', 'rollback', 'enqueue', or 'insert'.
             on_completion: Whether to delete or keep the thread created for a stateless run.
                 Must be one of 'delete' or 'keep'.
             if_not_exists: How to handle missing thread. Defaults to 'reject'.
@@ -721,7 +721,7 @@ class SyncRunsClient:
             on_completion: Whether to delete or keep the thread created for a stateless run.
                 Must be one of 'delete' or 'keep'.
             multitask_strategy: Multitask strategy to use.
-                Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+                Must be one of 'reject', 'interrupt', 'rollback', 'enqueue', or 'insert'.
             if_not_exists: How to handle missing thread. Defaults to 'reject'.
                 Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.

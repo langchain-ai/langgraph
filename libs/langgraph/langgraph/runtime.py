@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Any, Generic, cast
@@ -77,23 +78,65 @@ class ServerInfo:
 
 
 class RunControl:
-    """Run-scoped control surface for cooperative draining.
+    """Run-scoped control surface for cooperative draining and inserted input.
 
     Intended for a single graph run. Create a fresh `RunControl` per run;
     reusing a control after `request_drain()` leaves it drained.
 
     Safe to call from any thread: the drain request is represented by a
-    single attribute write, so no lock is needed for this signal.
-    If more mutable state is added here, add synchronization.
+    single attribute write, so no lock is needed for this signal. Inserted
+    input is guarded by a lock.
     """
 
-    __slots__ = ("_drain_reason",)
+    __slots__ = ("_drain_reason", "_inputs", "_inputs_lock")
 
     def __init__(self) -> None:
         self._drain_reason: str | None = None
+        self._inputs: list[tuple[str, Any]] = []
+        self._inputs_lock = threading.Lock()
 
     def request_drain(self, reason: str = "shutdown") -> None:
         self._drain_reason = reason
+
+    def submit_input(self, input_id: str, value: Any) -> None:
+        """Queue input for the running graph to apply at its next safe step boundary.
+
+        !!! warning "Experimental"
+
+            This method may change without notice.
+
+        The graph applies queued input only right before the nodes in its
+        `insert_before`, the points it declares safe (for an agent, before the
+        next model call, so input never lands between a tool call and its
+        result). Only the top-level graph applies it, since a subgraph's state
+        isn't the caller's, and never on the step a resume continues, since the
+        resume answers the state it paused on. Input it can't apply (not a dict
+        of the graph's input keys, or a value the state rejects) is skipped and
+        logged rather than failing the run. Input the run never reaches stays
+        queued, so the caller can run it afterwards.
+
+        Args:
+            input_id: Recorded in the `inserted_inputs` metadata of the
+                checkpoint that applied it.
+            value: A dict of the graph's input keys.
+        """
+        with self._inputs_lock:
+            self._inputs.append((input_id, value))
+
+    @property
+    def has_inputs(self) -> bool:
+        """Whether input is queued and not yet applied."""
+        return bool(self._inputs)
+
+    def take_inputs(self) -> list[tuple[str, Any]]:
+        """Remove and return queued input in the order it was submitted.
+
+        Returns:
+            `(input_id, value)` pairs.
+        """
+        with self._inputs_lock:
+            inputs, self._inputs = self._inputs, []
+        return inputs
 
     @property
     def drain_requested(self) -> bool:
