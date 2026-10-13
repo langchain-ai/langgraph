@@ -537,3 +537,95 @@ async def test_open_event_stream_done_records_post_ready_error():
     assert received == [values_event(seq=1)]
     assert isinstance(err, RuntimeError)
     assert "scripted async stream failure" in str(err)
+
+@pytest.mark.anyio
+async def test_open_event_stream_close_when_queue_is_full():
+    """Closing a stream with a full queue must not raise QueueFull."""
+
+    event_data = values_event(seq=1)
+    event_queued = asyncio.Event()
+    keep_stream_open = asyncio.Event()
+
+    class BlockingStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            payload = orjson.dumps(event_data).decode()
+            yield f"event: message\ndata: {payload}\n\n".encode()
+
+            # The producer resumes after the event has been processed.
+            event_queued.set()
+
+            # Keep the HTTP stream open until the test closes it.
+            await keep_stream_open.wait()
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            stream=BlockingStream(),
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="http://test",
+    ) as client:
+        transport = ProtocolSseTransport(
+            client=client,
+            thread_id="t-1",
+            max_queue_size=1,
+        )
+        handle = transport.open_event_stream({"channels": ["values"]})
+
+        await asyncio.wait_for(handle.ready, timeout=1.0)
+        await asyncio.wait_for(event_queued.wait(), timeout=1.0)
+
+        # Let the producer finish processing the event before closing.
+        await asyncio.sleep(0)
+
+        await asyncio.wait_for(handle.close(), timeout=1.0)
+
+        with pytest.raises(StopAsyncIteration):
+            await asyncio.wait_for(handle.events.__anext__(), timeout=1.0)
+
+        await transport.close()
+
+
+
+@pytest.mark.anyio
+async def test_natural_stream_completion_with_full_queue():
+    """Natural completion must preserve queued events and terminate iteration."""
+    event_data = values_event(seq=1)
+
+    class SingleEventStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            payload = orjson.dumps(event_data).decode()
+            yield f"event: message\ndata: {payload}\n\n".encode()
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            stream=SingleEventStream(),
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="http://test",
+    ) as client:
+        transport = ProtocolSseTransport(
+            client=client,
+            thread_id="t-1",
+            max_queue_size=1,
+        )
+        handle = transport.open_event_stream({"channels": ["values"]})
+
+        await asyncio.wait_for(handle.ready, timeout=1.0)
+        await asyncio.wait_for(handle.done, timeout=1.0)
+
+        received = [
+            event
+            async for event in handle.events
+        ]
+
+        assert received == [event_data]
+        await handle.close()
+        await transport.close()

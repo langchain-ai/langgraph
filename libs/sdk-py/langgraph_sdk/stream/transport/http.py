@@ -163,7 +163,10 @@ class ProtocolSseTransport:
             finally:
                 if not done.done():
                     done.set_result(None)
-                await queue.put(None)  # sentinel: end of stream
+                # Do not block shutdown if the consumer has stopped reading.
+                with contextlib.suppress(asyncio.QueueFull):
+                    queue.put_nowait(None)
+
 
         task = asyncio.create_task(pump())
         self._event_streams.add(task)
@@ -171,18 +174,43 @@ class ProtocolSseTransport:
 
         async def aiter() -> AsyncIterator[Event]:
             while True:
-                item = await queue.get()
+                if not queue.empty():
+                    item = queue.get_nowait()
+                else:
+                    if done.done():
+                        return
+
+                    get_task = asyncio.create_task(queue.get())
+                    completed, _ = await asyncio.wait(
+                        {get_task, done},
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+
+                    if get_task in completed:
+                        item = get_task.result()
+                    else:
+                        get_task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await get_task
+
+                        if queue.empty():
+                            return
+                        continue
+
                 if item is None or cancel_event.is_set():
                     return
-                yield item
 
+                yield item
         async def close() -> None:
             cancel_event.set()
-            # Why: pump may be mid-`finally`; ensure consumer unblocks.
-            queue.put_nowait(None)
             task.cancel()
+            # Ensure the consumer can wake up even if the queue is full.
+            with contextlib.suppress(asyncio.QueueFull):
+                queue.put_nowait(None)
+
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
+
 
         return EventStreamHandle(events=aiter(), ready=ready, done=done, close=close)
 
