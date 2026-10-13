@@ -93,6 +93,7 @@ class ControlPlaneDouble:
     timeline: list[str]
     existing_deployments: list[dict] = field(default_factory=list)
     push_token_status: int = 200
+    push_token_extra: dict = field(default_factory=dict)
     create_error: str | None = None
     listeners: list[dict] = field(default_factory=list)
     listeners_by_id: dict[str, dict] = field(default_factory=dict)
@@ -147,7 +148,12 @@ class ControlPlaneDouble:
             if self.push_token_status != 200:
                 return httpx.Response(self.push_token_status, text=NOT_A_CLI_DEPLOYMENT)
             return httpx.Response(
-                200, json={"token": PUSH_TOKEN, "registry_url": REGISTRY_URL}
+                200,
+                json={
+                    "token": PUSH_TOKEN,
+                    "registry_url": REGISTRY_URL,
+                    **self.push_token_extra,
+                },
             )
         if path.endswith("/upload-url"):
             return httpx.Response(
@@ -408,6 +414,48 @@ def test_local_deploy_logs_in_with_the_control_plane_push_token(
         "registry.example.com",
     )
     assert login.kwargs["input"] == f"{PUSH_TOKEN}\n"
+
+
+def test_local_deploy_tells_the_control_plane_it_honors_registry_usernames(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.run("--no-remote")
+
+    assert deploy_project.control_plane.bodies[_push_token(CREATED_ID)] == {
+        "supports_registry_username": True
+    }
+
+
+ECR_REPOSITORY = "123456789012.dkr.ecr.us-east-2.amazonaws.com/lsd/agent-1"
+ECR_PUSH_TOKEN_FIELDS = {"username": "AWS", "repository_url": ECR_REPOSITORY}
+
+
+def test_local_deploy_logs_in_with_the_username_the_control_plane_returns(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.push_token_extra = ECR_PUSH_TOKEN_FIELDS
+
+    deploy_project.run("--no-remote")
+
+    login = deploy_project.docker.command("login")
+    assert login.args[3:] == (
+        "login",
+        "-u",
+        "AWS",
+        "--password-stdin",
+        "123456789012.dkr.ecr.us-east-2.amazonaws.com",
+    )
+
+
+def test_local_deploy_pushes_to_exactly_the_returned_repository(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.push_token_extra = ECR_PUSH_TOKEN_FIELDS
+
+    deploy_project.run("--no-remote")
+
+    tag = deploy_project.docker.command("tag")
+    assert tag.args[-1] == f"{ECR_REPOSITORY}:latest"
 
 
 def test_local_deploy_tags_the_build_into_the_token_registry(
