@@ -29,7 +29,11 @@ from langgraph.checkpoint.sqlite._delta import (
     build_delta_stage2_sql,
     step_walk_with_row,
 )
-from langgraph.checkpoint.sqlite.utils import search_where
+from langgraph.checkpoint.sqlite.utils import (
+    load_pending_writes,
+    pending_writes_sql,
+    search_where,
+)
 
 _AIO_ERROR_MSG = (
     "The SqliteSaver does not support async methods. "
@@ -81,6 +85,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
 
     conn: sqlite3.Connection
     is_setup: bool
+    _has_task_path: bool = True
 
     def __init__(
         self,
@@ -154,6 +159,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 checkpoint_ns TEXT NOT NULL DEFAULT '',
                 checkpoint_id TEXT NOT NULL,
                 task_id TEXT NOT NULL,
+                task_path TEXT NOT NULL DEFAULT '',
                 idx INTEGER NOT NULL,
                 channel TEXT NOT NULL,
                 type TEXT,
@@ -162,6 +168,19 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             );
             """
         )
+        # sqlite has no ADD COLUMN IF NOT EXISTS; this migrates databases
+        # created before `task_path` existed and is a no-op on the rest.
+        try:
+            self.conn.execute(
+                "ALTER TABLE writes ADD COLUMN task_path TEXT NOT NULL DEFAULT ''"
+            )
+        except sqlite3.OperationalError as e:
+            # A read-only database from before the column can still be read;
+            # its rows would all read back as '' anyway.
+            if "readonly database" in str(e):
+                self._has_task_path = False
+            elif "duplicate column name" not in str(e):
+                raise
 
         self.is_setup = True
 
@@ -260,7 +279,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                     }
                 # find any pending writes
                 cur.execute(
-                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
+                    pending_writes_sql(self._has_task_path),
                     (
                         str(config["configurable"]["thread_id"]),
                         checkpoint_ns,
@@ -286,10 +305,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                         if parent_checkpoint_id
                         else None
                     ),
-                    [
-                        (task_id, channel, self.serde.loads_typed((type, value)))
-                        for task_id, channel, type, value in cur
-                    ],
+                    load_pending_writes(cur, self.serde),
                 )
 
     def list(
@@ -351,7 +367,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 metadata,
             ) in cur:
                 wcur.execute(
-                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
+                    pending_writes_sql(self._has_task_path),
                     (thread_id, checkpoint_ns, checkpoint_id),
                 )
                 yield CheckpointTuple(
@@ -378,10 +394,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                         if parent_checkpoint_id
                         else None
                     ),
-                    [
-                        (task_id, channel, self.serde.loads_typed((type, value)))
-                        for task_id, channel, type, value in wcur
-                    ],
+                    load_pending_writes(wcur, self.serde),
                 )
 
     def put(
@@ -460,9 +473,9 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             task_path: Path of the task creating the writes.
         """
         query = (
-            "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, task_path, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
             if all(w[0] in WRITES_IDX_MAP for w in writes)
-            else "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            else "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, task_path, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         with self.cursor() as cur:
             cur.executemany(
@@ -473,6 +486,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                         str(config["configurable"]["checkpoint_ns"]),
                         str(config["configurable"]["checkpoint_id"]),
                         task_id,
+                        task_path,
                         WRITES_IDX_MAP.get(channel, idx),
                         channel,
                         *self.serde.dumps_typed(value),
@@ -507,13 +521,12 @@ class SqliteSaver(BaseCheckpointSaver[str]):
 
         Two-stage query:
 
-        * Stage 1 (paged): newest-first slice of `checkpoints` returning
-          `(checkpoint_id, parent_checkpoint_id, type, checkpoint)` per
-          ancestor. Sqlite has no JSONB, so we ship the full serialized
-          checkpoint blob and inspect `channel_values` in Python. Pages
-          newest-first by `checkpoint_id` with a `< cursor` predicate;
-          page size is `DELTA_PAGE_SIZE`. Stops paging when every channel
-          has found its seed or the chain is exhausted.
+        * Stage 1 (streamed): recursive CTE over `checkpoints` following
+          `parent_checkpoint_id` from the target, returning
+          `(checkpoint_id, type, checkpoint)` per ancestor. Sqlite has no
+          JSONB, so we ship the full serialized checkpoint blob and inspect
+          `channel_values` in Python. Stops reading when every channel has
+          found its seed or the chain is exhausted.
 
         * Stage 2 (per-channel UNION ALL): one branch per channel reading
           `writes` filtered to that channel's specific `chain_cids`. No
@@ -526,7 +539,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         thread_id = str(config["configurable"]["thread_id"])
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = get_checkpoint_id(config)
-        if checkpoint_id is None:
+        if not checkpoint_id:
             target = self.get_tuple(config)
             if target is None:
                 return {ch: {"writes": []} for ch in channels}
@@ -538,12 +551,14 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         seeded: set[str] = set()
 
         with self.cursor(transaction=False) as cur:
-            cur.execute(DELTA_STAGE1_SQL, (thread_id, checkpoint_ns, checkpoint_id))
+            cur.execute(
+                DELTA_STAGE1_SQL,
+                (thread_id, checkpoint_ns, checkpoint_id, thread_id, checkpoint_ns),
+            )
             for row in cur:
-                cid, parent_cid, type_tag, blob = row
+                cid, type_tag, blob = row
                 if step_walk_with_row(
                     cid=cid,
-                    parent_cid=parent_cid,
                     type_tag=type_tag,
                     blob=blob,
                     target_id=checkpoint_id,
@@ -558,6 +573,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
 
             channels_with_chain = [ch for ch in channels if chain_by_ch[ch]]
             stage2_sql = build_delta_stage2_sql(
+                has_task_path=self._has_task_path,
                 chain_lens=[len(chain_by_ch[ch]) for ch in channels_with_chain],
             )
             if stage2_sql:
@@ -568,7 +584,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                     )
                 cur.execute(stage2_sql, stage2_params)
                 stage2_rows = cast(
-                    "list[tuple[str, str, str, int, str, bytes]]", cur.fetchall()
+                    "list[tuple[str, str, str, int, str, bytes, str]]", cur.fetchall()
                 )
             else:
                 stage2_rows = []

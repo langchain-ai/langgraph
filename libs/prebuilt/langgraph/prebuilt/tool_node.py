@@ -99,6 +99,14 @@ if TYPE_CHECKING:
     from langgraph.runtime import Runtime
     from pydantic_core import ErrorDetails
 
+try:
+    from langgraph.errors import is_invalid_resume
+except ImportError:  # `langgraph` before `is_invalid_resume` never marks resume errors
+
+    def is_invalid_resume(error: BaseException) -> bool:
+        return False
+
+
 # right now we use a dict as the default, can change this to AgentState, but depends
 # on if this lives in LangChain or LangGraph... ideally would have some typed
 # messages key
@@ -957,6 +965,11 @@ class ToolNode(RunnableCallable):
             try:
                 response = tool.invoke(call_args, config)
             except ValidationError as exc:
+                if is_invalid_resume(exc):
+                    # An `interrupt()` in this tool, or in a graph it ran, got a resume
+                    # value that doesn't match its `response_schema`. That's not a bad
+                    # tool argument: fail the run so the interrupt can be answered again.
+                    raise
                 # Filter out errors for injected arguments
                 injected = self._injected_args.get(call["name"])
                 filtered_errors = _filter_validation_errors(exc, injected)
@@ -982,6 +995,10 @@ class ToolNode(RunnableCallable):
         except GraphBubbleUp:
             raise
         except Exception as e:
+            # The model can't fix a resume value that doesn't match an interrupt's
+            # `response_schema`, so no `handle_tool_errors` setting handles it.
+            if is_invalid_resume(e):
+                raise
             # Determine which exception types are handled
             handled_types: tuple[type[Exception], ...]
             if isinstance(self._handle_tool_errors, type) and issubclass(
@@ -1053,9 +1070,13 @@ class ToolNode(RunnableCallable):
         # Call wrapper with request and execute callable
         try:
             return self._wrap_tool_call(tool_request, execute)
+        except GraphBubbleUp:
+            # Interrupts always propagate, as they do without a wrapper.
+            raise
         except Exception as e:
-            # Wrapper threw an exception
-            if not self._handle_tool_errors:
+            # Wrapper threw an exception. The model can't fix a resume value that
+            # doesn't match an interrupt's `response_schema`, so it's never handled.
+            if not self._handle_tool_errors or is_invalid_resume(e):
                 raise
             # Convert to error message
             content = _handle_tool_error(e, flag=self._handle_tool_errors)
@@ -1104,6 +1125,11 @@ class ToolNode(RunnableCallable):
             try:
                 response = await tool.ainvoke(call_args, config)
             except ValidationError as exc:
+                if is_invalid_resume(exc):
+                    # An `interrupt()` in this tool, or in a graph it ran, got a resume
+                    # value that doesn't match its `response_schema`. That's not a bad
+                    # tool argument: fail the run so the interrupt can be answered again.
+                    raise
                 # Filter out errors for injected arguments
                 injected = self._injected_args.get(call["name"])
                 filtered_errors = _filter_validation_errors(exc, injected)
@@ -1129,6 +1155,10 @@ class ToolNode(RunnableCallable):
         except GraphBubbleUp:
             raise
         except Exception as e:
+            # The model can't fix a resume value that doesn't match an interrupt's
+            # `response_schema`, so no `handle_tool_errors` setting handles it.
+            if is_invalid_resume(e):
+                raise
             # Determine which exception types are handled
             handled_types: tuple[type[Exception], ...]
             if isinstance(self._handle_tool_errors, type) and issubclass(
@@ -1208,9 +1238,13 @@ class ToolNode(RunnableCallable):
             # None check was performed above already
             self._wrap_tool_call = cast("ToolCallWrapper", self._wrap_tool_call)
             return self._wrap_tool_call(tool_request, _sync_execute)
+        except GraphBubbleUp:
+            # Interrupts always propagate, as they do without a wrapper.
+            raise
         except Exception as e:
-            # Wrapper threw an exception
-            if not self._handle_tool_errors:
+            # Wrapper threw an exception. The model can't fix a resume value that
+            # doesn't match an interrupt's `response_schema`, so it's never handled.
+            if not self._handle_tool_errors or is_invalid_resume(e):
                 raise
             # Convert to error message
             content = _handle_tool_error(e, flag=self._handle_tool_errors)

@@ -45,6 +45,7 @@ from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.pregel._algo import Call
 from langgraph.pregel._executor import Submit
 from langgraph.pregel._retry import arun_with_retry, run_with_retry
+from langgraph.pregel._task_status import CONTROL_WRITES
 from langgraph.types import (
     CachePolicy,
     PregelExecutableTask,
@@ -606,8 +607,9 @@ class PregelRunner:
                 task.config is None or TAG_HIDDEN not in task.config.get("tags", [])
             ):
                 self.node_finished(task.name)
-            if not task.writes:
-                # add no writes marker
+            if all(chan in CONTROL_WRITES for chan, _ in task.writes):
+                # record that the task finished, even if it produced no output
+                # (see `langgraph.pregel._task_status`)
                 task.writes.append((NO_WRITES, None))
             # save task writes to checkpointer
             self.put_writes()(task.id, task.writes)  # type: ignore[misc]

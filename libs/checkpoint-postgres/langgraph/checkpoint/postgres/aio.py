@@ -417,13 +417,13 @@ class AsyncPostgresSaver(BasePostgresSaver):
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = get_checkpoint_id(config)
-        if checkpoint_id is None:
+        if not checkpoint_id:
             target = await self.aget_tuple(config)
             if target is None:
                 return {ch: {"writes": []} for ch in channels}
             checkpoint_id = target.config["configurable"]["checkpoint_id"]
 
-        stage1_sql = _build_delta_stage1_sql(channels, paged=True)
+        stage1_sql = _build_delta_stage1_sql(channels, paged=True, include_cursor=True)
         parent_of: dict[str, str | None] = {}
         ver_by_i_by_cid: list[dict[str, str | None]] = [{} for _ in channels]
         hb_by_i_by_cid: list[dict[str, bool]] = [{} for _ in channels]
@@ -433,7 +433,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         seed_inline_by_ch: dict[str, Any] = {}
         walk_cursor_by_ch: dict[str, str | None] = {}
         seeded: set[str] = set()
-        cursor: str | None = None
+        cursor: str | None = checkpoint_id
 
         async with self._cursor() as cur:
             while True:
@@ -442,7 +442,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     # ver_i, blob channel, blob version, inline_i
                     stage1_params.extend([ch, ch, ch, ch])
                 stage1_params.extend(
-                    [thread_id, checkpoint_ns, cursor, cursor, _DELTA_PAGE_SIZE]
+                    [thread_id, checkpoint_ns, cursor, _DELTA_PAGE_SIZE]
                 )
                 await cur.execute(stage1_sql, stage1_params)
                 page = await cur.fetchall()
@@ -472,6 +472,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 if len(seeded) == len(channels) or len(page) < _DELTA_PAGE_SIZE:
                     break
                 cursor = oldest
+                stage1_sql = _build_delta_stage1_sql(channels, paged=True)
 
         channels_with_chain = [ch for ch in channels if chain_by_ch[ch]]
         channels_with_seed = [ch for ch in channels if seed_ver_by_ch[ch] is not None]
@@ -685,6 +686,24 @@ class AsyncPostgresSaver(BasePostgresSaver):
             pass
         return asyncio.run_coroutine_threadsafe(
             self.adelete_thread(thread_id), self.loop
+        ).result()
+
+    def get_delta_channel_history(
+        self, *, config: RunnableConfig, channels: Sequence[str]
+    ) -> Mapping[str, DeltaChannelHistory]:
+        """Sync bridge to `aget_delta_channel_history`, guarded like `get_tuple`."""
+        try:
+            if asyncio.get_running_loop() is self.loop:
+                raise asyncio.InvalidStateError(
+                    "Synchronous calls to AsyncPostgresSaver are only allowed from a "
+                    "different thread. From the main thread, use the async interface. "
+                    "For example, use `await checkpointer.aget_delta_channel_history(...)`."
+                )
+        except RuntimeError:
+            pass
+        return asyncio.run_coroutine_threadsafe(
+            self.aget_delta_channel_history(config=config, channels=channels),
+            self.loop,
         ).result()
 
 

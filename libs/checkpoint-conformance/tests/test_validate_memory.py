@@ -14,8 +14,8 @@ async def memory_checkpointer():
 
 
 @pytest.mark.asyncio
-async def test_validate_memory_base():
-    """InMemorySaver passes all base capability tests."""
+async def test_validate_memory():
+    """InMemorySaver passes the tests of every capability it implements."""
     report = await validate(memory_checkpointer)
     report.print_report()
-    assert report.passed_all_base(), f"Base tests failed: {report.to_dict()}"
+    assert report.passed_all(), f"Capability tests failed: {report.to_dict()}"

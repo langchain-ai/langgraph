@@ -448,11 +448,13 @@ class PostgresSaver(BasePostgresSaver):
 
         Two-stage query, both stages cover ALL requested channels:
 
-        * Stage 1 (paged): dynamic SELECT over `checkpoints` with K parallel
-          JSONB key lookups (one column pair per channel) — no subquery, no
-          aggregation. Pages newest-first by `checkpoint_id` with a cursor;
-          page size is `_DELTA_PAGE_SIZE`. Stops paging when every channel
-          has found its seed or the chain is exhausted.
+        * Stage 1 (paged): dynamic SELECT over `checkpoints` with three
+          columns per channel: its version, an `EXISTS` probe for a stored
+          blob at that version, and its inline value. Pages newest-first by
+          `checkpoint_id`, starting at the target; page size is
+          `_DELTA_PAGE_SIZE`.
+          Stops paging when every channel has found its seed or a page comes
+          back short.
 
         * Stage 2 (per-channel UNION ALL): one branch per channel reading
           `checkpoint_writes` filtered to that channel's specific
@@ -467,7 +469,7 @@ class PostgresSaver(BasePostgresSaver):
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = get_checkpoint_id(config)
-        if checkpoint_id is None:
+        if not checkpoint_id:
             target = self.get_tuple(config)
             if target is None:
                 return {ch: {"writes": []} for ch in channels}
@@ -475,7 +477,7 @@ class PostgresSaver(BasePostgresSaver):
 
         # Stage 1: paged K-JSONB-lookup scan, walking the parent chain in
         # Python after each page. Stops as soon as every channel has its seed.
-        stage1_sql = _build_delta_stage1_sql(channels, paged=True)
+        stage1_sql = _build_delta_stage1_sql(channels, paged=True, include_cursor=True)
         parent_of: dict[str, str | None] = {}
         ver_by_i_by_cid: list[dict[str, str | None]] = [{} for _ in channels]
         hb_by_i_by_cid: list[dict[str, bool]] = [{} for _ in channels]
@@ -485,7 +487,7 @@ class PostgresSaver(BasePostgresSaver):
         seed_inline_by_ch: dict[str, Any] = {}
         walk_cursor_by_ch: dict[str, str | None] = {}
         seeded: set[str] = set()
-        cursor: str | None = None
+        cursor: str | None = checkpoint_id
 
         with self._cursor() as cur:
             while True:
@@ -494,7 +496,7 @@ class PostgresSaver(BasePostgresSaver):
                     # ver_i, blob channel, blob version, inline_i
                     stage1_params.extend([ch, ch, ch, ch])
                 stage1_params.extend(
-                    [thread_id, checkpoint_ns, cursor, cursor, _DELTA_PAGE_SIZE]
+                    [thread_id, checkpoint_ns, cursor, _DELTA_PAGE_SIZE]
                 )
                 cur.execute(stage1_sql, stage1_params)
                 page = cur.fetchall()
@@ -526,6 +528,7 @@ class PostgresSaver(BasePostgresSaver):
                 if len(seeded) == len(channels) or len(page) < _DELTA_PAGE_SIZE:
                     break
                 cursor = oldest
+                stage1_sql = _build_delta_stage1_sql(channels, paged=True)
 
         # Stage 2: per-channel UNION ALL — one writes branch per channel
         # with non-empty chain, plus one blob branch per seeded channel.

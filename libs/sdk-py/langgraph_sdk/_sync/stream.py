@@ -22,6 +22,7 @@ from typing import Any, Literal, TypedDict, cast
 from langchain_core.language_models.chat_model_stream import ChatModelStream
 from langchain_protocol import Event, SubscribeParams
 
+from langgraph_sdk._shared.utilities import _quote_path_param
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import LangSmithTracing, QueryParamTypes
 from langgraph_sdk.stream.decoders import (
@@ -34,7 +35,11 @@ from langgraph_sdk.stream.decoders import (
     validate_interleave_channels,
 )
 from langgraph_sdk.stream.subscription import compute_union_filter, infer_channel
-from langgraph_sdk.stream.sync_controller import SyncStreamController, _SyncSubscription
+from langgraph_sdk.stream.sync_controller import (
+    SyncStreamController,
+    _is_root_terminal_lifecycle,
+    _SyncSubscription,
+)
 from langgraph_sdk.stream.transport import (
     SyncEventStreamHandle,
     SyncProtocolSseTransport,
@@ -194,7 +199,7 @@ class _SyncAgentModule:
             query_params.update(dict(params))
         request_headers = {**self._owner._headers, **dict(headers or {})}
         return self._owner._http.get(
-            f"/assistants/{self._owner.assistant_id}/graph",
+            f"/assistants/{_quote_path_param(self._owner.assistant_id)}/graph",
             params=query_params,
             headers=request_headers or None,
         )
@@ -1552,7 +1557,7 @@ class SyncThreadStream:
     def _fetch_state(self) -> dict[str, Any]:
         """Fetch the current thread state from the REST endpoint."""
         return self._http.get(
-            f"/threads/{self.thread_id}/state",
+            f"/threads/{_quote_path_param(self.thread_id)}/state",
             headers=self._headers or None,
         )
 
@@ -1613,7 +1618,7 @@ class SyncThreadStream:
             phase = data.get("event") if isinstance(data, dict) else None
             if phase in ("started", "running"):
                 self._run_seen = True
-            elif phase in ("completed", "failed"):
+            elif _is_root_terminal_lifecycle(event):
                 self.interrupted = False
                 self.interrupts = []
                 run_done = self._run_done

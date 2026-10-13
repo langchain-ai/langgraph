@@ -24,22 +24,45 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from langgraph.checkpoint.base import DeltaChannelHistory, PendingWrite
+from langgraph.checkpoint.base import (
+    DeltaChannelHistory,
+    PendingWrite,
+    writes_sort_key,
+)
 
-# Stage 1 streams ancestors of `target_cid` newest-first. The `<=`
-# predicate keeps target itself in the stream so we can read its
-# `parent_checkpoint_id` from the first row without a separate lookup;
-# the caller skips target's own writes/seed (matches the
-# `BaseCheckpointSaver` contract).
+# Stage 1 streams target, then its ancestors nearest-first, by following
+# `parent_checkpoint_id` rather than id order: ids are only monotonic within
+# one process, so a range scan by id can miss a parent whose id sorts above
+# its child's. Target is the anchor row; its own writes/seed are skipped
+# (matches the `BaseCheckpointSaver` contract).
+#
+# `put` is `INSERT OR REPLACE`, so re-putting an existing id under a
+# descendant's config makes the chain a loop. `step_walk_with_row` stops on a
+# repeated id; sqlite yields recursive rows lazily, so abandoning the cursor
+# ends the recursion.
+#
+# `CROSS JOIN` pins `ancestors` as the outer loop, so each step is one primary
+# key lookup. With a plain `JOIN` and no `ANALYZE` stats, sqlite can put
+# `checkpoints` outside and scan the whole thread per step.
 DELTA_STAGE1_SQL = (
+    "WITH RECURSIVE ancestors(checkpoint_id, parent_checkpoint_id, type, "
+    "checkpoint) AS ("
     "SELECT checkpoint_id, parent_checkpoint_id, type, checkpoint "
     "FROM checkpoints "
-    "WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id <= ? "
-    "ORDER BY checkpoint_id DESC"
+    "WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? "
+    "UNION ALL "
+    "SELECT c.checkpoint_id, c.parent_checkpoint_id, c.type, c.checkpoint "
+    "FROM ancestors a CROSS JOIN checkpoints c "
+    "ON c.checkpoint_id = a.parent_checkpoint_id "
+    "WHERE c.thread_id = ? AND c.checkpoint_ns = ?"
+    ") "
+    "SELECT checkpoint_id, type, checkpoint FROM ancestors"
 )
 
 
-def build_delta_stage2_sql(*, chain_lens: Sequence[int]) -> str:
+def build_delta_stage2_sql(
+    *, chain_lens: Sequence[int], has_task_path: bool = True
+) -> str:
     """Stage-2 per-channel UNION ALL fetching writes from `writes`.
 
     One branch per channel with a non-empty chain. Each branch inlines its
@@ -53,11 +76,12 @@ def build_delta_stage2_sql(*, chain_lens: Sequence[int]) -> str:
     of a single `channel = ANY(channels)` filter when channels have
     different chain depths — same rationale as postgres.
     """
+    task_path = "task_path" if has_task_path else "''"
     branches: list[str] = []
     for n in chain_lens:
         cid_placeholders = ",".join("?" * n)
         branches.append(
-            "SELECT checkpoint_id, channel, task_id, idx, type, value "
+            f"SELECT checkpoint_id, channel, task_id, idx, type, value, {task_path} "
             "FROM writes "
             "WHERE thread_id = ? AND checkpoint_ns = ? AND channel = ? "
             f"AND checkpoint_id IN ({cid_placeholders})"
@@ -68,7 +92,6 @@ def build_delta_stage2_sql(*, chain_lens: Sequence[int]) -> str:
 def step_walk_with_row(
     *,
     cid: str,
-    parent_cid: str | None,
     type_tag: str,
     blob: bytes,
     target_id: str,
@@ -81,36 +104,32 @@ def step_walk_with_row(
 ) -> bool:
     """Process one streamed stage-1 row in the merged ancestor walk.
 
-    The cursor returns (cid, parent_cid, type, blob) rows in
-    `checkpoint_id` DESC order starting at target. The first row is
-    target itself; we read its parent_cid to seed the walk and otherwise
-    skip it (target's own writes/seed are not part of the contract).
+    The cursor returns (cid, type, blob) rows in walk order starting at
+    target. The first row is target itself and is skipped (target's own
+    writes/seed are not part of the contract).
 
-    For each subsequent row, if `cid` matches the walk's current
-    position, we deserialize the blob, append the cid to every
-    not-yet-seeded channel's chain, and check `channel_values` for
+    For each subsequent row we deserialize the blob, append the cid to
+    every not-yet-seeded channel's chain, and check `channel_values` for
     seeds. The deserialized checkpoint is dropped before advancing — no
     cross-row cache, so peak in-flight is one deserialized checkpoint.
 
-    Off-path rows (different branch on the same thread) advance the
-    cursor without doing any work.
-
-    Returns True when every requested channel is seeded — the caller
-    can stop iterating and close the cursor.
+    Returns True when the caller can stop iterating and close the cursor:
+    every requested channel is seeded, or the chain revisited a checkpoint.
     """
     if "started" not in walk_state:
         if cid == target_id:
             walk_state["started"] = True
-            walk_state["cur_cid"] = parent_cid
             walk_state["active"] = {ch for ch in channels if ch not in seeded}
+            walk_state["walked"] = {cid}
         # Not target yet (or target not present): keep streaming.
         return False
     active: set[str] = walk_state["active"]
     if not active:
         return True
-    if cid != walk_state["cur_cid"]:
-        # Off-path row from a sibling branch — skip without deserializing.
-        return False
+    walked: set[str] = walk_state["walked"]
+    if cid in walked:
+        return True
+    walked.add(cid)
     for ch in active:
         chain_by_ch[ch].append(cid)
     ckpt = serde.loads_typed((type_tag, blob))
@@ -120,7 +139,6 @@ def step_walk_with_row(
         seeded.add(ch)
         active.discard(ch)
     del ckpt, channel_values
-    walk_state["cur_cid"] = parent_cid
     return not active
 
 
@@ -130,29 +148,31 @@ def build_delta_channels_writes_history(
     chain_by_ch: Mapping[str, list[str]],
     seed_val_by_ch: Mapping[str, Any],
     seeded: set[str],
-    stage2_rows: Sequence[tuple[str, str, str, int, str, bytes]],
+    stage2_rows: Sequence[tuple[str, str, str, int, str, bytes, str]],
     serde: Any,
 ) -> dict[str, DeltaChannelHistory]:
     """Demux stage-2 rows per channel; produce per-channel histories.
 
-    Stage-2 rows are `(checkpoint_id, channel, task_id, idx, type, value)`.
-    Final write order is oldest→newest globally and `(task_id, idx)` within
-    a checkpoint, matching the contract on `DeltaChannelHistory.writes`.
+    Stage-2 rows are
+    `(checkpoint_id, channel, task_id, idx, type, value, task_path)`.
+    Final write order is oldest→newest globally and `writes_sort_key`
+    within a checkpoint, matching the contract on
+    `DeltaChannelHistory.writes`.
 
     `seed` is omitted when the walk reached a true root with no snapshot
     found (channel never entered `seeded`); consumers treat absence as
     "start empty".
     """
-    writes_by_ch_by_cid: dict[str, dict[str, list[tuple[str, bytes, str, int]]]] = {
-        ch: {} for ch in channels
-    }
-    for cid, ch, task_id, idx, type_tag, value_blob in stage2_rows:
+    writes_by_ch_by_cid: dict[
+        str, dict[str, list[tuple[str, bytes, str, int, str]]]
+    ] = {ch: {} for ch in channels}
+    for cid, ch, task_id, idx, type_tag, value_blob, task_path in stage2_rows:
         writes_by_ch_by_cid.setdefault(ch, {}).setdefault(cid, []).append(
-            (type_tag, value_blob, task_id, idx)
+            (type_tag, value_blob, task_id, idx, task_path)
         )
     for cid_map in writes_by_ch_by_cid.values():
         for ws in cid_map.values():
-            ws.sort(key=lambda w: (w[2], w[3]))
+            ws.sort(key=lambda w: writes_sort_key(w[4], w[2], w[3]))
 
     result: dict[str, DeltaChannelHistory] = {}
     for ch in channels:
@@ -161,7 +181,7 @@ def build_delta_channels_writes_history(
         collected: list[PendingWrite] = []
         # Chain is newest-first; iterate oldest-first for the public order.
         for cid in reversed(chain_cids):
-            for type_tag, value_blob, task_id, _idx in cid_writes.get(cid, []):
+            for type_tag, value_blob, task_id, _idx, _path in cid_writes.get(cid, []):
                 collected.append(
                     (task_id, ch, serde.loads_typed((type_tag, value_blob)))
                 )

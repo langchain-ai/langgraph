@@ -27,6 +27,7 @@ from streaming._events import (
     checkpoints_event,
     custom_event,
     lifecycle_completed_event,
+    lifecycle_errored_event,
     lifecycle_event,
     lifecycle_started_event,
     message_finish_event,
@@ -473,6 +474,23 @@ def test_sync_lifecycle_watcher_reconnects_with_since_after_transport_drop():
     assert terminal.status == "completed"
     assert terminal.error is None
     assert fake.stream_request_bodies[1]["since"] == 1
+
+
+def test_sync_subgraph_completed_event_does_not_end_run():
+    fake = SyncFakeServer()
+    fake.script(
+        [
+            lifecycle_completed_event(seq=1, namespace=["child:1"]),
+            lifecycle_errored_event(seq=2, error="root failed"),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="existing", assistant_id="agent") as thread:
+            terminal = thread._wait_for_run_done()
+
+    assert terminal.status == "errored", "a subgraph's completed event ended the run"
+    assert "root failed" in str(terminal.error)
 
 
 def test_sync_threads_stream_accepts_websocket_transport_option():

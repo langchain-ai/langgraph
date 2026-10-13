@@ -14,6 +14,7 @@ from langgraph.checkpoint.base import (
     DeltaChannelHistory,
     PendingWrite,
     get_checkpoint_id,
+    writes_sort_key,
 )
 from langgraph.checkpoint.serde.types import TASKS
 from psycopg.types.json import Jsonb
@@ -109,7 +110,7 @@ select
     ) as channel_values,
     (
         select
-        array_agg(array[cw.task_id::text::bytea, cw.channel::bytea, cw.type::bytea, cw.blob] order by cw.task_id, cw.idx)
+        array_agg(array[cw.task_id::text::bytea, cw.channel::bytea, cw.type::bytea, cw.blob, convert_to(cw.task_path, 'UTF8'), cw.idx::text::bytea])
         from checkpoint_writes cw
         where cw.thread_id = checkpoints.thread_id
             and cw.checkpoint_ns = checkpoints.checkpoint_ns
@@ -168,40 +169,22 @@ class _DeltaStage2Row(TypedDict, total=False):
     type: str | None
     blob: bytes | None
     task_id: str | None  # "w" rows only
+    task_path: str | None  # "w" rows only
     idx: int | None  # "w" rows only
     version: str | None  # "b" rows only
 
 
-# Multi-channel two-stage DeltaChannel reconstruction.
-#
-# Stage 1 scans checkpoint metadata (no blob bytes) and emits one row per
-# checkpoint with K parallel JSONB key lookups (one column pair per
-# requested delta channel: ver_i / hs_i).  No subqueries, no aggregation.
-# Python walks the parent chain once across all channels.
-#
-# Stage 2 fetches all writes and the seed blobs for ALL channels in a
-# single roundtrip via `channel = ANY(%s)` and chain/seed-version
-# filtering.
-#
-# Empirical comparison vs an alternative "ship full channel_versions /
-# channel_values JSONB and let Python pick" form (1000 checkpoints,
-# 8 total channels in graph, 3 delta channels requested):
-#
-#   Postgres execution:    A=0.24ms vs B=0.38ms   (both negligible)
-#   End-to-end latency:    A=6.83ms vs B=2.28ms   (B is 3.0x faster)
-#   Wire payload:          A=836KB  vs B=330KB    (61% smaller)
-#   Buffer hits:           identical (167 blocks)
-#
-# B (this dynamic-columns design) wins because it avoids JSONB
-# serialization on the wire and JSONB-to-dict deserialization in
-# psycopg.  Even at K=8 (8 delta channels = 16 dynamic columns), B
-# still beats A end-to-end (4.2ms vs 6.8ms).
+# Delta history is rebuilt in two queries; `_build_delta_stage1_sql` and
+# `_build_delta_stage2_sql` document their shapes.
 
 
-def _build_delta_stage1_sql(channels: Sequence[str], *, paged: bool) -> str:
+def _build_delta_stage1_sql(
+    channels: Sequence[str], *, paged: bool, include_cursor: bool = False
+) -> str:
     """Build stage 1 SQL with K parallel version lookups + seed probes.
 
-    For channels=["messages", "files"] (with `paged=True`) the result is::
+    For channels=["messages", "files"] (with `paged=True, include_cursor=True`)
+    the result is::
 
         SELECT checkpoint_id, parent_checkpoint_id,
                checkpoint -> 'channel_versions' ->> %s AS ver_0,
@@ -217,7 +200,7 @@ def _build_delta_stage1_sql(channels: Sequence[str], *, paged: bool) -> str:
                checkpoint -> 'channel_values' -> %s AS inline_1
         FROM checkpoints
         WHERE thread_id = %s AND checkpoint_ns = %s
-          AND (%s::text IS NULL OR checkpoint_id < %s)
+          AND checkpoint_id <= %s
         ORDER BY checkpoint_id DESC
         LIMIT %s
 
@@ -258,9 +241,16 @@ def _build_delta_stage1_sql(channels: Sequence[str], *, paged: bool) -> str:
     and uses safe identifiers).
 
     Caller must extend params with `[ch_0 x4, ch_1 x4, ..., thread_id, ns,
-    cursor, cursor, page_size]` when `paged=True` — four per channel: the
-    version lookup, the blob's channel, the version the blob must match, and the
-    inline lookup.
+    cursor, page_size]` when `paged=True` — four per channel: the version
+    lookup, the blob's channel, the version the blob must match, and the inline
+    lookup.
+
+    Pages run newest-first from the target down. The first page passes the
+    target as the cursor with `include_cursor=True`, so it opens with the
+    target's own row, whose parent starts the walk; each later page continues
+    below the oldest row read. A checkpoint's ancestors have smaller ids (uuid6
+    is time-ordered, which `get_tuple` also relies on to find the latest
+    checkpoint), so no row newer than the target is part of its chain.
 
     When `paged=False`, the WHERE has no cursor predicate and there's no
     LIMIT/ORDER BY — kept as a non-public helper for tests/diagnostics.
@@ -284,7 +274,7 @@ def _build_delta_stage1_sql(channels: Sequence[str], *, paged: bool) -> str:
     )
     if paged:
         sql += (
-            " AND (%s::text IS NULL OR checkpoint_id < %s)"
+            f" AND checkpoint_id {'<=' if include_cursor else '<'} %s"
             " ORDER BY checkpoint_id DESC LIMIT %s"
         )
     return sql
@@ -319,7 +309,7 @@ def _build_delta_stage2_sql(
         branches.append(
             "SELECT 'w'::text AS _kind, "
             "checkpoint_id, channel, "
-            "type, blob, task_id, idx, NULL::text AS version "
+            "type, blob, task_id, task_path, idx, NULL::text AS version "
             "FROM checkpoint_writes "
             "WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s "
             "AND checkpoint_id = ANY(%s)"
@@ -327,7 +317,8 @@ def _build_delta_stage2_sql(
     for _ in channels_with_seed:
         branches.append(
             "SELECT 'b'::text AS _kind, NULL::text AS checkpoint_id, channel, "
-            "type, blob, NULL::text AS task_id, NULL::int AS idx, version "
+            "type, blob, NULL::text AS task_id, NULL::text AS task_path, "
+            "NULL::int AS idx, version "
             "FROM checkpoint_blobs "
             "WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s "
             "AND version = %s"
@@ -335,10 +326,8 @@ def _build_delta_stage2_sql(
     return " UNION ALL ".join(branches)
 
 
-# Stage 1 rows are dynamic-shape dicts: {checkpoint_id, parent_checkpoint_id,
-# ver_0, hs_0, ver_1, hs_1, ...}.  Walking is parameterized by the channel
-# list to map indices back to channel names — no static TypedDict here.
-# `dict[str, Any]` is the practical signature.
+# Stage 1 rows are dicts keyed by the per-channel aliases
+# `_build_delta_stage1_sql` emits, so there is no static TypedDict.
 
 
 class BasePostgresSaver(BaseCheckpointSaver[str]):
@@ -431,9 +420,11 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
           (a) it found a stored value for its channel — a blob or an inline
               primitive (channel becomes seeded),
           (b) it reached a real root (parent_of[cid] is None — fully
-              materialized at this point), or
+              materialized at this point),
           (c) the next ancestor cid isn't in `parent_of` yet (waiting for
-              a later page; the cursor stays put).
+              a later page; the cursor stays put), or
+          (d) the target's own row isn't in `parent_of` (the target doesn't
+              exist, so the walk never starts).
 
         Mutates `chain_by_ch`, `seed_ver_by_ch`, `seed_inline_by_ch`,
         `walk_cursor_by_ch`, and `seeded` in place.
@@ -441,9 +432,13 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         for i, ch in enumerate(channels):
             if ch in seeded:
                 continue
-            # First-time entry: cursor starts at the target's parent.
+            # The first page opens with the target's row, so it's missing only
+            # when the target doesn't exist; a `None` cursor would read as
+            # "target is a root".
             if ch not in walk_cursor_by_ch:
-                walk_cursor_by_ch[ch] = parent_of.get(target_id)
+                if target_id not in parent_of:
+                    continue
+                walk_cursor_by_ch[ch] = parent_of[target_id]
             cur_cid = walk_cursor_by_ch[ch]
             ch_chain = chain_by_ch[ch]
             hb_i = hb_by_i_by_cid[i]
@@ -492,10 +487,11 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         stored value, or when the seed blob is sentinel "empty" — in both cases
         the consumer treats absence as "start empty".
         """
-        # writes_by_ch_by_cid[channel][cid] = list of (type, blob, task_id, idx)
-        writes_by_ch_by_cid: dict[str, dict[str, list[tuple[str, bytes, str, int]]]] = {
-            ch: {} for ch in channels
-        }
+        # writes_by_ch_by_cid[channel][cid] = list of
+        # (type, blob, task_id, idx, task_path)
+        writes_by_ch_by_cid: dict[
+            str, dict[str, list[tuple[str, bytes, str, int, str]]]
+        ] = {ch: {} for ch in channels}
         # seed_blob_by_ver[(channel, version)] = (type, blob)
         seed_blob_by_ver: dict[tuple[str, str], tuple[str, bytes]] = {}
 
@@ -506,8 +502,14 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                 cid = cast(str, r["checkpoint_id"])
                 writes_by_ch_by_cid.setdefault(ch, {}).setdefault(cid, []).append(
                     cast(
-                        "tuple[str, bytes, str, int]",
-                        (r["type"], r["blob"], r["task_id"], r["idx"]),
+                        "tuple[str, bytes, str, int, str]",
+                        (
+                            r["type"],
+                            r["blob"],
+                            r["task_id"],
+                            r["idx"],
+                            r["task_path"],
+                        ),
                     )
                 )
             else:  # kind == "b"
@@ -516,10 +518,10 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                     "tuple[str, bytes]", (r["type"], r["blob"])
                 )
 
-        # Sort writes per (channel, cid) newest-first by (task_id, idx)
+        # Sort writes per (channel, cid) newest-first
         for cid_map in writes_by_ch_by_cid.values():
             for ws in cid_map.values():
-                ws.sort(key=lambda w: (w[2], w[3]), reverse=True)
+                ws.sort(key=lambda w: writes_sort_key(w[4], w[2], w[3]), reverse=True)
 
         result: dict[str, DeltaChannelHistory] = {}
         for ch in channels:
@@ -529,7 +531,9 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             collected: list[PendingWrite] = []
             cid_writes = writes_by_ch_by_cid.get(ch, {})
             for cid in chain_cids:
-                for type_tag, write_blob, task_id, _idx in cid_writes.get(cid, []):
+                for type_tag, write_blob, task_id, _idx, _path in cid_writes.get(
+                    cid, []
+                ):
                     val = self.serde.loads_typed((type_tag, write_blob))
                     collected.append((task_id, ch, val))
             collected.reverse()
@@ -572,20 +576,15 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         ]
 
     def _load_writes(
-        self, writes: list[tuple[bytes, bytes, bytes, bytes]]
+        self, writes: list[tuple[bytes, bytes, bytes, bytes, bytes, bytes]] | None
     ) -> list[tuple[str, str, Any]]:
-        return (
-            [
-                (
-                    tid.decode(),
-                    channel.decode(),
-                    self.serde.loads_typed((t.decode(), v)),
-                )
-                for tid, channel, t, v in writes
-            ]
-            if writes
-            else []
-        )
+        return [
+            (tid.decode(), channel.decode(), self.serde.loads_typed((t.decode(), v)))
+            for tid, channel, t, v, _, _ in sorted(
+                writes or [],
+                key=lambda w: writes_sort_key(w[4].decode(), w[0].decode(), int(w[5])),
+            )
+        ]
 
     def _dump_writes(
         self,

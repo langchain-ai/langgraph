@@ -15,6 +15,7 @@ from langgraph_sdk.stream.transport import EventStreamHandle, ProtocolSseTranspo
 from streaming._events import (
     input_requested_event,
     lifecycle_completed_event,
+    lifecycle_errored_event,
     lifecycle_event,
 )
 from streaming._fake_server import FakeServer, _StreamScript
@@ -113,6 +114,25 @@ async def test_terminal_lifecycle_clears_interrupts():
                 await asyncio.sleep(0.05)
     assert thread.interrupted is False
     assert thread.interrupts == []
+
+
+async def test_subgraph_completed_event_does_not_end_run():
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_completed_event(seq=0, namespace=["child:1"]),
+            lifecycle_errored_event(seq=1, error="root failed"),
+        ]
+    )
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            run_done = thread._run_done
+            assert run_done is not None
+            terminal = await asyncio.wait_for(run_done, timeout=2.0)
+    assert terminal.status == "errored", "a subgraph's completed event ended the run"
+    assert "root failed" in str(terminal.error)
 
 
 async def test_lifecycle_error_captured_for_output():

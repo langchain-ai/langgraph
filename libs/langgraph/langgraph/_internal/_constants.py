@@ -23,6 +23,9 @@ RETURN = sys.intern("__return__")
 # for writes of a task where we simply record the return value
 PREVIOUS = sys.intern("__previous__")
 # the implicit branch that handles each node's Control values
+SNAPSHOT_BUMPS = sys.intern("__snapshot_bumps__")
+# `versions_seen` key recording which entries a snapshot-only version bump
+# advanced, and the versions those nodes really read
 
 
 # --- Reserved cache namespaces ---
@@ -119,6 +122,7 @@ RESERVED = {
     ERROR,
     ERROR_SOURCE_NODE,
     NO_WRITES,
+    SNAPSHOT_BUMPS,
     # reserved config.configurable keys
     CONFIG_KEY_SEND,
     CONFIG_KEY_READ,

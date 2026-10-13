@@ -176,6 +176,35 @@ async def test_get_tuple_pending_writes(saver: BaseCheckpointSaver) -> None:
     )
 
 
+async def test_get_tuple_pending_writes_in_writes_sort_key_order(
+    saver: BaseCheckpointSaver,
+) -> None:
+    """pending_writes come back in writes_sort_key order, not put or task_id order."""
+    config = generate_config(str(uuid4()))
+    stored = await saver.aput(config, generate_checkpoint(), generate_metadata(), {})
+    await saver.aput_writes(
+        stored, [("ch", "b")], "00000000-0000-0000-0000-000000000000", "~pull, 02"
+    )
+    await saver.aput_writes(
+        stored,
+        [("ch", "a1"), ("ch", "a2")],
+        "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        "~pull, 01",
+    )
+    await saver.aput_writes(
+        stored, [("ch", "input")], "88888888-8888-8888-8888-888888888888"
+    )
+
+    tup = await saver.aget_tuple(stored)
+    assert tup is not None
+    values = [w[2] for w in tup.pending_writes or []]
+    assert values == ["input", "a1", "a2", "b"], (
+        f"Expected writes_sort_key order ['input', 'a1', 'a2', 'b'], got {values}. "
+        "Put order gives ['b', 'a1', 'a2', 'input'], task_id order gives "
+        "['b', 'input', 'a1', 'a2']."
+    )
+
+
 async def test_get_tuple_respects_namespace(saver: BaseCheckpointSaver) -> None:
     """checkpoint_ns filtering."""
     tid = str(uuid4())
@@ -223,6 +252,7 @@ ALL_GET_TUPLE_TESTS = [
     test_get_tuple_metadata,
     test_get_tuple_parent_config,
     test_get_tuple_pending_writes,
+    test_get_tuple_pending_writes_in_writes_sort_key_order,
     test_get_tuple_respects_namespace,
     test_get_tuple_nonexistent_checkpoint_id,
 ]
