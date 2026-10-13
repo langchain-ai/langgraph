@@ -4,7 +4,7 @@ import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime, timezone
 from inspect import signature
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -12,6 +12,7 @@ from langgraph.checkpoint.base import (
     ChannelVersions,
     Checkpoint,
     CheckpointTuple,
+    DeltaChannelHistory,
     PendingWrite,
 )
 from langgraph.checkpoint.base.id import uuid6
@@ -32,7 +33,7 @@ from langgraph._internal._constants import (
 )
 from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel
-from langgraph.channels.binop import _get_overwrite
+from langgraph.channels.binop import BinaryOperatorAggregate, _get_overwrite
 from langgraph.channels.delta import DeltaChannel
 from langgraph.managed.base import ManagedValueMapping, ManagedValueSpec
 
@@ -409,21 +410,37 @@ def versions_seen_without_bumps(
 def _delta_channels_to_replay(
     specs: Mapping[str, BaseChannel], checkpoint: Checkpoint
 ) -> list[str]:
-    """DeltaChannels whose value at `checkpoint` the ancestor walk rebuilds.
+    """Channels whose value at `checkpoint` the ancestor walk rebuilds.
 
     A `_DeltaSnapshot` blob or a plain value (migration) resolves directly via
     `from_checkpoint`, so only a channel with nothing stored here needs the
     walk. A channel with no version was never written, so it is empty without
     one; a walk for it would find no snapshot to stop at and read every
     ancestor, every time the thread is loaded.
+
+    A `BinaryOperatorAggregate` stores its value at every version, so one with
+    nothing stored was written as a `DeltaChannel` before its annotation
+    changed, and is rebuilt the same way.
     """
     return [
         k
         for k, spec in specs.items()
-        if isinstance(spec, DeltaChannel)
+        if isinstance(spec, (DeltaChannel, BinaryOperatorAggregate))
         and k in checkpoint["channel_versions"]
         and checkpoint["channel_values"].get(k, MISSING) is MISSING
     ]
+
+
+def _replay(spec: BaseChannel, history: DeltaChannelHistory) -> BaseChannel:
+    ch = spec.from_checkpoint(history.get("seed", MISSING))
+    if isinstance(ch, DeltaChannel):
+        ch.replay_writes(history["writes"])
+    else:
+        # One update per write: the writes span many supersteps, and a single
+        # call would reject a second Overwrite and drop the writes after one.
+        for _, _, value in history["writes"]:
+            ch.update([value])
+    return ch
 
 
 def _require_saver_for_history(
@@ -465,7 +482,7 @@ def channels_from_checkpoint(
 
     delta_channels = _delta_channels_to_replay(channel_specs, checkpoint)
     _require_saver_for_history(delta_channels, saver, config)
-    histories: Mapping[str, Any] = {}
+    histories: Mapping[str, DeltaChannelHistory] = {}
     if delta_channels and saver is not None and config is not None:
         histories = saver.get_delta_channel_history(
             config=config, channels=delta_channels
@@ -475,11 +492,7 @@ def channels_from_checkpoint(
     for k, spec in channel_specs.items():
         ch: BaseChannel
         if k in histories:
-            delta_spec = cast(DeltaChannel, spec)
-            history = histories[k]
-            replay_ch = delta_spec.from_checkpoint(history.get("seed", MISSING))
-            replay_ch.replay_writes(history["writes"])
-            ch = replay_ch
+            ch = _replay(spec, histories[k])
         else:
             ch = spec.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))
         channels[k] = ch
@@ -504,7 +517,7 @@ async def achannels_from_checkpoint(
 
     delta_channels = _delta_channels_to_replay(channel_specs, checkpoint)
     _require_saver_for_history(delta_channels, saver, config)
-    histories: Mapping[str, Any] = {}
+    histories: Mapping[str, DeltaChannelHistory] = {}
     if delta_channels and saver is not None and config is not None:
         histories = await saver.aget_delta_channel_history(
             config=config, channels=delta_channels
@@ -514,11 +527,7 @@ async def achannels_from_checkpoint(
     for k, spec in channel_specs.items():
         ch: BaseChannel
         if k in histories:
-            delta_spec = cast(DeltaChannel, spec)
-            history = histories[k]
-            replay_ch = delta_spec.from_checkpoint(history.get("seed", MISSING))
-            replay_ch.replay_writes(history["writes"])
-            ch = replay_ch
+            ch = _replay(spec, histories[k])
         else:
             ch = spec.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))
         channels[k] = ch
