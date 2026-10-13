@@ -537,3 +537,62 @@ async def test_open_event_stream_done_records_post_ready_error():
     assert received == [values_event(seq=1)]
     assert isinstance(err, RuntimeError)
     assert "scripted async stream failure" in str(err)
+
+
+async def _open_backpressured_stream(max_queue_size: int = 1):
+    """Open an SSE stream whose pump is parked putting into a full queue.
+
+    Returns (client_cm, transport, handle, backpressured_event).
+    """
+    backpressured = asyncio.Event()
+
+    class _BackpressuredBody(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b'data: {"seq": 0}\n\n'
+            backpressured.set()
+            yield b'data: {"seq": 1}\n\n'
+            # Keep the stream open so the pump stays parked on the full queue.
+            await asyncio.Event().wait()
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            stream=_BackpressuredBody(),
+        )
+
+    client_cm = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://test"
+    )
+    client = await client_cm.__aenter__()
+    transport = ProtocolSseTransport(
+        client=client, thread_id="t-1", max_queue_size=max_queue_size
+    )
+    handle = transport.open_event_stream({"channels": ["values"]})
+    await asyncio.wait_for(handle.ready, timeout=5.0)
+    await asyncio.wait_for(backpressured.wait(), timeout=5.0)
+    # Let the pump block putting the second event into the full queue.
+    await asyncio.sleep(0.2)
+    return client_cm, transport, handle
+
+
+async def test_transport_close_does_not_block_on_full_queue():
+    # Regression test for #9282: transport.close() hung forever when the
+    # event queue was full because the pump's finally block did a blocking
+    # queue.put(None) for the end-of-stream sentinel.
+    client_cm, transport, handle = await _open_backpressured_stream()
+    try:
+        await asyncio.wait_for(transport.close(), timeout=5.0)
+    finally:
+        await client_cm.__aexit__(None, None, None)
+
+
+async def test_handle_close_does_not_raise_on_full_queue():
+    # Regression test for #9282: handle.close() raised asyncio.QueueFull
+    # from queue.put_nowait(None) when the event queue was full.
+    client_cm, transport, handle = await _open_backpressured_stream()
+    try:
+        await asyncio.wait_for(handle.close(), timeout=5.0)
+    finally:
+        await asyncio.wait_for(transport.close(), timeout=5.0)
+        await client_cm.__aexit__(None, None, None)

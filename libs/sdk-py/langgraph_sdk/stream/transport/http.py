@@ -113,7 +113,23 @@ class ProtocolSseTransport:
         queue: asyncio.Queue[Event | None] = asyncio.Queue(maxsize=self._max_queue_size)
         cancel_event = asyncio.Event()
 
+        def _deliver_sentinel() -> None:
+            # Put the end-of-stream sentinel without blocking, dropping stale
+            # events if the queue is full. Shutdown paths only: the consumer
+            # is going away, so blocking behind (or raising on) a full queue
+            # would hang or crash close().
+            while True:
+                try:
+                    queue.put_nowait(None)
+                    return
+                except asyncio.QueueFull:
+                    try:
+                        queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        pass
+
         async def pump() -> None:
+            closing = False
             try:
                 # Merge default headers first so fixed SSE headers always win.
                 sse_headers = {
@@ -152,6 +168,7 @@ class ProtocolSseTransport:
                         if part is not None and isinstance(part.data, dict):
                             await queue.put(cast("Event", part.data))
             except asyncio.CancelledError as err:
+                closing = True
                 if not done.done():
                     done.set_result(err)
                 raise
@@ -163,7 +180,10 @@ class ProtocolSseTransport:
             finally:
                 if not done.done():
                     done.set_result(None)
-                await queue.put(None)  # sentinel: end of stream
+                if closing or cancel_event.is_set():
+                    _deliver_sentinel()
+                else:
+                    await queue.put(None)  # sentinel: end of stream
 
         task = asyncio.create_task(pump())
         self._event_streams.add(task)
@@ -179,7 +199,8 @@ class ProtocolSseTransport:
         async def close() -> None:
             cancel_event.set()
             # Why: pump may be mid-`finally`; ensure consumer unblocks.
-            queue.put_nowait(None)
+            # Draining first: put_nowait would raise QueueFull on a full queue.
+            _deliver_sentinel()
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
