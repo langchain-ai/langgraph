@@ -1743,7 +1743,7 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
             tool_runtime.store.put(("metrics",), "count", 1)
 
             # Stream output
-            tool_runtime.stream_writer.write("Processing...")
+            tool_runtime.stream_writer("Processing...")
 
             return f"Processed {x}"
         ```
