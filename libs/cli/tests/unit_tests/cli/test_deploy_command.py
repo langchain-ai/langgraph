@@ -363,7 +363,7 @@ def test_first_local_deploy_creates_an_internal_docker_deployment(
         pytest.param(
             "arm64",
             ("docker", "buildx", "build"),
-            ("--platform", "linux/amd64", "--load", "--progress=quiet"),
+            ("--platform", "linux/amd64", "--load", "--progress=plain"),
             id="apple_silicon_cross_builds_for_linux_amd64",
         ),
         pytest.param(

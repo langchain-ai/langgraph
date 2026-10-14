@@ -1201,7 +1201,7 @@ class DockerBuildCommand:
             return cls(("docker", "build"), ())
         flags: tuple[str, ...] = ("--platform", _DEPLOYMENT_PLATFORM, "--load")
         if not verbose:
-            flags += ("--progress=quiet",)
+            flags += ("--progress=plain",)
         return cls(("docker", "buildx", "build"), flags)
 
 
