@@ -1055,15 +1055,28 @@ def _print_deployment_result(
 # ---------------------------------------------------------------------------
 
 
+def _strip_url_scheme(url: str) -> str:
+    """Return a registry reference without a trailing slash or URL scheme."""
+    reference = url.rstrip("/")
+    if "://" in reference:
+        reference = reference.split("//", 1)[1]
+    return reference
+
+
+# Artifact Registry's username for access tokens. Control planes whose registry
+# needs another one return it as `username`.
+_DEFAULT_REGISTRY_USERNAME = "oauth2accesstoken"
+
+
 @contextmanager
-def _docker_config_for_token(registry_host: str, token: str):
+def _docker_config_for_token(registry_host: str, token: str, username: str):
     """Create a temporary Docker config with only the push token.
 
     Yields the path to a temporary config directory that can be passed
     to `docker --config <path>` so that system credential helpers
     (e.g. gcloud) don't interfere with the push token.
     """
-    auth_b64 = base64.b64encode(f"oauth2accesstoken:{token}".encode()).decode()
+    auth_b64 = base64.b64encode(f"{username}:{token}".encode()).decode()
     config_data = {"auths": {registry_host: {"auth": auth_b64}}}
     with tempfile.TemporaryDirectory() as tmpdir:
         with open(os.path.join(tmpdir, "config.json"), "w") as f:
@@ -1317,21 +1330,22 @@ def _run_local_build(
             raise click.ClickException(
                 "Push token response missing token or registry_url"
             )
+        username = push_data.get("username") or _DEFAULT_REGISTRY_USERNAME
         step += 1
 
-        normalized_registry = registry_url.rstrip("/")
-        if "://" in normalized_registry:
-            normalized_registry = normalized_registry.split("//", 1)[1]
-        repo_seed = image_name or name or spec.config.parent.name
-        remote_image = str(
-            ImageReference(
-                f"{normalized_registry}/{normalize_name(repo_seed)}",
-                tag,
+        if push_data.get("repository_url"):
+            # The control plane chose the exact repository (an ECR repository
+            # is a single image name, so nothing may be appended to it).
+            repository = _strip_url_scheme(push_data["repository_url"])
+        else:
+            repo_seed = image_name or name or spec.config.parent.name
+            repository = (
+                f"{_strip_url_scheme(registry_url)}/{normalize_name(repo_seed)}"
             )
-        )
-        registry_host = normalized_registry.split("/")[0]
+        remote_image = str(ImageReference(repository, tag))
+        registry_host = repository.split("/")[0]
 
-        with _docker_config_for_token(registry_host, deployment_token) as cfg:
+        with _docker_config_for_token(registry_host, deployment_token, username) as cfg:
             _log_deploy_step(step, f"Logging into {registry_host}")
             token_input = (
                 deployment_token
@@ -1343,7 +1357,7 @@ def _run_local_build(
                     *_docker_argv(cfg),
                     "login",
                     "-u",
-                    "oauth2accesstoken",
+                    username,
                     "--password-stdin",
                     registry_host,
                     input=token_input,
