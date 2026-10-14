@@ -74,6 +74,7 @@ async def _put(
     ns: str = "",
     metadata: dict[str, Any] | None = None,
     v: int = 4,
+    checkpoint_id: str | None = None,
 ) -> dict:
     config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ns}}
     if parent is not None:
@@ -83,7 +84,7 @@ async def _put(
     checkpoint = empty_checkpoint()
     checkpoint.update(
         v=v,
-        id=str(uuid6(clock_seq=step)),
+        id=checkpoint_id or str(uuid6(clock_seq=step)),
         channel_values=values,
         channel_versions=versions,
     )
@@ -98,7 +99,12 @@ async def _put(
     )
 
 
-async def _three_checkpoints(saver: Any, thread_id: str, ns: str = "") -> dict:
+async def _three_checkpoints(
+    saver: Any,
+    thread_id: str,
+    ns: str = "",
+    metadata: dict[str, Any] | None = None,
+) -> dict:
     parent = None
     steps = [
         ({"a": [1], "s": ["shared"]}, {"a": "1", "s": "1"}),
@@ -106,7 +112,9 @@ async def _three_checkpoints(saver: Any, thread_id: str, ns: str = "") -> dict:
         ({"a": [1, 2, 3]}, {"a": "3", "s": "1"}),
     ]
     for step, (values, versions) in enumerate(steps):
-        parent = await _put(saver, thread_id, parent, step, values, versions, ns=ns)
+        parent = await _put(
+            saver, thread_id, parent, step, values, versions, ns=ns, metadata=metadata
+        )
         await _call(saver, "put_writes", parent, [("a", step)], str(uuid4()))
     return parent
 
@@ -431,3 +439,102 @@ async def test_keep_latest_keeps_the_history_of_a_delta_checkpoint_saved_after_t
         )
         assert history["a"]["seed"] == [1, 2, 3]
         assert [value for _, _, value in history["a"]["writes"]] == [2]
+
+
+@pytest.mark.parametrize("name", SAVERS)
+async def test_keep_latest_deletes_a_subgraph_call_with_the_checkpoint_it_started_from(
+    name: str,
+) -> None:
+    async with _saver(name) as saver:
+        thread_id = str(uuid4())
+        older = await _put(saver, thread_id, None, 0, {}, {})
+        head = await _put(saver, thread_id, older, 1, {}, {})
+        unsaved = str(uuid6(clock_seq=2))
+        started_from = {
+            "finished:1": older["configurable"]["checkpoint_id"],
+            "interrupted:2": head["configurable"]["checkpoint_id"],
+            "running:3": unsaved,
+            "checkpointer_true": older["configurable"]["checkpoint_id"],
+        }
+        for ns, root in started_from.items():
+            await _three_checkpoints(
+                saver, thread_id, ns, metadata={"parents": {"": root}}
+            )
+
+        await _call(saver, "prune", [thread_id])
+
+        rows = await _rows(saver, thread_id)
+        assert {ns for ns, *_ in rows["checkpoints"]} == {
+            "",
+            "interrupted:2",
+            "running:3",
+            "checkpointer_true",
+        }
+        assert {ns for ns, *_ in rows["writes"]} == {
+            "interrupted:2",
+            "running:3",
+            "checkpointer_true",
+        }
+        assert {ns for ns, *_ in rows["blobs"]} == {
+            "interrupted:2",
+            "running:3",
+            "checkpointer_true",
+        }
+
+
+async def test_keep_latest_keeps_a_checkpoint_saved_meanwhile_whatever_its_id() -> None:
+    async with _saver("aio_base") as saver, _second_saver(saver) as other:
+        thread_id = str(uuid4())
+        head = await _three_checkpoints(saver, thread_id)
+        lower_id = "0" + head["configurable"]["checkpoint_id"][1:]
+        saved: list[dict] = []
+
+        async def save_a_child_with_a_lower_id() -> None:
+            child = await _put(
+                other,
+                thread_id,
+                head,
+                3,
+                {"a": [1, 2, 3, 4]},
+                {"a": "4", "s": "1"},
+                checkpoint_id=lower_id,
+            )
+            await _call(other, "put_writes", child, [("a", 4)], str(uuid4()))
+            saved.append(child)
+
+        _run_once_after(saver, PRUNE_HEADS_SQL, save_a_child_with_a_lower_id)
+        await saver.aprune([thread_id])
+
+        loaded = await saver.aget_tuple(saved[0])
+        assert loaded is not None, "the checkpoint saved during the prune was deleted"
+        assert loaded.checkpoint["channel_values"] == {
+            "a": [1, 2, 3, 4],
+            "s": ["shared"],
+        }
+        assert [value for _, _, value in loaded.pending_writes or []] == [4]
+
+
+@pytest.mark.parametrize("name", SAVERS)
+async def test_keep_latest_keeps_writes_saved_before_their_checkpoint(
+    name: str,
+) -> None:
+    async with _saver(name) as saver:
+        thread_id = str(uuid4())
+        head = await _three_checkpoints(saver, thread_id)
+        next_id = str(uuid6(clock_seq=3))
+        next_config = {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": "",
+                "checkpoint_id": next_id,
+            }
+        }
+        await _call(saver, "put_writes", next_config, [("a", 4)], str(uuid4()))
+
+        await _call(saver, "prune", [thread_id])
+        await _put(
+            saver, thread_id, head, 3, {}, {"a": "3", "s": "1"}, checkpoint_id=next_id
+        )
+
+        loaded = await _call(saver, "get_tuple", next_config)
+        assert [value for _, _, value in loaded.pending_writes] == [4]

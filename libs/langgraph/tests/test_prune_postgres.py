@@ -94,6 +94,22 @@ def _graph(
     return builder.compile(checkpointer=checkpointer)
 
 
+def _counting_subgraph(name: str, *, checkpointer: bool | None) -> Any:
+    class Calls(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages]
+        calls: Annotated[list[str], operator.add]
+
+    def count(state: Calls) -> dict:
+        n = len(state["messages"])
+        reply = AIMessage(f"{name} call {len(state['calls']) + 1}", id=f"{name}-{n}")
+        return {"calls": [name], "messages": [reply]}
+
+    builder = StateGraph(Calls)
+    builder.add_node("count", count)
+    builder.add_edge(START, "count")
+    return builder.compile(checkpointer=checkpointer)
+
+
 def _delta_graph(checkpointer: Any) -> Any:
     builder = StateGraph(DeltaState)
     builder.add_node("reply", _reply(ask=False))
@@ -111,6 +127,13 @@ def _say(i: int) -> dict:
 
 def _checkpoint_ids(checkpointer: Any, thread_id: str) -> list[str]:
     return [c.checkpoint["id"] for c in checkpointer.list(_config(thread_id))]
+
+
+def _namespaces(checkpointer: Any, thread_id: str) -> list[str]:
+    return sorted(
+        c.config["configurable"]["checkpoint_ns"]
+        for c in checkpointer.list(_config(thread_id))
+    )
 
 
 async def _acheckpoint_ids(checkpointer: Any, thread_id: str) -> list[str]:
@@ -256,17 +279,41 @@ def test_keep_latest_keeps_an_interrupted_subgraph_resumable(
                 graph.invoke(Command(resume=f"yes {i}"), _config(thread_id))
             graph.invoke(_say(2), _config(thread_id))
         before = graph.get_state(_config("pruned"), subgraphs=True)
-        namespaces = {
-            c.config["configurable"]["checkpoint_ns"]
-            for c in checkpointer.list(_config("pruned"))
-        }
+        interrupted = before.tasks[0].state.config["configurable"]["checkpoint_ns"]
 
         checkpointer.prune(["pruned"])
 
-        assert len(_checkpoint_ids(checkpointer, "pruned")) == len(namespaces)
+        assert _namespaces(checkpointer, "pruned") == ["", interrupted]
         assert graph.get_state(_config("pruned"), subgraphs=True) == _parentless(before)
         for thread_id in ("pruned", "twin"):
             graph.invoke(Command(resume="yes 2"), _config(thread_id))
+        assert (
+            graph.get_state(_config("pruned")).values
+            == graph.get_state(_config("twin")).values
+        )
+
+
+@pytest.mark.parametrize("durability", ["sync", "async", "exit"])
+@pytest.mark.parametrize("make_checkpointer", SYNC)
+def test_keep_latest_keeps_a_checkpointer_true_subgraph_but_not_finished_calls(
+    make_checkpointer: Any, durability: str
+) -> None:
+    with make_checkpointer() as checkpointer:
+        parent = StateGraph(State)
+        parent.add_node("memory", _counting_subgraph("memory", checkpointer=True))
+        parent.add_node("call", _counting_subgraph("call", checkpointer=None))
+        parent.add_edge(START, "memory")
+        parent.add_edge("memory", "call")
+        graph = parent.compile(checkpointer=checkpointer)
+        for i in range(3):
+            for thread_id in ("pruned", "twin"):
+                graph.invoke(_say(i), _config(thread_id), durability=durability)
+
+        checkpointer.prune(["pruned"])
+
+        assert _namespaces(checkpointer, "pruned") == ["", "memory"]
+        for thread_id in ("pruned", "twin"):
+            graph.invoke(_say(3), _config(thread_id), durability=durability)
         assert (
             graph.get_state(_config("pruned")).values
             == graph.get_state(_config("twin")).values

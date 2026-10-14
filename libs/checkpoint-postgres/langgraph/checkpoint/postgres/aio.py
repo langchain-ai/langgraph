@@ -27,20 +27,15 @@ from psycopg_pool import AsyncConnectionPool
 from langgraph.checkpoint.postgres import _ainternal
 from langgraph.checkpoint.postgres.base import (
     _DELTA_PAGE_SIZE,
-    PRUNE_BLOBS_SQL,
-    PRUNE_CHECKPOINTS_SQL,
     PRUNE_DELETE_THREADS_SQL,
-    PRUNE_DELTA_THREADS_SQL,
-    PRUNE_HEADS_SQL,
-    PRUNE_PARENTS_SQL,
-    PRUNE_REFERENCED_BLOBS_SQL,
     PRUNE_STRATEGIES,
-    PRUNE_WRITES_SQL,
     BasePostgresSaver,
+    _aexecute,
     _build_delta_stage1_sql,
     _build_delta_stage2_sql,
     _DeltaStage2Row,
-    _garbage_blobs,
+    _keep_latest,
+    _refuse_delta_threads,
 )
 from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
 
@@ -389,6 +384,11 @@ class AsyncPostgresSaver(BasePostgresSaver):
             ValueError: If `strategy` is unknown.
             NotImplementedError: If `strategy` is `"keep_latest"` and a thread
                 uses a `DeltaChannel`.
+            psycopg.errors.SerializationFailure: If another transaction, such
+                as a second prune, changes a thread's rows while `"keep_latest"`
+                prunes it.
+            psycopg.errors.DeadlockDetected: If a second prune of a thread runs
+                at the same time.
         """
         if isinstance(thread_ids, str):
             raise TypeError("thread_ids must be a sequence of thread IDs, not a str")
@@ -403,40 +403,16 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     await cur.execute(sql, (thread_ids,))
             return
         async with self._cursor() as cur:
-            await self._refuse_delta_threads(cur, thread_ids)
+            await _aexecute(cur, _refuse_delta_threads(thread_ids))
         for thread_id in thread_ids:
-            async with self._cursor() as cur, cur.connection.transaction():
-                await cur.execute(PRUNE_HEADS_SQL, (thread_id, thread_id, thread_id))
-                heads = await cur.fetchall()
-                # A run may have written this thread's first DeltaChannel
-                # checkpoint since the batch check. Checking after reading the
-                # heads sees it before anything it rebuilds from is deleted.
-                await self._refuse_delta_threads(cur, [thread_id])
-                for head in heads:
-                    ns, keep_from = head["checkpoint_ns"], head["keep_from"]
-                    await cur.execute(PRUNE_CHECKPOINTS_SQL, (thread_id, ns, keep_from))
-                    freed = await cur.fetchall()
-                    await cur.execute(PRUNE_WRITES_SQL, (thread_id, ns, keep_from))
-                    await cur.execute(
-                        PRUNE_PARENTS_SQL, (thread_id, ns, keep_from, keep_from)
-                    )
-                    if not freed:
-                        continue
-                    await cur.execute(PRUNE_REFERENCED_BLOBS_SQL, (thread_id, ns))
-                    garbage = _garbage_blobs(freed, await cur.fetchall())
-                    for channel, versions in garbage.items():
-                        await cur.execute(
-                            PRUNE_BLOBS_SQL, (thread_id, ns, channel, versions)
-                        )
-
-    async def _refuse_delta_threads(
-        self, cur: AsyncCursor[DictRow], thread_ids: Sequence[str]
-    ) -> None:
-        await cur.execute(PRUNE_DELTA_THREADS_SQL, (thread_ids, thread_ids))
-        if delta := sorted(r["thread_id"] for r in await cur.fetchall()):
-            raise NotImplementedError(
-                f"keep_latest can't prune threads that use a DeltaChannel: {', '.join(delta)}"
-            )
+            async with self._cursor() as cur:
+                if self.pipe:
+                    # The transaction has to start with its isolation level, and
+                    # in pipeline mode it would take in what ran since the last
+                    # sync.
+                    await self.pipe.sync()
+                async with cur.connection.transaction():
+                    await _aexecute(cur, _keep_latest(thread_id))
 
     @asynccontextmanager
     async def _cursor(

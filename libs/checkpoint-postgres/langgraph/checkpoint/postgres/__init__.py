@@ -27,20 +27,15 @@ from psycopg_pool import ConnectionPool
 from langgraph.checkpoint.postgres import _internal
 from langgraph.checkpoint.postgres.base import (
     _DELTA_PAGE_SIZE,
-    PRUNE_BLOBS_SQL,
-    PRUNE_CHECKPOINTS_SQL,
     PRUNE_DELETE_THREADS_SQL,
-    PRUNE_DELTA_THREADS_SQL,
-    PRUNE_HEADS_SQL,
-    PRUNE_PARENTS_SQL,
-    PRUNE_REFERENCED_BLOBS_SQL,
     PRUNE_STRATEGIES,
-    PRUNE_WRITES_SQL,
     BasePostgresSaver,
     _build_delta_stage1_sql,
     _build_delta_stage2_sql,
     _DeltaStage2Row,
-    _garbage_blobs,
+    _execute,
+    _keep_latest,
+    _refuse_delta_threads,
 )
 from langgraph.checkpoint.postgres.shallow import ShallowPostgresSaver
 
@@ -422,13 +417,17 @@ class PostgresSaver(BasePostgresSaver):
         `"delete"` removes every checkpoint, write and blob of the threads, in
         one transaction.
 
-        `"keep_latest"` keeps the latest checkpoint of each namespace (plus its
-        parent when it predates v4 and has pending sends), with its pending
-        writes and the blobs it references, and deletes everything older. A
-        kept checkpoint whose parent it deletes is left with no parent. Each
-        thread is pruned in its own transaction. Checkpoints saved while it runs
-        are kept, so a run appending to the thread meanwhile is safe; forking or
-        replaying from a checkpoint being deleted is not.
+        `"keep_latest"` keeps the latest checkpoint of each namespace (the one
+        `get_tuple` loads, plus its parent when it predates v4 and has pending
+        sends), with its pending writes and the blobs it references, and
+        deletes the rest. A kept checkpoint whose parent it deletes is left with
+        no parent. A subgraph call's namespace is deleted with the root
+        checkpoint the call started from, except a `checkpointer=True`
+        subgraph's, which keeps its latest checkpoint. Each thread is pruned in
+        its own transaction, on one snapshot of it, so a run appending to the
+        thread meanwhile is safe; forking or replaying from a checkpoint being
+        deleted is not. A thread that fails because another transaction changed
+        it leaves the threads before it pruned, and retrying is safe.
 
         `"keep_latest"` refuses threads that use a `DeltaChannel`, since it
         rebuilds the latest value from older checkpoints: if any requested
@@ -444,6 +443,11 @@ class PostgresSaver(BasePostgresSaver):
             ValueError: If `strategy` is unknown.
             NotImplementedError: If `strategy` is `"keep_latest"` and a thread
                 uses a `DeltaChannel`.
+            psycopg.errors.SerializationFailure: If another transaction, such
+                as a second prune, changes a thread's rows while `"keep_latest"`
+                prunes it.
+            psycopg.errors.DeadlockDetected: If a second prune of a thread runs
+                at the same time.
         """
         if isinstance(thread_ids, str):
             raise TypeError("thread_ids must be a sequence of thread IDs, not a str")
@@ -458,38 +462,16 @@ class PostgresSaver(BasePostgresSaver):
                     cur.execute(sql, (thread_ids,))
             return
         with self._cursor() as cur:
-            self._refuse_delta_threads(cur, thread_ids)
+            _execute(cur, _refuse_delta_threads(thread_ids))
         for thread_id in thread_ids:
-            with self._cursor() as cur, cur.connection.transaction():
-                cur.execute(PRUNE_HEADS_SQL, (thread_id, thread_id, thread_id))
-                heads = cur.fetchall()
-                # A run may have written this thread's first DeltaChannel
-                # checkpoint since the batch check. Checking after reading the
-                # heads sees it before anything it rebuilds from is deleted.
-                self._refuse_delta_threads(cur, [thread_id])
-                for head in heads:
-                    ns, keep_from = head["checkpoint_ns"], head["keep_from"]
-                    cur.execute(PRUNE_CHECKPOINTS_SQL, (thread_id, ns, keep_from))
-                    freed = cur.fetchall()
-                    cur.execute(PRUNE_WRITES_SQL, (thread_id, ns, keep_from))
-                    cur.execute(
-                        PRUNE_PARENTS_SQL, (thread_id, ns, keep_from, keep_from)
-                    )
-                    if not freed:
-                        continue
-                    cur.execute(PRUNE_REFERENCED_BLOBS_SQL, (thread_id, ns))
-                    garbage = _garbage_blobs(freed, cur.fetchall())
-                    for channel, versions in garbage.items():
-                        cur.execute(PRUNE_BLOBS_SQL, (thread_id, ns, channel, versions))
-
-    def _refuse_delta_threads(
-        self, cur: Cursor[DictRow], thread_ids: Sequence[str]
-    ) -> None:
-        cur.execute(PRUNE_DELTA_THREADS_SQL, (thread_ids, thread_ids))
-        if delta := sorted(r["thread_id"] for r in cur.fetchall()):
-            raise NotImplementedError(
-                f"keep_latest can't prune threads that use a DeltaChannel: {', '.join(delta)}"
-            )
+            with self._cursor() as cur:
+                if self.pipe:
+                    # The transaction has to start with its isolation level, and
+                    # in pipeline mode it would take in what ran since the last
+                    # sync.
+                    self.pipe.sync()
+                with cur.connection.transaction():
+                    _execute(cur, _keep_latest(thread_id))
 
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
