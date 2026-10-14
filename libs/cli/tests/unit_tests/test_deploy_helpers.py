@@ -593,9 +593,9 @@ class TestDockerBuildCommand:
                 False,
                 DockerBuildCommand(
                     ("docker", "buildx", "build"),
-                    ("--platform", "linux/amd64", "--load", "--progress=quiet"),
+                    ("--platform", "linux/amd64", "--load", "--progress=plain"),
                 ),
-                id="other_hosts_cross_build_quietly",
+                id="other_hosts_capture_plain_build_logs",
             ),
             pytest.param(
                 "arm64",
