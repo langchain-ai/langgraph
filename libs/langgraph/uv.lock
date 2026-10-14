@@ -1685,7 +1685,7 @@ test = [
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "3.1.3"
+version = "3.2.0"
 source = { editable = "../checkpoint-postgres" }
 dependencies = [
     { name = "langgraph-checkpoint" },
