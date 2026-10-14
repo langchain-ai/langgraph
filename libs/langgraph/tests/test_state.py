@@ -8,10 +8,11 @@ from typing import Annotated as Annotated2
 import pytest
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
-from typing_extensions import NotRequired, Required, TypedDict
+from typing_extensions import NotRequired, ReadOnly, Required, TypedDict
 
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
+from langgraph.graph import END, START
 from langgraph.graph.state import (
     StateGraph,
     _get_node_name,
@@ -200,6 +201,64 @@ def test_state_schema_optional_values(total_: bool):
     assert (
         set(output_schema["properties"].keys()) == expected_required | expected_optional
     )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "annotation",
+    [
+        ReadOnly[Annotated[list[str], operator.add]],
+        Annotated[ReadOnly[list[str]], operator.add],
+        Required[ReadOnly[Annotated[list[str], operator.add]]],
+        ReadOnly[Required[Annotated[list[str], operator.add]]],
+        NotRequired[ReadOnly[Annotated[list[str], operator.add]]],
+        ReadOnly[NotRequired[Annotated[list[str], operator.add]]],
+        Annotated[Required[ReadOnly[list[str]]], operator.add],
+        Annotated[NotRequired[ReadOnly[list[str]]], operator.add],
+    ],
+    ids=[
+        "outer_readonly",
+        "inner_readonly",
+        "required_readonly",
+        "readonly_required",
+        "notrequired_readonly",
+        "readonly_notrequired",
+        "annotated_required_readonly",
+        "annotated_notrequired_readonly",
+    ],
+)
+@pytest.mark.parametrize("mode", ["sequential", "fanout", "empty"])
+async def test_readonly_state_reducer(annotation: Any, mode: str) -> None:
+    class ReadOnlyState(TypedDict):
+        messages: annotation
+
+    builder = StateGraph(ReadOnlyState)
+
+    def first(state):
+        if mode == "empty":
+            assert state["messages"] == []
+        return {"messages": ["first"]}
+
+    builder.add_node("first", first)
+    builder.add_edge(START, "first")
+    if mode == "empty":
+        builder.add_edge("first", END)
+        input_state = {}
+        expected = {"messages": ["first"]}
+    else:
+        builder.add_node("second", lambda state: {"messages": ["second"]})
+        if mode == "fanout":
+            builder.add_edge(START, "second")
+            builder.add_edge("first", END)
+        else:
+            builder.add_edge("first", "second")
+        builder.add_edge("second", END)
+        input_state = {"messages": ["seed"]}
+        expected = {"messages": ["seed", "first", "second"]}
+
+    graph = builder.compile()
+    assert graph.invoke(input_state) == expected
+    assert await graph.ainvoke(input_state) == expected
 
 
 @pytest.mark.parametrize("kw_only_", [False, True])

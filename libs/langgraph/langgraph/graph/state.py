@@ -30,7 +30,14 @@ from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.store.base import BaseStore
 from pydantic import BaseModel, TypeAdapter
-from typing_extensions import NotRequired, Required, Self, Unpack, is_typeddict
+from typing_extensions import (
+    NotRequired,
+    ReadOnly,
+    Required,
+    Self,
+    Unpack,
+    is_typeddict,
+)
 
 from langgraph._internal import _serde
 from langgraph._internal._constants import (
@@ -1850,12 +1857,13 @@ def _get_channel(
 def _get_channel(
     name: str, annotation: Any, *, allow_managed: bool = True
 ) -> BaseChannel | ManagedValueSpec:
-    # Strip out Required and NotRequired wrappers
-    if hasattr(annotation, "__origin__") and annotation.__origin__ in (
+    # Strip TypedDict qualifiers to expose channel and reducer annotations.
+    while get_origin(annotation) in (
         Required,
         NotRequired,
+        ReadOnly,
     ):
-        annotation = annotation.__args__[0]
+        annotation = get_args(annotation)[0]
     if manager := _is_field_managed_value(name, annotation):
         if allow_managed:
             return manager

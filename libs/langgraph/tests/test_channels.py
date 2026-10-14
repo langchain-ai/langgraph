@@ -7,7 +7,7 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
-from typing_extensions import NotRequired, TypedDict
+from typing_extensions import NotRequired, ReadOnly, TypedDict
 
 from langgraph._internal._constants import OVERWRITE
 from langgraph._internal._typing import MISSING
@@ -655,8 +655,18 @@ def test_delta_channel_dict_reducer_overwrite_in_writes_replay() -> None:
     assert ch.get() == {"x": 10, "y": 20, "z": 30}
 
 
-def test_delta_channel_dict_reducer_with_notrequired_annotation() -> None:
-    """DeltaChannel infers dict type through `Annotated[NotRequired[dict[...]], ch]`."""
+@pytest.mark.parametrize(
+    "qualified_type",
+    [
+        NotRequired[dict[str, int]],
+        ReadOnly[dict[str, int]],
+        ReadOnly[NotRequired[dict[str, int]]],
+        NotRequired[ReadOnly[dict[str, int]]],
+    ],
+    ids=["notrequired", "readonly", "readonly_notrequired", "notrequired_readonly"],
+)
+def test_delta_channel_dict_reducer_with_qualified_annotation(qualified_type) -> None:
+    """DeltaChannel infers dict type through qualified `Annotated` fields."""
 
     def merge_dicts(state: dict, writes: list) -> dict:
         result = dict(state)
@@ -664,7 +674,7 @@ def test_delta_channel_dict_reducer_with_notrequired_annotation() -> None:
             result.update(w)
         return result
 
-    annotation = Annotated[NotRequired[dict[str, int]], DeltaChannel(merge_dicts)]
+    annotation = Annotated[qualified_type, DeltaChannel(merge_dicts)]
     ch = _get_channel("files", annotation).from_checkpoint(MISSING)
     assert ch.get() == {}
     ch.update([{"a": 1}])
