@@ -69,6 +69,16 @@ def lifecycle_errored_event(
     return _base(seq, "lifecycle", namespace or [], {"event": "failed", "error": error})
 
 
+def thread_stream_failed_frame() -> dict[str, Any]:
+    """Unsolicited error frame the server sends before closing a failed stream."""
+    return {
+        "type": "error",
+        "id": None,
+        "error": "unknown_error",
+        "message": "Thread event stream failed.",
+    }
+
+
 def values_event(
     seq: int = 0, namespace: list[str] | None = None, **data: Any
 ) -> dict[str, Any]:
