@@ -964,6 +964,19 @@ def test_image_pull_secret_without_push_to_or_image_uri_is_refused(
     assert deploy_project.timeline == []
 
 
+def test_an_invalid_image_pull_secret_name_is_rejected_before_any_docker_work(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, "--image-pull-secret", "Not_Valid!"
+    )
+
+    assert result.exit_code != 0
+    assert "not a valid Kubernetes" in result.output
+    assert deploy_project.docker.verbs() == []
+    assert deploy_project.timeline == []
+
+
 def test_image_pull_secret_cannot_update_an_existing_deployment(
     deploy_project: DeployProject,
 ) -> None:
@@ -977,7 +990,8 @@ def test_image_pull_secret_cannot_update_an_existing_deployment(
     )
 
     assert result.exit_code != 0
-    assert "--deployment-id" in result.output
+    assert "--image-pull-secret" in result.output
+    assert "dep-1" in result.output
     assert deploy_project.timeline == []
 
 
