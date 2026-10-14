@@ -48,7 +48,9 @@ from langgraph_cli.image_reference import ImageReference
 
 class TestDockerConfigForToken:
     def test_creates_config_json(self):
-        with _docker_config_for_token("us-docker.pkg.dev", "my-token") as cfg:
+        with _docker_config_for_token(
+            "us-docker.pkg.dev", "my-token", "oauth2accesstoken"
+        ) as cfg:
             config_path = os.path.join(cfg, "config.json")
             assert os.path.isfile(config_path)
             with open(config_path) as f:
@@ -56,13 +58,26 @@ class TestDockerConfigForToken:
             expected_auth = base64.b64encode(b"oauth2accesstoken:my-token").decode()
             assert data == {"auths": {"us-docker.pkg.dev": {"auth": expected_auth}}}
 
+    def test_uses_the_given_username(self):
+        with _docker_config_for_token(
+            "123456789012.dkr.ecr.us-east-2.amazonaws.com", "ecr-password", "AWS"
+        ) as cfg:
+            with open(os.path.join(cfg, "config.json")) as f:
+                data = json.load(f)
+        expected_auth = base64.b64encode(b"AWS:ecr-password").decode()
+        assert data["auths"]["123456789012.dkr.ecr.us-east-2.amazonaws.com"] == {
+            "auth": expected_auth
+        }
+
     def test_tempdir_cleaned_up(self):
-        with _docker_config_for_token("registry.example.com", "tok") as cfg:
+        with _docker_config_for_token(
+            "registry.example.com", "tok", "oauth2accesstoken"
+        ) as cfg:
             assert os.path.isdir(cfg)
         assert not os.path.exists(cfg)
 
     def test_different_registries(self):
-        with _docker_config_for_token("gcr.io", "token123") as cfg:
+        with _docker_config_for_token("gcr.io", "token123", "oauth2accesstoken") as cfg:
             with open(os.path.join(cfg, "config.json")) as f:
                 data = json.load(f)
             assert "gcr.io" in data["auths"]
@@ -595,9 +610,9 @@ class TestDockerBuildCommand:
                 False,
                 DockerBuildCommand(
                     ("docker", "buildx", "build"),
-                    ("--platform", "linux/amd64", "--load", "--progress=quiet"),
+                    ("--platform", "linux/amd64", "--load", "--progress=plain"),
                 ),
-                id="other_hosts_cross_build_quietly",
+                id="other_hosts_capture_plain_build_logs",
             ),
             pytest.param(
                 "arm64",
