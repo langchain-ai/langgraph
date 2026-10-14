@@ -152,6 +152,29 @@ def test_finished_task_does_not_report_answered_interrupt(
         assert asked == [["A1", "B"]]
 
 
+def test_finished_task_output_applies_once(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    builder = StateGraph(State)
+    builder.add_node("a", lambda s: {"log": [f"a:{interrupt('A')}"]})
+    builder.add_node("b", lambda s: {"log": [f"b:{interrupt('B')}"]})
+    builder.add_node("c", lambda s: {"log": [f"c:{interrupt('C')}"]})
+    builder.add_edge(START, "a")
+    builder.add_edge(START, "b")
+    builder.add_edge(START, "c")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = _config()
+
+    result = graph.invoke({"log": []}, config, durability=durability)
+    while pending := result.get("__interrupt__"):
+        result = graph.invoke(
+            Command(resume={pending[0].id: "yes"}), config, durability=durability
+        )
+
+    assert sorted(result["log"]) == ["a:yes", "b:yes", "c:yes"]
+    assert sorted(graph.get_state(config).values["log"]) == sorted(result["log"])
+
+
 @NEEDS_CONTEXTVARS
 async def test_finished_task_does_not_report_answered_interrupt_async(
     async_checkpointer: BaseCheckpointSaver,

@@ -257,6 +257,8 @@ class PregelLoop:
     _resume_loaded_writes: Sequence[PendingWrite] = ()
     # Tasks `_reapply_writes_to_succeeded_nodes` handed loaded writes back to.
     _reapplied_task_ids: set[str]
+    # Tasks that wrote during this run, the only ones exit mode saves at exit.
+    _written_task_ids: set[str]
     # An update or fork checkpoint addressed by `checkpoint_id` that the thread
     # has moved past, so it may already have children.
     _addressed_checkpoint_superseded: bool = False
@@ -455,6 +457,7 @@ class PregelLoop:
         """Put writes for a task, to be read by the next tick."""
         if not writes:
             return
+        self._written_task_ids.add(task_id)
         # deduplicate writes to special channels, last write wins
         if all(w[0] in WRITES_IDX_MAP for w in writes):
             writes = list({w[0]: w for w in writes}.values())
@@ -556,10 +559,12 @@ class PregelLoop:
                 CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
             },
         )
-        # group by task id
+        # Writes loaded with the checkpoint are stored on it already. Saving them
+        # again can file them under new indexes, and then they apply twice.
         by_task = defaultdict(list)
         for task_id, channel, value in self.checkpoint_pending_writes:
-            by_task[task_id].append((channel, value))
+            if task_id in self._written_task_ids:
+                by_task[task_id].append((channel, value))
         # submit writes to checkpointer
         for task_id, writes in by_task.items():
             if self.checkpointer_put_writes_accepts_task_path and hasattr(
@@ -904,6 +909,7 @@ class PregelLoop:
             if tid != NULL_TASK_ID and isinstance(self.specs.get(ch), DeltaChannel)
         }
         self._exit_command_writes = []
+        self._written_task_ids = set()
         # Resuming from a previous checkpoint requires two things:
         # 1. A prior checkpoint exists (channel_versions is non-empty)
         # 2. The input signals continuation (not a fresh run with new input)
