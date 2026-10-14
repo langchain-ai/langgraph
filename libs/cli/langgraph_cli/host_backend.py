@@ -249,9 +249,12 @@ class HostBackendClient:
         return self._request("DELETE", f"/v2/deployments/{deployment_id}")
 
     def request_push_token(self, deployment_id: str) -> dict[str, Any]:
+        # Tells the control plane this client logs in with the returned
+        # `username` and pushes to `repository_url`. LangSmith AWS requires it.
         return self._request(
             "POST",
             f"/v2/deployments/{deployment_id}/push-token",
+            {"supports_registry_username": True},
         )
 
     def request_upload_url(self, deployment_id: str) -> dict[str, Any]:

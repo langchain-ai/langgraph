@@ -93,6 +93,7 @@ class ControlPlaneDouble:
     timeline: list[str]
     existing_deployments: list[dict] = field(default_factory=list)
     push_token_status: int = 200
+    push_token_extra: dict = field(default_factory=dict)
     create_error: str | None = None
     listeners: list[dict] = field(default_factory=list)
     listeners_by_id: dict[str, dict] = field(default_factory=dict)
@@ -147,7 +148,12 @@ class ControlPlaneDouble:
             if self.push_token_status != 200:
                 return httpx.Response(self.push_token_status, text=NOT_A_CLI_DEPLOYMENT)
             return httpx.Response(
-                200, json={"token": PUSH_TOKEN, "registry_url": REGISTRY_URL}
+                200,
+                json={
+                    "token": PUSH_TOKEN,
+                    "registry_url": REGISTRY_URL,
+                    **self.push_token_extra,
+                },
             )
         if path.endswith("/upload-url"):
             return httpx.Response(
@@ -363,7 +369,7 @@ def test_first_local_deploy_creates_an_internal_docker_deployment(
         pytest.param(
             "arm64",
             ("docker", "buildx", "build"),
-            ("--platform", "linux/amd64", "--load", "--progress=quiet"),
+            ("--platform", "linux/amd64", "--load", "--progress=plain"),
             id="apple_silicon_cross_builds_for_linux_amd64",
         ),
         pytest.param(
@@ -408,6 +414,48 @@ def test_local_deploy_logs_in_with_the_control_plane_push_token(
         "registry.example.com",
     )
     assert login.kwargs["input"] == f"{PUSH_TOKEN}\n"
+
+
+def test_local_deploy_tells_the_control_plane_it_honors_registry_usernames(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.run("--no-remote")
+
+    assert deploy_project.control_plane.bodies[_push_token(CREATED_ID)] == {
+        "supports_registry_username": True
+    }
+
+
+ECR_REPOSITORY = "123456789012.dkr.ecr.us-east-2.amazonaws.com/lsd/agent-1"
+ECR_PUSH_TOKEN_FIELDS = {"username": "AWS", "repository_url": ECR_REPOSITORY}
+
+
+def test_local_deploy_logs_in_with_the_username_the_control_plane_returns(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.push_token_extra = ECR_PUSH_TOKEN_FIELDS
+
+    deploy_project.run("--no-remote")
+
+    login = deploy_project.docker.command("login")
+    assert login.args[3:] == (
+        "login",
+        "-u",
+        "AWS",
+        "--password-stdin",
+        "123456789012.dkr.ecr.us-east-2.amazonaws.com",
+    )
+
+
+def test_local_deploy_pushes_to_exactly_the_returned_repository(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.push_token_extra = ECR_PUSH_TOKEN_FIELDS
+
+    deploy_project.run("--no-remote")
+
+    tag = deploy_project.docker.command("tag")
+    assert tag.args[-1] == f"{ECR_REPOSITORY}:latest"
 
 
 def test_local_deploy_tags_the_build_into_the_token_registry(
@@ -916,6 +964,100 @@ def test_self_hosted_control_plane_places_when_asked(
         "listener_id": LISTENER_ID,
         "listener_config": {"k8s_namespace": "agents"},
     }
+
+
+def test_image_pull_secret_is_included_in_resource_spec_on_create(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run(
+        "--push-to",
+        PUSH_REPOSITORY,
+        "--image-pull-secret",
+        "regcred",
+        "--image-pull-secret",
+        "other-secret",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {
+            "image_pull_secrets": [
+                {"name": "regcred"},
+                {"name": "other-secret"},
+            ],
+        },
+    }
+
+
+def test_image_pull_secret_works_with_image_uri_too(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run(
+        "--image-uri", EXTERNAL_DIGEST, "--image-pull-secret", "regcred"
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {"image_pull_secrets": [{"name": "regcred"}]},
+    }
+
+
+def test_image_pull_secret_without_push_to_or_image_uri_is_refused(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run("--image-pull-secret", "regcred")
+
+    assert result.exit_code != 0
+    assert "only apply when creating a deployment with --push-to" in result.output
+    assert deploy_project.timeline == []
+
+
+def test_an_invalid_image_pull_secret_name_is_rejected_before_any_docker_work(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, "--image-pull-secret", "Not_Valid!"
+    )
+
+    assert result.exit_code != 0
+    assert "not a valid Kubernetes" in result.output
+    assert deploy_project.docker.verbs() == []
+    assert deploy_project.timeline == []
+
+
+def test_image_pull_secret_cannot_update_an_existing_deployment(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run(
+        "--deployment-id",
+        "dep-1",
+        "--push-to",
+        PUSH_REPOSITORY,
+        "--image-pull-secret",
+        "regcred",
+    )
+
+    assert result.exit_code != 0
+    assert "--image-pull-secret" in result.output
+    assert "dep-1" in result.output
+    assert deploy_project.timeline == []
+
+
+def test_image_pull_secret_cannot_update_a_deployment_found_by_name(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.existing_deployments = [
+        {"id": "dep-ext", "name": "my-app", "source": "external_docker"}
+    ]
+
+    result = deploy_project.run(
+        "--image-uri", EXTERNAL_DIGEST, "--image-pull-secret", "regcred"
+    )
+
+    assert result.exit_code != 0
+    assert "--image-pull-secret" in result.output
+    assert deploy_project.docker.verbs() == []
+    assert _patch("dep-ext") not in deploy_project.timeline
 
 
 def test_updating_a_deployment_never_looks_up_listeners(

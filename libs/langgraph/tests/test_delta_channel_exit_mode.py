@@ -625,3 +625,33 @@ def test_exit_resume_retried_after_its_final_checkpoint_fails_reruns_the_resumed
     state = graph.get_state(config)
     assert state.values["log"] == state.values["plain"]
     assert sorted(state.values["plain"]) == ["ask", "done", "in"]
+
+
+class _TurnState(_ResumeState):
+    turn: int
+
+
+@pytest.mark.parametrize("exit_runs", [1, 2])
+def test_exit_runs_from_a_checkpoint_the_thread_moved_past_leave_its_newer_branch_alone(
+    sync_checkpointer: BaseCheckpointSaver, exit_runs: int
+) -> None:
+    builder = StateGraph(_TurnState)
+    builder.add_node("a", lambda state: _both(f"a{state['turn']}"))
+    builder.add_node("b", lambda state: _both(f"b{state['turn']}"))
+    builder.add_edge(START, "a")
+    builder.add_edge("a", "b")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"turn": 1, **_both("in1")}, config)
+    end_of_turn_1 = graph.get_state(config).config
+    graph.invoke({"turn": 2, **_both("in2")}, config)
+
+    for turn in range(3, 3 + exit_runs):
+        graph.invoke(
+            {"turn": turn, **_both(f"in{turn}")}, end_of_turn_1, durability="exit"
+        )
+
+    history = list(graph.get_state_history(config))
+    assert [s.values.get("log", []) for s in history] == [
+        s.values.get("plain", []) for s in history
+    ]

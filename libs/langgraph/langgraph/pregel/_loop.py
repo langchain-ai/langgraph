@@ -161,6 +161,12 @@ def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
     return StreamProtocol(__call__, {mode for s in streams for mode in s.modes})
 
 
+def _cacheable(writes: WritesT) -> bool:
+    # A cache hit skips the node, so a cached error would skip it without
+    # raising: only a node that finished goes to the cache.
+    return not any(c in (INTERRUPT, ERROR) for c, _ in writes)
+
+
 class PregelLoop:
     config: RunnableConfig
     store: BaseStore | None
@@ -443,13 +449,18 @@ class PregelLoop:
             return None
         return self._graph_lifecycle_events.popleft()
 
-    def put_writes(self, task_id: str, writes: WritesT) -> None:
+    def put_writes(
+        self, task_id: str, writes: WritesT, *, cached: bool = False
+    ) -> None:
         """Put writes for a task, to be read by the next tick."""
         if not writes:
             return
         # deduplicate writes to special channels, last write wins
         if all(w[0] in WRITES_IDX_MAP for w in writes):
             writes = list({w[0]: w for w in writes}.values())
+        # Before the writes are saved, kept in `checkpoint_pending_writes` or
+        # applied, so all of them hold the same message ids.
+        ensure_message_ids(self.specs, writes)
         if task_id == NULL_TASK_ID:
             # writes for the null task are accumulated
             self.checkpoint_pending_writes = [
@@ -486,14 +497,6 @@ class PregelLoop:
 
         # save writes
         self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
-        # Assign stable IDs to any id=None BaseMessages in DeltaChannel writes
-        # before the background thread serialises them. Without this, reducers
-        # that assign IDs inside apply_writes() race with serialisation and
-        # store id=None, causing get_state() replays to produce a different UUID
-        # on every call.
-        for c, v in writes_to_save:
-            if isinstance(self.specs.get(c), DeltaChannel):
-                ensure_message_ids(v)
         if self.durability != "exit" and self.checkpointer_put_writes is not None:
             config = patch_configurable(
                 self.checkpoint_config,
@@ -536,7 +539,7 @@ class PregelLoop:
                 self._error_handler_write_futs.append(fut)
         # output writes
         if hasattr(self, "tasks"):
-            self.output_writes(task_id, writes)
+            self.output_writes(task_id, writes, cached=cached)
 
     def _put_pending_writes(self) -> None:
         if self.checkpointer_put_writes is None:
@@ -685,10 +688,6 @@ class PregelLoop:
             self.status = "done"
             return False
 
-        if self.control is not None and self.control.drain_requested:
-            self.status = "draining"
-            return False
-
         # if there are pending writes from a previous loop, apply them
         if self._reapplies_pending_writes and self.checkpoint_pending_writes:
             self._reapply_writes_to_succeeded_nodes(self.tasks)
@@ -700,6 +699,13 @@ class PregelLoop:
         ):
             self.status = "interrupt_before"
             raise GraphInterrupt()
+
+        # stop before running the next tasks if a drain was requested. after
+        # the breakpoint check: a resume passes the next step's breakpoints,
+        # so draining in front of one would skip it
+        if self.control is not None and self.control.drain_requested:
+            self.status = "draining"
+            return False
 
         # produce debug output
         self._emit("tasks", map_debug_tasks, self.tasks.values())
@@ -1012,6 +1018,8 @@ class PregelLoop:
             # save writes
             for tid, ws in writes.items():
                 if forks:
+                    # These skip `put_writes`, which gives messages their ids.
+                    ensure_message_ids(self.specs, ws)
                     carried.extend((tid, c, v) for c, v in ws)
                 else:
                     self.put_writes(tid, ws)
@@ -1076,6 +1084,9 @@ class PregelLoop:
             )
         # map inputs to channel updates
         elif input_writes := deque(map_input(input_keys, self.input)):
+            # Before the input is applied, so this run reads the message ids
+            # that are saved with it.
+            ensure_message_ids(self.specs, input_writes)
             # discard any unfinished tasks from previous checkpoint
             discard_tasks = prepare_next_tasks(
                 self.checkpoint,
@@ -1359,6 +1370,14 @@ class PregelLoop:
             or self.checkpointer_put_writes is None
         ):
             return
+
+        # A checkpoint a `checkpoint_id` addressed may already have children,
+        # which read the writes stored on it, so then the channels this run
+        # wrote snapshot instead.
+        if self._has_persisted_parent and not self._loaded_latest:
+            self._delta_channels_forced_snapshot.update(
+                w[3] for w in self._exit_delta_writes
+            )
 
         counters = dict(
             self.checkpoint_metadata.get("counters_since_delta_snapshot") or {}
@@ -1699,7 +1718,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
     ) -> PregelExecutableTask | None:
         if pushed := super().accept_push(task, write_idx, call):
             for task in self.match_cached_writes():
-                self.output_writes(task.id, task.writes, cached=True)
+                self.put_writes(task.id, task.writes, cached=True)
         return pushed
 
     def schedule_error_handler(
@@ -1736,16 +1755,18 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         if self._reapplies_pending_writes:
             self._reapply_writes_to_succeeded_nodes({handler_task.id: handler_task})
         for task in self.match_cached_writes():
-            self.output_writes(task.id, task.writes, cached=True)
+            self.put_writes(task.id, task.writes, cached=True)
         return handler_task
 
-    def put_writes(self, task_id: str, writes: WritesT) -> None:
+    def put_writes(
+        self, task_id: str, writes: WritesT, *, cached: bool = False
+    ) -> None:
         """Put writes for a task, to be read by the next tick."""
-        super().put_writes(task_id, writes)
-        if not writes or self.cache is None or not hasattr(self, "tasks"):
+        super().put_writes(task_id, writes, cached=cached)
+        if cached or not writes or self.cache is None or not hasattr(self, "tasks"):
             return
         task = self.tasks.get(task_id)
-        if task is None or task.cache_key is None:
+        if task is None or task.cache_key is None or not _cacheable(writes):
             return
         self.submit(
             self.cache.set,
@@ -1953,7 +1974,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
     ) -> PregelExecutableTask | None:
         if pushed := super().accept_push(task, write_idx, call):
             for task in await self.amatch_cached_writes():
-                self.output_writes(task.id, task.writes, cached=True)
+                self.put_writes(task.id, task.writes, cached=True)
         return pushed
 
     async def aschedule_error_handler(
@@ -1990,19 +2011,18 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         if self._reapplies_pending_writes:
             self._reapply_writes_to_succeeded_nodes({handler_task.id: handler_task})
         for task in await self.amatch_cached_writes():
-            self.output_writes(task.id, task.writes, cached=True)
+            self.put_writes(task.id, task.writes, cached=True)
         return handler_task
 
-    def put_writes(self, task_id: str, writes: WritesT) -> None:
+    def put_writes(
+        self, task_id: str, writes: WritesT, *, cached: bool = False
+    ) -> None:
         """Put writes for a task, to be read by the next tick."""
-        super().put_writes(task_id, writes)
-        if not writes or self.cache is None or not hasattr(self, "tasks"):
+        super().put_writes(task_id, writes, cached=cached)
+        if cached or not writes or self.cache is None or not hasattr(self, "tasks"):
             return
         task = self.tasks.get(task_id)
-        if task is None or task.cache_key is None:
-            return
-        if writes[0][0] in (INTERRUPT, ERROR):
-            # only cache successful tasks
+        if task is None or task.cache_key is None or not _cacheable(writes):
             return
         self.submit(
             self.cache.aset,
