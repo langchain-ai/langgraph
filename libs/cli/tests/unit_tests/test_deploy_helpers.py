@@ -16,6 +16,7 @@ from langgraph_cli.deploy import (
     BuildAndPush,
     ById,
     ByName,
+    CreateOnlySettings,
     CustomerRegistrySource,
     DockerBuildCommand,
     ExistingDeployment,
@@ -34,6 +35,7 @@ from langgraph_cli.deploy import (
     _parse_env_from_config,
     _resolve_env_path,
     _resolve_pushed_image_digest,
+    _resource_spec,
     _select_source,
     _validate_prebuilt_image,
     find_deployment_by_name,
@@ -636,6 +638,7 @@ class TestSelectSource:
         "tag": None,
         "remote_build_flag": None,
         "placement": RequestedPlacement(),
+        "image_pull_secrets": (),
         "selector": ByName("my-app"),
     }
     REPOSITORY = "registry.example.com/app"
@@ -651,7 +654,7 @@ class TestSelectSource:
                         reference=ImageReference(REPOSITORY, "latest"),
                         prebuilt_image=None,
                     ),
-                    requested_placement=RequestedPlacement(),
+                    create_only=CreateOnlySettings(RequestedPlacement()),
                 ),
                 id="push_to_selects_the_external_source_with_the_default_tag",
             ),
@@ -663,7 +666,7 @@ class TestSelectSource:
                         reference=ImageReference(REPOSITORY, "v2"),
                         prebuilt_image=None,
                     ),
-                    requested_placement=RequestedPlacement(),
+                    create_only=CreateOnlySettings(RequestedPlacement()),
                 ),
                 id="push_to_keeps_a_tag_given_in_the_reference",
             ),
@@ -675,7 +678,7 @@ class TestSelectSource:
                         reference=ImageReference(REPOSITORY, "v3"),
                         prebuilt_image=None,
                     ),
-                    requested_placement=RequestedPlacement(),
+                    create_only=CreateOnlySettings(RequestedPlacement()),
                 ),
                 id="tag_flag_composes_with_push_to",
             ),
@@ -687,7 +690,7 @@ class TestSelectSource:
                         reference=ImageReference(REPOSITORY, "latest"),
                         prebuilt_image="app:dev",
                     ),
-                    requested_placement=RequestedPlacement(),
+                    create_only=CreateOnlySettings(RequestedPlacement()),
                 ),
                 id="prebuilt_image_is_retagged_for_push_to_without_docker_checks",
             ),
@@ -702,16 +705,35 @@ class TestSelectSource:
                         reference=ImageReference(REPOSITORY, "latest"),
                         prebuilt_image=None,
                     ),
-                    requested_placement=RequestedPlacement("listener-1", "agents"),
+                    create_only=CreateOnlySettings(
+                        RequestedPlacement("listener-1", "agents")
+                    ),
                 ),
                 id="push_to_carries_the_requested_placement",
+            ),
+            pytest.param(
+                {
+                    "push_to": REPOSITORY,
+                    "image_pull_secrets": ("regcred", "other-secret"),
+                },
+                True,
+                CustomerRegistrySource(
+                    image=BuildAndPush(
+                        reference=ImageReference(REPOSITORY, "latest"),
+                        prebuilt_image=None,
+                    ),
+                    create_only=CreateOnlySettings(
+                        RequestedPlacement(), ("regcred", "other-secret")
+                    ),
+                ),
+                id="push_to_carries_the_image_pull_secrets",
             ),
             pytest.param(
                 {"image_uri": f"{REPOSITORY}@sha256:abc123"},
                 True,
                 CustomerRegistrySource(
                     image=PublishedImage(f"{REPOSITORY}@sha256:abc123"),
-                    requested_placement=RequestedPlacement(),
+                    create_only=CreateOnlySettings(RequestedPlacement()),
                 ),
                 id="image_uri_selects_the_published_image_source_by_digest",
             ),
@@ -720,7 +742,7 @@ class TestSelectSource:
                 False,
                 CustomerRegistrySource(
                     image=PublishedImage(f"{REPOSITORY}@sha256:abc123"),
-                    requested_placement=RequestedPlacement(),
+                    create_only=CreateOnlySettings(RequestedPlacement()),
                 ),
                 id="image_uri_needs_no_local_docker_and_is_trimmed",
             ),
@@ -732,7 +754,9 @@ class TestSelectSource:
                 False,
                 CustomerRegistrySource(
                     image=PublishedImage(f"{REPOSITORY}@sha256:abc123"),
-                    requested_placement=RequestedPlacement("listener-1", "agents"),
+                    create_only=CreateOnlySettings(
+                        RequestedPlacement("listener-1", "agents")
+                    ),
                 ),
                 id="image_uri_carries_the_requested_placement",
             ),
@@ -820,6 +844,11 @@ class TestSelectSource:
                 {"placement": RequestedPlacement(k8s_namespace="agents")},
                 "only apply when creating a deployment with --push-to",
                 id="namespace_without_push_to",
+            ),
+            pytest.param(
+                {"image_pull_secrets": ("regcred",)},
+                "only apply when creating a deployment with --push-to",
+                id="image_pull_secret_without_push_to",
             ),
             pytest.param(
                 {"image_uri": REPOSITORY, "push_to": REPOSITORY},
@@ -1258,7 +1287,7 @@ def test_a_deployment_id_with_listener_flags_is_refused_without_probing_docker(
 
     monkeypatch.setattr(deploy_mod, "can_build_locally", explode)
 
-    with pytest.raises(click.UsageError, match="--deployment-id"):
+    with pytest.raises(click.UsageError, match="dep-1"):
         _select_source(
             push_to="registry.example.com/app",
             image=None,
@@ -1267,8 +1296,75 @@ def test_a_deployment_id_with_listener_flags_is_refused_without_probing_docker(
             tag=None,
             remote_build_flag=None,
             placement=RequestedPlacement(listener_id="listener-1"),
+            image_pull_secrets=(),
             selector=ById("dep-1"),
         )
+
+
+def test_a_deployment_id_with_image_pull_secrets_is_refused_without_probing_docker(
+    monkeypatch,
+):
+    def explode() -> tuple[bool, str | None]:
+        raise AssertionError("docker must not be probed for an argv-only conflict")
+
+    monkeypatch.setattr(deploy_mod, "can_build_locally", explode)
+
+    with pytest.raises(click.UsageError, match="dep-1"):
+        _select_source(
+            push_to="registry.example.com/app",
+            image=None,
+            image_uri=None,
+            image_name=None,
+            tag=None,
+            remote_build_flag=None,
+            placement=RequestedPlacement(),
+            image_pull_secrets=("regcred",),
+            selector=ById("dep-1"),
+        )
+
+
+class TestResourceSpec:
+    def test_no_secrets_keeps_the_operator_default(self):
+        assert _resource_spec(()) == {}
+
+    def test_secrets_become_local_object_references_in_order(self):
+        assert _resource_spec(("regcred", "other-secret")) == {
+            "image_pull_secrets": [
+                {"name": "regcred"},
+                {"name": "other-secret"},
+            ],
+        }
+
+
+class TestCreateOnlySettings:
+    @pytest.mark.parametrize(
+        "name",
+        [
+            pytest.param("Bad_Name", id="uppercase_and_underscore"),
+            pytest.param("", id="empty"),
+            pytest.param("-leading-hyphen", id="leading_hyphen"),
+            pytest.param("a" * 254, id="too_long"),
+        ],
+    )
+    def test_an_invalid_secret_name_is_rejected_up_front(self, name):
+        with pytest.raises(click.UsageError, match="not a valid Kubernetes"):
+            CreateOnlySettings(RequestedPlacement(), (name,))
+
+    def test_a_valid_secret_name_is_accepted(self):
+        CreateOnlySettings(RequestedPlacement(), ("regcred-1.example",))
+
+    def test_ensure_not_existing_mentions_the_api_and_ui_for_pull_secrets(self):
+        settings = CreateOnlySettings(RequestedPlacement(), ("regcred",))
+        with pytest.raises(click.UsageError, match="API or the LangSmith UI"):
+            settings.ensure_not_existing("dep-1")
+
+    def test_ensure_not_existing_keeps_the_placement_message_unchanged(self):
+        settings = CreateOnlySettings(RequestedPlacement(listener_id="listener-1"))
+        with pytest.raises(
+            click.UsageError,
+            match="Listener and namespace are fixed when a deployment is created",
+        ):
+            settings.ensure_not_existing("dep-1")
 
 
 class TestPlacementOnAKnownListener:

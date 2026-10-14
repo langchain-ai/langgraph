@@ -231,15 +231,6 @@ class RequestedPlacement:
     def requested(self) -> bool:
         return self.listener_id is not None or self.k8s_namespace is not None
 
-    def ensure_not_requested(self, deployment_id: str) -> None:
-        if self.requested:
-            raise click.UsageError(
-                "Listener and namespace are fixed when a deployment is created. "
-                f"Deployment {deployment_id} already exists, so drop --listener-id "
-                "and --k8s-namespace, or create a new deployment with a different "
-                "--name."
-            )
-
     def on(self, listener: Listener) -> Placement:
         return OnListener(listener.id, self._namespace(listener))
 
@@ -1661,10 +1652,72 @@ class PublishedImage:
 ImageSource = BuildAndPush | PublishedImage
 
 
+def _resource_spec(image_pull_secrets: tuple[str, ...]) -> Mapping[str, object]:
+    if not image_pull_secrets:
+        return _OPERATOR_DEFAULT_RESOURCE_SPEC
+    return {
+        "image_pull_secrets": [{"name": name} for name in image_pull_secrets],
+    }
+
+
+# Mirrors the control plane's own LocalObjectReference.name validation (a
+# Kubernetes DNS subdomain), so a bad secret name is rejected here instead of
+# after a build and push.
+_K8S_SECRET_NAME_RE = re.compile(
+    r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class CreateOnlySettings:
+    """Options for an external-image deployment that only apply when
+    creating one, never when updating an existing deployment."""
+
+    placement: RequestedPlacement
+    image_pull_secrets: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        for name in self.image_pull_secrets:
+            if len(name) > 253 or not _K8S_SECRET_NAME_RE.match(name):
+                raise click.UsageError(
+                    f"--image-pull-secret {name!r} is not a valid Kubernetes "
+                    "secret name (lowercase alphanumeric characters, '-', or "
+                    "'.' only, max 253 characters)."
+                )
+
+    @property
+    def requested(self) -> bool:
+        return self.placement.requested or bool(self.image_pull_secrets)
+
+    def ensure_creatable(self, push_to: str | None, image_uri: str | None) -> None:
+        if push_to is None and image_uri is None and self.requested:
+            raise click.UsageError(
+                "--listener-id, --k8s-namespace, and --image-pull-secret only "
+                "apply when creating a deployment with --push-to or --image-uri."
+            )
+
+    def ensure_not_existing(self, deployment_id: str) -> None:
+        if self.placement.requested:
+            raise click.UsageError(
+                "Listener and namespace are fixed when a deployment is "
+                f"created. Deployment {deployment_id} already exists, so "
+                "drop --listener-id and --k8s-namespace, or create a new "
+                "deployment with a different --name."
+            )
+        if self.image_pull_secrets:
+            raise click.UsageError(
+                "langgraph deploy does not update image pull secrets on an "
+                f"existing deployment. Deployment {deployment_id} already "
+                "exists, so drop --image-pull-secret and update resource_spec "
+                "through the API or the LangSmith UI instead, or create a "
+                "new deployment with a different --name."
+            )
+
+
 @dataclass(frozen=True, slots=True)
 class CustomerRegistrySource:
     image: ImageSource
-    requested_placement: RequestedPlacement
+    create_only: CreateOnlySettings
 
     def run(self, ctx: DeployContext) -> DeployOutcome:
         if isinstance(ctx.selector, ById):
@@ -1686,7 +1739,7 @@ class CustomerRegistrySource:
         self, ctx: DeployContext, existing: ExistingDeployment, step: int
     ) -> DeployOutcome:
         _ensure_customer_registry_source(existing)
-        self.requested_placement.ensure_not_requested(existing.id)
+        self.create_only.ensure_not_existing(existing.id)
         image_uri, step = self._publish(ctx, step)
         _log_deploy_step(step, f"Updating deployment {existing.id}")
         updated = ctx.client.update_deployment(
@@ -1701,7 +1754,7 @@ class CustomerRegistrySource:
         )
 
     def _resolve_placement(self, ctx: DeployContext) -> Placement:
-        requested = self.requested_placement
+        requested = self.create_only.placement
         if requested.listener_id is not None:
             return requested.on(_requested_listener(ctx.client, requested.listener_id))
         if not (ctx.endpoints.is_cloud or requested.requested):
@@ -1730,7 +1783,9 @@ class CustomerRegistrySource:
                 else None,
                 source=_CUSTOMER_REGISTRY_SOURCE,
                 source_config={
-                    "resource_spec": _OPERATOR_DEFAULT_RESOURCE_SPEC,
+                    "resource_spec": _resource_spec(
+                        self.create_only.image_pull_secrets
+                    ),
                     **placement.source_config(),
                 },
                 source_revision_config={"image_uri": image_uri},
@@ -1824,19 +1879,13 @@ def _select_source(
     tag: str | None,
     remote_build_flag: bool | None,
     placement: RequestedPlacement,
+    image_pull_secrets: tuple[str, ...],
     selector: DeploymentSelector,
 ) -> DeploymentSource:
-    if push_to is None and image_uri is None and placement.requested:
-        raise click.UsageError(
-            "--listener-id and --k8s-namespace only apply when creating a "
-            "deployment with --push-to or --image-uri."
-        )
-    if placement.requested and isinstance(selector, ById):
-        raise click.UsageError(
-            "Listener and namespace are fixed when a deployment is created, so "
-            "they cannot be set for an existing --deployment-id. Drop them, or "
-            "create a new deployment with --name."
-        )
+    create_only = CreateOnlySettings(placement, image_pull_secrets)
+    create_only.ensure_creatable(push_to, image_uri)
+    if create_only.requested and isinstance(selector, ById):
+        create_only.ensure_not_existing(selector.deployment_id)
     if image_uri is not None:
         if push_to is not None:
             raise click.UsageError("--image-uri cannot be combined with --push-to.")
@@ -1848,7 +1897,7 @@ def _select_source(
             raise click.UsageError("--image-uri cannot be combined with --remote.")
         return CustomerRegistrySource(
             image=PublishedImage(_validate_image_uri(image_uri)),
-            requested_placement=placement,
+            create_only=create_only,
         )
     if push_to is not None:
         if remote_build_flag is True:
@@ -1858,7 +1907,7 @@ def _select_source(
             _require_local_docker()
         return CustomerRegistrySource(
             image=BuildAndPush(reference=reference, prebuilt_image=image),
-            requested_placement=placement,
+            create_only=create_only,
         )
     if image and remote_build_flag is True:
         raise click.UsageError("--image cannot be combined with --remote builds.")
@@ -2203,6 +2252,18 @@ def _deploy_base_options(
                 ),
             ),
             click.option(
+                "--image-pull-secret",
+                "image_pull_secrets",
+                multiple=True,
+                help=(
+                    "Name of a Kubernetes secret (type kubernetes.io/"
+                    "dockerconfigjson) in the deployment's namespace to use for "
+                    "pulling the image from a private registry. Repeat to give "
+                    "more than one. Only used when creating a deployment with "
+                    "--push-to or --image-uri."
+                ),
+            ),
+            click.option(
                 "--config",
                 "-c",
                 default=DEFAULT_CONFIG,
@@ -2315,6 +2376,7 @@ def _deploy_cmd(
     image_uri: str | None,
     listener_id: str | None,
     k8s_namespace: str | None,
+    image_pull_secrets: tuple[str, ...],
     tag: str | None,
     base_image: str | None,
     install_command: str | None,
@@ -2391,6 +2453,7 @@ def _deploy_cmd(
         tag=tag,
         remote_build_flag=remote_build_flag,
         placement=RequestedPlacement(listener_id, k8s_namespace),
+        image_pull_secrets=image_pull_secrets,
         selector=selector,
     )
 
