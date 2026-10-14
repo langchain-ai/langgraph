@@ -915,7 +915,7 @@ class ToolNode(RunnableCallable):
                             goto=cast("list[Send]", parent_command.goto) + output.goto,
                         )
                     else:
-                        parent_command = Command(graph=Command.PARENT, goto=output.goto)
+                        parent_command = replace(output, goto=output.goto)
                 else:
                     combined_outputs.append(output)
             else:

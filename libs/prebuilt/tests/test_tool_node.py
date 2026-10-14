@@ -1425,6 +1425,38 @@ def test_tool_node_parent_command_with_send() -> None:
     ]
 
 
+def test_tool_node_parent_command_with_send_preserves_update() -> None:
+    """The first parent command's update survives Send fan-out combination."""
+
+    @dec_tool
+    def transfer_to_alice():
+        """Transfer to Alice"""
+        return Command(goto=[Send("alice", {})], update="alice", graph=Command.PARENT)
+
+    @dec_tool
+    def transfer_to_bob():
+        """Transfer to Bob"""
+        return Command(goto=[Send("bob", {})], update="bob", graph=Command.PARENT)
+
+    tool_calls = [
+        {"args": {}, "id": "1", "name": "transfer_to_alice", "type": "tool_call"},
+        {"args": {}, "id": "2", "name": "transfer_to_bob", "type": "tool_call"},
+    ]
+
+    result = ToolNode([transfer_to_alice, transfer_to_bob]).invoke(
+        [AIMessage("", tool_calls=tool_calls)],
+        config=_create_config_with_runtime(),
+    )
+
+    assert result == [
+        Command(
+            goto=[Send("alice", {}), Send("bob", {})],
+            update="alice",
+            graph=Command.PARENT,
+        )
+    ]
+
+
 async def test_tool_node_command_remove_all_messages() -> None:
 
     @dec_tool
