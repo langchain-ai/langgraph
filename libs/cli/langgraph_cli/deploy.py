@@ -1682,6 +1682,13 @@ class CustomerRegistrySource:
     ) -> DeployOutcome:
         _ensure_customer_registry_source(existing)
         self.requested_placement.ensure_not_requested(existing.id)
+        if self.image_pull_secrets:
+            raise click.UsageError(
+                "Image pull secrets are fixed when a deployment is created. "
+                f"Deployment {existing.id} already exists, so drop "
+                "--image-pull-secret, or create a new deployment with a "
+                "different --name."
+            )
         image_uri, step = self._publish(ctx, step)
         _log_deploy_step(step, f"Updating deployment {existing.id}")
         updated = ctx.client.update_deployment(

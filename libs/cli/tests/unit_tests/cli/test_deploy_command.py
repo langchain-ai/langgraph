@@ -981,6 +981,23 @@ def test_image_pull_secret_cannot_update_an_existing_deployment(
     assert deploy_project.timeline == []
 
 
+def test_image_pull_secret_cannot_update_a_deployment_found_by_name(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.existing_deployments = [
+        {"id": "dep-ext", "name": "my-app", "source": "external_docker"}
+    ]
+
+    result = deploy_project.run(
+        "--image-uri", EXTERNAL_DIGEST, "--image-pull-secret", "regcred"
+    )
+
+    assert result.exit_code != 0
+    assert "--image-pull-secret" in result.output
+    assert deploy_project.docker.verbs() == []
+    assert _patch("dep-ext") not in deploy_project.timeline
+
+
 def test_updating_a_deployment_never_looks_up_listeners(
     deploy_project: DeployProject,
 ) -> None:
