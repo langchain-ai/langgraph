@@ -34,6 +34,7 @@ from langgraph_cli.deploy import (
     _parse_env_from_config,
     _resolve_env_path,
     _resolve_pushed_image_digest,
+    _resource_spec,
     _select_source,
     _validate_prebuilt_image,
     find_deployment_by_name,
@@ -621,6 +622,7 @@ class TestSelectSource:
         "tag": None,
         "remote_build_flag": None,
         "placement": RequestedPlacement(),
+        "image_pull_secrets": (),
         "selector": ByName("my-app"),
     }
     REPOSITORY = "registry.example.com/app"
@@ -690,6 +692,22 @@ class TestSelectSource:
                     requested_placement=RequestedPlacement("listener-1", "agents"),
                 ),
                 id="push_to_carries_the_requested_placement",
+            ),
+            pytest.param(
+                {
+                    "push_to": REPOSITORY,
+                    "image_pull_secrets": ("regcred", "other-secret"),
+                },
+                True,
+                CustomerRegistrySource(
+                    image=BuildAndPush(
+                        reference=ImageReference(REPOSITORY, "latest"),
+                        prebuilt_image=None,
+                    ),
+                    requested_placement=RequestedPlacement(),
+                    image_pull_secrets=("regcred", "other-secret"),
+                ),
+                id="push_to_carries_the_image_pull_secrets",
             ),
             pytest.param(
                 {"image_uri": f"{REPOSITORY}@sha256:abc123"},
@@ -805,6 +823,11 @@ class TestSelectSource:
                 {"placement": RequestedPlacement(k8s_namespace="agents")},
                 "only apply when creating a deployment with --push-to",
                 id="namespace_without_push_to",
+            ),
+            pytest.param(
+                {"image_pull_secrets": ("regcred",)},
+                "only apply when creating a deployment with --push-to",
+                id="image_pull_secret_without_push_to",
             ),
             pytest.param(
                 {"image_uri": REPOSITORY, "push_to": REPOSITORY},
@@ -1252,8 +1275,44 @@ def test_a_deployment_id_with_listener_flags_is_refused_without_probing_docker(
             tag=None,
             remote_build_flag=None,
             placement=RequestedPlacement(listener_id="listener-1"),
+            image_pull_secrets=(),
             selector=ById("dep-1"),
         )
+
+
+def test_a_deployment_id_with_image_pull_secrets_is_refused_without_probing_docker(
+    monkeypatch,
+):
+    def explode() -> tuple[bool, str | None]:
+        raise AssertionError("docker must not be probed for an argv-only conflict")
+
+    monkeypatch.setattr(deploy_mod, "can_build_locally", explode)
+
+    with pytest.raises(click.UsageError, match="--deployment-id"):
+        _select_source(
+            push_to="registry.example.com/app",
+            image=None,
+            image_uri=None,
+            image_name=None,
+            tag=None,
+            remote_build_flag=None,
+            placement=RequestedPlacement(),
+            image_pull_secrets=("regcred",),
+            selector=ById("dep-1"),
+        )
+
+
+class TestResourceSpec:
+    def test_no_secrets_keeps_the_operator_default(self):
+        assert _resource_spec(()) == {}
+
+    def test_secrets_become_local_object_references_in_order(self):
+        assert _resource_spec(("regcred", "other-secret")) == {
+            "image_pull_secrets": [
+                {"name": "regcred"},
+                {"name": "other-secret"},
+            ],
+        }
 
 
 class TestPlacementOnAKnownListener:

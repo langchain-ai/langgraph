@@ -1647,10 +1647,19 @@ class PublishedImage:
 ImageSource = BuildAndPush | PublishedImage
 
 
+def _resource_spec(image_pull_secrets: tuple[str, ...]) -> Mapping[str, object]:
+    if not image_pull_secrets:
+        return _OPERATOR_DEFAULT_RESOURCE_SPEC
+    return {
+        "image_pull_secrets": [{"name": name} for name in image_pull_secrets],
+    }
+
+
 @dataclass(frozen=True, slots=True)
 class CustomerRegistrySource:
     image: ImageSource
     requested_placement: RequestedPlacement
+    image_pull_secrets: tuple[str, ...] = ()
 
     def run(self, ctx: DeployContext) -> DeployOutcome:
         if isinstance(ctx.selector, ById):
@@ -1716,7 +1725,7 @@ class CustomerRegistrySource:
                 else None,
                 source=_CUSTOMER_REGISTRY_SOURCE,
                 source_config={
-                    "resource_spec": _OPERATOR_DEFAULT_RESOURCE_SPEC,
+                    "resource_spec": _resource_spec(self.image_pull_secrets),
                     **placement.source_config(),
                 },
                 source_revision_config={"image_uri": image_uri},
@@ -1810,18 +1819,24 @@ def _select_source(
     tag: str | None,
     remote_build_flag: bool | None,
     placement: RequestedPlacement,
+    image_pull_secrets: tuple[str, ...],
     selector: DeploymentSelector,
 ) -> DeploymentSource:
-    if push_to is None and image_uri is None and placement.requested:
+    if (
+        push_to is None
+        and image_uri is None
+        and (placement.requested or image_pull_secrets)
+    ):
         raise click.UsageError(
-            "--listener-id and --k8s-namespace only apply when creating a "
-            "deployment with --push-to or --image-uri."
+            "--listener-id, --k8s-namespace, and --image-pull-secret only "
+            "apply when creating a deployment with --push-to or --image-uri."
         )
-    if placement.requested and isinstance(selector, ById):
+    if (placement.requested or image_pull_secrets) and isinstance(selector, ById):
         raise click.UsageError(
-            "Listener and namespace are fixed when a deployment is created, so "
-            "they cannot be set for an existing --deployment-id. Drop them, or "
-            "create a new deployment with --name."
+            "Listener, namespace, and image pull secrets are fixed when a "
+            "deployment is created, so they cannot be set for an existing "
+            "--deployment-id. Drop them, or create a new deployment with "
+            "--name."
         )
     if image_uri is not None:
         if push_to is not None:
@@ -1835,6 +1850,7 @@ def _select_source(
         return CustomerRegistrySource(
             image=PublishedImage(_validate_image_uri(image_uri)),
             requested_placement=placement,
+            image_pull_secrets=image_pull_secrets,
         )
     if push_to is not None:
         if remote_build_flag is True:
@@ -1845,6 +1861,7 @@ def _select_source(
         return CustomerRegistrySource(
             image=BuildAndPush(reference=reference, prebuilt_image=image),
             requested_placement=placement,
+            image_pull_secrets=image_pull_secrets,
         )
     if image and remote_build_flag is True:
         raise click.UsageError("--image cannot be combined with --remote builds.")
@@ -2189,6 +2206,18 @@ def _deploy_base_options(
                 ),
             ),
             click.option(
+                "--image-pull-secret",
+                "image_pull_secrets",
+                multiple=True,
+                help=(
+                    "Name of a Kubernetes secret (type kubernetes.io/"
+                    "dockerconfigjson) in the deployment's namespace to use for "
+                    "pulling the image from a private registry. Repeat to give "
+                    "more than one. Only used when creating a deployment with "
+                    "--push-to or --image-uri."
+                ),
+            ),
+            click.option(
                 "--config",
                 "-c",
                 default=DEFAULT_CONFIG,
@@ -2301,6 +2330,7 @@ def _deploy_cmd(
     image_uri: str | None,
     listener_id: str | None,
     k8s_namespace: str | None,
+    image_pull_secrets: tuple[str, ...],
     tag: str | None,
     base_image: str | None,
     install_command: str | None,
@@ -2377,6 +2407,7 @@ def _deploy_cmd(
         tag=tag,
         remote_build_flag=remote_build_flag,
         placement=RequestedPlacement(listener_id, k8s_namespace),
+        image_pull_secrets=image_pull_secrets,
         selector=selector,
     )
 

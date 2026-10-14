@@ -918,6 +918,69 @@ def test_self_hosted_control_plane_places_when_asked(
     }
 
 
+def test_image_pull_secret_is_included_in_resource_spec_on_create(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run(
+        "--push-to",
+        PUSH_REPOSITORY,
+        "--image-pull-secret",
+        "regcred",
+        "--image-pull-secret",
+        "other-secret",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {
+            "image_pull_secrets": [
+                {"name": "regcred"},
+                {"name": "other-secret"},
+            ],
+        },
+    }
+
+
+def test_image_pull_secret_works_with_image_uri_too(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run(
+        "--image-uri", EXTERNAL_DIGEST, "--image-pull-secret", "regcred"
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {"image_pull_secrets": [{"name": "regcred"}]},
+    }
+
+
+def test_image_pull_secret_without_push_to_or_image_uri_is_refused(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run("--image-pull-secret", "regcred")
+
+    assert result.exit_code != 0
+    assert "only apply when creating a deployment with --push-to" in result.output
+    assert deploy_project.timeline == []
+
+
+def test_image_pull_secret_cannot_update_an_existing_deployment(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run(
+        "--deployment-id",
+        "dep-1",
+        "--push-to",
+        PUSH_REPOSITORY,
+        "--image-pull-secret",
+        "regcred",
+    )
+
+    assert result.exit_code != 0
+    assert "--deployment-id" in result.output
+    assert deploy_project.timeline == []
+
+
 def test_updating_a_deployment_never_looks_up_listeners(
     deploy_project: DeployProject,
 ) -> None:
