@@ -474,6 +474,64 @@ def test_functional_task_finished_with_none_is_not_rerun(
     assert calls == {"a": 2, "b": 3}
 
 
+def test_subgraph_finished_task_is_not_rerun(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    calls: Counter[str] = Counter()
+    builder = StateGraph(State)
+    builder.add_node("child", _build_parallel(None, calls))
+    builder.add_edge(START, "child")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = _config()
+
+    graph.invoke({"log": []}, config, durability=durability)
+    snapshot = graph.get_state(config)
+    graph.invoke(
+        Command(resume={_interrupt_by_value(snapshot, "A1").id: "yes"}),
+        config,
+        durability=durability,
+    )
+    snapshot = graph.get_state(config)
+    result = graph.invoke(
+        Command(resume={_interrupt_by_value(snapshot, "B").id: "ok"}),
+        config,
+        durability=durability,
+    )
+
+    assert sorted(result["log"]) == ["a:yes", "b:ok"]
+    assert calls == {"a": 2, "b": 3}, "resuming B ran the finished A again"
+
+
+def test_nested_entrypoint_finished_task_is_not_rerun(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    calls: Counter[str] = Counter()
+
+    @task
+    def step_1(query: str) -> str:
+        calls["step_1"] += 1
+        return f"{query} bar"
+
+    @task
+    def human_feedback(query: str) -> str:
+        calls["human_feedback"] += 1
+        return f"{query} {interrupt('feedback?')}"
+
+    @entrypoint()
+    def child(query: str) -> str:
+        return human_feedback(step_1(query).result()).result()
+
+    @entrypoint(checkpointer=sync_checkpointer)
+    def parent(query: str) -> str:
+        return child.invoke(query)
+
+    config = _config()
+    parent.invoke("foo", config)
+
+    assert parent.invoke(Command(resume="baz"), config) == "foo bar baz"
+    assert calls == {"step_1": 1, "human_feedback": 2}
+
+
 # --- Reading task status from recorded writes ---
 
 

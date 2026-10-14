@@ -1177,6 +1177,43 @@ def test_subgraph_interrupt_resume_with_explicit_head_checkpoint_id(
     assert result["value"] == ["sub_a", "human:answer", "sub_b"]
 
 
+def test_subgraph_replay_reasks_answered_parallel_interrupt(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Replaying a subgraph checkpoint asks its step's questions again, including
+    one already answered. An update checkpoint replays in place instead of
+    forking, so its tasks keep their ids and its saved answers could be reused."""
+
+    subgraph = (
+        StateGraph(State)
+        .add_node("a", lambda s: {"value": [f"a:{interrupt('a')}"]})
+        .add_node("b", lambda s: {"value": [f"b:{interrupt('b')}"]})
+        .add_edge(START, "a")
+        .add_edge(START, "b")
+        .compile(checkpointer=True)
+    )
+    graph = (
+        StateGraph(State)
+        .add_node("subgraph_node", subgraph)
+        .add_edge(START, "subgraph_node")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    def subgraph_head() -> RunnableConfig:
+        return graph.get_state(config, subgraphs=True).tasks[0].state.config
+
+    graph.invoke({"value": []}, config)
+    graph.update_state(subgraph_head(), {"value": ["u"]}, as_node="__start__")
+    result = graph.invoke(None, config)
+    question_a = next(i for i in result["__interrupt__"] if i.value == "a")
+    graph.invoke(Command(resume={question_a.id: "yes"}), config)
+
+    result = graph.invoke(None, subgraph_head())
+
+    assert sorted(i.value for i in result["__interrupt__"]) == ["a", "b"]
+
+
 def test_subgraph_replay_loads_accumulated_state_then_resume(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
