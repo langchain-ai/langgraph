@@ -13,6 +13,7 @@ from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
 from types import NoneType as NoneType
 from typing import (
+    Annotated,
     Any,
     Generic,
     Literal,
@@ -30,7 +31,14 @@ from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.store.base import BaseStore
 from pydantic import BaseModel, TypeAdapter
-from typing_extensions import NotRequired, Required, Self, Unpack, is_typeddict
+from typing_extensions import (
+    NotRequired,
+    Required,
+    Self,
+    TypedDict,
+    Unpack,
+    is_typeddict,
+)
 
 from langgraph._internal import _serde
 from langgraph._internal._constants import (
@@ -1941,6 +1949,45 @@ def _is_field_managed_value(name: str, typ: type[Any]) -> ManagedValueSpec | Non
     return None
 
 
+def _hoist_required_qualifiers(typ: type) -> type:
+    """Move ``Required``/``NotRequired`` out of ``Annotated`` in a TypedDict's hints.
+
+    ``Annotated[Required[str], meta]`` and ``Required[Annotated[str, meta]]`` are
+    equivalent spellings, but pydantic < 2.11 only understands the second one when
+    building a schema (``PydanticSchemaGenerationError: Unable to generate
+    pydantic-core schema for typing.Required[str]``). Return a TypedDict with the
+    same keys, totality and metadata using the spelling every supported pydantic
+    accepts; return ``typ`` unchanged when nothing needs rewriting.
+    """
+    hints = get_type_hints(typ, include_extras=True)
+    rewritten: dict[str, Any] = {}
+    changed = False
+    for key, hint in hints.items():
+        if get_origin(hint) is Annotated:
+            inner, *meta = get_args(hint)
+            qualifier = get_origin(inner)
+            if qualifier in (Required, NotRequired):
+                hint = qualifier[Annotated[tuple((get_args(inner)[0], *meta))]]  # type: ignore[index]
+                changed = True
+        rewritten[key] = hint
+    if not changed:
+        return typ
+    required = typ.__required_keys__
+    normalized = TypedDict(  # type: ignore[misc]
+        typ.__name__,
+        {
+            k: (
+                v
+                if get_origin(v) in (Required, NotRequired)
+                else (Required[v] if k in required else NotRequired[v])
+            )
+            for k, v in rewritten.items()
+        },
+    )
+    normalized.__module__ = typ.__module__
+    return normalized
+
+
 def _get_json_schema(
     typ: type,
     schemas: dict,
@@ -1950,7 +1997,7 @@ def _get_json_schema(
     if isclass(typ) and issubclass(typ, BaseModel):
         return typ.model_json_schema()
     elif is_typeddict(typ):
-        return TypeAdapter(typ).json_schema()
+        return TypeAdapter(_hoist_required_qualifiers(typ)).json_schema()
     else:
         keys = list(schemas[typ].keys())
         if len(keys) == 1 and keys[0] == "__root__":

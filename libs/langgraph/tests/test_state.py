@@ -2,7 +2,7 @@ import inspect
 import operator
 import warnings
 from dataclasses import dataclass, field
-from typing import Annotated, Any, Union
+from typing import Annotated, Any, Union, get_type_hints
 from typing import Annotated as Annotated2
 
 import pytest
@@ -15,6 +15,7 @@ from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.graph.state import (
     StateGraph,
     _get_node_name,
+    _hoist_required_qualifiers,
     _is_field_channel,
     _warn_invalid_state_schema,
 )
@@ -133,6 +134,34 @@ def test_state_schema_with_type_hint():
             assert c[node_name] == foo_state
         else:
             assert c[node_name] == output_state
+
+
+@pytest.mark.parametrize("total_", [True, False])
+def test_hoist_required_qualifiers(total_: bool):
+    # pydantic < 2.11 cannot build a schema for ``Annotated[Required[...]]``; the
+    # equivalent ``Required[Annotated[...]]`` spelling works on every supported version.
+    class Spelled(TypedDict, total=total_):  # type: ignore
+        plain: str
+        req: Annotated[Required[str], "foo"]
+        opt: Annotated[NotRequired[dict], "bar"]
+        nested: Required[Annotated[dict, operator.or_]]
+
+    class Untouched(TypedDict, total=total_):  # type: ignore
+        plain: str
+        nested: Required[Annotated[dict, operator.or_]]
+
+    hoisted = _hoist_required_qualifiers(Spelled)
+    assert hoisted is not Spelled
+    assert hoisted.__name__ == Spelled.__name__
+    assert hoisted.__required_keys__ == Spelled.__required_keys__
+    assert hoisted.__optional_keys__ == Spelled.__optional_keys__
+    hints = get_type_hints(hoisted, include_extras=True)
+    assert hints["req"] == Required[Annotated[str, "foo"]]
+    assert hints["opt"] == NotRequired[Annotated[dict, "bar"]]
+    assert hints["nested"] == Required[Annotated[dict, operator.or_]]
+    assert hints["plain"] == (Required[str] if total_ else NotRequired[str])
+    # nothing to rewrite: the original class is returned as is
+    assert _hoist_required_qualifiers(Untouched) is Untouched
 
 
 @pytest.mark.parametrize("total_", [True, False])
