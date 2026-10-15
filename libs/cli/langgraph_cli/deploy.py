@@ -1209,6 +1209,33 @@ class DockerBuildCommand:
         return cls(("docker", "buildx", "build"), flags)
 
 
+def _active_docker_host(runner: CommandRunner) -> str | None:
+    """Return the daemon endpoint of the user's active Docker context.
+
+    None when `DOCKER_HOST` is set, which Docker honors with any config
+    directory. Also None when the lookup fails (for example, `DOCKER_CONTEXT`
+    names a context that doesn't exist) or the context has no Docker endpoint
+    (Docker prints `<no value>`); that keeps Docker's own default in place.
+    """
+    if os.environ.get("DOCKER_HOST"):
+        return None
+    try:
+        stdout, _ = runner.run(
+            subp_exec(
+                "docker",
+                "context",
+                "inspect",
+                "--format",
+                "{{.Endpoints.docker.Host}}",
+                collect=True,
+            )
+        )
+    except (click.exceptions.Exit, OSError):
+        return None
+    host = (stdout or "").strip()
+    return host if "://" in host else None
+
+
 def _docker_argv(docker_config_dir: str | None) -> tuple[str, ...]:
     if docker_config_dir is None:
         return ("docker",)
@@ -1242,17 +1269,13 @@ def _push_image(
     runner: CommandRunner,
     image: str,
     *,
-    docker_config_dir: str | None,
+    docker: tuple[str, ...],
     verbose: bool,
 ) -> None:
     for attempt in range(1, _PUSH_ATTEMPTS + 1):
         try:
             with Progress(message="Pushing...", elapsed=not verbose):
-                runner.run(
-                    subp_exec(
-                        *_docker_argv(docker_config_dir), "push", image, verbose=verbose
-                    )
-                )
+                runner.run(subp_exec(*docker, "push", image, verbose=verbose))
             return
         except click.exceptions.Exit:
             if attempt == _PUSH_ATTEMPTS:
@@ -1337,6 +1360,11 @@ def _run_local_build(
         registry_host = repository.split("/")[0]
 
         with _docker_config_for_token(registry_host, deployment_token, username) as cfg:
+            # A config directory has no current context, so Docker would fall
+            # back to /var/run/docker.sock; keep using the daemon the build used.
+            docker_host = _active_docker_host(runner)
+            host_args = ("--host", docker_host) if docker_host else ()
+            docker = (*_docker_argv(cfg), *host_args)
             _log_deploy_step(step, f"Logging into {registry_host}")
             token_input = (
                 deployment_token
@@ -1345,7 +1373,7 @@ def _run_local_build(
             )
             runner.run(
                 subp_exec(
-                    *_docker_argv(cfg),
+                    *docker,
                     "login",
                     "-u",
                     username,
@@ -1361,7 +1389,7 @@ def _run_local_build(
             runner.run(
                 subp_exec("docker", "tag", image_to_push, remote_image, verbose=verbose)
             )
-            _push_image(runner, remote_image, docker_config_dir=cfg, verbose=verbose)
+            _push_image(runner, remote_image, docker=docker, verbose=verbose)
         step += 1
 
         resolved_image = _resolve_pushed_image_digest(
@@ -1826,7 +1854,7 @@ class CustomerRegistrySource:
                 _build_image(runner, ctx.spec, image, verbose=ctx.verbose)
             step += 1
             _log_deploy_step(step, f"Pushing image {image}")
-            _push_image(runner, image, docker_config_dir=None, verbose=ctx.verbose)
+            _push_image(runner, image, docker=_docker_argv(None), verbose=ctx.verbose)
             step += 1
             digest = _resolve_pushed_image_digest(
                 runner, remote_image=image, docker_config_dir=None, verbose=ctx.verbose
