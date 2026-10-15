@@ -468,6 +468,11 @@ class PregelLoop:
                 for w in self.checkpoint_pending_writes
                 if w[0] != task_id or w[1] not in WRITES_IDX_MAP
             ]
+            # Savers key a regular write by its position in the list, and the
+            # special ones dropped above won't be there next time, so they go
+            # last: a resume saved ahead of an update would move it to a new
+            # slot once the list is saved again, and it would apply twice.
+            writes = sorted(writes, key=lambda w: w[0] in WRITES_IDX_MAP)
             writes_to_save: WritesT = [
                 w[1:] for w in self.checkpoint_pending_writes if w[0] == task_id
             ] + list(writes)
