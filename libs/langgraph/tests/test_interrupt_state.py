@@ -152,6 +152,34 @@ def test_finished_task_does_not_report_answered_interrupt(
         assert asked == [["A1", "B"]]
 
 
+@pytest.mark.parametrize("checkpoint_id", ["none", "head"])
+def test_resume_at_the_latest_checkpoint_does_not_rerun_finished_task(
+    sync_checkpointer: BaseCheckpointSaver, checkpoint_id: str
+) -> None:
+    calls: Counter[str] = Counter()
+    graph = _build_parallel(sync_checkpointer, calls)
+    config = _config()
+    graph.invoke({"log": []}, config)
+
+    def resume(question: str, answer: str) -> Any:
+        snapshot = graph.get_state(config)
+        target = (
+            snapshot.config
+            if checkpoint_id == "head"
+            else {"configurable": {**config["configurable"], "checkpoint_id": None}}
+        )
+        return graph.invoke(
+            Command(resume={_interrupt_by_value(snapshot, question).id: answer}),
+            target,
+        )
+
+    resume("A1", "yes")
+    result = resume("B", "ok")
+
+    assert sorted(result["log"]) == ["a:yes", "b:ok"]
+    assert calls == {"a": 2, "b": 3}, "resuming B ran the finished A again"
+
+
 @NEEDS_CONTEXTVARS
 async def test_finished_task_does_not_report_answered_interrupt_async(
     async_checkpointer: BaseCheckpointSaver,
