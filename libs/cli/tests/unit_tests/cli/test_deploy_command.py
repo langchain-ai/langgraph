@@ -52,6 +52,8 @@ ARCHIVE = ("/tmp/src.tgz", 2048, "langgraph.json")
 OBJECT_PATH = "tarballs/src.tgz"
 PLATFORM_FORMAT = "{{.Os}}/{{.Architecture}}"
 DIGESTS_FORMAT = "{{json .RepoDigests}}"
+CONTEXT_HOST_FORMAT = "{{.Endpoints.docker.Host}}"
+CONTEXT_HOST = "unix:///Users/dev/.docker/run/docker.sock"
 NOT_A_CLI_DEPLOYMENT = (
     "push token is only available for 'internal_docker' source deployments"
 )
@@ -192,6 +194,7 @@ class DockerCommand:
 class DockerDouble:
     timeline: list[str]
     failing_pushes: int = 0
+    contexts_supported: bool = True
     builds: list[dict] = field(default_factory=list)
     commands: list[DockerCommand] = field(default_factory=list)
 
@@ -235,6 +238,10 @@ class DockerDouble:
         if "push" in args and self.failing_pushes > 0:
             self.failing_pushes -= 1
             raise click.exceptions.Exit(1)
+        if CONTEXT_HOST_FORMAT in args:
+            if not self.contexts_supported:
+                raise click.exceptions.Exit(1)
+            return f"{CONTEXT_HOST}\n", None
         if PLATFORM_FORMAT in args:
             return "linux/amd64\n", None
         if DIGESTS_FORMAT in args:
@@ -244,6 +251,8 @@ class DockerDouble:
 
     @staticmethod
     def _verb(args: tuple[str, ...]) -> str:
+        if CONTEXT_HOST_FORMAT in args:
+            return "inspect-context"
         if PLATFORM_FORMAT in args:
             return "inspect-platform"
         if DIGESTS_FORMAT in args:
@@ -292,7 +301,12 @@ def deploy_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DeployPro
         json.dumps({"graphs": {"agent": "agent.py:graph"}, "dependencies": ["."]})
     )
     monkeypatch.chdir(tmp_path)
-    for name in ("LANGSMITH_TENANT_ID", "LANGSMITH_ENDPOINT", "LANGGRAPH_HOST_URL"):
+    for name in (
+        "LANGSMITH_TENANT_ID",
+        "LANGSMITH_ENDPOINT",
+        "LANGGRAPH_HOST_URL",
+        "DOCKER_HOST",
+    ):
         monkeypatch.delenv(name, raising=False)
 
     timeline: list[str] = []
@@ -340,6 +354,7 @@ def test_first_local_deploy_creates_then_builds_pushes_and_updates_in_order(
         CREATE_DEPLOYMENT,
         "docker build",
         _push_token(CREATED_ID),
+        "docker inspect-context",
         "docker login",
         "docker tag",
         "docker push",
@@ -406,7 +421,7 @@ def test_local_deploy_logs_in_with_the_control_plane_push_token(
 
     login = deploy_project.docker.command("login")
     assert login.args[:2] == ("docker", "--config")
-    assert login.args[3:] == (
+    assert login.args[-5:] == (
         "login",
         "-u",
         "oauth2accesstoken",
@@ -414,6 +429,43 @@ def test_local_deploy_logs_in_with_the_control_plane_push_token(
         "registry.example.com",
     )
     assert login.kwargs["input"] == f"{PUSH_TOKEN}\n"
+
+
+def test_local_deploy_logs_in_and_pushes_through_the_active_docker_context(
+    deploy_project: DeployProject,
+) -> None:
+    """The temporary config has no current context, so without the active
+    context's endpoint Docker would push through /var/run/docker.sock."""
+    result = deploy_project.run("--no-remote")
+
+    assert result.exit_code == 0, result.output
+    for verb in ("login", "push"):
+        args = deploy_project.docker.command(verb).args
+        assert args[3:5] == ("--host", CONTEXT_HOST), verb
+
+
+def test_local_deploy_leaves_an_explicit_docker_host_to_docker(
+    deploy_project: DeployProject, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DOCKER_HOST", "tcp://127.0.0.1:2375")
+
+    result = deploy_project.run("--no-remote")
+
+    assert result.exit_code == 0, result.output
+    assert "docker inspect-context" not in deploy_project.docker.verbs()
+    for verb in ("login", "push"):
+        assert "--host" not in deploy_project.docker.command(verb).args, verb
+
+
+def test_local_deploy_without_docker_contexts_keeps_dockers_default(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.docker.contexts_supported = False
+
+    result = deploy_project.run("--no-remote")
+
+    assert result.exit_code == 0, result.output
+    assert "--host" not in deploy_project.docker.command("push").args
 
 
 def test_local_deploy_tells_the_control_plane_it_honors_registry_usernames(
@@ -438,7 +490,7 @@ def test_local_deploy_logs_in_with_the_username_the_control_plane_returns(
     deploy_project.run("--no-remote")
 
     login = deploy_project.docker.command("login")
-    assert login.args[3:] == (
+    assert login.args[-5:] == (
         "login",
         "-u",
         "AWS",
@@ -506,6 +558,7 @@ def test_prebuilt_image_is_validated_and_pushed_without_a_build(
     assert deploy_project.docker.builds == []
     assert deploy_project.docker.verbs() == [
         "docker inspect-platform",
+        "docker inspect-context",
         "docker login",
         "docker tag",
         "docker push",
