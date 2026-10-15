@@ -349,7 +349,6 @@ class PregelLoop:
         self.interrupt_before = interrupt_before
         self.manager = manager
         self.is_nested = CONFIG_KEY_TASK_ID in self.config.get(CONF, {})
-        self.is_replaying = CONFIG_KEY_CHECKPOINT_ID in config[CONF]
         self._migrate_checkpoint = migrate_checkpoint
         self.trigger_to_nodes = trigger_to_nodes
         self.retry_policy = retry_policy
@@ -407,6 +406,14 @@ class PregelLoop:
             else ()
         )
         self.prev_checkpoint_config = None
+        # A run replays only when it's pointed at a checkpoint: a truthy
+        # `checkpoint_id`, this graph's `checkpoint_map` entry, or a replaying
+        # parent. Every task config carries `checkpoint_id: None`, so a key
+        # check would make every subgraph replay its finished tasks.
+        self.is_replaying = bool(
+            self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)
+            or self.config[CONF].get(CONFIG_KEY_REPLAY_STATE)
+        )
         runtime = self.config[CONF].get(CONFIG_KEY_RUNTIME)
         self.control = runtime.control if isinstance(runtime, Runtime) else None
 
@@ -950,11 +957,6 @@ class PregelLoop:
                 or configurable.get(CONFIG_KEY_RESUMING, False)
             )
         )
-        if self.is_nested and not is_time_traveling:
-            # Task configs always carry a `checkpoint_id` (None), so a nested
-            # graph starts out replaying even on a plain resume, which would
-            # rerun its finished tasks instead of handing back their writes.
-            self.is_replaying = False
         if is_time_traveling:
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
