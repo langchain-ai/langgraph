@@ -189,6 +189,24 @@ class BranchSpec(NamedTuple):
         result = await self.path.ainvoke(value, config)
         return self._finish(writer, input, result, config)
 
+    def _resolve_destination(self, route_key: Hashable) -> str:
+        """Look up a routing function's return value in ``path_map``.
+
+        A bare ``self.ends[route_key]`` surfaces a context-free ``KeyError`` when
+        the routing function returns something that isn't a ``path_map`` key --
+        which is an easy mistake to make and gives the user nothing to act on.
+        Raise an error that names the offending value and the valid ones.
+        """
+        try:
+            return self.ends[route_key]
+        except KeyError:
+            valid = sorted(map(repr, self.ends))
+            raise ValueError(
+                f"Conditional edge returned {route_key!r}, which is not a key in "
+                f"path_map. Valid keys: {valid}. Either return one of these from "
+                f"the routing function, or add {route_key!r} to path_map."
+            ) from None
+
     def _finish(
         self,
         writer: _Writer,
@@ -200,7 +218,7 @@ class BranchSpec(NamedTuple):
             result = [result]
         if self.ends:
             destinations: Sequence[Send | str] = [
-                r if isinstance(r, Send) else self.ends[r] for r in result
+                r if isinstance(r, Send) else self._resolve_destination(r) for r in result
             ]
         else:
             destinations = cast(Sequence[Send | str], result)
