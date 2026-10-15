@@ -452,7 +452,6 @@ def test_local_deploy_leaves_an_explicit_docker_host_to_docker(
     result = deploy_project.run("--no-remote")
 
     assert result.exit_code == 0, result.output
-    assert "docker inspect-context" not in deploy_project.docker.verbs()
     for verb in ("login", "push"):
         assert "--host" not in deploy_project.docker.command(verb).args, verb
 

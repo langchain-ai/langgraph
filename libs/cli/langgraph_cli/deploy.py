@@ -1209,9 +1209,6 @@ class DockerBuildCommand:
         return cls(("docker", "buildx", "build"), flags)
 
 
-_DOCKER_HOST_FORMAT = "{{.Endpoints.docker.Host}}"
-
-
 def _active_docker_host(runner: CommandRunner) -> str | None:
     """Return the daemon endpoint of the user's active Docker context.
 
@@ -1228,7 +1225,7 @@ def _active_docker_host(runner: CommandRunner) -> str | None:
                 "context",
                 "inspect",
                 "--format",
-                _DOCKER_HOST_FORMAT,
+                "{{.Endpoints.docker.Host}}",
                 collect=True,
             )
         )
@@ -1237,15 +1234,10 @@ def _active_docker_host(runner: CommandRunner) -> str | None:
     return (stdout or "").strip() or None
 
 
-def _docker_argv(
-    docker_config_dir: str | None, docker_host: str | None = None
-) -> tuple[str, ...]:
+def _docker_argv(docker_config_dir: str | None) -> tuple[str, ...]:
     if docker_config_dir is None:
         return ("docker",)
-    # A config directory has no current context, so Docker would fall back to
-    # /var/run/docker.sock; keep talking to the daemon the build used.
-    host = ("--host", docker_host) if docker_host else ()
-    return ("docker", "--config", docker_config_dir, *host)
+    return ("docker", "--config", docker_config_dir)
 
 
 def _build_image(
@@ -1365,9 +1357,12 @@ def _run_local_build(
         remote_image = str(ImageReference(repository, tag))
         registry_host = repository.split("/")[0]
 
-        docker_host = _active_docker_host(runner)
         with _docker_config_for_token(registry_host, deployment_token, username) as cfg:
-            docker = _docker_argv(cfg, docker_host)
+            # A config directory has no current context, so Docker would fall
+            # back to /var/run/docker.sock; keep using the daemon the build used.
+            docker_host = _active_docker_host(runner)
+            host_args = ("--host", docker_host) if docker_host else ()
+            docker = (*_docker_argv(cfg), *host_args)
             _log_deploy_step(step, f"Logging into {registry_host}")
             token_input = (
                 deployment_token
