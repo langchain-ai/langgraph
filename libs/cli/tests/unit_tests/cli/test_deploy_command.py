@@ -194,7 +194,7 @@ class DockerCommand:
 class DockerDouble:
     timeline: list[str]
     failing_pushes: int = 0
-    contexts_supported: bool = True
+    context_lookup_fails: bool = False
     context_host: str = CONTEXT_HOST
     builds: list[dict] = field(default_factory=list)
     commands: list[DockerCommand] = field(default_factory=list)
@@ -240,7 +240,7 @@ class DockerDouble:
             self.failing_pushes -= 1
             raise click.exceptions.Exit(1)
         if CONTEXT_HOST_FORMAT in args:
-            if not self.contexts_supported:
+            if self.context_lookup_fails:
                 raise click.exceptions.Exit(1)
             return f"{self.context_host}\n", None
         if PLATFORM_FORMAT in args:
@@ -457,10 +457,10 @@ def test_local_deploy_leaves_an_explicit_docker_host_to_docker(
         assert "--host" not in deploy_project.docker.command(verb).args, verb
 
 
-def test_local_deploy_without_docker_contexts_keeps_dockers_default(
+def test_local_deploy_keeps_dockers_default_when_the_context_lookup_fails(
     deploy_project: DeployProject,
 ) -> None:
-    deploy_project.docker.contexts_supported = False
+    deploy_project.docker.context_lookup_fails = True
 
     result = deploy_project.run("--no-remote")
 

@@ -1213,9 +1213,9 @@ def _active_docker_host(runner: CommandRunner) -> str | None:
     """Return the daemon endpoint of the user's active Docker context.
 
     None when `DOCKER_HOST` is set, which Docker honors with any config
-    directory, or when the context can't be read (a Docker without contexts, or
-    a context with no Docker endpoint, which prints `<no value>`), which leaves
-    Docker's own default in place.
+    directory. Also None when the lookup fails (for example, `DOCKER_CONTEXT`
+    names a context that doesn't exist) or the context has no Docker endpoint
+    (Docker prints `<no value>`); that keeps Docker's own default in place.
     """
     if os.environ.get("DOCKER_HOST"):
         return None
