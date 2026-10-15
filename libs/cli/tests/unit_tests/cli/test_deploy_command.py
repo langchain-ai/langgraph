@@ -195,6 +195,7 @@ class DockerDouble:
     timeline: list[str]
     failing_pushes: int = 0
     contexts_supported: bool = True
+    context_host: str = CONTEXT_HOST
     builds: list[dict] = field(default_factory=list)
     commands: list[DockerCommand] = field(default_factory=list)
 
@@ -241,7 +242,7 @@ class DockerDouble:
         if CONTEXT_HOST_FORMAT in args:
             if not self.contexts_supported:
                 raise click.exceptions.Exit(1)
-            return f"{CONTEXT_HOST}\n", None
+            return f"{self.context_host}\n", None
         if PLATFORM_FORMAT in args:
             return "linux/amd64\n", None
         if DIGESTS_FORMAT in args:
@@ -460,6 +461,17 @@ def test_local_deploy_without_docker_contexts_keeps_dockers_default(
     deploy_project: DeployProject,
 ) -> None:
     deploy_project.docker.contexts_supported = False
+
+    result = deploy_project.run("--no-remote")
+
+    assert result.exit_code == 0, result.output
+    assert "--host" not in deploy_project.docker.command("push").args
+
+
+def test_local_deploy_ignores_a_context_without_a_docker_endpoint(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.docker.context_host = "<no value>"
 
     result = deploy_project.run("--no-remote")
 

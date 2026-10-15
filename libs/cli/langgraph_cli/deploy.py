@@ -1212,9 +1212,10 @@ class DockerBuildCommand:
 def _active_docker_host(runner: CommandRunner) -> str | None:
     """Return the daemon endpoint of the user's active Docker context.
 
-    None when ``DOCKER_HOST`` is set, which Docker honors with any config
-    directory, or when the context can't be read (a Docker without contexts),
-    which leaves Docker's own default in place.
+    None when `DOCKER_HOST` is set, which Docker honors with any config
+    directory, or when the context can't be read (a Docker without contexts, or
+    a context with no Docker endpoint, which prints `<no value>`), which leaves
+    Docker's own default in place.
     """
     if os.environ.get("DOCKER_HOST"):
         return None
@@ -1229,9 +1230,10 @@ def _active_docker_host(runner: CommandRunner) -> str | None:
                 collect=True,
             )
         )
-    except click.exceptions.Exit:
+    except (click.exceptions.Exit, OSError):
         return None
-    return (stdout or "").strip() or None
+    host = (stdout or "").strip()
+    return host if "://" in host else None
 
 
 def _docker_argv(docker_config_dir: str | None) -> tuple[str, ...]:
