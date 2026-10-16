@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
+from websockets.exceptions import ConnectionClosed, InvalidStatus
+
 
 def protocol_error(response: dict[str, Any]) -> RuntimeError:
     """Build the error for a protocol `{"type": "error"}` envelope."""
@@ -29,14 +32,15 @@ def stream_error_frame(event: Any) -> RuntimeError | None:
 def is_non_retryable_stream_error(error: BaseException | None) -> bool:
     """Whether reopening the stream would fail the same way.
 
-    True for a 4xx other than 408 and 429, whether it is the status of the stream
-    request or a WebSocket close code of 4000 plus that status. A server that
-    rejects a WebSocket after accepting it closes with such a code, because a
-    browser can't read the status of a refused upgrade.
+    True for a 4xx other than 408 and 429: the status of a refused stream request
+    or WebSocket upgrade, or a WebSocket close code of 4000 plus that status. A
+    server that rejects a WebSocket after accepting it closes with such a code,
+    because a browser can't read the status of a refused upgrade.
     """
-    status = getattr(getattr(error, "response", None), "status_code", None)
-    if status is None:
-        code = getattr(getattr(error, "rcvd", None), "code", None)
-        if isinstance(code, int) and 4000 <= code < 5000:
-            status = code - 4000
-    return isinstance(status, int) and 400 <= status < 500 and status not in (408, 429)
+    if isinstance(error, (httpx.HTTPStatusError, InvalidStatus)):
+        status = error.response.status_code
+    elif isinstance(error, ConnectionClosed) and error.rcvd is not None:
+        status = error.rcvd.code - 4000
+    else:
+        return False
+    return 400 <= status < 500 and status not in (408, 429)

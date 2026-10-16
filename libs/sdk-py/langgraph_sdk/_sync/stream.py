@@ -1508,6 +1508,11 @@ class SyncThreadStream:
         with self._lifecycle_watcher_lock:
             if self._lifecycle_watcher_thread is not None:
                 return
+            if self._run_done is not None and self._run_done.done():
+                # The watcher stopped before this run started, typically on the
+                # 404 for a thread this run.start just created, so the result it
+                # left isn't this run's.
+                self._run_done = _BlockingResult()
             self._lifecycle_watcher_thread = threading.Thread(
                 target=self._run_lifecycle_watcher,
                 name="langgraph-sdk-sync-lifecycle",
@@ -1533,8 +1538,11 @@ class SyncThreadStream:
         if self._transport is None:
             return
         reconnect_attempts = 0
+        frame_error: RuntimeError | None = None
         while not self._closed:
-            frame_error: RuntimeError | None = None
+            # A stream opened before run.start can 404 for the thread that
+            # run.start creates, so it gets one more try once a run has started.
+            opened_before_run = not self._run_seen
             try:
                 handle = self._transport.open_event_stream(
                     self._lifecycle_stream_params()
@@ -1552,7 +1560,7 @@ class SyncThreadStream:
                     # event. Resolve `_run_done` as errored so `thread.output`
                     # doesn't block forever.
                     if not self._closed:
-                        self._fail_run_done(
+                        self._stop_lifecycle_watcher(
                             frame_error
                             or RuntimeError(
                                 "lifecycle stream ended before terminal event"
@@ -1567,13 +1575,34 @@ class SyncThreadStream:
                     raise err
             except Exception as exc:
                 if is_non_retryable_stream_error(exc):
-                    self._fail_run_done(exc)
-                    return
+                    if self._stop_lifecycle_watcher(
+                        exc, unless_run_started=opened_before_run
+                    ):
+                        return
+                    continue
                 reconnect_attempts += 1
                 if reconnect_attempts <= self._lifecycle_max_reconnect_attempts:
                     continue
-                self._fail_run_done(RuntimeError(f"Lifecycle transport failed: {exc}"))
+                self._stop_lifecycle_watcher(
+                    frame_error or RuntimeError(f"Lifecycle transport failed: {exc}")
+                )
                 return
+
+    def _stop_lifecycle_watcher(
+        self, error: BaseException, *, unless_run_started: bool = False
+    ) -> bool:
+        """Fail the run with `error` and clear the watcher, so run.start starts another.
+
+        Returns False, changing nothing, when `unless_run_started` is set and a
+        run has started. Holding the lock keeps a run.start from seeing this
+        watcher as still running once it has decided to stop.
+        """
+        with self._lifecycle_watcher_lock:
+            if unless_run_started and self._run_seen:
+                return False
+            self._fail_run_done(error)
+            self._lifecycle_watcher_thread = None
+            return True
 
     def _fail_run_done(self, error: BaseException) -> None:
         run_done = self._run_done

@@ -1847,8 +1847,14 @@ class AsyncThreadStream:
             await asyncio.wait_for(asyncio.shield(gate), timeout=timeout)
 
     def _ensure_lifecycle_watcher_running(self) -> None:
-        if self._lifecycle_watcher_task is not None:
+        task = self._lifecycle_watcher_task
+        if task is not None and not task.done():
             return
+        if task is not None:
+            # The watcher stopped before this run started, typically on the 404
+            # for a thread this run.start just created, so the result it left
+            # isn't this run's.
+            self._run_done = asyncio.get_running_loop().create_future()
         self._lifecycle_watcher_task = asyncio.create_task(
             self._run_lifecycle_watcher()
         )
@@ -1871,8 +1877,11 @@ class AsyncThreadStream:
         if self._transport is None:
             return
         reconnect_attempts = 0
+        frame_error: RuntimeError | None = None
         while not self._closed:
-            frame_error: RuntimeError | None = None
+            # A stream opened before run.start can 404 for the thread that
+            # run.start creates, so it gets one more try once a run has started.
+            opened_before_run = not self._run_seen
             try:
                 handle = self._transport.open_event_stream(
                     self._lifecycle_stream_params()
@@ -1909,13 +1918,17 @@ class AsyncThreadStream:
                 raise
             except Exception as exc:
                 if is_non_retryable_stream_error(exc):
+                    if opened_before_run and self._run_seen:
+                        continue
                     self._fail_run_done(exc)
                     return
                 reconnect_attempts += 1
                 if reconnect_attempts <= self._lifecycle_max_reconnect_attempts:
                     await asyncio.sleep(0.05)
                     continue
-                self._fail_run_done(RuntimeError(f"Lifecycle transport failed: {exc}"))
+                self._fail_run_done(
+                    frame_error or RuntimeError(f"Lifecycle transport failed: {exc}")
+                )
                 return
 
     def _fail_run_done(self, error: BaseException) -> None:
