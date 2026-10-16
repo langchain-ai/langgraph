@@ -172,6 +172,32 @@ def test_finished_task_output_applies_once(
         )
 
     assert sorted(result["log"]) == ["a:yes", "b:yes", "c:yes"]
+
+
+def test_resume_with_update_applies_the_update_once(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    def ask_three_times(state: State) -> State:
+        answers = [interrupt(str(question)) for question in range(1, 4)]
+        return {"log": ["a:" + "".join(answers)]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("a", ask_three_times)
+        .add_edge(START, "a")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = _config()
+
+    result = graph.invoke({"log": []}, config, durability=durability)
+    for i in range(1, 4):
+        result = graph.invoke(
+            Command(resume=str(i), update={"log": [f"u{i}"]}),
+            config,
+            durability=durability,
+        )
+
+    assert sorted(result["log"]) == ["a:123", "u1", "u2", "u3"]
     assert sorted(graph.get_state(config).values["log"]) == sorted(result["log"])
 
 
