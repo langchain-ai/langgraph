@@ -257,8 +257,10 @@ class PregelLoop:
     _resume_loaded_writes: Sequence[PendingWrite] = ()
     # Tasks `_reapply_writes_to_succeeded_nodes` handed loaded writes back to.
     _reapplied_task_ids: set[str]
-    # An update or fork checkpoint addressed by `checkpoint_id` that the thread
-    # has moved past, so it may already have children.
+    # Tasks that wrote during this run, the only ones exit mode saves at exit.
+    _written_task_ids: set[str]
+    # A checkpoint addressed by `checkpoint_id` that the thread has moved past,
+    # so it may already have children.
     _addressed_checkpoint_superseded: bool = False
 
     # The checkpoint_config that points at the parent loaded at `__enter__`
@@ -349,7 +351,6 @@ class PregelLoop:
         self.interrupt_before = interrupt_before
         self.manager = manager
         self.is_nested = CONFIG_KEY_TASK_ID in self.config.get(CONF, {})
-        self.is_replaying = CONFIG_KEY_CHECKPOINT_ID in config[CONF]
         self._migrate_checkpoint = migrate_checkpoint
         self.trigger_to_nodes = trigger_to_nodes
         self.retry_policy = retry_policy
@@ -407,6 +408,14 @@ class PregelLoop:
             else ()
         )
         self.prev_checkpoint_config = None
+        # Whether the run points this loop at a checkpoint: a truthy
+        # `checkpoint_id`, this graph's `checkpoint_map` entry, or a replaying
+        # parent. Every task config carries `checkpoint_id: None`, so a key
+        # check would count every subgraph.
+        self._addressed = bool(
+            self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)
+            or self.config[CONF].get(CONFIG_KEY_REPLAY_STATE)
+        )
         runtime = self.config[CONF].get(CONFIG_KEY_RUNTIME)
         self.control = runtime.control if isinstance(runtime, Runtime) else None
 
@@ -455,6 +464,7 @@ class PregelLoop:
         """Put writes for a task, to be read by the next tick."""
         if not writes:
             return
+        self._written_task_ids.add(task_id)
         # deduplicate writes to special channels, last write wins
         if all(w[0] in WRITES_IDX_MAP for w in writes):
             writes = list({w[0]: w for w in writes}.values())
@@ -556,10 +566,12 @@ class PregelLoop:
                 CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
             },
         )
-        # group by task id
+        # Writes loaded with the checkpoint are stored on it already. Saving them
+        # again can file them under new indexes, and then they apply twice.
         by_task = defaultdict(list)
         for task_id, channel, value in self.checkpoint_pending_writes:
-            by_task[task_id].append((channel, value))
+            if task_id in self._written_task_ids:
+                by_task[task_id].append((channel, value))
         # submit writes to checkpointer
         for task_id, writes in by_task.items():
             if self.checkpointer_put_writes_accepts_task_path and hasattr(
@@ -904,6 +916,7 @@ class PregelLoop:
             if tid != NULL_TASK_ID and isinstance(self.specs.get(ch), DeltaChannel)
         }
         self._exit_command_writes = []
+        self._written_task_ids = set()
         # Resuming from a previous checkpoint requires two things:
         # 1. A prior checkpoint exists (channel_versions is non-empty)
         # 2. The input signals continuation (not a fresh run with new input)
@@ -931,7 +944,7 @@ class PregelLoop:
         # writes so that interrupt() calls re-fire instead of returning
         # stale values. But if we're actively resuming, keep them —
         # multi-interrupt scenarios need previously resolved values preserved.
-        is_time_traveling = self.is_replaying and (
+        is_time_traveling = self._addressed and (
             # Time-travel to a subgraph checkpoint: the parent sets
             # RESUMING=True (it can't distinguish time-travel from resume),
             # so we check if this subgraph's own ns is in checkpoint_map.
@@ -950,6 +963,10 @@ class PregelLoop:
                 or configurable.get(CONFIG_KEY_RESUMING, False)
             )
         )
+        # Finished tasks rerun only on time travel, or on a resume at a
+        # checkpoint the thread has moved past. A resume addressed at the
+        # thread's latest checkpoint hands their writes back, as without an id.
+        self.is_replaying = is_time_traveling or self._addressed_checkpoint_superseded
         if is_time_traveling:
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
@@ -1165,11 +1182,11 @@ class PregelLoop:
             # checkpoint ID since the fork was created after the subgraph's
             # checkpoints from the original execution.
             #
-            # Only gate on is_time_traveling (not is_replaying). When the
+            # Only gate on is_time_traveling (not _addressed). When the
             # client resumes with an explicit checkpoint_id that happens to
             # point at the current head (e.g. LangGraph Studio sending
             # `checkpoint: {checkpoint_id}` alongside Command(resume=...)),
-            # is_replaying is True but is_time_traveling is False. In that
+            # the run is addressed but not time traveling. In that
             # case subgraphs should load their latest checkpoint normally,
             # not go through ReplayState's before-bound lookup which would
             # miss subgraph checkpoints created during processing of the
@@ -1789,7 +1806,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             # This covers both normal replay and subgraphs resolved via
             # checkpoint_map during time-travel.
             saved = self.checkpointer.get_tuple(self.checkpoint_config)
-            if saved is not None and saved.metadata.get("source") in ("update", "fork"):
+            if saved is not None:
                 self._addressed_checkpoint_superseded = checkpoint_superseded(
                     self.checkpointer, self.checkpoint_config, saved
                 )
@@ -2045,7 +2062,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             # This covers both normal replay and subgraphs resolved via
             # checkpoint_map during time-travel.
             saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
-            if saved is not None and saved.metadata.get("source") in ("update", "fork"):
+            if saved is not None:
                 self._addressed_checkpoint_superseded = await acheckpoint_superseded(
                     self.checkpointer, self.checkpoint_config, saved
                 )
