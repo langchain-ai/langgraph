@@ -1728,22 +1728,22 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
         def my_tool(x: int, runtime: ToolRuntime) -> str:
             \"\"\"Tool that accesses runtime context.\"\"\"
             # Access state
-            messages = tool_runtime.state["messages"]
+            messages = runtime.state["messages"]
 
             # Access tool_call_id
-            print(f"Tool call ID: {tool_runtime.tool_call_id}")
+            print(f"Tool call ID: {runtime.tool_call_id}")
 
             # Access config
-            print(f"Run ID: {tool_runtime.config.get('run_id')}")
+            print(f"Run ID: {runtime.config.get('run_id')}")
 
             # Access runtime context
-            user_id = tool_runtime.context.get("user_id")
+            user_id = runtime.context.get("user_id")
 
             # Access store
-            tool_runtime.store.put(("metrics",), "count", 1)
+            runtime.store.put(("metrics",), "count", 1)
 
             # Stream output
-            tool_runtime.stream_writer.write("Processing...")
+            runtime.stream_writer("Processing...")
 
             return f"Processed {x}"
         ```
