@@ -1722,7 +1722,7 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     Example:
         ```python
         from langchain_core.tools import tool
-        from langchain.tools import ToolRuntime
+        from langgraph.prebuilt import ToolRuntime
 
         @tool
         def my_tool(x: int, runtime: ToolRuntime) -> str:
