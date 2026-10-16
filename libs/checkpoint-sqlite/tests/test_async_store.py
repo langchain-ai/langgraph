@@ -4,6 +4,7 @@ import tempfile
 import uuid
 from collections.abc import AsyncIterator, Generator, Iterable
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import cast
 
 import pytest
@@ -79,6 +80,72 @@ def conn_string(request: pytest.FixtureRequest) -> Generator[str, None, None]:
             yield temp_file.name
         finally:
             os.unlink(temp_file.name)
+
+
+@pytest.mark.parametrize("batched", [False, True])
+async def test_put_preserves_created_at(store: AsyncSqliteStore, batched: bool) -> None:
+    namespace = ("users", "alice")
+    clock = ["2026-01-01 00:00:00"]
+    await store.conn.create_function("current_timestamp", 0, lambda: clock[0])
+    await store.aput(namespace, "preferences", {"drink": "tea"}, ttl=60)
+    before = await store.aget(namespace, "preferences", refresh_ttl=False)
+    assert before is not None
+    assert before.created_at == datetime.fromisoformat(clock[0])
+
+    clock[0] = "2026-01-02 00:00:00"
+    if batched:
+        await store.abatch(
+            [
+                PutOp(namespace, "preferences", {"drink": "water"}, ttl=30),
+                PutOp(namespace, "preferences", {"drink": "coffee"}, ttl=None),
+                PutOp(namespace, "new", {"drink": "milk"}, ttl=None),
+            ]
+        )
+    else:
+        await store.aput(namespace, "preferences", {"drink": "coffee"}, ttl=None)
+        await store.aput(namespace, "new", {"drink": "milk"}, ttl=None)
+
+    after = await store.aget(namespace, "preferences", refresh_ttl=False)
+    new = await store.aget(namespace, "new", refresh_ttl=False)
+    assert after is not None and new is not None
+    assert after.value == {"drink": "coffee"}
+    assert after.updated_at == datetime.fromisoformat(clock[0])
+    assert new.created_at == new.updated_at == after.updated_at
+    async with store.conn.execute(
+        "SELECT expires_at, ttl_minutes FROM store WHERE key = 'preferences'"
+    ) as cur:
+        assert await cur.fetchone() == (None, None)
+    assert after.created_at == before.created_at
+    found = await store.asearch(namespace, filter={"drink": "coffee"})
+    assert len(found) == 1
+    assert found[0].created_at == before.created_at
+
+    await store.adelete(namespace, "preferences")
+    clock[0] = "2026-01-03 00:00:00"
+    await store.aput(namespace, "preferences", {"drink": "juice"})
+    recreated = await store.aget(namespace, "preferences")
+    assert recreated is not None
+    assert (
+        recreated.created_at == recreated.updated_at == datetime.fromisoformat(clock[0])
+    )
+
+
+async def test_update_preserves_vector_cascade(
+    fake_embeddings: CharacterEmbeddings,
+) -> None:
+    async with create_vector_store(
+        fake_embeddings, text_fields=["text", "extra"]
+    ) as store:
+        await store.conn.execute("PRAGMA foreign_keys = ON")
+        await store.aput(("docs",), "doc", {"text": "old", "extra": "removed"})
+        await store.aput(("docs",), "doc", {"text": "new"})
+        async with store.conn.execute(
+            "SELECT field_name FROM store_vectors WHERE key = 'doc'"
+        ) as cur:
+            assert await cur.fetchall() == [("text",)]
+        await store.aput(("docs",), "doc", {"text": "unindexed"}, index=False)
+        async with store.conn.execute("SELECT COUNT(*) FROM store_vectors") as cur:
+            assert await cur.fetchone() == (0,)
 
 
 async def test_no_running_loop(store: AsyncSqliteStore) -> None:

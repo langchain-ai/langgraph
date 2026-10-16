@@ -8,6 +8,7 @@ import uuid
 from collections import Counter, defaultdict
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Any, Literal, cast
 
 import pytest
@@ -316,6 +317,69 @@ def test_batch_list_namespaces_ops(store: SqliteStore) -> None:
 
     # Third operation should only return namespaces ending with "public"
     assert all(ns[-1] == "public" for ns in results[2])
+
+
+@pytest.mark.parametrize("batched", [False, True])
+def test_put_preserves_created_at(store: SqliteStore, batched: bool) -> None:
+    namespace = ("users", "alice")
+    clock = ["2026-01-01 00:00:00"]
+    store.conn.create_function("current_timestamp", 0, lambda: clock[0])
+    store.put(namespace, "preferences", {"drink": "tea"}, ttl=60)
+    before = store.get(namespace, "preferences", refresh_ttl=False)
+    assert before is not None
+    assert before.created_at == datetime.fromisoformat(clock[0])
+
+    clock[0] = "2026-01-02 00:00:00"
+    if batched:
+        store.batch(
+            [
+                PutOp(namespace, "preferences", {"drink": "water"}, ttl=30),
+                PutOp(namespace, "preferences", {"drink": "coffee"}, ttl=None),
+                PutOp(namespace, "new", {"drink": "milk"}, ttl=None),
+            ]
+        )
+    else:
+        store.put(namespace, "preferences", {"drink": "coffee"}, ttl=None)
+        store.put(namespace, "new", {"drink": "milk"}, ttl=None)
+
+    after = store.get(namespace, "preferences", refresh_ttl=False)
+    new = store.get(namespace, "new", refresh_ttl=False)
+    assert after is not None and new is not None
+    assert after.value == {"drink": "coffee"}
+    assert after.updated_at == datetime.fromisoformat(clock[0])
+    assert new.created_at == new.updated_at == after.updated_at
+    assert store.conn.execute(
+        "SELECT expires_at, ttl_minutes FROM store WHERE key = 'preferences'"
+    ).fetchone() == (None, None)
+    assert after.created_at == before.created_at
+    found = store.search(namespace, filter={"drink": "coffee"})
+    assert len(found) == 1
+    assert found[0].created_at == before.created_at
+
+    store.delete(namespace, "preferences")
+    clock[0] = "2026-01-03 00:00:00"
+    store.put(namespace, "preferences", {"drink": "juice"})
+    recreated = store.get(namespace, "preferences")
+    assert recreated is not None
+    assert (
+        recreated.created_at == recreated.updated_at == datetime.fromisoformat(clock[0])
+    )
+
+
+def test_update_preserves_vector_cascade(
+    fake_embeddings: CharacterEmbeddings,
+) -> None:
+    with create_vector_store(fake_embeddings, text_fields=["text", "extra"]) as store:
+        store.conn.execute("PRAGMA foreign_keys = ON")
+        store.put(("docs",), "doc", {"text": "old", "extra": "removed"})
+        store.put(("docs",), "doc", {"text": "new"})
+        assert store.conn.execute(
+            "SELECT field_name FROM store_vectors WHERE key = 'doc'"
+        ).fetchall() == [("text",)]
+        store.put(("docs",), "doc", {"text": "unindexed"}, index=False)
+        assert store.conn.execute("SELECT COUNT(*) FROM store_vectors").fetchone() == (
+            0,
+        )
 
 
 class TestSqliteStore:

@@ -384,12 +384,22 @@ class BaseSqliteStore:
                     expires_at = None
                 else:
                     expires_at = now + datetime.timedelta(minutes=op.ttl)
-                values.append("(?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?)")
+                # Keep REPLACE's vector cascade behavior, but carry forward the
+                # original creation time when replacing an existing item.
+                values.append(
+                    """(?, ?, ?, COALESCE(
+                        (SELECT created_at FROM store WHERE prefix = ? AND key = ?),
+                        CURRENT_TIMESTAMP
+                    ), CURRENT_TIMESTAMP, ?, ?)"""
+                )
+                prefix = _namespace_to_text(op.namespace)
                 insertion_params.extend(
                     [
-                        _namespace_to_text(op.namespace),
+                        prefix,
                         op.key,
                         orjson.dumps(dict(cast(Mapping[str, Any], op.value))),
+                        prefix,
+                        op.key,
                         expires_at,
                         op.ttl,
                     ]
