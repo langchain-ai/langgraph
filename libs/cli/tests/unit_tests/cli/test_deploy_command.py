@@ -367,7 +367,12 @@ def test_first_local_deploy_creates_then_builds_pushes_and_updates_in_order(
 
 @pytest.mark.parametrize(
     ("deployment_type", "wire_type"),
-    [("serverless", "dev"), ("dedicated", "prod"), ("dev", "dev"), ("prod", "prod")],
+    [
+        ("serverless", "dev_zero"),
+        ("dedicated", "prod"),
+        ("dev", "dev"),
+        ("prod", "prod"),
+    ],
 )
 @pytest.mark.parametrize("build_mode", ["--no-remote", "--remote"])
 def test_deployment_type_aliases(

@@ -2218,7 +2218,8 @@ def _deploy_base_options(
                 show_default=True,
                 help=(
                     "Deployment type (used when creating a new deployment): "
-                    "serverless (dev) or dedicated (prod). "
+                    "serverless (scale to zero) or dedicated (prod); "
+                    "legacy dev and prod are also accepted. "
                     "Ignored with --push-to."
                 ),
             ),
@@ -2509,7 +2510,7 @@ def _deploy_cmd(
             ),
             verbose=verbose,
             selector=selector,
-            deployment_type={"serverless": "dev", "dedicated": "prod"}.get(
+            deployment_type={"serverless": "dev_zero", "dedicated": "prod"}.get(
                 deployment_type, deployment_type
             ),
             secrets=secrets,
