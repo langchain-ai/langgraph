@@ -167,6 +167,18 @@ def test_string_prompt():
     assert response == expected_response
 
 
+def test_model_call_does_not_format_state():
+    # call_model used to build its "missing messages" error string, which
+    # includes repr(state), on every call. That is O(len(messages)) per step.
+    class NoReprHumanMessage(HumanMessage):
+        def __repr__(self) -> str:
+            raise AssertionError("state should not be formatted")
+
+    agent = create_react_agent(FakeToolCallingModel(), [])
+    response = agent.invoke({"messages": [NoReprHumanMessage("hi?")]})
+    assert response["messages"][-1].content == "hi?"
+
+
 def test_callable_prompt():
     def prompt(state):
         modified_message = f"Bar {state['messages'][-1].content}"
