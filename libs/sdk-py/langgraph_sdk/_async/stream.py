@@ -1212,6 +1212,7 @@ class AsyncThreadStream:
         # observes a `completed`/`errored` event.
         self._interrupts_lock = asyncio.Lock()
         self._lifecycle_watcher_task: asyncio.Task[None] | None = None
+        self._lifecycle_watcher_rejected = False
         self._lifecycle_watcher_handle: EventStreamHandle | None = None
         self._lifecycle_cursor: int | None = None
         self._lifecycle_max_reconnect_attempts = 5
@@ -1848,13 +1849,14 @@ class AsyncThreadStream:
 
     def _ensure_lifecycle_watcher_running(self) -> None:
         task = self._lifecycle_watcher_task
-        if task is not None and not task.done():
+        if task is not None and not self._lifecycle_watcher_rejected:
             return
         if task is not None:
-            # The watcher stopped before this run started, typically on the 404
-            # for a thread this run.start just created, so the result it left
-            # isn't this run's.
+            # A 4xx stopped the watcher before this run started, typically the
+            # 404 for a thread this run.start just created, so the result it
+            # left isn't this run's.
             self._run_done = asyncio.get_running_loop().create_future()
+            self._lifecycle_watcher_rejected = False
         self._lifecycle_watcher_task = asyncio.create_task(
             self._run_lifecycle_watcher()
         )
@@ -1920,6 +1922,7 @@ class AsyncThreadStream:
                 if is_non_retryable_stream_error(exc):
                     if opened_before_run and self._run_seen:
                         continue
+                    self._lifecycle_watcher_rejected = True
                     self._fail_run_done(exc)
                     return
                 reconnect_attempts += 1

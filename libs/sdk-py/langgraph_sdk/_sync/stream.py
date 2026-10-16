@@ -1509,9 +1509,9 @@ class SyncThreadStream:
             if self._lifecycle_watcher_thread is not None:
                 return
             if self._run_done is not None and self._run_done.done():
-                # The watcher stopped before this run started, typically on the
-                # 404 for a thread this run.start just created, so the result it
-                # left isn't this run's.
+                # A 4xx stopped the watcher before this run started, typically
+                # the 404 for a thread this run.start just created, so the
+                # result it left isn't this run's.
                 self._run_done = _BlockingResult()
             self._lifecycle_watcher_thread = threading.Thread(
                 target=self._run_lifecycle_watcher,
@@ -1560,7 +1560,7 @@ class SyncThreadStream:
                     # event. Resolve `_run_done` as errored so `thread.output`
                     # doesn't block forever.
                     if not self._closed:
-                        self._stop_lifecycle_watcher(
+                        self._fail_run_done(
                             frame_error
                             or RuntimeError(
                                 "lifecycle stream ended before terminal event"
@@ -1575,7 +1575,7 @@ class SyncThreadStream:
                     raise err
             except Exception as exc:
                 if is_non_retryable_stream_error(exc):
-                    if self._stop_lifecycle_watcher(
+                    if self._stop_rejected_lifecycle_watcher(
                         exc, unless_run_started=opened_before_run
                     ):
                         return
@@ -1583,15 +1583,15 @@ class SyncThreadStream:
                 reconnect_attempts += 1
                 if reconnect_attempts <= self._lifecycle_max_reconnect_attempts:
                     continue
-                self._stop_lifecycle_watcher(
+                self._fail_run_done(
                     frame_error or RuntimeError(f"Lifecycle transport failed: {exc}")
                 )
                 return
 
-    def _stop_lifecycle_watcher(
+    def _stop_rejected_lifecycle_watcher(
         self, error: BaseException, *, unless_run_started: bool = False
     ) -> bool:
-        """Fail the run with `error` and clear the watcher, so run.start starts another.
+        """Fail the run with a 4xx `error` and clear the watcher, so run.start starts another.
 
         Returns False, changing nothing, when `unless_run_started` is set and a
         run has started. Holding the lock keeps a run.start from seeing this
