@@ -17,6 +17,7 @@ from streaming._events import (
     lifecycle_completed_event,
     lifecycle_errored_event,
     lifecycle_event,
+    thread_stream_failed_frame,
 )
 from streaming._fake_server import FakeServer, _StreamScript
 
@@ -48,7 +49,7 @@ async def test_interrupts_populated_from_input_requested_event():
 
 
 async def test_aenter_starts_lifecycle_watcher():
-    """Entering AsyncThreadStream opens lifecycle/input SSE before run.start."""
+    """Entering with an explicit thread_id opens the lifecycle/input SSE before run.start."""
     fake = FakeServer()
     fake.script([lifecycle_event(seq=0, phase="started")])
     asgi = httpx.ASGITransport(app=fake.app)
@@ -274,3 +275,137 @@ async def test_lifecycle_watcher_reconnects_with_since_after_transport_drop():
     assert fake.stream_request_bodies[0]["channels"] == ["lifecycle", "input"]
     assert fake.stream_request_bodies[1]["channels"] == ["lifecycle", "input"]
     assert fake.stream_request_bodies[1]["since"] == 1
+
+
+async def test_lifecycle_error_frame_becomes_the_run_error():
+    fake = FakeServer()
+    fake.script([lifecycle_event(seq=0, phase="running"), thread_stream_failed_frame()])
+    async with httpx.AsyncClient(
+        transport=fake.transport, base_url="http://test"
+    ) as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            run_done = thread._run_done
+            assert run_done is not None
+            terminal = await asyncio.wait_for(run_done, timeout=2.0)
+
+    assert terminal.status == "errored"
+    assert (
+        str(terminal.error)
+        == "Protocol error [unknown_error]: Thread event stream failed."
+    )
+
+
+async def test_lifecycle_watcher_stops_on_a_404_without_retrying():
+    fake = FakeServer()
+    fake.script_sequence([_StreamScript(events=[], status=404)])
+    async with httpx.AsyncClient(
+        transport=fake.transport, base_url="http://test"
+    ) as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            run_done = thread._run_done
+            assert run_done is not None
+            terminal = await asyncio.wait_for(run_done, timeout=2.0)
+
+    assert isinstance(terminal.error, httpx.HTTPStatusError)
+    assert terminal.error.response.status_code == 404
+    assert len(fake.stream_request_bodies) == 1
+
+
+async def test_minted_thread_opens_the_lifecycle_stream_after_run_start():
+    fake = FakeServer()
+    fake.script([lifecycle_completed_event(seq=1)])
+    async with httpx.AsyncClient(
+        transport=fake.transport, base_url="http://test"
+    ) as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(assistant_id="agent") as thread:
+            assert thread._lifecycle_watcher_task is None
+            await thread.run.start(input={})
+            run_done = thread._run_done
+            assert run_done is not None
+            terminal = await asyncio.wait_for(run_done, timeout=2.0)
+
+    assert terminal.status == "completed"
+
+
+def _new_thread_scripts() -> list[_StreamScript]:
+    return [
+        _StreamScript(events=[], status=404),
+        _StreamScript(events=[lifecycle_completed_event(seq=1)]),
+    ]
+
+
+async def test_run_start_restarts_a_watcher_stopped_by_a_404_for_a_new_thread():
+    fake = FakeServer()
+    fake.script_sequence(_new_thread_scripts())
+    fake.set_state({"ok": True})
+    async with httpx.AsyncClient(
+        transport=fake.transport, base_url="http://test"
+    ) as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-new", assistant_id="agent") as thread:
+            rejected = thread._run_done
+            assert rejected is not None
+            await asyncio.wait_for(rejected, timeout=2.0)
+            await thread.run.start(input={})
+            output = await thread.output.with_timeout(2.0)
+
+    assert output == {"ok": True}
+    assert len(fake.stream_request_bodies) == 2
+
+
+async def test_lifecycle_watcher_retries_a_404_that_arrives_after_run_start():
+    fake = FakeServer()
+    fake.script_sequence(_new_thread_scripts())
+    fake.set_state({"ok": True})
+    stream_opened = asyncio.Event()
+    run_started = asyncio.Event()
+
+    async def handle(request: httpx.Request) -> httpx.Response:
+        if (
+            request.url.path.endswith("/stream/events")
+            and not fake.stream_request_bodies
+        ):
+            stream_opened.set()
+            await run_started.wait()
+        return await fake._handle_request(request)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handle), base_url="http://test"
+    ) as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-new", assistant_id="agent") as thread:
+            await asyncio.wait_for(stream_opened.wait(), timeout=2.0)
+            await thread.run.start(input={})
+            run_started.set()
+            output = await thread.output.with_timeout(2.0)
+
+    assert output == {"ok": True}
+    assert len(fake.stream_request_bodies) == 2
+
+
+async def test_lifecycle_watcher_reports_the_error_frame_when_reconnects_run_out():
+    fake = FakeServer()
+    async with httpx.AsyncClient(
+        transport=fake.transport, base_url="http://test"
+    ) as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        stream = threads.stream(thread_id="t-1", assistant_id="agent")
+        stream._lifecycle_max_reconnect_attempts = 1
+        fake.script_sequence(
+            [
+                _StreamScript(events=[thread_stream_failed_frame()], fail_after=1)
+                for _ in range(stream._lifecycle_max_reconnect_attempts + 1)
+            ]
+        )
+        async with stream as thread:
+            run_done = thread._run_done
+            assert run_done is not None
+            terminal = await asyncio.wait_for(run_done, timeout=2.0)
+
+    assert (
+        str(terminal.error)
+        == "Protocol error [unknown_error]: Thread event stream failed."
+    )

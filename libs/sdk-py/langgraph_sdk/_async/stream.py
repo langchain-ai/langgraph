@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import random
 from collections.abc import AsyncGenerator, AsyncIterator, Generator, Mapping
 from dataclasses import dataclass, field
@@ -36,6 +37,11 @@ from langgraph_sdk.stream.decoders import (
     ToolCallsDecoder,
     validate_interleave_channels,
 )
+from langgraph_sdk.stream.errors import (
+    is_non_retryable_stream_error,
+    protocol_error,
+    stream_error_frame,
+)
 from langgraph_sdk.stream.subscription import compute_union_filter, infer_channel
 from langgraph_sdk.stream.transport import (
     AsyncProtocolTransport,
@@ -43,6 +49,8 @@ from langgraph_sdk.stream.transport import (
     ProtocolSseTransport,
     ProtocolWebSocketTransport,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class InterruptPayload(TypedDict):
@@ -193,6 +201,7 @@ class RunModule:
             if not gate.done():
                 gate.set_result(None)
             self._owner._run_seen = True
+            self._owner._ensure_lifecycle_watcher_running()
             return result
         except BaseException as err:
             # Why: gate MUST reject on any exit type, including CancelledError,
@@ -1203,6 +1212,7 @@ class AsyncThreadStream:
         # observes a `completed`/`errored` event.
         self._interrupts_lock = asyncio.Lock()
         self._lifecycle_watcher_task: asyncio.Task[None] | None = None
+        self._lifecycle_watcher_rejected = False
         self._lifecycle_watcher_handle: EventStreamHandle | None = None
         self._lifecycle_cursor: int | None = None
         self._lifecycle_max_reconnect_attempts = 5
@@ -1261,8 +1271,11 @@ class AsyncThreadStream:
         # Create the run-done future here (async context guarantees a running loop).
         self._run_done = asyncio.get_running_loop().create_future()
         # Start the lifecycle watcher immediately so reattach and thread.output
-        # work without a preceding run.start call.
-        self._ensure_lifecycle_watcher_running()
+        # work without a preceding run.start call. A minted thread_id names no
+        # thread until run.start creates it, and with custom auth a stream for a
+        # thread that doesn't exist yet fails, so run.start starts the watcher.
+        if self._explicit_thread_id:
+            self._ensure_lifecycle_watcher_running()
         return self
 
     async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
@@ -1630,6 +1643,13 @@ class AsyncThreadStream:
                 async for event in self._dedup_iter(shared.events):
                     if self._closed:
                         break
+                    if (frame_error := stream_error_frame(event)) is not None:
+                        logger.warning(
+                            "Thread %s event stream failed: %s",
+                            self.thread_id,
+                            frame_error,
+                        )
+                        continue
                     self._observe_event(event)
                     for sub in list(self._subscriptions.values()):
                         if matches_subscription(event, sub.params):
@@ -1655,6 +1675,7 @@ class AsyncThreadStream:
                 if (
                     err is not None
                     and not isinstance(err, asyncio.CancelledError)
+                    and not is_non_retryable_stream_error(err)
                     and not self._closed
                 ):
                     with contextlib.suppress(Exception):
@@ -1681,7 +1702,8 @@ class AsyncThreadStream:
 
         Returns:
             `True` if a new stream was opened (caller should resume fanout),
-            `False` if all reconnect attempts were exhausted or the controller
+            `False` if all reconnect attempts were exhausted, the server
+            rejected the stream with a non-retryable 4xx, or the controller
             was closed in the meantime.
         """
         if self._transport is None:
@@ -1702,7 +1724,9 @@ class AsyncThreadStream:
                 await new_stream.ready
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception as err:
+                if is_non_retryable_stream_error(err):
+                    return False
                 await self._reconnect_sleep(attempt)
                 continue
             self._shared_stream = new_stream
@@ -1800,9 +1824,7 @@ class AsyncThreadStream:
             # 202/204 — no body. Caller gets an empty result.
             return {}
         if response.get("type") == "error":
-            code = response.get("error", "unknown")
-            message = response.get("message", "")
-            raise RuntimeError(f"Protocol error [{code}]: {message}")
+            raise protocol_error(response)
         meta = response.get("meta")
         if isinstance(meta, dict):
             applied_through_seq = meta.get("applied_through_seq")
@@ -1826,8 +1848,15 @@ class AsyncThreadStream:
             await asyncio.wait_for(asyncio.shield(gate), timeout=timeout)
 
     def _ensure_lifecycle_watcher_running(self) -> None:
-        if self._lifecycle_watcher_task is not None:
+        task = self._lifecycle_watcher_task
+        if task is not None and not self._lifecycle_watcher_rejected:
             return
+        if task is not None:
+            # A 4xx stopped the watcher before this run started, typically the
+            # 404 for a thread this run.start just created, so the result it
+            # left isn't this run's.
+            self._run_done = asyncio.get_running_loop().create_future()
+            self._lifecycle_watcher_rejected = False
         self._lifecycle_watcher_task = asyncio.create_task(
             self._run_lifecycle_watcher()
         )
@@ -1850,7 +1879,11 @@ class AsyncThreadStream:
         if self._transport is None:
             return
         reconnect_attempts = 0
+        frame_error: RuntimeError | None = None
         while not self._closed:
+            # A stream opened before run.start can 404 for the thread that
+            # run.start creates, so it gets one more try once a run has started.
+            opened_before_run = not self._run_seen
             try:
                 handle = self._transport.open_event_stream(
                     self._lifecycle_stream_params()
@@ -1860,6 +1893,7 @@ class AsyncThreadStream:
                 async for event in handle.events:
                     if self._closed:
                         return
+                    frame_error = stream_error_frame(event) or frame_error
                     self._observe_lifecycle_event(event)
                     await self._apply_lifecycle_event(event)
                 err = await handle.done
@@ -1868,37 +1902,42 @@ class AsyncThreadStream:
                     # event. Resolve `_run_done` as errored so awaiters of
                     # `thread.output` don't hang.
                     if err is None:
-                        run_done = self._run_done
-                        if run_done is not None and not run_done.done():
-                            run_done.set_result(
-                                _RunTerminal(
-                                    status="errored",
-                                    error=RuntimeError(
-                                        "lifecycle stream ended before terminal event"
-                                    ),
-                                )
+                        self._fail_run_done(
+                            frame_error
+                            or RuntimeError(
+                                "lifecycle stream ended before terminal event"
                             )
+                        )
                     return
                 reconnect_attempts += 1
-                if reconnect_attempts > self._lifecycle_max_reconnect_attempts:
+                if (
+                    is_non_retryable_stream_error(err)
+                    or reconnect_attempts > self._lifecycle_max_reconnect_attempts
+                ):
                     raise err
                 await asyncio.sleep(0.05)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
+                if is_non_retryable_stream_error(exc):
+                    if opened_before_run and self._run_seen:
+                        continue
+                    self._lifecycle_watcher_rejected = True
+                    self._fail_run_done(exc)
+                    return
                 reconnect_attempts += 1
                 if reconnect_attempts <= self._lifecycle_max_reconnect_attempts:
                     await asyncio.sleep(0.05)
                     continue
-                run_done = self._run_done
-                if run_done is not None and not run_done.done():
-                    run_done.set_result(
-                        _RunTerminal(
-                            status="errored",
-                            error=RuntimeError(f"Lifecycle transport failed: {exc}"),
-                        )
-                    )
+                self._fail_run_done(
+                    frame_error or RuntimeError(f"Lifecycle transport failed: {exc}")
+                )
                 return
+
+    def _fail_run_done(self, error: BaseException) -> None:
+        run_done = self._run_done
+        if run_done is not None and not run_done.done():
+            run_done.set_result(_RunTerminal(status="errored", error=error))
 
     async def _fetch_state(self) -> dict[str, Any]:
         """Fetch the current thread state from the REST endpoint."""

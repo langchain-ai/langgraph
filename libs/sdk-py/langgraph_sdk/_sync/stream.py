@@ -34,6 +34,11 @@ from langgraph_sdk.stream.decoders import (
     ToolCallsDecoder,
     validate_interleave_channels,
 )
+from langgraph_sdk.stream.errors import (
+    is_non_retryable_stream_error,
+    protocol_error,
+    stream_error_frame,
+)
 from langgraph_sdk.stream.subscription import compute_union_filter, infer_channel
 from langgraph_sdk.stream.sync_controller import (
     SyncStreamController,
@@ -237,6 +242,7 @@ class SyncRunModule:
         controller = self._owner._controller
         if controller is not None and controller._run_start_gate is not None:
             controller._run_start_gate.set()
+        self._owner._ensure_lifecycle_watcher_running()
         return result
 
     def respond(
@@ -1111,6 +1117,7 @@ class SyncThreadStream:
         self.interrupted: bool = False
         self.interrupts: list[InterruptPayload] = []
         self._lifecycle_watcher_thread: threading.Thread | None = None
+        self._lifecycle_watcher_lock = threading.Lock()
         self._lifecycle_watcher_handle: SyncEventStreamHandle | None = None
         self._lifecycle_cursor: int | None = None
         self._lifecycle_max_reconnect_attempts = 5
@@ -1149,7 +1156,11 @@ class SyncThreadStream:
             self._transport, run_start_gate=run_start_gate
         )
         self._run_done = _BlockingResult()
-        self._ensure_lifecycle_watcher_running()
+        # A minted thread_id names no thread until run.start creates it, and
+        # with custom auth a stream for a thread that doesn't exist yet fails,
+        # so run.start starts the watcher instead.
+        if self._explicit_thread_id:
+            self._ensure_lifecycle_watcher_running()
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
@@ -1485,9 +1496,7 @@ class SyncThreadStream:
         if response is None:
             return {}
         if response.get("type") == "error":
-            code = response.get("error", "unknown")
-            message = response.get("message", "")
-            raise RuntimeError(f"Protocol error [{code}]: {message}")
+            raise protocol_error(response)
         meta = response.get("meta")
         if isinstance(meta, dict):
             applied_through_seq = meta.get("applied_through_seq")
@@ -1496,14 +1505,20 @@ class SyncThreadStream:
         return response.get("result", {})
 
     def _ensure_lifecycle_watcher_running(self) -> None:
-        if self._lifecycle_watcher_thread is not None:
-            return
-        self._lifecycle_watcher_thread = threading.Thread(
-            target=self._run_lifecycle_watcher,
-            name="langgraph-sdk-sync-lifecycle",
-            daemon=True,
-        )
-        self._lifecycle_watcher_thread.start()
+        with self._lifecycle_watcher_lock:
+            if self._lifecycle_watcher_thread is not None:
+                return
+            if self._run_done is not None and self._run_done.done():
+                # A 4xx stopped the watcher before this run started, typically
+                # the 404 for a thread this run.start just created, so the
+                # result it left isn't this run's.
+                self._run_done = _BlockingResult()
+            self._lifecycle_watcher_thread = threading.Thread(
+                target=self._run_lifecycle_watcher,
+                name="langgraph-sdk-sync-lifecycle",
+                daemon=True,
+            )
+            self._lifecycle_watcher_thread.start()
 
     def _observe_lifecycle_event(self, event: Event) -> None:
         seq = event.get("seq")
@@ -1523,7 +1538,11 @@ class SyncThreadStream:
         if self._transport is None:
             return
         reconnect_attempts = 0
+        frame_error: RuntimeError | None = None
         while not self._closed:
+            # A stream opened before run.start can 404 for the thread that
+            # run.start creates, so it gets one more try once a run has started.
+            opened_before_run = not self._run_seen
             try:
                 handle = self._transport.open_event_stream(
                     self._lifecycle_stream_params()
@@ -1532,27 +1551,63 @@ class SyncThreadStream:
                 for event in handle.events:
                     if self._closed:
                         return
+                    frame_error = stream_error_frame(event) or frame_error
                     self._observe_lifecycle_event(event)
                     self._apply_lifecycle_event(event)
                 err = handle.error()
                 if err is None:
+                    # Clean EOF: stream ended without a terminal lifecycle
+                    # event. Resolve `_run_done` as errored so `thread.output`
+                    # doesn't block forever.
+                    if not self._closed:
+                        self._fail_run_done(
+                            frame_error
+                            or RuntimeError(
+                                "lifecycle stream ended before terminal event"
+                            )
+                        )
                     return
                 reconnect_attempts += 1
-                if reconnect_attempts > self._lifecycle_max_reconnect_attempts:
+                if (
+                    is_non_retryable_stream_error(err)
+                    or reconnect_attempts > self._lifecycle_max_reconnect_attempts
+                ):
                     raise err
             except Exception as exc:
+                if is_non_retryable_stream_error(exc):
+                    if self._stop_rejected_lifecycle_watcher(
+                        exc, unless_run_started=opened_before_run
+                    ):
+                        return
+                    continue
                 reconnect_attempts += 1
                 if reconnect_attempts <= self._lifecycle_max_reconnect_attempts:
                     continue
-                run_done = self._run_done
-                if run_done is not None and not run_done.done():
-                    run_done.set_result(
-                        _RunTerminal(
-                            status="errored",
-                            error=RuntimeError(f"Lifecycle transport failed: {exc}"),
-                        )
-                    )
+                self._fail_run_done(
+                    frame_error or RuntimeError(f"Lifecycle transport failed: {exc}")
+                )
                 return
+
+    def _stop_rejected_lifecycle_watcher(
+        self, error: BaseException, *, unless_run_started: bool = False
+    ) -> bool:
+        """Fail the run with a 4xx `error` and clear the watcher, so run.start starts another.
+
+        Returns False, changing nothing, when `unless_run_started` is set and a
+        run has started. Holding the lock keeps a run.start from seeing this
+        watcher as still running once it has decided to stop.
+        """
+        with self._lifecycle_watcher_lock:
+            if unless_run_started and self._run_seen:
+                return False
+            self._fail_run_done(error)
+            self._lifecycle_watcher_thread = None
+            return True
+
+    def _fail_run_done(self, error: BaseException) -> None:
+        run_done = self._run_done
+        if run_done is not None and not run_done.done():
+            run_done.set_result(_RunTerminal(status="errored", error=error))
 
     def _fetch_state(self) -> dict[str, Any]:
         """Fetch the current thread state from the REST endpoint."""
