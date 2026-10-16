@@ -2214,7 +2214,7 @@ def _deploy_base_options(
             click.option(
                 "--deployment-type",
                 type=click.Choice(["serverless", "dedicated", "dev", "prod"]),
-                default="dev",
+                default="serverless",
                 show_default=True,
                 help=(
                     "Deployment type (used when creating a new deployment): "

@@ -386,15 +386,20 @@ def test_deployment_type_aliases(
     }
 
 
-def test_first_local_deploy_creates_an_internal_docker_deployment(
-    deploy_project: DeployProject,
+@pytest.mark.parametrize(
+    ("build_mode", "source"),
+    [("--no-remote", "internal_docker"), ("--remote", "internal_source")],
+)
+def test_first_deploy_defaults_to_serverless(
+    deploy_project: DeployProject, build_mode: str, source: str
 ) -> None:
-    deploy_project.run("--no-remote")
+    result = deploy_project.run(build_mode)
 
+    assert result.exit_code == 0, result.output
     assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT] == {
         "name": "my-app",
-        "source": "internal_docker",
-        "source_config": {"deployment_type": "dev"},
+        "source": source,
+        "source_config": {"deployment_type": "dev_zero"},
         "source_revision_config": {},
         "secrets": [],
     }
