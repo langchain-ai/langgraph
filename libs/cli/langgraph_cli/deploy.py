@@ -2213,11 +2213,12 @@ def _deploy_base_options(
             ),
             click.option(
                 "--deployment-type",
-                type=click.Choice(["dev", "prod"]),
+                type=click.Choice(["serverless", "dedicated", "dev", "prod"]),
                 default="dev",
                 show_default=True,
                 help=(
-                    "Deployment type (used when creating a new deployment). "
+                    "Deployment type (used when creating a new deployment): "
+                    "serverless (dev) or dedicated (prod). "
                     "Ignored with --push-to."
                 ),
             ),
@@ -2508,7 +2509,9 @@ def _deploy_cmd(
             ),
             verbose=verbose,
             selector=selector,
-            deployment_type=deployment_type,
+            deployment_type={"serverless": "dev", "dedicated": "prod"}.get(
+                deployment_type, deployment_type
+            ),
             secrets=secrets,
             tracked_packages=tracked_packages,
         )
