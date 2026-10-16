@@ -10,32 +10,6 @@ from langgraph_cli.host_backend import (
 )
 
 
-@pytest.mark.parametrize(
-    ("host_url", "langsmith_endpoint", "expected"),
-    [
-        ("https://aws.api.host.langchain.com/", None, True),
-        ("https://AWS.api.host.langchain.com:443", None, True),
-        (None, "https://aws.api.smith.langchain.com", True),
-        (None, None, False),
-        ("https://eu.api.host.langchain.com", None, False),
-        ("https://apac.api.host.langchain.com", None, False),
-        ("https://aws.example.com/api-host", None, False),
-        ("https://aws.api.host.langchain.com.example.com", None, False),
-        (
-            "https://api.host.langchain.com",
-            "https://aws.api.smith.langchain.com",
-            False,
-        ),
-    ],
-)
-def test_aws_detection_uses_the_resolved_control_plane_host(
-    host_url: str | None, langsmith_endpoint: str | None, expected: bool
-) -> None:
-    endpoints = ControlPlaneEndpoints.resolve(host_url, langsmith_endpoint)
-
-    assert endpoints.is_aws is expected
-
-
 def test_constructor_strips_trailing_slash():
     c = HostBackendClient("https://api.example.com/", "key")
     assert c.base_url == "https://api.example.com"

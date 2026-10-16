@@ -44,10 +44,6 @@ class ControlPlaneEndpoints:
             f".{CLOUD_CONTROL_PLANE_HOST}"
         )
 
-    @property
-    def is_aws(self) -> bool:
-        return urlparse(self.control_plane_url).hostname == "aws.api.host.langchain.com"
-
     @classmethod
     def from_control_plane_url(cls, url: str) -> ControlPlaneEndpoints:
         control_plane_url = url.rstrip("/")
