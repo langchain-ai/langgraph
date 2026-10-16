@@ -344,6 +344,81 @@ def deploy_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DeployPro
     return DeployProject(control_plane, docker, timeline, uploads)
 
 
+@pytest.mark.parametrize("build_mode", ["--no-remote", "--remote"])
+@pytest.mark.parametrize("deployment_args", [(), ("--deployment-type", "dev")])
+def test_aws_deploy_uses_dev(
+    deploy_project: DeployProject, build_mode: str, deployment_args: tuple[str, ...]
+) -> None:
+    result = deploy_project.run(
+        build_mode, *deployment_args, host_url="https://aws.api.host.langchain.com"
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "deployment_type": "dev"
+    }
+
+
+@pytest.mark.parametrize("build_mode", ["--no-remote", "--remote"])
+def test_aws_deploy_rejects_serverless_before_creating_or_building(
+    deploy_project: DeployProject, build_mode: str
+) -> None:
+    result = deploy_project.run(
+        build_mode,
+        "--deployment-type",
+        "serverless",
+        host_url="https://aws.api.host.langchain.com",
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "Serverless deployments are not supported on AWS yet" in result.output
+    assert "Use --deployment-type dev instead" in result.output
+    assert deploy_project.timeline == [LIST_DEPLOYMENTS]
+
+
+@pytest.mark.parametrize("endpoint_source", ["environment", "dotenv"])
+def test_aws_default_is_resolved_from_langsmith_endpoint(
+    deploy_project: DeployProject,
+    monkeypatch: pytest.MonkeyPatch,
+    endpoint_source: str,
+) -> None:
+    endpoint = "https://aws.api.smith.langchain.com"
+    if endpoint_source == "environment":
+        monkeypatch.setenv("LANGSMITH_ENDPOINT", endpoint)
+    else:
+        Path(".env").write_text(f"LANGSMITH_ENDPOINT={endpoint}\n")
+    result = CliRunner().invoke(
+        cli,
+        [
+            "deploy",
+            "--api-key",
+            "test-key",
+            "--name",
+            "my-app",
+            "--no-input",
+            "--no-wait",
+            "--remote",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "deployment_type": "dev"
+    }
+
+
+def test_explicit_host_takes_precedence_over_aws_langsmith_endpoint(
+    deploy_project: DeployProject, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LANGSMITH_ENDPOINT", "https://aws.api.smith.langchain.com")
+    result = deploy_project.run("--remote", host_url=CLOUD_CONTROL_PLANE_URL)
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "deployment_type": "dev_zero"
+    }
+
+
 def test_first_local_deploy_creates_then_builds_pushes_and_updates_in_order(
     deploy_project: DeployProject,
 ) -> None:

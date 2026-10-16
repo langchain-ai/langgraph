@@ -1548,6 +1548,11 @@ def _resolve_or_create(
     )
     if found is not None:
         return found.id, step
+    if ctx.endpoints.is_aws and ctx.deployment_type == "dev_zero":
+        raise click.UsageError(
+            "Serverless deployments are not supported on AWS yet. "
+            "Use --deployment-type dev instead."
+        )
     try:
         created, step = _create_deployment(
             ctx.client,
@@ -2214,8 +2219,8 @@ def _deploy_base_options(
             click.option(
                 "--deployment-type",
                 type=click.Choice(["serverless", "dedicated", "dev", "prod"]),
-                default="serverless",
-                show_default=True,
+                default=None,
+                show_default="serverless; dev on AWS",
                 help=(
                     "Deployment type (used when creating a new deployment): "
                     "serverless (scale to zero) or dedicated (prod); "
@@ -2396,7 +2401,7 @@ def _deploy_cmd(
     host_url: str | None,
     api_key: str | None,
     deployment_id: str | None,
-    deployment_type: str,
+    deployment_type: str | None,
     name: str | None,
     agent_id: str | None,
     environment: str | None,
@@ -2488,6 +2493,9 @@ def _deploy_cmd(
     )
 
     client = _create_host_backend_client(host_url, api_key, env_vars=env_vars)
+    deployment_type = deployment_type or (
+        "dev" if client.endpoints.is_aws else "serverless"
+    )
     try:
         tracked_packages = find_tracked_packages(config, config_json) or None
     except Exception as exc:
