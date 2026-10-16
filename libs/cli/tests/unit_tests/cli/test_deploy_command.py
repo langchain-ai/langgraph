@@ -365,6 +365,27 @@ def test_first_local_deploy_creates_then_builds_pushes_and_updates_in_order(
     assert "Deployment updated" in result.output
 
 
+@pytest.mark.parametrize(
+    ("deployment_type", "wire_type"),
+    [
+        ("serverless", "dev_zero"),
+        ("dedicated", "prod"),
+        ("dev", "dev"),
+        ("prod", "prod"),
+    ],
+)
+@pytest.mark.parametrize("build_mode", ["--no-remote", "--remote"])
+def test_deployment_type_aliases(
+    deploy_project: DeployProject, deployment_type: str, wire_type: str, build_mode: str
+) -> None:
+    result = deploy_project.run(build_mode, "--deployment-type", deployment_type)
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "deployment_type": wire_type
+    }
+
+
 def test_first_local_deploy_creates_an_internal_docker_deployment(
     deploy_project: DeployProject,
 ) -> None:
