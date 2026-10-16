@@ -1,3 +1,7 @@
+import multiprocessing
+import sqlite3
+import time
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
@@ -11,6 +15,30 @@ from langgraph.checkpoint.base import (
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.utils import _metadata_predicate, search_where
+
+
+def _hold_sqlite_write_lock(
+    db_path: str,
+    started_event: Any,
+    errors: Any,
+    hold_seconds: float = 1.0,
+) -> None:
+    conn: sqlite3.Connection | None = None
+    lock_acquired = False
+    try:
+        conn = sqlite3.connect(db_path, timeout=1.0, check_same_thread=False)
+        conn.execute("BEGIN IMMEDIATE")
+        lock_acquired = True
+        started_event.set()
+        time.sleep(hold_seconds)
+        conn.commit()
+    except Exception as exc:
+        errors.put(repr(exc))
+    finally:
+        if not lock_acquired:
+            started_event.set()
+        if conn is not None:
+            conn.close()
 
 
 class TestSqliteSaver:
@@ -307,3 +335,55 @@ class TestSqliteSaver:
             # Nested digit-starting key via dotted path
             results = list(saver.list(None, filter={"user.123abc": "ok2"}))
             assert len(results) == 1
+
+    def test_put_waits_for_interprocess_write_lock(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "interprocess-write-lock.sqlite"
+        setup_config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "setup-thread",
+                "checkpoint_ns": "",
+            }
+        }
+        write_config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "write-thread",
+                "checkpoint_ns": "",
+            }
+        }
+
+        # Initialize schema before taking the lock in another process.
+        with SqliteSaver.from_conn_string(str(db_path)) as saver:
+            saver.put(setup_config, empty_checkpoint(), {}, {})
+
+        ctx = multiprocessing.get_context("spawn")
+        started_event = ctx.Event()
+        errors = ctx.Queue()
+        lock_holder = ctx.Process(
+            target=_hold_sqlite_write_lock,
+            args=(str(db_path), started_event, errors),
+        )
+        lock_holder.start()
+
+        assert started_event.wait(timeout=5), "Lock holder process did not start"
+
+        with sqlite3.connect(
+            str(db_path), timeout=3.0, check_same_thread=False
+        ) as conn:
+            saver = SqliteSaver(conn)
+            checkpoint = empty_checkpoint()
+            started = time.monotonic()
+            saved_config = saver.put(write_config, checkpoint, {}, {})
+            elapsed = time.monotonic() - started
+
+        lock_holder.join(timeout=5)
+        if lock_holder.is_alive():
+            lock_holder.terminate()
+            lock_holder.join(timeout=5)
+            pytest.fail("Lock holder process did not exit")
+
+        assert lock_holder.exitcode == 0
+        assert errors.empty(), f"Lock holder process failed: {errors.get()}"
+        assert elapsed >= 0.5
+
+        with SqliteSaver.from_conn_string(str(db_path)) as saver:
+            assert saver.get_tuple(saved_config) is not None
