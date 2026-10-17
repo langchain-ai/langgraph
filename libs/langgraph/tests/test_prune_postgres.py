@@ -2,6 +2,7 @@ import operator
 import sys
 from collections.abc import Callable
 from contextlib import contextmanager
+from threading import Event
 from typing import Annotated, Any
 
 import pytest
@@ -72,12 +73,15 @@ def _graph(
     ask: bool = False,
     fail: set[str] | None = None,
     calls: dict[str, int] | None = None,
+    before_fail: Callable[[], None] | None = None,
 ) -> Any:
     def note(name: str):
         def node(state: State) -> dict:
             if calls is not None:
                 calls[name] = calls.get(name, 0) + 1
             if fail is not None and name in fail:
+                if before_fail is not None:
+                    before_fail()
                 fail.discard(name)
                 raise ValueError(f"{name} failed")
             return {"notes": [name]}
@@ -234,18 +238,37 @@ def test_keep_latest_keeps_a_pending_interrupt_resumable(
 
 @pytest.mark.parametrize("make_checkpointer", SYNC)
 def test_keep_latest_keeps_writes_of_tasks_that_finished_before_a_failure(
-    make_checkpointer: Any,
+    make_checkpointer: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_checkpointer() as checkpointer:
         calls: dict[str, int] = {}
         fail: set[str] = set()
-        graph = _graph(checkpointer, fail=fail, calls=calls)
+        left_persisted = Event()
+        put_writes = checkpointer.put_writes
+
+        def persist(config, writes, task_id, task_path=""):
+            put_writes(config, writes, task_id, task_path)
+            if ("notes", ["left"]) in writes:
+                left_persisted.set()
+
+        def wait_for_left() -> None:
+            assert left_persisted.wait(5), "left task writes were not persisted"
+
+        monkeypatch.setattr(checkpointer, "put_writes", persist)
+        graph = _graph(checkpointer, fail=fail, calls=calls, before_fail=wait_for_left)
         for thread_id in ("pruned", "twin"):
             for i in range(2):
                 graph.invoke(_say(i), _config(thread_id))
+            left_persisted.clear()
             fail.add("right")
             with pytest.raises(ValueError, match="right failed"):
                 graph.invoke(_say(2), _config(thread_id))
+            checkpoint = checkpointer.get_tuple(_config(thread_id))
+            assert checkpoint is not None
+            assert any(
+                channel == "notes" and value == ["left"]
+                for _, channel, value in checkpoint.pending_writes
+            )
         before = graph.get_state(_config("pruned"))
 
         checkpointer.prune(["pruned"])
