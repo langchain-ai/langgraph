@@ -1,0 +1,22 @@
+name: Verify LangGraph concurrent cache snapshot fix
+
+on:
+  push:
+    branches:
+      - validation/langgraph-cache-snapshot-9304
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e ./libs/langgraph
+      - name: Verify all 20 concurrent cached nested-task runs
+        run: python research_repros/issue_9304_concurrent_cache.py
