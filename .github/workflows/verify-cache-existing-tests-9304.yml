@@ -19,10 +19,10 @@ jobs:
           python-version: "3.12"
       - name: Install LangGraph and focused test dependencies
         run: |
-          python -m pip install -e ./libs/langgraph pytest pytest-mock pytest-asyncio pytest-dotenv syrupy httpx
+          python -m pip install -e ./libs/langgraph -e ./libs/checkpoint-sqlite -e ./libs/checkpoint-postgres pytest pytest-mock pytest-asyncio pytest-dotenv syrupy httpx redis 'psycopg[binary]' psycopg_pool pycryptodome
       - name: Test functional task caching and interrupt recovery
         run: |
-          python -m pytest -q libs/langgraph/tests/test_pregel.py -k "multiple_interrupts_functional_cache or no_redundant_put_writes_for_cached_task" --maxfail=1
+          NO_DOCKER=true python -m pytest -q libs/langgraph/tests/test_pregel.py -k "multiple_interrupts_functional_cache or no_redundant_put_writes_for_cached_task" --maxfail=1
       - name: Repeated original concurrency repro after fix
         run: |
           for i in 1 2 3 4 5; do
