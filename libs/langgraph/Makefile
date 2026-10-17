@@ -43,9 +43,15 @@ start-services:
 stop-services:
 	docker compose -f tests/compose-postgres.yml -f tests/compose-redis.yml down -v
 
+# The test matrix includes 3.10 and 3.14, but the locked in-memory server
+# dependencies are available on 3.11-3.13. Keep its interpreter separate.
+DEV_SERVER_PYTHON ?= 3.12
+DEV_SERVER_ENV = $(CURDIR)/.venvs/dev-server
+
 start-dev-server:
 	uv sync --frozen --group test --no-dev
-	@LOG_LEVEL=warning uv run --no-sync langgraph dev --config tests/example_app/langgraph.json --no-browser --no-reload & \
+	UV_PROJECT_ENVIRONMENT=$(DEV_SERVER_ENV) uv sync --frozen --group test --no-dev --python $(DEV_SERVER_PYTHON)
+	@LOG_LEVEL=warning UV_PROJECT_ENVIRONMENT=$(DEV_SERVER_ENV) uv run --no-sync --python $(DEV_SERVER_PYTHON) langgraph dev --config tests/example_app/langgraph.json --no-browser --no-reload & \
 	PID=$$!; echo "$$PID" > .devserver.pid; \
 	for ATTEMPT in $$(seq 1 60); do \
 		if ! kill -0 $$PID 2>/dev/null; then break; fi; \
