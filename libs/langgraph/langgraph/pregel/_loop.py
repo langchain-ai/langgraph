@@ -1726,7 +1726,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         matched: list[PregelExecutableTask] = []
         if cached := {
             (t.cache_key.ns, t.cache_key.key): t
-            for t in self.tasks.values()
+            for t in list(self.tasks.values())
             if t.cache_key and not t.writes
         }:
             for key, values in self.cache.get(tuple(cached)).items():
