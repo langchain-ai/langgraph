@@ -57,6 +57,7 @@ from langgraph._internal._constants import (
     NS_END,
     NS_SEP,
     NULL_TASK_ID,
+    PULL,
     PUSH,
     RESUME,
     TASKS,
@@ -122,6 +123,7 @@ from langgraph.pregel._io import (
     map_output_values,
     read_channels,
 )
+from langgraph.pregel._log import logger
 from langgraph.pregel._messages import ensure_message_ids
 from langgraph.pregel._read import PregelNode
 from langgraph.pregel._task_status import read_task_statuses
@@ -187,6 +189,8 @@ class PregelLoop:
     manager: None | AsyncParentRunManager | ParentRunManager
     interrupt_after: All | Sequence[str]
     interrupt_before: All | Sequence[str]
+    insert_before: Sequence[str]
+    insert_channels: Sequence[str]
     durability: Durability
     retry_policy: Sequence[RetryPolicy]
     cache_policy: CachePolicy | None
@@ -328,6 +332,8 @@ class PregelLoop:
         durability: Durability,
         interrupt_after: All | Sequence[str] = EMPTY_SEQ,
         interrupt_before: All | Sequence[str] = EMPTY_SEQ,
+        insert_before: Sequence[str] = EMPTY_SEQ,
+        insert_channels: Sequence[str] = EMPTY_SEQ,
         manager: None | AsyncParentRunManager | ParentRunManager = None,
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
@@ -349,6 +355,8 @@ class PregelLoop:
         self.stream_keys = stream_keys
         self.interrupt_after = interrupt_after
         self.interrupt_before = interrupt_before
+        self.insert_before = insert_before
+        self.insert_channels = insert_channels
         self.manager = manager
         self.is_nested = CONFIG_KEY_TASK_ID in self.config.get(CONF, {})
         self._migrate_checkpoint = migrate_checkpoint
@@ -724,6 +732,11 @@ class PregelLoop:
             self.status = "draining"
             return False
 
+        # apply input inserted into the running run, then plan the step again
+        # from the new state
+        if self._accepts_inserted_input() and self._apply_inserted_input():
+            return self.tick()
+
         # produce debug output
         self._emit("tasks", map_debug_tasks, self.tasks.values())
 
@@ -817,6 +830,110 @@ class PregelLoop:
         raise NotImplementedError
 
     # private
+
+    def _accepts_inserted_input(self) -> bool:
+        """Whether queued input can be applied before the next step.
+
+        Only in a top-level `StateGraph`, only when every next task is a node
+        declared in `insert_before` that reads the state (not a `Send`, which
+        gets its own argument), and never on the step a resume continues: the
+        resume applies to the state it paused on.
+        """
+        return (
+            self.control is not None
+            and self.control.has_inputs
+            and not self.is_nested
+            and bool(self.insert_before)
+            and bool(self.insert_channels)
+            and not self.config[CONF].get(CONFIG_KEY_RESUMING, False)
+            and all(
+                task.path[0] == PULL and task.name in self.insert_before
+                for task in self.tasks.values()
+            )
+        )
+
+    def _apply_inserted_input(self) -> bool:
+        """Apply queued input to the state and save it as an `input` checkpoint.
+
+        Each input gets its own write, so two that set the same plain key don't
+        raise; the later one wins. Returns whether any was applied, so `tick()`
+        plans the step again.
+        """
+        applied: list[str] = []
+        writes: list[tuple[str, Any]] = []
+        inserted_channels: set[str] = set()
+        for input_id, value in cast(RunControl, self.control).take_inputs():
+            if not (input_writes := self._inserted_writes(input_id, value)):
+                continue
+            inserted_channels |= apply_writes(
+                self.checkpoint,
+                self.channels,
+                [PregelTaskWrites((), INPUT, input_writes, [])],
+                self.checkpointer_get_next_version,
+                self.trigger_to_nodes,
+            )
+            writes.extend(input_writes)
+            applied.append(input_id)
+        if not applied:
+            return False
+        # snapshot delta channels this input wrote, so they read back without
+        # their writes stored separately
+        self._delta_channels_forced_snapshot.update(
+            channel
+            for channel, _ in writes
+            if isinstance(self.specs.get(channel), DeltaChannel)
+        )
+        # add to the last step's updated channels, which trigger the planned tasks
+        self.updated_channels = (self.updated_channels or set()) | inserted_channels
+        if not inserted_channels.isdisjoint(
+            (self.output_keys,)
+            if isinstance(self.output_keys, str)
+            else self.output_keys
+        ):
+            self._emit(
+                "values", map_output_values, self.output_keys, writes, self.channels
+            )
+        self._put_checkpoint(
+            cast(
+                CheckpointMetadata,
+                {"source": "input", "inserted_inputs": applied},
+            )
+        )
+        # the checkpoint took a step, but no node ran: keep the recursion budget
+        self.stop += 1
+        return True
+
+    def _inserted_writes(self, input_id: str, value: Any) -> list[tuple[str, Any]]:
+        """State updates for inserted input, or none if the state rejects it.
+
+        Written straight to the state channels: through `__start__`, the graph
+        would route back to its entry.
+        """
+        if not isinstance(value, dict):
+            logger.warning(
+                "Skipping inserted input %s: expected a dict of state keys, got %s",
+                input_id,
+                type(value).__name__,
+            )
+            return []
+        if ignored := [key for key in value if key not in self.insert_channels]:
+            logger.warning(
+                "Ignoring keys of inserted input %s that aren't graph input keys: %s",
+                input_id,
+                ignored,
+            )
+        writes = [(k, v) for k, v in value.items() if k in self.insert_channels]
+        try:
+            for key, val in writes:
+                self.channels[key].copy().update([val])
+        except Exception:
+            logger.warning(
+                "Skipping inserted input %s: the state rejected it",
+                input_id,
+                exc_info=True,
+            )
+            return []
+        return writes
 
     @property
     def _reapplies_pending_writes(self) -> bool:
@@ -1660,6 +1777,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         manager: None | AsyncParentRunManager | ParentRunManager = None,
         interrupt_after: All | Sequence[str] = EMPTY_SEQ,
         interrupt_before: All | Sequence[str] = EMPTY_SEQ,
+        insert_before: Sequence[str] = EMPTY_SEQ,
+        insert_channels: Sequence[str] = EMPTY_SEQ,
         input_keys: str | Sequence[str] = EMPTY_SEQ,
         output_keys: str | Sequence[str] = EMPTY_SEQ,
         stream_keys: str | Sequence[str] = EMPTY_SEQ,
@@ -1682,6 +1801,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             stream_keys=stream_keys,
             interrupt_after=interrupt_after,
             interrupt_before=interrupt_before,
+            insert_before=insert_before,
+            insert_channels=insert_channels,
             manager=manager,
             migrate_checkpoint=migrate_checkpoint,
             trigger_to_nodes=trigger_to_nodes,
@@ -1915,6 +2036,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         durability: Durability,
         interrupt_after: All | Sequence[str] = EMPTY_SEQ,
         interrupt_before: All | Sequence[str] = EMPTY_SEQ,
+        insert_before: Sequence[str] = EMPTY_SEQ,
+        insert_channels: Sequence[str] = EMPTY_SEQ,
         manager: None | AsyncParentRunManager | ParentRunManager = None,
         input_keys: str | Sequence[str] = EMPTY_SEQ,
         output_keys: str | Sequence[str] = EMPTY_SEQ,
@@ -1938,6 +2061,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             stream_keys=stream_keys,
             interrupt_after=interrupt_after,
             interrupt_before=interrupt_before,
+            insert_before=insert_before,
+            insert_channels=insert_channels,
             manager=manager,
             migrate_checkpoint=migrate_checkpoint,
             trigger_to_nodes=trigger_to_nodes,

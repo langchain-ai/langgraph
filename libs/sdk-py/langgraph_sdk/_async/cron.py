@@ -104,7 +104,7 @@ class CronClient:
 
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
-                Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+                Must be one of 'reject', 'interrupt', 'rollback', 'enqueue', or 'insert'.
             end_time: The time to stop running the cron job. If not provided, the cron job will run indefinitely.
             enabled: Whether the cron job is enabled or not.
             timezone: IANA timezone for the cron schedule. Accepts a string (e.g. 'America/New_York') or a ``datetime.tzinfo`` instance (e.g. ``ZoneInfo("America/New_York")``).
@@ -222,7 +222,7 @@ class CronClient:
                 after execution. 'keep' creates a new thread for each execution but does not
                 clean them up. Clients are responsible for cleaning up kept threads.
             multitask_strategy: Multitask strategy to use.
-                Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+                Must be one of 'reject', 'interrupt', 'rollback', 'enqueue', or 'insert'.
             end_time: The time to stop running the cron job. If not provided, the cron job will run indefinitely.
             enabled: Whether the cron job is enabled or not.
             timezone: IANA timezone for the cron schedule. Accepts a string (e.g. 'America/New_York') or a ``datetime.tzinfo`` instance (e.g. ``ZoneInfo("America/New_York")``).
