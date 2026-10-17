@@ -484,9 +484,9 @@ def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception], 
 
         type_hints = get_type_hints(handler)
         if first_param.name in type_hints:
-            origin = get_origin(first_param.annotation)
+            origin = get_origin(type_hints[first_param.name])
             if origin in [Union, UnionType]:
-                args = get_args(first_param.annotation)
+                args = get_args(type_hints[first_param.name])
                 if all(issubclass(arg, Exception) for arg in args):
                     return tuple(args)
                 msg = (
