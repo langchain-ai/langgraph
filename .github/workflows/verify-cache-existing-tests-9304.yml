@@ -1,0 +1,30 @@
+name: LangGraph cache regression tests (fork only)
+
+on:
+  push:
+    branches:
+      - validation/langgraph-cache-snapshot-9304
+
+permissions:
+  contents: read
+
+jobs:
+  targeted-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install LangGraph and focused test dependencies
+        run: |
+          python -m pip install -e ./libs/langgraph pytest pytest-mock pytest-asyncio pytest-dotenv syrupy httpx
+      - name: Test functional task caching and interrupt recovery
+        run: |
+          python -m pytest -q libs/langgraph/tests/test_pregel.py -k "multiple_interrupts_functional_cache or no_redundant_put_writes_for_cached_task" --maxfail=1
+      - name: Repeated original concurrency repro after fix
+        run: |
+          for i in 1 2 3 4 5; do
+            python research_repros/issue_9304_concurrent_cache.py
+          done
