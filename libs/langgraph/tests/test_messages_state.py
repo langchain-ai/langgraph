@@ -342,6 +342,40 @@ def test_remove_all_messages():
         _AnyIdHumanMessage(content="Updated hi there"),
     ]
 
+    # messages after the marker still use normal formatting and merge rules
+    image = {
+        "type": "image",
+        "source_type": "base64",
+        "data": "1234",
+        "mime_type": "image/jpeg",
+    }
+    result = add_messages(
+        [HumanMessage(content="old", id="old")],
+        [
+            RemoveMessage(id=REMOVE_ALL_MESSAGES),
+            HumanMessage(content=[image], id="img"),
+        ],
+        format="langchain-openai",
+    )
+    assert result[0].content == [
+        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,1234"}}
+    ]
+
+    result = add_messages(
+        [HumanMessage(content="old", id="old")],
+        [
+            RemoveMessage(id=REMOVE_ALL_MESSAGES),
+            AIMessage(content="v1", id="same"),
+            AIMessage(content="v2", id="same"),
+        ],
+    )
+    assert result == [AIMessage(content="v2", id="same")]
+
+    assert add_messages(
+        [HumanMessage(content="old", id="old")],
+        [RemoveMessage(id=REMOVE_ALL_MESSAGES), RemoveMessage(id="old")],
+    ) == []
+
 
 def test_push_messages_in_graph():
     class MessagesState(TypedDict):

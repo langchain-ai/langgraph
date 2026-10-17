@@ -213,7 +213,8 @@ def add_messages(
             remove_all_idx = idx
 
     if remove_all_idx is not None:
-        return right[remove_all_idx + 1 :]
+        left = []
+        right = right[remove_all_idx + 1 :]
 
     # merge
     merged = left.copy()
