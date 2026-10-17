@@ -43,8 +43,6 @@ start-services:
 stop-services:
 	docker compose -f tests/compose-postgres.yml -f tests/compose-redis.yml down -v
 
-# The test matrix includes 3.10 and 3.14, but the locked in-memory server
-# dependencies are available on 3.11-3.13. Keep its interpreter separate.
 DEV_SERVER_PYTHON ?= 3.12
 DEV_SERVER_ENV = $(CURDIR)/.venvs/dev-server
 

@@ -1972,8 +1972,6 @@ class AsyncThreadStream:
                 # knows a run exists (handles reattach without run.start).
                 self._run_seen = True
             elif phase in ("completed", "failed"):
-                # A child may finish before its parent commits the child's update.
-                # Only the root lifecycle can make thread.output terminal.
                 if isinstance(params, dict) and params.get("namespace"):
                     return
                 # Why: interrupts describe current-run state. Clear on terminal
