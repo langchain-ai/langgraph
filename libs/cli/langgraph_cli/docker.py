@@ -330,6 +330,20 @@ def compose(
     return compose_str
 
 
+def get_config_to_docker_build_context(
+    config_json: dict,
+    install_command: str | None = None,
+    build_command: str | None = None,
+) -> str | None:
+    """Return the build context passed to config_to_docker, if overridden."""
+    is_js_project = config_json.get("node_version") and not config_json.get(
+        "python_version"
+    )
+    if is_js_project and (build_command or install_command):
+        return str(pathlib.Path.cwd())
+    return None
+
+
 def build_docker_image(
     runner,
     set: Callable[[str], None],
@@ -365,16 +379,12 @@ def build_docker_image(
         "-t",
         tag,
     ]
-    # determine build context: use current directory for JS projects, config parent for Python
-    is_js_project = config_json.get("node_version") and not config_json.get(
-        "python_version"
+    config_to_docker_build_context = get_config_to_docker_build_context(
+        config_json,
+        install_command=install_command,
+        build_command=build_command,
     )
-    # build/install commands only apply to JS projects for now
-    # without install/build command, JS projects will follow the old behavior
-    if is_js_project and (build_command or install_command):
-        build_context = str(pathlib.Path.cwd())
-    else:
-        build_context = str(config.parent)
+    build_context = config_to_docker_build_context or str(config.parent)
 
     # Deep copy to avoid mutating the caller's config (config_to_docker
     # rewrites graph paths to container-internal paths in place).
@@ -386,7 +396,7 @@ def build_docker_image(
         api_version=api_version,
         install_command=install_command,
         build_command=build_command,
-        build_context=build_context,
+        build_context=config_to_docker_build_context,
     )
     # add additional_contexts
     if additional_contexts:
