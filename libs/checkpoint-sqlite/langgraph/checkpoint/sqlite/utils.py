@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.base import get_checkpoint_id
+from langgraph.checkpoint.base import PendingWrite, get_checkpoint_id, writes_sort_key
+from langgraph.checkpoint.serde.base import SerializerProtocol
 
 _FILTER_PATTERN = re.compile(r"^[a-zA-Z0-9_.-]+$")
 
@@ -114,3 +115,23 @@ def search_where(
         param_values.append(get_checkpoint_id(before))
 
     return ("WHERE " + " AND ".join(wheres) if wheres else "", param_values)
+
+
+def pending_writes_sql(has_task_path: bool) -> str:
+    task_path = "task_path" if has_task_path else "''"
+    return (
+        f"SELECT task_id, channel, type, value, {task_path}, idx FROM writes "
+        "WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?"
+    )
+
+
+def load_pending_writes(
+    rows: Iterable[Any], serde: SerializerProtocol
+) -> list[PendingWrite]:
+    """Deserialize `pending_writes_sql` rows in `writes_sort_key` order."""
+    return [
+        (task_id, channel, serde.loads_typed((type_, value)))
+        for task_id, channel, type_, value, _, _ in sorted(
+            rows, key=lambda r: writes_sort_key(r[4], r[0], r[5])
+        )
+    ]

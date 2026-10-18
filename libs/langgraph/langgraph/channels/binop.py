@@ -2,6 +2,7 @@ import collections.abc
 from collections.abc import Callable, Sequence
 from typing import Any, Generic
 
+from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from typing_extensions import NotRequired, Required, Self
 
 from langgraph._internal._constants import OVERWRITE
@@ -116,6 +117,9 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
     def from_checkpoint(self, checkpoint: Value) -> Self:
         empty = self.__class__(self.typ, self.operator)
         empty.key = self.key
+        # A thread written while this field was a DeltaChannel stores snapshots.
+        if isinstance(checkpoint, _DeltaSnapshot):
+            checkpoint = checkpoint.value
         if checkpoint is not MISSING:
             empty.value = checkpoint
         return empty
