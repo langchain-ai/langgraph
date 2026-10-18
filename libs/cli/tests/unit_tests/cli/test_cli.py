@@ -14,6 +14,7 @@ import langgraph_cli.deploy as deploy_module
 from langgraph_cli.cli import cli, prepare_args_and_stdin
 from langgraph_cli.config import Config, _get_pip_cleanup_lines, validate_config
 from langgraph_cli.docker import DEFAULT_POSTGRES_URI, DockerCapabilities, Version
+from langgraph_cli.host_backend import HostBackendError
 from langgraph_cli.util import clean_empty_lines
 
 FORMATTED_CLEANUP_LINES = _get_pip_cleanup_lines(
@@ -451,6 +452,203 @@ def test_deploy_list_command_no_results(monkeypatch) -> None:
 
     assert result.exit_code == 0, result.output
     assert result.output.strip() == "No deployments found."
+
+
+def test_deploy_listeners_list_command(monkeypatch) -> None:
+    runner = CliRunner()
+    captured: dict[str, str] = {}
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            captured["host_url"] = host_url
+            captured["api_key"] = api_key
+            captured["tenant_id"] = tenant_id or ""
+
+        def list_listeners(self):
+            return [
+                {
+                    "id": "listener-1",
+                    "compute_id": "prod-cluster",
+                    "compute_config": {"k8s_namespaces": ["agents"]},
+                },
+                {
+                    "id": "listener-2",
+                    "compute_id": "multi-cluster",
+                    "compute_config": {"k8s_namespaces": ["agents", "agents-staging"]},
+                },
+            ]
+
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "listeners",
+            "list",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured == {
+        "host_url": "https://api.example.com",
+        "api_key": "test-key",
+        "tenant_id": "",
+    }
+    assert "Listener ID" in result.output
+    assert "Compute ID" in result.output
+    assert "Namespaces" in result.output
+    assert "listener-1" in result.output
+    assert "prod-cluster" in result.output
+    assert "agents, agents-staging" in result.output
+
+
+def test_deploy_listeners_list_command_no_results(monkeypatch) -> None:
+    runner = CliRunner()
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def list_listeners(self):
+            return []
+
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "listeners",
+            "list",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output.strip() == "No listeners found for this workspace."
+
+
+def test_deploy_listeners_list_command_json(monkeypatch) -> None:
+    runner = CliRunner()
+
+    listeners = [
+        {
+            "id": "listener-1",
+            "compute_id": "prod-cluster",
+            "compute_config": {"k8s_namespaces": ["agents"]},
+        },
+        {
+            "id": "listener-2",
+            "compute_id": "multi-cluster",
+            "compute_config": {"k8s_namespaces": ["agents", "agents-staging"]},
+        },
+    ]
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def list_listeners(self):
+            return listeners
+
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "listeners",
+            "list",
+            "--json",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == listeners
+
+
+def test_deploy_listeners_list_command_json_no_results(monkeypatch) -> None:
+    runner = CliRunner()
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def list_listeners(self):
+            return []
+
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "listeners",
+            "list",
+            "--json",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == []
+
+
+def test_deploy_listeners_list_command_json_org_scoped_403(monkeypatch) -> None:
+    """With --json, an org-scoped 403 must raise cleanly instead of
+    prompting for a workspace ID, which would write to stdout and hang
+    waiting for input that a scripted invocation never provides."""
+    runner = CliRunner()
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def list_listeners(self):
+            raise HostBackendError("requires workspace specification", status_code=403)
+
+        def set_tenant(self, tenant_id: str) -> None:
+            raise AssertionError("must not retry with a prompted tenant with --json")
+
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
+
+    prompt_calls = []
+    monkeypatch.setattr(
+        click, "prompt", lambda *a, **k: prompt_calls.append((a, k)) or "unreachable"
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "listeners",
+            "list",
+            "--json",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert prompt_calls == [], "must not prompt interactively with --json"
+    assert result.exit_code != 0
+    assert "LANGSMITH_TENANT_ID" in result.output
 
 
 def test_deploy_revisions_list_command(monkeypatch) -> None:

@@ -248,6 +248,95 @@ def test_drain_from_subgraph_can_resume_parent() -> None:
     }
 
 
+class _BreakpointState(TypedDict, total=False):
+    first: str
+    second: str
+
+
+def _drain_before_breakpoint_builder(
+    second_runs: list[str],
+) -> StateGraph[_BreakpointState]:
+    def first(state: _BreakpointState, runtime: Runtime) -> _BreakpointState:
+        runtime.control.request_drain("rollout")
+        return {"first": "done"}
+
+    def second(state: _BreakpointState) -> _BreakpointState:
+        second_runs.append("second")
+        return {"second": "done"}
+
+    builder = StateGraph(_BreakpointState)
+    builder.add_node("first", first)
+    builder.add_node("second", second)
+    builder.add_edge(START, "first")
+    builder.add_edge("first", "second")
+    return builder
+
+
+@pytest.mark.parametrize("at_compile", [True, False])
+def test_drain_before_interrupt_before_stops_at_breakpoint(at_compile: bool) -> None:
+    # A resume passes the next step's breakpoints, so a drain right before a
+    # breakpoint has to stop there instead, or the resumed run skips it.
+    second_runs: list[str] = []
+    breakpoints = {"interrupt_before": ["second"]}
+    compiled = _drain_before_breakpoint_builder(second_runs).compile(
+        checkpointer=MemorySaver(), **(breakpoints if at_compile else {})
+    )
+    run_kwargs = {} if at_compile else breakpoints
+    config = {"configurable": {"thread_id": "drain-breakpoint"}}
+
+    assert compiled.invoke({}, config, control=RunControl(), **run_kwargs) == {
+        "first": "done"
+    }
+    assert compiled.get_state(config).next == ("second",)
+    assert second_runs == []
+
+    assert compiled.invoke(None, config, **run_kwargs) == {
+        "first": "done",
+        "second": "done",
+    }
+    assert second_runs == ["second"]
+
+
+def test_drain_before_subgraph_interrupt_before_stops_at_breakpoint() -> None:
+    second_runs: list[str] = []
+    child = _drain_before_breakpoint_builder(second_runs).compile(
+        interrupt_before=["second"]
+    )
+    parent = StateGraph(_BreakpointState)
+    parent.add_node("child", child)
+    parent.add_edge(START, "child")
+    compiled = parent.compile(checkpointer=MemorySaver())
+    config = {"configurable": {"thread_id": "drain-subgraph-breakpoint"}}
+
+    compiled.invoke({}, config, control=RunControl())
+    state = compiled.get_state(config, subgraphs=True)
+    assert state.next == ("child",)
+    assert state.tasks[0].state.next == ("second",)
+    assert second_runs == []
+
+    assert compiled.invoke(None, config) == {"first": "done", "second": "done"}
+    assert second_runs == ["second"]
+
+
+@pytest.mark.anyio
+async def test_drain_before_interrupt_before_stops_at_breakpoint_async() -> None:
+    second_runs: list[str] = []
+    compiled = _drain_before_breakpoint_builder(second_runs).compile(
+        checkpointer=MemorySaver(), interrupt_before=["second"]
+    )
+    config = {"configurable": {"thread_id": "drain-breakpoint-async"}}
+
+    assert await compiled.ainvoke({}, config, control=RunControl()) == {"first": "done"}
+    assert (await compiled.aget_state(config)).next == ("second",)
+    assert second_runs == []
+
+    assert await compiled.ainvoke(None, config) == {
+        "first": "done",
+        "second": "done",
+    }
+    assert second_runs == ["second"]
+
+
 @pytest.mark.anyio
 async def test_drain_requested_in_terminal_step_finishes_normally_async() -> None:
     class State(TypedDict, total=False):

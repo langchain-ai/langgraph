@@ -20,7 +20,7 @@ from warnings import warn
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 from typing_extensions import (
     NotRequired,
     TypeAliasType,
@@ -882,6 +882,16 @@ class Command(Generic[N], ToolOutputMixin):
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
 
+def _validate_resume(adapter: TypeAdapter[Any], value: Any) -> Any:
+    from langgraph.errors import _mark_invalid_resume
+
+    try:
+        return adapter.validate_python(value)
+    except ValidationError as exc:
+        _mark_invalid_resume(exc)
+        raise
+
+
 @overload
 def interrupt(value: Any, *, response_schema: type[ResponseT]) -> ResponseT: ...
 
@@ -989,6 +999,7 @@ def interrupt(
     Raises:
         GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
         pydantic.ValidationError: When a resume value does not match a Pydantic model, `TypedDict`, or dataclass `response_schema`.
+            Nothing is saved, so the interrupt can be answered again. `is_invalid_resume` identifies it.
     """
     from langgraph._internal._constants import (
         CONFIG_KEY_CHECKPOINT_NS,
@@ -1012,14 +1023,14 @@ def interrupt(
     if scratchpad.resume:
         if idx < len(scratchpad.resume):
             v = scratchpad.resume[idx]
-            validated = adapter.validate_python(v) if adapter else v
+            validated = _validate_resume(adapter, v) if adapter else v
             conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume[: idx + 1])])
             return validated
     # find current resume value
     v = scratchpad.get_null_resume(True)
     if v is not None:
         assert len(scratchpad.resume) == idx, (scratchpad.resume, idx)
-        validated = adapter.validate_python(v) if adapter else v
+        validated = _validate_resume(adapter, v) if adapter else v
         scratchpad.resume.append(v)
         conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
         return validated

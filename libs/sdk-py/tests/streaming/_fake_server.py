@@ -60,6 +60,7 @@ class _StreamScript:
     events: list[dict[str, Any]]
     delay: float = 0.0
     fail_after: int | None = None
+    status: int = 200
 
 
 class FakeServer:
@@ -263,6 +264,8 @@ class FakeServer:
                     events=list(self.scripted_events), delay=self._stream_delay
                 )
             )
+            if script.status != 200:
+                return httpx.Response(script.status, json={"detail": "scripted"})
             self.open_event_streams += 1
             self._open_event_streams_max = max(
                 self._open_event_streams_max, self.open_event_streams

@@ -32,7 +32,7 @@ from langgraph_cli.host_backend import (
     HostBackendError,
     SourceName,
 )
-from langgraph_cli.image_reference import ImageReference
+from langgraph_cli.image_reference import DIGEST_SEPARATOR, ImageReference
 from langgraph_cli.progress import Progress
 from langgraph_cli.util import warn_non_wolfi_distro
 
@@ -230,15 +230,6 @@ class RequestedPlacement:
     @property
     def requested(self) -> bool:
         return self.listener_id is not None or self.k8s_namespace is not None
-
-    def ensure_not_requested(self, deployment_id: str) -> None:
-        if self.requested:
-            raise click.UsageError(
-                "Listener and namespace are fixed when a deployment is created. "
-                f"Deployment {deployment_id} already exists, so drop --listener-id "
-                "and --k8s-namespace, or create a new deployment with a different "
-                "--name."
-            )
 
     def on(self, listener: Listener) -> Placement:
         return OnListener(listener.id, self._namespace(listener))
@@ -610,6 +601,41 @@ def format_deployments_table(deployments: Sequence[dict[str, object]]) -> str:
             _extract_deployment_url(deployment),
         )
         for deployment in deployments
+    ]
+    widths = [
+        max(len(headers[index]), *(len(row[index]) for row in rows))
+        for index in range(len(headers))
+    ]
+
+    def format_row(row: Sequence[str]) -> str:
+        return "  ".join(value.ljust(widths[index]) for index, value in enumerate(row))
+
+    lines = [format_row(headers), format_row(tuple("-" * width for width in widths))]
+    lines.extend(format_row(row) for row in rows)
+    return "\n".join(lines)
+
+
+def _extract_listener_namespaces(listener: dict[str, object]) -> str:
+    compute_config = listener.get("compute_config")
+    namespaces = (
+        compute_config.get("k8s_namespaces")
+        if isinstance(compute_config, dict)
+        else None
+    )
+    if isinstance(namespaces, list) and namespaces:
+        return ", ".join(str(namespace) for namespace in namespaces)
+    return "-"
+
+
+def format_listeners_table(listeners: Sequence[dict[str, object]]) -> str:
+    headers = ("Listener ID", "Compute ID", "Namespaces")
+    rows = [
+        (
+            str(listener.get("id", "-") or "-"),
+            str(listener.get("compute_id", "-") or "-"),
+            _extract_listener_namespaces(listener),
+        )
+        for listener in listeners
     ]
     widths = [
         max(len(headers[index]), *(len(row[index]) for row in rows))
@@ -1020,15 +1046,28 @@ def _print_deployment_result(
 # ---------------------------------------------------------------------------
 
 
+def _strip_url_scheme(url: str) -> str:
+    """Return a registry reference without a trailing slash or URL scheme."""
+    reference = url.rstrip("/")
+    if "://" in reference:
+        reference = reference.split("//", 1)[1]
+    return reference
+
+
+# Artifact Registry's username for access tokens. Control planes whose registry
+# needs another one return it as `username`.
+_DEFAULT_REGISTRY_USERNAME = "oauth2accesstoken"
+
+
 @contextmanager
-def _docker_config_for_token(registry_host: str, token: str):
+def _docker_config_for_token(registry_host: str, token: str, username: str):
     """Create a temporary Docker config with only the push token.
 
     Yields the path to a temporary config directory that can be passed
     to `docker --config <path>` so that system credential helpers
     (e.g. gcloud) don't interfere with the push token.
     """
-    auth_b64 = base64.b64encode(f"oauth2accesstoken:{token}".encode()).decode()
+    auth_b64 = base64.b64encode(f"{username}:{token}".encode()).decode()
     config_data = {"auths": {registry_host: {"auth": auth_b64}}}
     with tempfile.TemporaryDirectory() as tmpdir:
         with open(os.path.join(tmpdir, "config.json"), "w") as f:
@@ -1166,8 +1205,35 @@ class DockerBuildCommand:
             return cls(("docker", "build"), ())
         flags: tuple[str, ...] = ("--platform", _DEPLOYMENT_PLATFORM, "--load")
         if not verbose:
-            flags += ("--progress=quiet",)
+            flags += ("--progress=plain",)
         return cls(("docker", "buildx", "build"), flags)
+
+
+def _active_docker_host(runner: CommandRunner) -> str | None:
+    """Return the daemon endpoint of the user's active Docker context.
+
+    None when `DOCKER_HOST` is set, which Docker honors with any config
+    directory. Also None when the lookup fails (for example, `DOCKER_CONTEXT`
+    names a context that doesn't exist) or the context has no Docker endpoint
+    (Docker prints `<no value>`); that keeps Docker's own default in place.
+    """
+    if os.environ.get("DOCKER_HOST"):
+        return None
+    try:
+        stdout, _ = runner.run(
+            subp_exec(
+                "docker",
+                "context",
+                "inspect",
+                "--format",
+                "{{.Endpoints.docker.Host}}",
+                collect=True,
+            )
+        )
+    except (click.exceptions.Exit, OSError):
+        return None
+    host = (stdout or "").strip()
+    return host if "://" in host else None
 
 
 def _docker_argv(docker_config_dir: str | None) -> tuple[str, ...]:
@@ -1203,17 +1269,13 @@ def _push_image(
     runner: CommandRunner,
     image: str,
     *,
-    docker_config_dir: str | None,
+    docker: tuple[str, ...],
     verbose: bool,
 ) -> None:
     for attempt in range(1, _PUSH_ATTEMPTS + 1):
         try:
             with Progress(message="Pushing...", elapsed=not verbose):
-                runner.run(
-                    subp_exec(
-                        *_docker_argv(docker_config_dir), "push", image, verbose=verbose
-                    )
-                )
+                runner.run(subp_exec(*docker, "push", image, verbose=verbose))
             return
         except click.exceptions.Exit:
             if attempt == _PUSH_ATTEMPTS:
@@ -1282,21 +1344,27 @@ def _run_local_build(
             raise click.ClickException(
                 "Push token response missing token or registry_url"
             )
+        username = push_data.get("username") or _DEFAULT_REGISTRY_USERNAME
         step += 1
 
-        normalized_registry = registry_url.rstrip("/")
-        if "://" in normalized_registry:
-            normalized_registry = normalized_registry.split("//", 1)[1]
-        repo_seed = image_name or name or spec.config.parent.name
-        remote_image = str(
-            ImageReference(
-                f"{normalized_registry}/{normalize_name(repo_seed)}",
-                tag,
+        if push_data.get("repository_url"):
+            # The control plane chose the exact repository (an ECR repository
+            # is a single image name, so nothing may be appended to it).
+            repository = _strip_url_scheme(push_data["repository_url"])
+        else:
+            repo_seed = image_name or name or spec.config.parent.name
+            repository = (
+                f"{_strip_url_scheme(registry_url)}/{normalize_name(repo_seed)}"
             )
-        )
-        registry_host = normalized_registry.split("/")[0]
+        remote_image = str(ImageReference(repository, tag))
+        registry_host = repository.split("/")[0]
 
-        with _docker_config_for_token(registry_host, deployment_token) as cfg:
+        with _docker_config_for_token(registry_host, deployment_token, username) as cfg:
+            # A config directory has no current context, so Docker would fall
+            # back to /var/run/docker.sock; keep using the daemon the build used.
+            docker_host = _active_docker_host(runner)
+            host_args = ("--host", docker_host) if docker_host else ()
+            docker = (*_docker_argv(cfg), *host_args)
             _log_deploy_step(step, f"Logging into {registry_host}")
             token_input = (
                 deployment_token
@@ -1305,10 +1373,10 @@ def _run_local_build(
             )
             runner.run(
                 subp_exec(
-                    *_docker_argv(cfg),
+                    *docker,
                     "login",
                     "-u",
-                    "oauth2accesstoken",
+                    username,
                     "--password-stdin",
                     registry_host,
                     input=token_input,
@@ -1321,7 +1389,7 @@ def _run_local_build(
             runner.run(
                 subp_exec("docker", "tag", image_to_push, remote_image, verbose=verbose)
             )
-            _push_image(runner, remote_image, docker_config_dir=cfg, verbose=verbose)
+            _push_image(runner, remote_image, docker=docker, verbose=verbose)
         step += 1
 
         resolved_image = _resolve_pushed_image_digest(
@@ -1544,9 +1612,9 @@ def _ensure_customer_registry_source(existing: ExistingDeployment) -> None:
     if existing.source != _CUSTOMER_REGISTRY_SOURCE:
         raise click.UsageError(
             f"Deployment {existing.id} was not created from an external image "
-            "and cannot be updated with --push-to. Run without --push-to to keep "
-            "its current build mode, or use a different --name to create a new "
-            "deployment."
+            "and cannot be updated with --push-to or --image-uri. Run without "
+            "either flag to keep its current build mode, or use a different "
+            "--name to create a new deployment."
         )
 
 
@@ -1599,10 +1667,85 @@ class RemoteBuildSource:
 
 
 @dataclass(frozen=True, slots=True)
-class CustomerRegistrySource:
+class BuildAndPush:
     reference: ImageReference
     prebuilt_image: str | None
-    requested_placement: RequestedPlacement
+
+
+@dataclass(frozen=True, slots=True)
+class PublishedImage:
+    image_uri: str
+
+
+ImageSource = BuildAndPush | PublishedImage
+
+
+def _resource_spec(image_pull_secrets: tuple[str, ...]) -> Mapping[str, object]:
+    if not image_pull_secrets:
+        return _OPERATOR_DEFAULT_RESOURCE_SPEC
+    return {
+        "image_pull_secrets": [{"name": name} for name in image_pull_secrets],
+    }
+
+
+# Mirrors the control plane's own LocalObjectReference.name validation (a
+# Kubernetes DNS subdomain), so a bad secret name is rejected here instead of
+# after a build and push.
+_K8S_SECRET_NAME_RE = re.compile(
+    r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class CreateOnlySettings:
+    """Options for an external-image deployment that only apply when
+    creating one, never when updating an existing deployment."""
+
+    placement: RequestedPlacement
+    image_pull_secrets: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        for name in self.image_pull_secrets:
+            if len(name) > 253 or not _K8S_SECRET_NAME_RE.match(name):
+                raise click.UsageError(
+                    f"--image-pull-secret {name!r} is not a valid Kubernetes "
+                    "secret name (lowercase alphanumeric characters, '-', or "
+                    "'.' only, max 253 characters)."
+                )
+
+    @property
+    def requested(self) -> bool:
+        return self.placement.requested or bool(self.image_pull_secrets)
+
+    def ensure_creatable(self, push_to: str | None, image_uri: str | None) -> None:
+        if push_to is None and image_uri is None and self.requested:
+            raise click.UsageError(
+                "--listener-id, --k8s-namespace, and --image-pull-secret only "
+                "apply when creating a deployment with --push-to or --image-uri."
+            )
+
+    def ensure_not_existing(self, deployment_id: str) -> None:
+        if self.placement.requested:
+            raise click.UsageError(
+                "Listener and namespace are fixed when a deployment is "
+                f"created. Deployment {deployment_id} already exists, so "
+                "drop --listener-id and --k8s-namespace, or create a new "
+                "deployment with a different --name."
+            )
+        if self.image_pull_secrets:
+            raise click.UsageError(
+                "langgraph deploy does not update image pull secrets on an "
+                f"existing deployment. Deployment {deployment_id} already "
+                "exists, so drop --image-pull-secret and update resource_spec "
+                "through the API or the LangSmith UI instead, or create a "
+                "new deployment with a different --name."
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class CustomerRegistrySource:
+    image: ImageSource
+    create_only: CreateOnlySettings
 
     def run(self, ctx: DeployContext) -> DeployOutcome:
         if isinstance(ctx.selector, ById):
@@ -1624,7 +1767,7 @@ class CustomerRegistrySource:
         self, ctx: DeployContext, existing: ExistingDeployment, step: int
     ) -> DeployOutcome:
         _ensure_customer_registry_source(existing)
-        self.requested_placement.ensure_not_requested(existing.id)
+        self.create_only.ensure_not_existing(existing.id)
         image_uri, step = self._publish(ctx, step)
         _log_deploy_step(step, f"Updating deployment {existing.id}")
         updated = ctx.client.update_deployment(
@@ -1639,7 +1782,7 @@ class CustomerRegistrySource:
         )
 
     def _resolve_placement(self, ctx: DeployContext) -> Placement:
-        requested = self.requested_placement
+        requested = self.create_only.placement
         if requested.listener_id is not None:
             return requested.on(_requested_listener(ctx.client, requested.listener_id))
         if not (ctx.endpoints.is_cloud or requested.requested):
@@ -1668,7 +1811,9 @@ class CustomerRegistrySource:
                 else None,
                 source=_CUSTOMER_REGISTRY_SOURCE,
                 source_config={
-                    "resource_spec": _OPERATOR_DEFAULT_RESOURCE_SPEC,
+                    "resource_spec": _resource_spec(
+                        self.create_only.image_pull_secrets
+                    ),
                     **placement.source_config(),
                 },
                 source_revision_config={"image_uri": image_uri},
@@ -1686,16 +1831,22 @@ class CustomerRegistrySource:
         )
 
     def _publish(self, ctx: DeployContext, step: int) -> tuple[str, int]:
-        image = str(self.reference)
+        if isinstance(self.image, PublishedImage):
+            return self.image.image_uri, step
+        image = str(self.image.reference)
         with Runner() as runner:
-            if self.prebuilt_image:
-                _log_deploy_step(step, f"Validating image {self.prebuilt_image}")
+            if self.image.prebuilt_image:
+                _log_deploy_step(step, f"Validating image {self.image.prebuilt_image}")
                 _validate_prebuilt_image(
-                    runner, self.prebuilt_image, verbose=ctx.verbose
+                    runner, self.image.prebuilt_image, verbose=ctx.verbose
                 )
                 runner.run(
                     subp_exec(
-                        "docker", "tag", self.prebuilt_image, image, verbose=ctx.verbose
+                        "docker",
+                        "tag",
+                        self.image.prebuilt_image,
+                        image,
+                        verbose=ctx.verbose,
                     )
                 )
             else:
@@ -1703,7 +1854,7 @@ class CustomerRegistrySource:
                 _build_image(runner, ctx.spec, image, verbose=ctx.verbose)
             step += 1
             _log_deploy_step(step, f"Pushing image {image}")
-            _push_image(runner, image, docker_config_dir=None, verbose=ctx.verbose)
+            _push_image(runner, image, docker=_docker_argv(None), verbose=ctx.verbose)
             step += 1
             digest = _resolve_pushed_image_digest(
                 runner, remote_image=image, docker_config_dir=None, verbose=ctx.verbose
@@ -1733,26 +1884,48 @@ def _push_reference(push_to: str, tag: str | None) -> ImageReference:
     return reference.with_tag(normalize_image_tag(tag or _DEFAULT_IMAGE_TAG))
 
 
+def _validate_image_uri(image_uri: str) -> str:
+    value = image_uri.strip()
+    if not value:
+        raise click.UsageError("--image-uri must not be empty.")
+    if DIGEST_SEPARATOR not in value:
+        raise click.UsageError(
+            "--image-uri must pin a digest, e.g. "
+            f"repository{DIGEST_SEPARATOR}<sha256 hex>. Kubernetes can cache "
+            "images by tag, so redeploying a mutable tag may silently keep "
+            "running the previous image."
+        )
+    return value
+
+
 def _select_source(
     *,
     push_to: str | None,
     image: str | None,
+    image_uri: str | None,
     image_name: str | None,
     tag: str | None,
     remote_build_flag: bool | None,
     placement: RequestedPlacement,
+    image_pull_secrets: tuple[str, ...],
     selector: DeploymentSelector,
 ) -> DeploymentSource:
-    if push_to is None and placement.requested:
-        raise click.UsageError(
-            "--listener-id and --k8s-namespace only apply when creating a "
-            "deployment with --push-to."
-        )
-    if placement.requested and isinstance(selector, ById):
-        raise click.UsageError(
-            "Listener and namespace are fixed when a deployment is created, so "
-            "they cannot be set for an existing --deployment-id. Drop them, or "
-            "create a new deployment with --name."
+    create_only = CreateOnlySettings(placement, image_pull_secrets)
+    create_only.ensure_creatable(push_to, image_uri)
+    if create_only.requested and isinstance(selector, ById):
+        create_only.ensure_not_existing(selector.deployment_id)
+    if image_uri is not None:
+        if push_to is not None:
+            raise click.UsageError("--image-uri cannot be combined with --push-to.")
+        if image is not None:
+            raise click.UsageError("--image-uri cannot be combined with --image.")
+        if tag is not None:
+            raise click.UsageError("--image-uri cannot be combined with --tag.")
+        if remote_build_flag is not None:
+            raise click.UsageError("--image-uri cannot be combined with --remote.")
+        return CustomerRegistrySource(
+            image=PublishedImage(_validate_image_uri(image_uri)),
+            create_only=create_only,
         )
     if push_to is not None:
         if remote_build_flag is True:
@@ -1761,9 +1934,8 @@ def _select_source(
         if image is None:
             _require_local_docker()
         return CustomerRegistrySource(
-            reference=reference,
-            prebuilt_image=image,
-            requested_placement=placement,
+            image=BuildAndPush(reference=reference, prebuilt_image=image),
+            create_only=create_only,
         )
     if image and remote_build_flag is True:
         raise click.UsageError("--image cannot be combined with --remote builds.")
@@ -1793,7 +1965,10 @@ def _create_host_backend_client(
     host_url: str | None,
     api_key: str | None,
     env_vars: dict[str, str] | None = None,
+    *,
+    no_input: bool | None = None,
 ) -> HostBackendClient:
+    effective_no_input = _no_input if no_input is None else no_input
     if env_vars is None:
         env_vars = _parse_env_from_config({}, pathlib.Path.cwd() / DEFAULT_CONFIG)
     resolved_api_key = api_key
@@ -1808,7 +1983,7 @@ def _create_host_backend_client(
                 resolved_api_key = val
                 break
     if not resolved_api_key:
-        if _no_input:
+        if effective_no_input:
             raise click.ClickException(
                 "No LangSmith API key found. Set LANGSMITH_API_KEY in the "
                 "environment or .env file."
@@ -1833,6 +2008,8 @@ def _create_host_backend_client(
 def _call_host_backend_with_optional_tenant(
     client: HostBackendClient,
     operation: Callable[[HostBackendClient], _T],
+    *,
+    no_input: bool | None = None,
 ) -> _T:
     """Run *operation*, prompting for a workspace ID on org-scoped 403s.
 
@@ -1841,6 +2018,7 @@ def _call_host_backend_with_optional_tenant(
     in-place so all subsequent calls through the same instance are
     tenant-aware.
     """
+    effective_no_input = _no_input if no_input is None else no_input
     prompted_for_tenant = False
 
     while True:
@@ -1852,7 +2030,7 @@ def _call_host_backend_with_optional_tenant(
                 and err.status_code == 403
                 and "requires workspace specification" in err.message
             ):
-                if _no_input:
+                if effective_no_input:
                     raise click.ClickException(
                         "API key is org-scoped and requires a workspace ID. "
                         "Set LANGSMITH_TENANT_ID in your .env file or "
@@ -2035,11 +2213,13 @@ def _deploy_base_options(
             ),
             click.option(
                 "--deployment-type",
-                type=click.Choice(["dev", "prod"]),
+                type=click.Choice(["serverless", "dedicated", "dev", "prod"]),
                 default="dev",
                 show_default=True,
                 help=(
-                    "Deployment type (used when creating a new deployment). "
+                    "Deployment type (used when creating a new deployment): "
+                    "serverless (scale to zero) or dedicated (prod); "
+                    "legacy dev and prod are also accepted. "
                     "Ignored with --push-to."
                 ),
             ),
@@ -2076,18 +2256,41 @@ def _deploy_base_options(
                 ),
             ),
             click.option(
+                "--image-uri",
+                help=(
+                    "Deploy an image that's already in a registry you manage, "
+                    "without building, retagging, or pushing anything. For "
+                    "self-hosted and hybrid LangSmith. Give the full reference, "
+                    "e.g. 123456789.dkr.ecr.us-east-1.amazonaws.com/agents/"
+                    "my-agent:v1.2.3 or ...@sha256:<digest>. Cannot be combined "
+                    "with --push-to, --image, --tag, or --remote."
+                ),
+            ),
+            click.option(
                 "--listener-id",
                 help=(
                     "Listener that will run the deployment, for workspaces that "
                     "deploy through a listener in your own cluster. Only used when "
-                    "creating a deployment with --push-to."
+                    "creating a deployment with --push-to or --image-uri."
                 ),
             ),
             click.option(
                 "--k8s-namespace",
                 help=(
                     "Kubernetes namespace the listener deploys into. Only used when "
-                    "creating a deployment with --push-to."
+                    "creating a deployment with --push-to or --image-uri."
+                ),
+            ),
+            click.option(
+                "--image-pull-secret",
+                "image_pull_secrets",
+                multiple=True,
+                help=(
+                    "Name of a Kubernetes secret (type kubernetes.io/"
+                    "dockerconfigjson) in the deployment's namespace to use for "
+                    "pulling the image from a private registry. Repeat to give "
+                    "more than one. Only used when creating a deployment with "
+                    "--push-to or --image-uri."
                 ),
             ),
             click.option(
@@ -2200,8 +2403,10 @@ def _deploy_cmd(
     image_name: str | None,
     image: str | None,
     push_to: str | None,
+    image_uri: str | None,
     listener_id: str | None,
     k8s_namespace: str | None,
+    image_pull_secrets: tuple[str, ...],
     tag: str | None,
     base_image: str | None,
     install_command: str | None,
@@ -2273,10 +2478,12 @@ def _deploy_cmd(
     source = _select_source(
         push_to=push_to,
         image=image,
+        image_uri=image_uri,
         image_name=image_name,
         tag=tag,
         remote_build_flag=remote_build_flag,
         placement=RequestedPlacement(listener_id, k8s_namespace),
+        image_pull_secrets=image_pull_secrets,
         selector=selector,
     )
 
@@ -2303,7 +2510,9 @@ def _deploy_cmd(
             ),
             verbose=verbose,
             selector=selector,
-            deployment_type=deployment_type,
+            deployment_type={"serverless": "dev_zero", "dedicated": "prod"}.get(
+                deployment_type, deployment_type
+            ),
             secrets=secrets,
             tracked_packages=tracked_packages,
         )
@@ -2406,6 +2615,53 @@ def deploy_list(
         click.echo("No deployments found.")
         return
     click.echo(format_deployments_table(deployments))
+
+
+# ---------------------------------------------------------------------------
+# deploy listeners
+# ---------------------------------------------------------------------------
+
+
+@deploy.group(
+    "listeners",
+    cls=NestedHelpGroup,
+    help="[Beta] Inspect listeners available to this workspace.",
+)
+def deploy_listeners() -> None:
+    pass
+
+
+@OPT_HOST_API_KEY
+@OPT_HOST_URL
+@click.option(
+    "--json",
+    "json_output",
+    is_flag=True,
+    default=False,
+    help="Emit the listeners as a JSON array instead of a table.",
+)
+@deploy_listeners.command(
+    "list",
+    help=(
+        "[Beta] List listeners available to this workspace.\n\n"
+        "Pass a listener's id to `langgraph deploy --push-to ... "
+        "--listener-id <id>` to deploy through it."
+    ),
+)
+def deploy_listeners_list(
+    api_key: str | None, host_url: str | None, json_output: bool
+) -> None:
+    client = _create_host_backend_client(host_url, api_key, no_input=json_output)
+    listeners = _call_host_backend_with_optional_tenant(
+        client, lambda c: c.list_listeners(), no_input=json_output
+    )
+    if json_output:
+        click.echo(json_mod.dumps(listeners))
+        return
+    if not listeners:
+        click.echo("No listeners found for this workspace.")
+        return
+    click.echo(format_listeners_table(listeners))
 
 
 # ---------------------------------------------------------------------------

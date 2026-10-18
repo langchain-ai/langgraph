@@ -242,6 +242,171 @@ async def test_afork_by_update_state(
     assert state.values["log"] == [*base.values["log"], "patched"]
 
 
+def _assert_branch_unchanged(state: StateSnapshot, expected: list, edit: str) -> None:
+    assert state.values["log"] == state.values["plain"] == expected, (
+        f"{edit!r} was written by an update_state on this branch's base, "
+        f"but this branch now reads {state.values['log']}"
+    )
+
+
+# The old checkpoint is either a finished turn, which saved no writes, or one
+# whose next node already ran there, so the edit reuses that task's id.
+@pytest.mark.parametrize("next_node_ran", [False, True])
+def test_update_state_on_an_old_checkpoint_leaves_its_other_branch_alone(
+    sync_checkpointer: BaseCheckpointSaver, next_node_ran: bool
+) -> None:
+    config = _thread("t")
+    graph = _build(sync_checkpointer, "first")
+    graph.invoke(_both("in-1"), config)
+    _build(sync_checkpointer, "second").invoke(_both("in-2"), config)
+    branch = graph.get_state(config)
+    base = next(
+        snapshot
+        for snapshot in graph.get_state_history(config)
+        if "in-2" not in snapshot.values["log"]
+        and snapshot.next == (("n",) if next_node_ran else ())
+    )
+
+    edited = graph.update_state(_at(config, base), _both("edit"), as_node="n")
+
+    _assert_branch_unchanged(
+        graph.get_state(branch.config), branch.values["log"], "edit"
+    )
+    assert graph.get_state(edited).values["log"] == [*base.values["log"], "edit"]
+
+    _build(sync_checkpointer, "third").invoke(_both("in-3"), branch.config)
+    _assert_branch_unchanged(
+        graph.get_state(config),
+        [*branch.values["log"], "in-3", "third-out"],
+        "edit",
+    )
+
+
+@pytest.mark.parametrize("next_node_ran", [False, True])
+async def test_aupdate_state_on_an_old_checkpoint_leaves_its_other_branch_alone(
+    async_checkpointer: BaseCheckpointSaver, next_node_ran: bool
+) -> None:
+    config = _thread("t")
+    graph = _build(async_checkpointer, "first")
+    await graph.ainvoke(_both("in-1"), config)
+    await _build(async_checkpointer, "second").ainvoke(_both("in-2"), config)
+    branch = await graph.aget_state(config)
+    base = await anext(
+        snapshot
+        async for snapshot in graph.aget_state_history(config)
+        if "in-2" not in snapshot.values["log"]
+        and snapshot.next == (("n",) if next_node_ran else ())
+    )
+
+    edited = await graph.aupdate_state(_at(config, base), _both("edit"), as_node="n")
+
+    _assert_branch_unchanged(
+        await graph.aget_state(branch.config), branch.values["log"], "edit"
+    )
+    assert (await graph.aget_state(edited)).values["log"] == [
+        *base.values["log"],
+        "edit",
+    ]
+
+    await _build(async_checkpointer, "third").ainvoke(_both("in-3"), branch.config)
+    _assert_branch_unchanged(
+        await graph.aget_state(config),
+        [*branch.values["log"], "in-3", "third-out"],
+        "edit",
+    )
+
+
+def test_bulk_update_on_an_old_checkpoint_leaves_its_other_branch_alone(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    config = _thread("t")
+    graph = _build(sync_checkpointer, "first")
+    graph.invoke(_both("in-1"), config)
+    base = graph.get_state(config)
+    _build(sync_checkpointer, "second").invoke(_both("in-2"), config)
+    branch = graph.get_state(config)
+
+    edited = graph.bulk_update_state(
+        _at(config, base),
+        [[StateUpdate(_both("s1"), "n")], [StateUpdate(_both("s2"), "n")]],
+    )
+
+    _assert_branch_unchanged(graph.get_state(branch.config), branch.values["log"], "s1")
+    assert graph.get_state(edited).values["log"] == [*base.values["log"], "s1", "s2"]
+
+
+@pytest.mark.parametrize(
+    "edit", [_both("edit"), {"other": ["edit"]}], ids=["delta_and_plain", "plain_only"]
+)
+def test_clearing_an_old_checkpoint_does_not_pick_up_an_edit_of_it(
+    sync_checkpointer: BaseCheckpointSaver, edit: dict
+) -> None:
+    graph = (
+        StateGraph(_State)
+        .add_node("a", lambda state: _both("a"))
+        .add_node("b", lambda state: _both("b"))
+        .add_edge(START, "a")
+        .add_edge("a", "b")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = _thread("t")
+    graph.invoke(_both("in"), config, interrupt_before=["b"])
+    base = graph.get_state(config)
+    graph.update_state(config, _both("later"), as_node="a")
+    graph.update_state(base.config, edit, as_node="b")
+
+    cleared = graph.update_state(base.config, None, as_node=END)
+
+    values = graph.get_state(cleared).values
+    assert values["log"] == values["plain"] == ["in", "a"]
+    assert values["other"] == []
+
+
+def test_clearing_a_checkpoint_after_editing_it_keeps_the_edit_in_both_channels(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    def q(state: _State) -> dict:
+        interrupt("continue?")
+        return _both("q")
+
+    graph = (
+        StateGraph(_State)
+        .add_node("p", lambda state: _both("p"))
+        .add_node("q", q)
+        .add_edge(START, "p")
+        .add_edge(START, "q")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = _thread("t")
+    graph.invoke(_both("in"), config)
+    head = graph.get_state(config)
+    graph.update_state(head.config, _both("edit"), as_node="q")
+
+    cleared = graph.update_state(head.config, None, as_node=END)
+
+    state = graph.get_state(cleared)
+    assert state.values["log"] == state.values["plain"] == ["in", "p", "edit"]
+
+
+def test_update_state_with_the_head_checkpoint_id_stores_no_snapshot(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    config = _thread("t")
+    graph = _build(sync_checkpointer, "first")
+    graph.invoke(_both("in-1"), config)
+    for i in range(3):
+        graph.update_state(graph.get_state(config).config, _both(f"u{i}"))
+
+    assert not _snapshotted_checkpoints(sync_checkpointer, config)
+    assert graph.get_state(config).values["log"] == [
+        "in-1",
+        "first-out",
+        "u0",
+        "u1",
+        "u2",
+    ]
+
+
 def test_unaddressed_run_keeps_snapshot_cadence(
     sync_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
@@ -315,7 +480,7 @@ def test_fork_before_first_value_by_bulk_update(
 
 
 @pytest.mark.parametrize("first_as_node", [INPUT, END, "__copy__"])
-def test_fork_by_bulk_update_whose_first_superstep_skips_the_plan(
+def test_fork_by_bulk_update_whose_first_superstep_is_not_a_node(
     sync_checkpointer: BaseCheckpointSaver, first_as_node: str
 ) -> None:
     config = _thread("t")
@@ -378,6 +543,106 @@ def test_unaddressed_bulk_update_keeps_snapshot_cadence(
     )
 
     assert not _snapshotted_checkpoints(sync_checkpointer, config)
+
+
+def _build_two_steps(checkpointer: BaseCheckpointSaver, subgraph: bool) -> Any:
+    if subgraph:
+        inner = StateGraph(_State)
+        inner.add_node("b1", lambda state: _both("b1"))
+        inner.add_node("b2", lambda state: _both("b2"))
+        inner.add_edge(START, "b1")
+        inner.add_edge("b1", "b2")
+        second: Any = inner.compile()
+    else:
+        second = lambda state: _both("b")  # noqa: E731
+    builder = StateGraph(_State)
+    builder.add_node("a", lambda state: _both("a"))
+    builder.add_node("b", second)
+    builder.add_edge(START, "a")
+    builder.add_edge("a", "b")
+    return builder.compile(checkpointer=checkpointer)
+
+
+@pytest.mark.parametrize(
+    "replay_input", [None, Command(update=_both("cmd"))], ids=["none", "command"]
+)
+@pytest.mark.parametrize("subgraph", [False, True])
+def test_replay_from_an_edit_the_thread_moved_past_leaves_its_branch_alone(
+    sync_checkpointer: BaseCheckpointSaver,
+    durability: Durability,
+    subgraph: bool,
+    replay_input: Command | None,
+) -> None:
+    graph = _build_two_steps(sync_checkpointer, subgraph)
+    config = _thread("t")
+    graph.invoke(_both("in-1"), config, durability=durability)
+    edit = graph.update_state(config, _both("edit"), as_node="a")
+    graph.invoke(_both("in-2"), config, durability=durability)
+    branch = graph.get_state(config)
+
+    graph.invoke(replay_input, edit, durability=durability)
+
+    after = graph.get_state(branch.config).values
+    assert after["log"] == after["plain"] == branch.values["log"], (
+        f"a replay from the edit wrote into the branch that already grew from it: "
+        f"{after['log']}"
+    )
+    replay = graph.get_state(config).values
+    assert replay["log"] == replay["plain"]
+
+
+@pytest.mark.parametrize(
+    "replay_input", [None, Command(update=_both("cmd"))], ids=["none", "command"]
+)
+@pytest.mark.parametrize("subgraph", [False, True])
+async def test_areplay_from_an_edit_the_thread_moved_past_leaves_its_branch_alone(
+    async_checkpointer: BaseCheckpointSaver,
+    durability: Durability,
+    subgraph: bool,
+    replay_input: Command | None,
+) -> None:
+    graph = _build_two_steps(async_checkpointer, subgraph)
+    config = _thread("t")
+    await graph.ainvoke(_both("in-1"), config, durability=durability)
+    edit = await graph.aupdate_state(config, _both("edit"), as_node="a")
+    await graph.ainvoke(_both("in-2"), config, durability=durability)
+    branch = await graph.aget_state(config)
+
+    await graph.ainvoke(replay_input, edit, durability=durability)
+
+    after = (await graph.aget_state(branch.config)).values
+    assert after["log"] == after["plain"] == branch.values["log"], (
+        f"a replay from the edit wrote into the branch that already grew from it: "
+        f"{after['log']}"
+    )
+    replay = (await graph.aget_state(config)).values
+    assert replay["log"] == replay["plain"]
+
+
+@pytest.mark.parametrize(
+    "command",
+    [Command(update=_both("cmd")), Command(goto="a")],
+    ids=["update", "goto"],
+)
+def test_command_replay_of_an_old_checkpoint_stores_nothing_on_it(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability, command: Command
+) -> None:
+    graph = _build_two_steps(sync_checkpointer, subgraph=False)
+    config = _thread("t")
+    graph.invoke(_both("in"), config, interrupt_before=["b"], durability=durability)
+    old = graph.get_state(config)
+    graph.invoke(None, config, durability=durability)
+    branch = graph.get_state(config)
+
+    graph.invoke(command, old.config, durability=durability)
+
+    after = graph.get_state(branch.config).values
+    assert after["log"] == after["plain"] == branch.values["log"]
+    graph.invoke(None, old.config, durability=durability)
+    replay = graph.get_state(config).values
+    assert replay["log"] == replay["plain"] == ["in", "a", "b"], (
+        f"a later replay of the checkpoint repeated the earlier Command: {replay}"
+    )
 
 
 def _build_paused_before_b(checkpointer: BaseCheckpointSaver) -> Any:
@@ -475,20 +740,6 @@ def _build_deferred_after_interrupt(checkpointer: BaseCheckpointSaver) -> Any:
     return builder.compile(checkpointer=checkpointer, interrupt_after=["a"])
 
 
-@pytest.mark.parametrize(
-    "durability",
-    [
-        "sync",
-        "async",
-        pytest.param(
-            "exit",
-            marks=pytest.mark.xfail(
-                reason="exit durability stores a resumed run's loaded writes twice",
-                strict=True,
-            ),
-        ),
-    ],
-)
 def test_resume_on_an_interrupted_head_consumes_its_writes_without_a_snapshot(
     sync_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:

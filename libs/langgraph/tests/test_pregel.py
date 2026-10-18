@@ -5932,9 +5932,9 @@ def test_no_redundant_put_writes_for_cached_task(
     put_writes_task_ids: list[str] = []
     orig = PregelLoop.put_writes
 
-    def spy(self, task_id, writes):
+    def spy(self, task_id, writes, **kwargs):
         put_writes_task_ids.append(task_id)
-        return orig(self, task_id, writes)
+        return orig(self, task_id, writes, **kwargs)
 
     with patch.object(PregelLoop, "put_writes", spy):
         result = workflow.invoke(Command(resume="ans"), config=config)
@@ -7737,6 +7737,8 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
 def test_parallel_interrupts_double(sync_checkpointer: BaseCheckpointSaver) -> None:
     # --- CHILD GRAPH ---
 
+    answered: Counter[str] = Counter()
+
     class ChildState(BaseModel):
         prompt: str = Field(..., description="What is going to be asked to the user?")
         human_input: str | None = Field(None, description="What the human said")
@@ -7746,6 +7748,7 @@ def test_parallel_interrupts_double(sync_checkpointer: BaseCheckpointSaver) -> N
 
     def get_human_input(state: ChildState):
         human_input = interrupt(state.prompt)
+        answered["human"] += 1
 
         return dict(
             human_inputs=[human_input],  # update parent state
@@ -7753,6 +7756,7 @@ def test_parallel_interrupts_double(sync_checkpointer: BaseCheckpointSaver) -> N
 
     def get_dolphin_input(state: ChildState):
         human_input = interrupt(state.prompt)
+        answered["dolphin"] += 1
 
         return dict(
             human_inputs=[human_input],  # update parent state
@@ -7846,6 +7850,7 @@ def test_parallel_interrupts_double(sync_checkpointer: BaseCheckpointSaver) -> N
 
     assert invokes == 5
     assert len(events) == 5
+    assert answered == {"human": 2, "dolphin": 2}
 
 
 def test_pregel_loop_refcount():

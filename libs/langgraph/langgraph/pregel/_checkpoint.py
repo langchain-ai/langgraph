@@ -1,24 +1,39 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime, timezone
-from typing import Any, cast
+from inspect import signature
+from typing import Any, Literal
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
+    CheckpointTuple,
+    DeltaChannelHistory,
     PendingWrite,
 )
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 
-from langgraph._internal._config import DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT
-from langgraph._internal._constants import NS_END, NS_SEP, PUSH, SNAPSHOT_BUMPS
+from langgraph._internal._config import (
+    DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT,
+    patch_configurable,
+)
+from langgraph._internal._constants import (
+    CONF,
+    CONFIG_KEY_CHECKPOINT_ID,
+    NS_END,
+    NS_SEP,
+    NULL_TASK_ID,
+    PUSH,
+    SNAPSHOT_BUMPS,
+)
 from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.binop import BinaryOperatorAggregate, _get_overwrite
 from langgraph.channels.delta import DeltaChannel
 from langgraph.managed.base import ManagedValueMapping, ManagedValueSpec
 
@@ -38,15 +53,38 @@ def empty_checkpoint() -> Checkpoint:
     )
 
 
+def put_writes_accepts_task_path(put_writes: Callable[..., Any]) -> bool:
+    """Whether a saver's `put_writes` or `aput_writes` takes `task_path`.
+
+    Savers written before the parameter existed don't, so it is passed only
+    when this is true.
+    """
+    return signature(put_writes).parameters.get("task_path") is not None
+
+
 def exit_delta_task_id(step: int, task_id: str) -> str:
     """Synthetic task id for exit-mode DeltaChannel writes.
 
     Embeds the superstep in the first UUID group so `ORDER BY task_id, idx`
     preserves chronological order while remaining a valid RFC UUID (required by
-    Postgres `checkpoint_writes.task_id uuid` columns).
+    Postgres `checkpoint_writes.task_id uuid` columns). Never `NULL_TASK_ID`:
+    readers apply writes under it as the anchor checkpoint's own pending writes.
     """
     parts = str(uuid.UUID(task_id)).split("-")
-    return f"{step:08d}-{parts[1]}-{parts[2]}-{parts[3]}-{parts[4]}"
+    synthetic = f"{step:08d}-{parts[1]}-{parts[2]}-{parts[3]}-{parts[4]}"
+    if synthetic == NULL_TASK_ID:
+        return f"{step:08d}-0000-0000-0000-000000000001"
+    return synthetic
+
+
+def exit_delta_late_task_id(step: int, task_id: str) -> str:
+    """Synthetic task id for exit-mode writes of a superstep after the anchor's own.
+
+    Sorts after every real task id, in step order, so replay keeps them after
+    the anchor's own superstep whether a saver orders by task path or task id.
+    """
+    parts = str(uuid.UUID(task_id)).split("-")
+    return f"ffffffff-{step >> 16:04x}-{step & 0xFFFF:04x}-{parts[3]}-{parts[4]}"
 
 
 def delta_channels_to_snapshot(
@@ -116,6 +154,52 @@ def delta_channels_with_pending_writes(
     }
 
 
+def delta_channels_overwritten(
+    specs: Mapping[str, Any], writes: Iterable[tuple[str, Any]]
+) -> set[str]:
+    """Return the names of the DeltaChannels that `writes` set with an `Overwrite`.
+
+    `update_state` saves a full snapshot of these channels in the checkpoint it
+    creates, like the loop does when a node returns an `Overwrite`. Otherwise,
+    reading the channel later starts from an older snapshot and replays the
+    writes the `Overwrite` threw away.
+    """
+    return {
+        ch
+        for ch, value in writes
+        if isinstance(specs.get(ch), DeltaChannel) and _get_overwrite(value)[0]
+    }
+
+
+def checkpoint_superseded(
+    saver: BaseCheckpointSaver, config: RunnableConfig, saved: CheckpointTuple
+) -> bool:
+    """Whether the thread has moved past `saved`, the checkpoint `config` addressed.
+
+    A checkpoint with a child is never the latest put, so this misses none. A
+    leaf of an abandoned branch counts as well; telling it apart would mean
+    listing the thread to look for children, which the saver can't do cheaply.
+    """
+    if not config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
+        return False
+    latest = saver.get_tuple(
+        patch_configurable(config, {CONFIG_KEY_CHECKPOINT_ID: None})
+    )
+    return latest is not None and latest.checkpoint["id"] != saved.checkpoint["id"]
+
+
+async def acheckpoint_superseded(
+    saver: BaseCheckpointSaver, config: RunnableConfig, saved: CheckpointTuple
+) -> bool:
+    """Async `checkpoint_superseded`."""
+    if not config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
+        return False
+    latest = await saver.aget_tuple(
+        patch_configurable(config, {CONFIG_KEY_CHECKPOINT_ID: None})
+    )
+    return latest is not None and latest.checkpoint["id"] != saved.checkpoint["id"]
+
+
 def create_metadata_for_update_state_api(
     channels: Mapping[str, BaseChannel],
     updated_channels: set[str],
@@ -145,6 +229,7 @@ def create_checkpoint_plan_for_update_state_api(
     channels: Mapping[str, BaseChannel],
     updated_channels: set[str],
     *,
+    source: Literal["update", "input"],
     step: int,
     parents: dict[str, Any],
     saved_metadata: Mapping[str, Any] | None,
@@ -154,7 +239,7 @@ def create_checkpoint_plan_for_update_state_api(
 ) -> tuple[set[str], dict[str, Any]]:
     """Return ``(channels_to_snapshot, metadata)`` for an update_state head."""
     metadata: dict[str, Any] = {
-        "source": "update",
+        "source": source,
         "step": step,
         "parents": parents,
     }
@@ -190,6 +275,7 @@ def create_checkpoint(
     get_next_version: GetNextVersion | None = None,
     channels_to_snapshot: set[str] | None = None,
     stored_versions: ChannelVersions | None = None,
+    trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
 ) -> Checkpoint:
     """Build a new Checkpoint from the previous one and live channel state.
 
@@ -248,7 +334,9 @@ def create_checkpoint(
         id=id or str(uuid6(clock_seq=step)),
         channel_values=values,
         channel_versions=channel_versions,
-        versions_seen=_mark_bumps_seen(checkpoint["versions_seen"], bumped),
+        versions_seen=_mark_bumps_seen(
+            checkpoint["versions_seen"], bumped, trigger_to_nodes or {}
+        ),
         updated_channels=None if updated_channels is None else sorted(updated_channels),
     )
 
@@ -256,19 +344,27 @@ def create_checkpoint(
 def _mark_bumps_seen(
     versions_seen: dict[str, ChannelVersions],
     bumped: Mapping[str, tuple[Any, Any]],
+    trigger_to_nodes: Mapping[str, Sequence[str]],
 ) -> dict[str, ChannelVersions]:
     """Advance whoever had seen a bumped channel's old version to the new one.
 
     A bump that only stores a snapshot is not a write. Left unseen, it would
-    re-fire `interrupt_before` and rerun the channel's subscribers. For each
-    entry it advances, `SNAPSHOT_BUMPS` keeps the new version and the one the
-    node really read, so `versions_seen_without_bumps` can put the read back.
+    re-fire `interrupt_before` and rerun the channel's subscribers. A channel
+    bumped from no version was never written, so it also goes to the
+    subscribers that never ran: they have no entry, and would start on the bump.
+    For each entry it advances, `SNAPSHOT_BUMPS` keeps the new version and the
+    one the node really read, so `versions_seen_without_bumps` can put the read
+    back.
     """
     if not bumped:
         return versions_seen
     out = dict(versions_seen)
+    for k, (old, _) in bumped.items():
+        if old is None:
+            for node in trigger_to_nodes.get(k, ()):
+                out.setdefault(node, {})
     marks = dict(versions_seen.get(SNAPSHOT_BUMPS, {}))
-    for node, seen in versions_seen.items():
+    for node, seen in out.items():
         if node == SNAPSHOT_BUMPS:
             continue
         for k, (old, new) in bumped.items():
@@ -311,29 +407,51 @@ def versions_seen_without_bumps(
     return out
 
 
-def _needs_replay(spec: BaseChannel, stored: object) -> bool:
-    """True if `spec` is a `DeltaChannel` and no value is stored at this
-    checkpoint, requiring an ancestor walk to reconstruct.
+def _delta_channels_to_replay(
+    specs: Mapping[str, BaseChannel], checkpoint: Checkpoint
+) -> list[str]:
+    """Channels whose value at `checkpoint` the ancestor walk rebuilds.
 
-    `_DeltaSnapshot` blobs and plain values (migration) resolve directly via
-    `from_checkpoint` — only absence (`MISSING`) triggers replay.
+    A `_DeltaSnapshot` blob or a plain value (migration) resolves directly via
+    `from_checkpoint`, so only a channel with nothing stored here needs the
+    walk. A channel with no version was never written, so it is empty without
+    one; a walk for it would find no snapshot to stop at and read every
+    ancestor, every time the thread is loaded.
+
+    A `BinaryOperatorAggregate` stores its value at every version, so one with
+    nothing stored was written as a `DeltaChannel` before its annotation
+    changed, and is rebuilt the same way.
     """
-    if not isinstance(spec, DeltaChannel):
-        return False
-    return stored is MISSING
+    return [
+        k
+        for k, spec in specs.items()
+        if isinstance(spec, (DeltaChannel, BinaryOperatorAggregate))
+        and k in checkpoint["channel_versions"]
+        and checkpoint["channel_values"].get(k, MISSING) is MISSING
+    ]
+
+
+def _replay(spec: BaseChannel, history: DeltaChannelHistory) -> BaseChannel:
+    ch = spec.from_checkpoint(history.get("seed", MISSING))
+    if isinstance(ch, DeltaChannel):
+        ch.replay_writes(history["writes"])
+    else:
+        # One update per write: the writes span many supersteps, and a single
+        # call would reject a second Overwrite and drop the writes after one.
+        for _, _, value in history["writes"]:
+            ch.update([value])
+    return ch
 
 
 def _require_saver_for_history(
-    checkpoint: Checkpoint,
     delta_channels: list[str],
     saver: BaseCheckpointSaver | None,
     config: RunnableConfig | None,
 ) -> None:
-    written = [k for k in delta_channels if k in checkpoint["channel_versions"]]
-    if written and (saver is None or config is None):
+    if delta_channels and (saver is None or config is None):
         raise ValueError(
-            f"DeltaChannel {written} has history to replay but no checkpointer "
-            "or config was passed to read it"
+            f"DeltaChannel {delta_channels} has history to replay but no "
+            "checkpointer or config was passed to read it"
         )
 
 
@@ -362,13 +480,9 @@ def channels_from_checkpoint(
         else:
             managed_specs[k] = v
 
-    delta_channels: list[str] = [
-        k
-        for k, spec in channel_specs.items()
-        if _needs_replay(spec, checkpoint["channel_values"].get(k, MISSING))
-    ]
-    _require_saver_for_history(checkpoint, delta_channels, saver, config)
-    histories: Mapping[str, Any] = {}
+    delta_channels = _delta_channels_to_replay(channel_specs, checkpoint)
+    _require_saver_for_history(delta_channels, saver, config)
+    histories: Mapping[str, DeltaChannelHistory] = {}
     if delta_channels and saver is not None and config is not None:
         histories = saver.get_delta_channel_history(
             config=config, channels=delta_channels
@@ -378,11 +492,7 @@ def channels_from_checkpoint(
     for k, spec in channel_specs.items():
         ch: BaseChannel
         if k in histories:
-            delta_spec = cast(DeltaChannel, spec)
-            history = histories[k]
-            replay_ch = delta_spec.from_checkpoint(history.get("seed", MISSING))
-            replay_ch.replay_writes(history["writes"])
-            ch = replay_ch
+            ch = _replay(spec, histories[k])
         else:
             ch = spec.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))
         channels[k] = ch
@@ -405,13 +515,9 @@ async def achannels_from_checkpoint(
         else:
             managed_specs[k] = v
 
-    delta_channels: list[str] = [
-        k
-        for k, spec in channel_specs.items()
-        if _needs_replay(spec, checkpoint["channel_values"].get(k, MISSING))
-    ]
-    _require_saver_for_history(checkpoint, delta_channels, saver, config)
-    histories: Mapping[str, Any] = {}
+    delta_channels = _delta_channels_to_replay(channel_specs, checkpoint)
+    _require_saver_for_history(delta_channels, saver, config)
+    histories: Mapping[str, DeltaChannelHistory] = {}
     if delta_channels and saver is not None and config is not None:
         histories = await saver.aget_delta_channel_history(
             config=config, channels=delta_channels
@@ -421,11 +527,7 @@ async def achannels_from_checkpoint(
     for k, spec in channel_specs.items():
         ch: BaseChannel
         if k in histories:
-            delta_spec = cast(DeltaChannel, spec)
-            history = histories[k]
-            replay_ch = delta_spec.from_checkpoint(history.get("seed", MISSING))
-            replay_ch.replay_writes(history["writes"])
-            ch = replay_ch
+            ch = _replay(spec, histories[k])
         else:
             ch = spec.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))
         channels[k] = ch
