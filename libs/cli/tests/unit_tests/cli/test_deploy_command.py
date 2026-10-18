@@ -344,6 +344,44 @@ def deploy_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DeployPro
     return DeployProject(control_plane, docker, timeline, uploads)
 
 
+@pytest.mark.parametrize("build_mode", ["--no-remote", "--remote"])
+@pytest.mark.parametrize(
+    ("detail", "expects_dev_hint"),
+    [
+        ("Scale to zero deployments are not supported in AWS environments", True),
+        ("No eligible cluster is currently available to host this deployment.", False),
+    ],
+)
+def test_create_failure_preserves_backend_error_and_only_hints_for_aws_rejection(
+    deploy_project: DeployProject, build_mode: str, detail: str, expects_dev_hint: bool
+) -> None:
+    deploy_project.control_plane.create_error = detail
+
+    result = deploy_project.run(build_mode)
+
+    assert result.exit_code == 1, result.output
+    assert detail in result.output
+    assert ("Use --deployment-type dev instead." in result.output) is expects_dev_hint
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "deployment_type": "dev_zero"
+    }
+    assert deploy_project.timeline == [LIST_DEPLOYMENTS, CREATE_DEPLOYMENT]
+
+
+@pytest.mark.parametrize("build_mode", ["--no-remote", "--remote"])
+def test_aws_serverless_creation_succeeds_when_backend_accepts_it(
+    deploy_project: DeployProject, build_mode: str
+) -> None:
+    result = deploy_project.run(
+        build_mode, host_url="https://aws.api.host.langchain.com"
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "deployment_type": "dev_zero"
+    }
+
+
 def test_first_local_deploy_creates_then_builds_pushes_and_updates_in_order(
     deploy_project: DeployProject,
 ) -> None:
@@ -386,15 +424,20 @@ def test_deployment_type_aliases(
     }
 
 
-def test_first_local_deploy_creates_an_internal_docker_deployment(
-    deploy_project: DeployProject,
+@pytest.mark.parametrize(
+    ("build_mode", "source"),
+    [("--no-remote", "internal_docker"), ("--remote", "internal_source")],
+)
+def test_first_deploy_defaults_to_serverless(
+    deploy_project: DeployProject, build_mode: str, source: str
 ) -> None:
-    deploy_project.run("--no-remote")
+    result = deploy_project.run(build_mode)
 
+    assert result.exit_code == 0, result.output
     assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT] == {
         "name": "my-app",
-        "source": "internal_docker",
-        "source_config": {"deployment_type": "dev"},
+        "source": source,
+        "source_config": {"deployment_type": "dev_zero"},
         "source_revision_config": {},
         "secrets": [],
     }

@@ -1560,6 +1560,14 @@ def _resolve_or_create(
             secrets=ctx.secrets,
         )
     except HostBackendError as err:
+        if err.status_code == 400 and err.detail == (
+            "Scale to zero deployments are not supported in AWS environments"
+        ):
+            raise HostBackendError(
+                f"{err.message}\nUse --deployment-type dev instead.",
+                status_code=err.status_code,
+                detail=err.detail,
+            ) from None
         if _needs_a_listener(err):
             raise ListenerRequiredError(
                 "The image has to come from a registry you manage, so re-run with "
@@ -2214,7 +2222,7 @@ def _deploy_base_options(
             click.option(
                 "--deployment-type",
                 type=click.Choice(["serverless", "dedicated", "dev", "prod"]),
-                default="dev",
+                default="serverless",
                 show_default=True,
                 help=(
                     "Deployment type (used when creating a new deployment): "
