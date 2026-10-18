@@ -2624,9 +2624,11 @@ class Pregel(
         graph continues from `START` on the updated state. Exactly-once
         relies on the engine's assumption that a thread has at most one run
         in flight, which LangGraph Platform enforces. A run that resumes an
-        interrupt does not consume the queue on entry, and an idle thread
-        consumes nothing until its next run completes a step. Pending updates
-        are visible as `StateSnapshot.queued`. Validation runs against the
+        interrupt does not consume the queue on entry: an update that steers
+        the interrupted node is not applied before that node re-runs, but at
+        the end of the run or the next time the node is about to run. An idle
+        thread consumes nothing until its next run completes a step. Pending
+        updates are visible as `StateSnapshot.queued`. Validation runs against the
         thread's current state when the update is accepted; if the state has
         changed by the time it is applied and a reducer then rejects it, the
         run fails with `QueueApplyError` naming the update, and the update is

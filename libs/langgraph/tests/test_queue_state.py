@@ -241,7 +241,7 @@ def test_resume_does_not_consume(sync_checkpointer: BaseCheckpointSaver) -> None
 
     # queued while paused at b's interrupt
     graph.queue_state(config, {"log": ["steer"]}, steer="c")
-    # invoke(None) with nothing to resume completes no step: nothing consumed
+    # visible while the thread is paused, taken by nothing yet
     assert len(graph.get_state(config).queued) == 1
 
     result = graph.invoke(Command(resume="yes"), config)
@@ -495,6 +495,109 @@ def test_subgraph_is_addressed_by_namespace(
     )
 
 
+@pytest.mark.parametrize("durability", ["sync", "async", "exit"])
+def test_queue_without_steer_waits_for_the_run_that_finishes(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    """A follow-up with no `steer` is taken only by the run that finishes:
+    not by the run that stops on `interrupt()`, not on entry by the resume,
+    and not by `invoke(None)` on the paused thread. Covers the channel case:
+    messages arrive while the agent waits for an approval, and must apply
+    after the approved run completes, as a new turn from `START`."""
+
+    def b(state: State) -> dict:
+        if "yes" in state["log"]:
+            return {"log": ["b"]}
+        answer = interrupt("go?")
+        time.sleep(0.05)
+        return {"log": ["b", answer]}
+
+    gate = Gate()
+    graph = chain(gate, "a", override={"b": b}).compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    # queued mid-run, before the run stops on b's interrupt
+    thread, result = run_in_thread(
+        graph.invoke, {"log": ["in"]}, config, durability=durability
+    )
+    assert gate.entered.wait(10)
+    first = graph.queue_state(config, {"log": ["late1"]})
+    gate.release.set()
+    thread.join(10)
+    assert "error" not in result, result.get("error")
+    assert result["value"]["__interrupt__"][0].value == "go?"
+    state = graph.get_state(config)
+    assert state.next == ("b",)
+    assert [q.id for q in state.queued] == [first]
+
+    # queued while idle on the interrupt: no run starts, the interrupt stays
+    history = len(list(graph.get_state_history(config)))
+    second = graph.queue_state(config, {"log": ["late2"]})
+    state = graph.get_state(config)
+    assert state.next == ("b",)
+    assert state.values["log"] == ["in", "a"]
+    assert [q.id for q in state.queued] == [first, second]
+    assert len(list(graph.get_state_history(config))) == history
+
+    # a poke with nothing to resume re-raises the interrupt and takes nothing
+    poked = graph.invoke(None, config, durability=durability)
+    assert poked["__interrupt__"][0].value == "go?"
+    assert [q.id for q in graph.get_state(config).queued] == [first, second]
+
+    # resume from a fresh process: the items are taken when the resumed run
+    # finishes, in accept order, and the graph continues from START on them
+    restarted = chain(override={"b": b}).compile(checkpointer=sync_checkpointer)
+    final = restarted.invoke(Command(resume="yes"), config, durability=durability)
+    assert final["log"] == [
+        "in",
+        "a",
+        "b",
+        "yes",
+        "c",
+        "d",
+        "late1",
+        "late2",
+        "a",
+        "b",
+        "c",
+        "d",
+    ]
+    state = restarted.get_state(config)
+    assert state.next == ()
+    assert state.queued == ()
+
+
+def test_queue_without_steer_waits_across_a_static_interrupt(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = chain().compile(checkpointer=sync_checkpointer, interrupt_before=["c"])
+    config = {"configurable": {"thread_id": "1"}}
+    graph.queue_state(config, {"log": ["late"]})
+    graph.invoke({"log": ["in"]}, config)
+    state = graph.get_state(config)
+    assert state.next == ("c",)
+    assert len(state.queued) == 1
+    # the resumed run finishes, takes the item, and the follow-up pass stops
+    # at the same breakpoint
+    result = graph.invoke(None, config)
+    assert result["log"] == ["in", "a", "b", "c", "d", "late", "a", "b"]
+    state = graph.get_state(config)
+    assert state.next == ("c",)
+    assert state.queued == ()
+    assert graph.invoke(None, config)["log"] == [
+        "in",
+        "a",
+        "b",
+        "c",
+        "d",
+        "late",
+        "a",
+        "b",
+        "c",
+        "d",
+    ]
+
+
 async def test_async_queue_mid_run(
     async_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
@@ -528,3 +631,65 @@ async def test_async_idle_then_follow_up(
     result = await graph.ainvoke({"log": ["in"]}, config)
     assert result["log"] == ["in", "a", "b", "c", "d", "follow", "a", "b", "c", "d"]
     assert (await graph.aget_state(config)).queued == ()
+
+
+@pytest.mark.parametrize("durability", ["sync", "async", "exit"])
+async def test_async_queue_without_steer_waits_for_the_run_that_finishes(
+    async_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    """Async twin of `test_queue_without_steer_waits_for_the_run_that_finishes`."""
+
+    def b(state: State) -> dict:
+        if "yes" in state["log"]:
+            return {"log": ["b"]}
+        answer = interrupt("go?")
+        time.sleep(0.05)
+        return {"log": ["b", answer]}
+
+    gate = Gate()
+    graph = chain(gate, "a", override={"b": b}).compile(checkpointer=async_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    task = asyncio.create_task(
+        graph.ainvoke({"log": ["in"]}, config, durability=durability)
+    )
+    await asyncio.to_thread(gate.entered.wait, 10)
+    first = await graph.aqueue_state(config, {"log": ["late1"]})
+    gate.release.set()
+    result = await task
+    assert result["__interrupt__"][0].value == "go?"
+    state = await graph.aget_state(config)
+    assert state.next == ("b",)
+    assert [q.id for q in state.queued] == [first]
+
+    second = await graph.aqueue_state(config, {"log": ["late2"]})
+    state = await graph.aget_state(config)
+    assert state.next == ("b",)
+    assert state.values["log"] == ["in", "a"]
+    assert [q.id for q in state.queued] == [first, second]
+
+    poked = await graph.ainvoke(None, config, durability=durability)
+    assert poked["__interrupt__"][0].value == "go?"
+    assert [q.id for q in (await graph.aget_state(config)).queued] == [first, second]
+
+    restarted = chain(override={"b": b}).compile(checkpointer=async_checkpointer)
+    final = await restarted.ainvoke(
+        Command(resume="yes"), config, durability=durability
+    )
+    assert final["log"] == [
+        "in",
+        "a",
+        "b",
+        "yes",
+        "c",
+        "d",
+        "late1",
+        "late2",
+        "a",
+        "b",
+        "c",
+        "d",
+    ]
+    state = await restarted.aget_state(config)
+    assert state.next == ()
+    assert state.queued == ()
