@@ -3,7 +3,7 @@ from collections.abc import Callable, Sequence
 from typing import Any, Generic
 
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
-from typing_extensions import NotRequired, Required, Self
+from typing_extensions import NotRequired, ReadOnly, Required, Self
 
 from langgraph._internal._constants import OVERWRITE
 from langgraph._internal._typing import MISSING
@@ -21,9 +21,9 @@ __all__ = ("BinaryOperatorAggregate",)
 
 # Adapted from typing_extensions
 def _strip_extras(t):  # type: ignore[no-untyped-def]
-    """Strips Annotated, Required and NotRequired from a given type."""
+    """Strips Annotated, Required, NotRequired and ReadOnly from a given type."""
     if hasattr(t, "__origin__"):
-        if t.__origin__ in (Required, NotRequired):
+        if t.__origin__ in (Required, NotRequired, ReadOnly):
             return _strip_extras(t.__args__[0])
         return _strip_extras(t.__origin__)
     return t

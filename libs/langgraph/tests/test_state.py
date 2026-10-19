@@ -8,7 +8,7 @@ from typing import Annotated as Annotated2
 import pytest
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
-from typing_extensions import NotRequired, Required, TypedDict
+from typing_extensions import NotRequired, ReadOnly, Required, TypedDict
 
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
@@ -371,3 +371,55 @@ def test_is_field_channel() -> None:
     # No channel cases
     assert _is_field_channel(int) is None
     assert _is_field_channel(Annotated[int, "just_metadata"]) is None
+
+
+def test_state_readonly_reducer_qualifiers() -> None:
+    """Reducers wrapped in ReadOnly/Required/NotRequired qualifiers are discovered.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/9311:
+    `StateGraph` previously ignored the reducer in
+    `ReadOnly[Annotated[list[str], operator.add]]`, silently dropping values in
+    sequential graphs and raising `InvalidUpdateError` in parallel graphs.
+    """
+
+    class ReadOnlyOuter(TypedDict):
+        findings: ReadOnly[Annotated[list[str], operator.add]]
+
+    class ReadOnlyInner(TypedDict):
+        findings: Annotated[ReadOnly[list[str]], operator.add]
+
+    class ReadOnlyStacked(TypedDict):
+        findings: ReadOnly[NotRequired[Annotated[list[str], operator.add]]]
+
+    # reducer is recognized through stacked qualifier wrappers
+    for schema in (ReadOnlyOuter, ReadOnlyStacked):
+        builder = StateGraph(schema)
+        builder.add_node("a", lambda state: {"findings": ["a"]})
+        builder.add_node("b", lambda state: {"findings": ["b"]})
+        builder.add_edge("__start__", "a")
+        builder.add_edge("a", "b")
+        builder.add_edge("b", "__end__")
+        graph = builder.compile()
+        assert isinstance(graph.channels["findings"], BinaryOperatorAggregate)
+        assert graph.invoke({"findings": ["seed"]}) == {"findings": ["seed", "a", "b"]}
+
+    # parallel graph no longer raises InvalidUpdateError
+    builder = StateGraph(ReadOnlyOuter)
+    builder.add_node("a", lambda state: {"findings": ["a"]})
+    builder.add_node("b", lambda state: {"findings": ["b"]})
+    builder.add_edge("__start__", "a")
+    builder.add_edge("__start__", "b")
+    builder.add_edge("a", "__end__")
+    builder.add_edge("b", "__end__")
+    assert builder.compile().invoke({"findings": ["seed"]}) == {
+        "findings": ["seed", "a", "b"]
+    }
+
+    # ReadOnly inside Annotated: reducer still initializes its empty value
+    builder = StateGraph(ReadOnlyInner)
+    builder.add_node("a", lambda state: {"findings": ["a"]})
+    builder.add_edge("__start__", "a")
+    builder.add_edge("a", "__end__")
+    graph = builder.compile()
+    assert isinstance(graph.channels["findings"], BinaryOperatorAggregate)
+    assert graph.invoke({}) == {"findings": ["a"]}

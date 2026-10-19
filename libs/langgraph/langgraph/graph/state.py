@@ -30,7 +30,14 @@ from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.store.base import BaseStore
 from pydantic import BaseModel, TypeAdapter
-from typing_extensions import NotRequired, Required, Self, Unpack, is_typeddict
+from typing_extensions import (
+    NotRequired,
+    ReadOnly,
+    Required,
+    Self,
+    Unpack,
+    is_typeddict,
+)
 
 from langgraph._internal import _serde
 from langgraph._internal._constants import (
@@ -1850,10 +1857,12 @@ def _get_channel(
 def _get_channel(
     name: str, annotation: Any, *, allow_managed: bool = True
 ) -> BaseChannel | ManagedValueSpec:
-    # Strip out Required and NotRequired wrappers
-    if hasattr(annotation, "__origin__") and annotation.__origin__ in (
+    # Strip out stacked Required/NotRequired/ReadOnly wrappers
+    # (e.g. ReadOnly[NotRequired[Annotated[list[str], operator.add]]])
+    while hasattr(annotation, "__origin__") and annotation.__origin__ in (
         Required,
         NotRequired,
+        ReadOnly,
     ):
         annotation = annotation.__args__[0]
     if manager := _is_field_managed_value(name, annotation):
@@ -1881,11 +1890,12 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
             if isinstance(item, BaseChannel):
                 if isinstance(item, DeltaChannel) and hasattr(typ, "__origin__"):
                     origin = typ.__origin__
-                    # Unwrap parameterized Required[X]/NotRequired[X] to X
+                    # Unwrap parameterized Required[X]/NotRequired[X]/ReadOnly[X] to X
                     # (e.g. Annotated[NotRequired[dict[...]], ...]).
-                    if hasattr(origin, "__origin__") and origin.__origin__ in (
+                    while hasattr(origin, "__origin__") and origin.__origin__ in (
                         Required,
                         NotRequired,
+                        ReadOnly,
                     ):
                         origin = origin.__args__[0]
                     item = item.__class__(
