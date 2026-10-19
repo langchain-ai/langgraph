@@ -3,6 +3,13 @@
 Set ``LANGGRAPH_STRICT_MSGPACK=true`` to restrict checkpoint deserialization
 to the types listed in ``SAFE_MSGPACK_TYPES``.  Without this, any Python
 callable stored in checkpoint data will be imported and executed on load.
+
+Control-flow types (``MSGPACK_CONTROL_TYPES``: ``Send``, ``Command``,
+``Overwrite``) are exempt from the unconditional safe-set bypass: reviving one
+of them steers graph execution (a ``Send`` schedules a node run with the
+deserialized argument), so in strict mode they are only reconstructed when the
+operator explicitly opted in through ``allowed_msgpack_modules`` (or the
+allowlist a graph derives at compile time from its own nodes and routers).
 """
 
 import os
@@ -81,6 +88,21 @@ SAFE_MSGPACK_TYPES: frozenset[tuple[str, ...]] = frozenset(
         ("langgraph.types", "Overwrite"),
         ("langgraph.store.base", "Item"),
         ("langgraph.store.base", "GetOp"),
+    }
+)
+
+# Control-flow types: reconstructing one of these from checkpoint data is a
+# control-flow decision, not just data revival. A forged Send("node", arg)
+# pending write schedules `node` with the attacker-chosen argument, so
+# SAFE_MSGPACK_TYPES membership alone must not admit them in strict mode.
+# They deserialize only when explicitly present in the configured allowlist
+# (operator-supplied allowed_msgpack_modules, or the compile-time derived
+# allowlist for graphs whose own nodes/routers emit them).
+MSGPACK_CONTROL_TYPES: frozenset[tuple[str, ...]] = frozenset(
+    {
+        ("langgraph.types", "Send"),
+        ("langgraph.types", "Command"),
+        ("langgraph.types", "Overwrite"),
     }
 )
 

@@ -700,7 +700,9 @@ def test_coerce_timeout_policy_returns_same_instance_for_already_coerced():
 
 
 def test_send_timeout_round_trips_through_msgpack_serde():
-    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    # Send is a control type: strict mode requires an explicit allowlist
+    # entry to reconstruct it (safe-set membership no longer suffices).
+    serde = JsonPlusSerializer(allowed_msgpack_modules=[("langgraph.types", "Send")])
     packet = Send(
         "worker",
         {"x": 1},
@@ -711,7 +713,7 @@ def test_send_timeout_round_trips_through_msgpack_serde():
 
 
 def test_send_without_timeout_round_trips_through_msgpack_serde():
-    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    serde = JsonPlusSerializer(allowed_msgpack_modules=[("langgraph.types", "Send")])
     packet = Send("worker", {"x": 1})
 
     assert serde.loads_typed(serde.dumps_typed(packet)) == packet

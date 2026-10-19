@@ -1248,6 +1248,12 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             serde_allowlist = _serde.build_serde_allowlist(
                 schemas=schema_types,
                 channels=self.channels,
+                control_type_sources=[spec.runnable for spec in self.nodes.values()]
+                + [
+                    branch.path
+                    for branch_specs in self.branches.values()
+                    for branch in branch_specs.values()
+                ],
             )
             checkpointer = _serde.apply_checkpointer_allowlist(
                 checkpointer, serde_allowlist

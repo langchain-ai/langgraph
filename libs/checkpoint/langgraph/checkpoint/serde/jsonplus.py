@@ -114,6 +114,12 @@ class JsonPlusSerializer(SerializerProtocol):
         Set the environment variable ``LANGGRAPH_STRICT_MSGPACK=true`` to restrict
         deserialization to a built-in allowlist of safe types.  You can also pass
         an explicit ``allowed_msgpack_modules`` to the constructor.
+
+        Control-flow types (``langgraph.types.Send`` / ``Command`` /
+        ``Overwrite``) are never admitted by the built-in safe set alone: in
+        strict mode they deserialize only when explicitly listed in
+        ``allowed_msgpack_modules`` or in the allowlist a graph derives at
+        compile time from its own nodes and routers.
     """
 
     def __init__(
@@ -581,6 +587,56 @@ def _create_msgpack_ext_hook(
     def _check_allowed(module: str, name: str) -> bool:
         """Check if type is allowed. Returns True if allowed, False if blocked."""
         key = (module, name)
+
+        if key in _lg_msgpack.MSGPACK_CONTROL_TYPES:
+            # Control-flow types (Send/Command/Overwrite) steer graph
+            # execution when revived: a Send schedules a node run with the
+            # deserialized argument. Safe-set membership alone therefore does
+            # not admit them; they require an explicit entry in the configured
+            # allowlist, or the permissive allow-everything mode below (which
+            # keeps its existing warn-once treatment).
+            if allowed_modules is True:
+                emit_serde_event(
+                    {
+                        "kind": "msgpack_unregistered_allowed",
+                        "module": module,
+                        "name": name,
+                    }
+                )
+                _warn_once(
+                    _warned_unregistered_types,
+                    key,
+                    "Deserializing control type %s.%s from checkpoint. "
+                    "Control types (Send/Command/Overwrite) require an explicit "
+                    "allowlist entry in strict mode. "
+                    "Add to allowed_msgpack_modules to allow explicitly: [(%r, %r)]",
+                    module,
+                    name,
+                    module,
+                    name,
+                )
+                return True
+            if allowed_modules is not None and key in allowed_modules:
+                return True
+            emit_serde_event(
+                {
+                    "kind": "msgpack_blocked",
+                    "module": module,
+                    "name": name,
+                }
+            )
+            _warn_once(
+                _warned_blocked_types,
+                key,
+                "Blocked deserialization of control type %s.%s - not in "
+                "allowed_msgpack_modules. Add to allowed_msgpack_modules to "
+                "allow: [(%r, %r)]",
+                module,
+                name,
+                module,
+                name,
+            )
+            return False
 
         if key in _lg_msgpack.SAFE_MSGPACK_TYPES:
             return True

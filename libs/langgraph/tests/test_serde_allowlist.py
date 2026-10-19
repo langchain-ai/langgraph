@@ -11,8 +11,10 @@ from typing_extensions import NotRequired, Required, TypedDict
 
 from langgraph._internal._serde import (
     collect_allowlist_from_schemas,
+    collect_control_types_from_callables,
     curated_core_allowlist,
 )
+from langgraph.types import Send
 
 
 class Color(Enum):
@@ -75,6 +77,11 @@ class DummyChannel:
     @property
     def UpdateType(self) -> type[InnerModel]:
         return InnerModel
+
+
+class FanOutState(TypedDict):
+    xs: list[str]
+    out: list[str]
 
 
 def test_curated_core_allowlist_includes_messages() -> None:
@@ -157,3 +164,94 @@ def test_collect_allowlist_typing_union_optional() -> None:
     allowlist = collect_allowlist_from_schemas(schemas=[typing_optional, typing_union])
     assert (InnerDataclass.__module__, InnerDataclass.__name__) in allowlist
     assert (InnerModel.__module__, InnerModel.__name__) in allowlist
+
+
+# --- control-type detection for the compile-time derived allowlist ---
+
+
+def test_control_types_detected_from_router() -> None:
+    from langgraph.types import (  # noqa: PLC0415
+        Command,
+        Send,
+    )
+
+    def fan_out(state: Any) -> list[Send]:
+        return [Send("work", {"k": v}) for v in state["xs"]]
+
+    assert collect_control_types_from_callables([fan_out]) == {
+        ("langgraph.types", "Send")
+    }
+
+    def both(state: Any) -> list[Any]:
+        return [Send("2", Command(goto=Send("2", 3)))]
+
+    assert collect_control_types_from_callables([both]) == {
+        ("langgraph.types", "Send"),
+        ("langgraph.types", "Command"),
+    }
+
+
+def test_control_types_detected_from_module_attribute_access() -> None:
+    import langgraph.types as lt  # noqa: PLC0415
+
+    def fan_out(state: Any) -> list[Any]:
+        return [lt.Send("work", 1)]
+
+    assert collect_control_types_from_callables([fan_out]) == {
+        ("langgraph.types", "Send")
+    }
+
+
+def test_control_types_detected_from_alias_and_closure() -> None:
+    from langgraph.types import Send as FanOut  # noqa: PLC0415
+
+    def make_router():
+        def fan_out(state: Any) -> list[Any]:
+            return [FanOut("work", 1)]
+
+        return fan_out
+
+    assert collect_control_types_from_callables([make_router()]) == {
+        ("langgraph.types", "Send")
+    }
+
+
+def test_control_types_not_detected_from_plain_callables() -> None:
+    def plain(state: Any) -> dict:
+        return {"a": state["a"] + 1}
+
+    class CallableNode:
+        def __call__(self, state: Any) -> dict:
+            return {"a": 1}
+
+    assert collect_control_types_from_callables([plain, CallableNode()]) == set()
+    assert collect_control_types_from_callables(None) == set()
+
+
+def test_control_types_detected_through_compiled_graph() -> None:
+    from langgraph.graph import END, START, StateGraph  # noqa: PLC0415
+
+    def router(state: FanOutState) -> list[Send]:
+        return [Send("work", x) for x in state["xs"]]
+
+    def work(state: Any) -> dict:
+        return {"out": [state]}
+
+    builder = StateGraph(FanOutState)
+    builder.add_node("source", lambda state: {"xs": state["xs"]})
+    builder.add_node("work", work)
+    builder.add_edge(START, "source")
+    builder.add_conditional_edges("source", router)
+    builder.add_edge("work", END)
+    graph = builder.compile()
+
+    sources = [spec.runnable for spec in builder.nodes.values()] + [
+        branch.path
+        for branch_specs in builder.branches.values()
+        for branch in branch_specs.values()
+    ]
+    assert collect_control_types_from_callables(sources) == {
+        ("langgraph.types", "Send")
+    }
+    # the compiled graph object itself is a valid scan source (subgraph nodes)
+    assert ("langgraph.types", "Send") in collect_control_types_from_callables([graph])

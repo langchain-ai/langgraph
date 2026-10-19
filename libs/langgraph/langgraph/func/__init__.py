@@ -612,6 +612,7 @@ class entrypoint(Generic[ContextT]):
                 schemas=[input_type, output_type, save_type]
                 + ([self.context_schema] if self.context_schema is not None else []),
                 channels=graph.channels,
+                control_type_sources=[node.bound for node in graph.nodes.values()],
             )
             graph._serde_allowlist = serde_allowlist
             graph.checkpointer = _serde.apply_checkpointer_allowlist(
