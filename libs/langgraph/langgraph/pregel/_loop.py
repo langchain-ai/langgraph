@@ -333,6 +333,7 @@ class PregelLoop:
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
         has_graph_lifecycle_callbacks: bool = False,
+        input_commands_via_start: bool = False,
     ) -> None:
         self.stream = stream
         self.config = config
@@ -345,6 +346,7 @@ class PregelLoop:
         self.nodes = nodes
         self.specs = specs
         self.input_keys = input_keys
+        self.input_commands_via_start = input_commands_via_start
         self.output_keys = output_keys
         self.stream_keys = stream_keys
         self.interrupt_after = interrupt_after
@@ -1039,6 +1041,12 @@ class PregelLoop:
                 raise EmptyInputError("Received empty Command input")
             # save writes
             for tid, ws in writes.items():
+                if not is_resuming and self.input_commands_via_start:
+                    # StateGraph's START task applies fresh updates and routing.
+                    # Resume values still need to be handled by the runtime.
+                    ws = [(c, v) for c, v in ws if c == RESUME]
+                    if not ws:
+                        continue
                 if forks:
                     # These skip `put_writes`, which gives messages their ids.
                     ensure_message_ids(self.specs, ws)
@@ -1667,6 +1675,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
         has_graph_lifecycle_callbacks: bool = False,
+        input_commands_via_start: bool = False,
     ) -> None:
         super().__init__(
             input,
@@ -1689,6 +1698,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             cache_policy=cache_policy,
             durability=durability,
             has_graph_lifecycle_callbacks=has_graph_lifecycle_callbacks,
+            input_commands_via_start=input_commands_via_start,
         )
         self.stack = ExitStack()
         if checkpointer:
@@ -1923,6 +1933,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
         has_graph_lifecycle_callbacks: bool = False,
+        input_commands_via_start: bool = False,
     ) -> None:
         super().__init__(
             input,
@@ -1945,6 +1956,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             cache_policy=cache_policy,
             durability=durability,
             has_graph_lifecycle_callbacks=has_graph_lifecycle_callbacks,
+            input_commands_via_start=input_commands_via_start,
         )
         self.stack = AsyncExitStack()
         if checkpointer:

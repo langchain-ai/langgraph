@@ -765,6 +765,9 @@ class Pregel(
     trigger_to_nodes: Mapping[str, Sequence[str]]
     node_error_handler_map: Mapping[str, str]
 
+    # StateGraph has a START task that extracts fresh input Commands.
+    _input_commands_via_start: bool = False
+
     def __init__(
         self,
         *,
@@ -2998,6 +3001,7 @@ class Pregel(
                 specs=self.channels,
                 output_keys=output_keys,
                 input_keys=self.input_channels,
+                input_commands_via_start=self._input_commands_via_start,
                 stream_keys=self.stream_channels_asis,
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,
@@ -3450,6 +3454,7 @@ class Pregel(
                 specs=self.channels,
                 output_keys=output_keys,
                 input_keys=self.input_channels,
+                input_commands_via_start=self._input_commands_via_start,
                 stream_keys=self.stream_channels_asis,
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,

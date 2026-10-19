@@ -485,8 +485,9 @@ def test_command_update_on_an_input_checkpoint_matches_a_plain_channel(
     assert replayed["log"] == replayed["plain"]
 
 
-def test_exit_command_update_on_a_new_thread_matches_a_plain_channel(
+def test_command_update_on_a_new_thread_matches_a_plain_channel(
     sync_checkpointer: BaseCheckpointSaver,
+    durability: Durability,
 ) -> None:
     builder = StateGraph(_ResumeState)
     builder.add_node("node", lambda state: _both("node"))
@@ -494,7 +495,8 @@ def test_exit_command_update_on_a_new_thread_matches_a_plain_channel(
     graph = builder.compile(checkpointer=sync_checkpointer)
     config = {"configurable": {"thread_id": "t"}}
 
-    graph.invoke(Command(update=_both("cmd")), config, durability="exit")
+    result = graph.invoke(Command(update=_both("cmd")), config, durability=durability)
+    assert result["log"] == result["plain"] == ["cmd", "node"]
 
     history = list(graph.get_state_history(config))
     assert [s.values.get("log", []) for s in history] == [

@@ -1409,6 +1409,7 @@ class CompiledStateGraph(
     schema_to_mapper: dict[type[Any], Callable[[Any], Any] | None]
     _output_mapper: Callable[[Any], Any] | None
     _state_mapper: Callable[[Any], Any] | None
+    _input_commands_via_start = True
 
     def __init__(
         self,
@@ -1464,7 +1465,9 @@ class CompiledStateGraph(
                 if input.graph == Command.PARENT:
                     return None
                 return [
-                    (k, v) for k, v in input._update_as_tuples() if k in output_keys
+                    (k, v)
+                    for k, v in input._update_as_tuples()
+                    if k in self.builder.channels or k in self.builder.managed
                 ]
             elif (
                 isinstance(input, (list, tuple))
@@ -1477,7 +1480,9 @@ class CompiledStateGraph(
                         if i.graph == Command.PARENT:
                             continue
                         updates.extend(
-                            (k, v) for k, v in i._update_as_tuples() if k in output_keys
+                            (k, v)
+                            for k, v in i._update_as_tuples()
+                            if k in self.builder.channels or k in self.builder.managed
                         )
                     else:
                         updates.extend(_get_updates(i) or ())
