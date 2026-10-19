@@ -735,6 +735,31 @@ class StateSnapshot(NamedTuple):
     """
 
 
+def _make_hashable(value: Any) -> Any:
+    """Recursively convert containers to hashable tuples for `Send.__hash__`.
+
+    Two values that compare equal (`==`) convert to equal tuples, so the hash
+    stays consistent with `Send.__eq__` for the common container types. Values
+    that are unhashable for any other reason fall back to `repr(value)`.
+    """
+    if isinstance(value, dict):
+        return tuple(
+            sorted(
+                ((key, _make_hashable(item)) for key, item in value.items()),
+                key=repr,
+            )
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(_make_hashable(item) for item in value)
+    if isinstance(value, (set, frozenset)):
+        return tuple(sorted((_make_hashable(item) for item in value), key=repr))
+    try:
+        hash(value)
+    except TypeError:
+        return repr(value)
+    return value
+
+
 class Send:
     """A message or packet to send to a specific node in the graph.
 
@@ -810,7 +835,7 @@ class Send:
         self.timeout = TimeoutPolicy.coerce(timeout)
 
     def __hash__(self) -> int:
-        return hash((self.node, self.arg, self.timeout))
+        return hash((self.node, _make_hashable(self.arg), self.timeout))
 
     def __repr__(self) -> str:
         if self.timeout is None:
