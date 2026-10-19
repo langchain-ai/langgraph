@@ -23,7 +23,7 @@ import pandas as pd
 import pytest
 from langchain_core.documents.base import Document
 from langchain_core.messages import AIMessage, HumanMessage
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, Field, SecretStr
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import SecretStr as SecretStrV1
 
@@ -1291,3 +1291,49 @@ def test_msgpack_failed_reconstruction_returns_payload(
     )
 
     assert serde.loads_typed(("msgpack", payload)) == expected
+
+
+class _UserWithAlias(BaseModel):
+    user_id: int = Field(default=1, alias="userId")
+    name: str = "default"
+
+
+class _ContainerWithAliasedUsers(BaseModel):
+    users: list[_UserWithAlias]
+
+
+def test_msgpack_pydantic_v2_field_alias_roundtrip() -> None:
+    serde = JsonPlusSerializer(allowed_msgpack_modules=True)
+
+    # 1. Direct model with aliased field + default value
+    user = _UserWithAlias(userId=42, name="alice")
+    dumped = serde.dumps_typed(user)
+    loaded = serde.loads_typed(dumped)
+    assert isinstance(loaded, _UserWithAlias)
+    assert loaded.user_id == 42
+    assert loaded.name == "alice"
+
+    # 2. Nested model with aliased fields
+    container = _ContainerWithAliasedUsers(
+        users=[_UserWithAlias(userId=10), _UserWithAlias(userId=20)]
+    )
+    dumped_c = serde.dumps_typed(container)
+    loaded_c = serde.loads_typed(dumped_c)
+    assert isinstance(loaded_c, _ContainerWithAliasedUsers)
+    assert [u.user_id for u in loaded_c.users] == [10, 20]
+
+    # 3. Legacy checkpoint payload containing alias keys
+    legacy_payload = (
+        _UserWithAlias.__module__,
+        _UserWithAlias.__name__,
+        {"userId": 99, "name": "bob"},
+        "model_validate_json",
+    )
+    packed_legacy = ormsgpack.packb(
+        ormsgpack.Ext(5, _msgpack_enc(legacy_payload)),
+        option=ormsgpack.OPT_NON_STR_KEYS,
+    )
+    loaded_legacy = serde.loads_typed(("msgpack", packed_legacy))
+    assert isinstance(loaded_legacy, _UserWithAlias)
+    assert loaded_legacy.user_id == 99
+    assert loaded_legacy.name == "bob"

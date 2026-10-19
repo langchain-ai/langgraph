@@ -744,9 +744,15 @@ def _create_msgpack_ext_hook(
                 # module, name, kwargs, method
                 cls = getattr(importlib.import_module(tup[0]), tup[1])
                 try:
-                    return cls(**tup[2])
+                    try:
+                        return cls.model_validate(tup[2], by_name=True)
+                    except TypeError:
+                        return cls.model_validate(tup[2])
                 except Exception:
-                    return cls.model_construct(**tup[2])
+                    try:
+                        return cls(**tup[2])
+                    except Exception:
+                        return cls.model_construct(**tup[2])
             except Exception:
                 # for pydantic objects we can't find/reconstruct
                 # let's return the kwargs dict instead
