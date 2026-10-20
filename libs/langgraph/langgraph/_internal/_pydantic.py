@@ -192,8 +192,6 @@ def create_model(
 
     Args:
         model_name: The name of the model.
-        module_name: The name of the module where the model is defined.
-            This is used by Pydantic to resolve any forward references.
         field_definitions: The field definitions for the model.
         root: Type for a root model (RootModel)
 
