@@ -207,6 +207,78 @@ class TestMemorySaver:
         ]
         assert len(search_results_4) == 0
 
+    def test_put_standalone_checkpoint_persists_channel_values(self) -> None:
+        checkpointer = self.memory_saver
+
+        # 1. When calling checkpointer.put with empty new_versions ({}),
+        # no channel blobs are stored (copy-on-write behavior), so channel_values is empty.
+        write_config_1: RunnableConfig = {
+            "configurable": {"thread_id": "thread-empty", "checkpoint_ns": ""}
+        }
+        read_config_1: RunnableConfig = {"configurable": {"thread_id": "thread-empty"}}
+        checkpoint_1: Checkpoint = {
+            "v": 4,
+            "ts": "2024-07-31T20:14:19.804150+00:00",
+            "id": "1ef4f797-8335-6428-8001-8a1503f9b875",
+            "channel_values": {"my_key": "meow", "node": "node"},
+            "channel_versions": {
+                "__start__": 2,
+                "my_key": 3,
+                "start:node": 3,
+                "node": 3,
+            },
+            "versions_seen": {
+                "__input__": {},
+                "__start__": {"__start__": 1},
+                "node": {"start:node": 2},
+            },
+        }
+
+        checkpointer.put(write_config_1, checkpoint_1, {}, {})
+        loaded_empty = checkpointer.get(read_config_1)
+        assert loaded_empty is not None
+        assert loaded_empty["channel_values"] == {}
+
+        # 2. When calling checkpointer.put with populated new_versions (as in the corrected README),
+        # channel blobs are persisted into self.blobs and channel_values are successfully restored.
+        write_config_2: RunnableConfig = {
+            "configurable": {"thread_id": "thread-populated", "checkpoint_ns": ""}
+        }
+        read_config_2: RunnableConfig = {
+            "configurable": {"thread_id": "thread-populated"}
+        }
+        checkpoint_2: Checkpoint = {
+            "v": 4,
+            "ts": "2024-07-31T20:14:19.804150+00:00",
+            "id": "1ef4f797-8335-6428-8001-8a1503f9b876",
+            "channel_values": {"my_key": "meow", "node": "node"},
+            "channel_versions": {
+                "__start__": 2,
+                "my_key": 3,
+                "start:node": 3,
+                "node": 3,
+            },
+            "versions_seen": {
+                "__input__": {},
+                "__start__": {"__start__": 1},
+                "node": {"start:node": 2},
+            },
+        }
+
+        checkpointer.put(
+            write_config_2, checkpoint_2, {}, checkpoint_2["channel_versions"]
+        )
+        loaded = checkpointer.get(read_config_2)
+        assert loaded is not None
+        assert loaded["channel_values"] == {"my_key": "meow", "node": "node"}
+
+        listed = list(checkpointer.list(read_config_2))
+        assert len(listed) == 1
+        assert listed[0].checkpoint["channel_values"] == {
+            "my_key": "meow",
+            "node": "node",
+        }
+
 
 async def test_memory_saver() -> None:
     memory_saver = InMemorySaver()

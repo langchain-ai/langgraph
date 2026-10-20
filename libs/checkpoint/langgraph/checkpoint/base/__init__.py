@@ -311,7 +311,10 @@ class BaseCheckpointSaver(Generic[V]):
             config: Configuration for the checkpoint.
             checkpoint: The checkpoint to store.
             metadata: Additional metadata for the checkpoint.
-            new_versions: New channel versions as of this write.
+            new_versions: New channel versions as of this write. For initial or
+                standalone checkpoint writes, pass all active channel versions
+                (e.g. `checkpoint['channel_versions']`) so channel values are
+                persisted.
 
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
@@ -503,7 +506,10 @@ class BaseCheckpointSaver(Generic[V]):
             config: Configuration for the checkpoint.
             checkpoint: The checkpoint to store.
             metadata: Additional metadata for the checkpoint.
-            new_versions: New channel versions as of this write.
+            new_versions: New channel versions as of this write. For initial or
+                standalone checkpoint writes, pass all active channel versions
+                (e.g. `checkpoint['channel_versions']`) so channel values are
+                persisted.
 
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.

@@ -94,7 +94,7 @@ checkpoint = {
 }
 
 # store checkpoint
-checkpointer.put(write_config, checkpoint, {}, {})
+checkpointer.put(write_config, checkpoint, {}, checkpoint["channel_versions"])
 
 # load checkpoint
 checkpointer.get(read_config)
