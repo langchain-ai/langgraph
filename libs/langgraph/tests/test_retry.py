@@ -52,6 +52,7 @@ from langgraph.pregel._read import PregelNode
 from langgraph.pregel._retry import (
     _checkpoint_ns_for_parent_command,
     _ensure_execution_info,
+    _ns_without_task_ids,
     _should_retry_on,
     _TimedAttemptScope,
     arun_with_retry,
@@ -169,6 +170,17 @@ def test_checkpoint_ns_for_parent_command() -> None:
     assert (
         _checkpoint_ns_for_parent_command("parent:1|1|child:1|1|node:1")
         == "parent:1|1|child:1"
+    )
+
+
+def test_ns_without_task_ids_keeps_numeric_segments() -> None:
+    assert _ns_without_task_ids("") == ""
+    assert _ns_without_task_ids("node") == "node"
+    assert _ns_without_task_ids("node:1") == "node"
+    assert _ns_without_task_ids("node:1|child:2") == "node|child"
+    assert _ns_without_task_ids("middle:1|1|inner:2") == "middle|1|inner"
+    assert (
+        _ns_without_task_ids("parent:1|1|child:1|1|node:1") == "parent|1|child|1|node"
     )
 
 

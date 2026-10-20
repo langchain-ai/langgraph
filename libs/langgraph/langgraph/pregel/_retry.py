@@ -33,6 +33,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
     CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
+    NS_END,
     NS_SEP,
 )
 from langgraph._internal._runnable import create_task_in_config_context
@@ -541,6 +542,17 @@ def _ensure_execution_info(
     )
 
 
+def _ns_without_task_ids(ns: str) -> str:
+    """Remove task ids from a checkpoint namespace, keeping numeric segments.
+
+    `recast_checkpoint_ns` drops the purely-numeric segments too, but a
+    `checkpointer=True` subgraph stores its history under the namespace with
+    them kept (see `Pregel._own_checkpoint_config`), and a `Command.PARENT`
+    raised inside it is addressed to that same form.
+    """
+    return NS_SEP.join(part.split(NS_END)[0] for part in ns.split(NS_SEP))
+
+
 def _checkpoint_ns_for_parent_command(ns: str) -> str:
     """Return the checkpoint namespace for the parent graph.
 
@@ -619,7 +631,12 @@ def run_with_retry(
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
             # strip task_ids from namespace for comparison (ns format: "node1|node2:task_id")
-            if cmd.graph in (ns, recast_checkpoint_ns(ns), task.name):
+            if cmd.graph in (
+                ns,
+                recast_checkpoint_ns(ns),
+                _ns_without_task_ids(ns),
+                task.name,
+            ):
                 # this command is for the current graph, handle it
                 for w in task.writers:
                     w.invoke(cmd, config)
@@ -747,7 +764,12 @@ async def arun_with_retry(
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
             # strip task_ids from namespace for comparison (ns format: "node1|node2:task_id")
-            if cmd.graph in (ns, recast_checkpoint_ns(ns), task.name):
+            if cmd.graph in (
+                ns,
+                recast_checkpoint_ns(ns),
+                _ns_without_task_ids(ns),
+                task.name,
+            ):
                 try:
                     # this command is for the current graph, handle it
                     for w in task.writers:
