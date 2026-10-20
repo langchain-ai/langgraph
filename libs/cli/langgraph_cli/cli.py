@@ -15,7 +15,11 @@ from langgraph_cli.analytics import log_command
 from langgraph_cli.config import Config
 from langgraph_cli.constants import DEFAULT_CONFIG, DEFAULT_PORT
 from langgraph_cli.deploy import deploy
-from langgraph_cli.docker import DockerCapabilities, build_docker_image
+from langgraph_cli.docker import (
+    DockerCapabilities,
+    build_docker_image,
+    get_config_to_docker_build_context,
+)
 from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.progress import Progress
 from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
@@ -546,6 +550,14 @@ tests
 )
 @OPT_API_VERSION
 @OPT_ENGINE_RUNTIME_MODE
+@click.option(
+    "--install-command",
+    help="Custom install command to run from the build context root. If not provided, auto-detects based on package manager files.",
+)
+@click.option(
+    "--build-command",
+    help="Custom build command to run from the langgraph.json directory. If not provided, uses default build process.",
+)
 @log_command
 def dockerfile(
     save_path: str,
@@ -554,8 +566,23 @@ def dockerfile(
     base_image: str | None = None,
     api_version: str | None = None,
     engine_runtime_mode: str = "combined_queue_worker",
+    install_command: str | None = None,
+    build_command: str | None = None,
 ) -> None:
     from click import secho
+
+    if install_command and langgraph_cli.config.has_disallowed_build_command_content(
+        install_command
+    ):
+        raise click.UsageError(
+            "install_command contains disallowed characters or patterns."
+        )
+    if build_command and langgraph_cli.config.has_disallowed_build_command_content(
+        build_command
+    ):
+        raise click.UsageError(
+            "build_command contains disallowed characters or patterns."
+        )
 
     save_path = pathlib.Path(save_path).absolute()
     secho(f"🔍 Validating configuration at path: {config}", fg="yellow")
@@ -569,12 +596,21 @@ def dockerfile(
             config_json, engine_runtime_mode=engine_runtime_mode
         )
 
+    build_context = get_config_to_docker_build_context(
+        config_json,
+        install_command=install_command,
+        build_command=build_command,
+    )
+
     secho(f"📝 Generating Dockerfile at {save_path}", fg="yellow")
     dockerfile_content, additional_contexts = langgraph_cli.config.config_to_docker(
         config_path=config,
         config=config_json,
         base_image=effective_base_image,
         api_version=api_version,
+        install_command=install_command,
+        build_command=build_command,
+        build_context=build_context,
     )
     with open(str(save_path), "w", encoding="utf-8") as f:
         f.write(dockerfile_content)
