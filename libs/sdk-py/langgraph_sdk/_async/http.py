@@ -7,7 +7,6 @@ import logging
 import sys
 import warnings
 from collections.abc import AsyncIterator, Callable, Mapping
-from contextlib import asynccontextmanager
 from typing import Any, cast
 
 import httpx
@@ -37,29 +36,6 @@ class HttpClient:
     def __init__(self, client: httpx.AsyncClient) -> None:
         self.client = client
 
-    async def _request(
-        self, method: str, path: str, *, stream: bool = False, **kwargs: Any
-    ) -> httpx.Response:
-        attempt = 0
-        while True:
-            request = self.client.build_request(method, path, **kwargs)
-            response = await self.client.send(request, stream=stream)
-            if response.status_code != 504 or attempt == 3:
-                return response
-            await response.aclose()
-            await asyncio.sleep(0.5 * 2**attempt)
-            attempt += 1
-
-    @asynccontextmanager
-    async def _stream(
-        self, method: str, path: str, **kwargs: Any
-    ) -> AsyncIterator[httpx.Response]:
-        response = await self._request(method, path, stream=True, **kwargs)
-        try:
-            yield response
-        finally:
-            await response.aclose()
-
     async def get(
         self,
         path: str,
@@ -69,7 +45,7 @@ class HttpClient:
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a `GET` request."""
-        r = await self._request("GET", path, params=params, headers=headers)
+        r = await self.client.get(path, params=params, headers=headers)
         if on_response:
             on_response(r)
         await _araise_for_status_typed(r)
@@ -92,8 +68,8 @@ class HttpClient:
         # Merge headers, with runtime headers taking precedence
         if headers:
             request_headers.update(headers)
-        r = await self._request(
-            "POST", path, headers=request_headers, content=content, params=params
+        r = await self.client.post(
+            path, headers=request_headers, content=content, params=params
         )
         if on_response:
             on_response(r)
@@ -113,8 +89,8 @@ class HttpClient:
         request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
-        r = await self._request(
-            "PUT", path, headers=request_headers, content=content, params=params
+        r = await self.client.put(
+            path, headers=request_headers, content=content, params=params
         )
         if on_response:
             on_response(r)
@@ -134,8 +110,8 @@ class HttpClient:
         request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
-        r = await self._request(
-            "PATCH", path, headers=request_headers, content=content, params=params
+        r = await self.client.patch(
+            path, headers=request_headers, content=content, params=params
         )
         if on_response:
             on_response(r)
@@ -152,7 +128,7 @@ class HttpClient:
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> None:
         """Send a `DELETE` request."""
-        r = await self._request(
+        r = await self.client.request(
             "DELETE", path, json=json, params=params, headers=headers
         )
         if on_response:
@@ -174,7 +150,7 @@ class HttpClient:
         request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
-        async with self._stream(
+        async with self.client.stream(
             method, path, headers=request_headers, content=content, params=params
         ) as r:
             if on_response:
@@ -249,7 +225,7 @@ class HttpClient:
             current_params = params if reconnect_path is None else None
 
             retry = False
-            async with self._stream(
+            async with self.client.stream(
                 current_method,
                 reconnect_path or path,
                 headers=current_headers,
