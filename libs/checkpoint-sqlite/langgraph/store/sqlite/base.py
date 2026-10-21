@@ -1048,6 +1048,11 @@ class SqliteStore(BaseSqliteStore, BaseStore):
         if not self.is_setup:
             self.setup()
         with self.lock:
+            # Required for store_vectors ON DELETE CASCADE. SQLite ignores
+            # foreign keys until this pragma is set, and it must be set
+            # outside a transaction.
+            self.conn.execute("PRAGMA foreign_keys=ON")
+            self.conn.execute("PRAGMA secure_delete=ON")
             if transaction:
                 self.conn.execute("BEGIN")
 

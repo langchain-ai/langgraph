@@ -624,6 +624,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         Returns:
             None
         """
+        await self.conn.execute("PRAGMA secure_delete=ON")
         async with self.lock, self.conn.cursor() as cur:
             await cur.execute(
                 "DELETE FROM checkpoints WHERE thread_id = ?",
@@ -634,6 +635,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                 (str(thread_id),),
             )
             await self.conn.commit()
+        await self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
     async def aget_delta_channel_history(
         self, *, config: RunnableConfig, channels: Sequence[str]

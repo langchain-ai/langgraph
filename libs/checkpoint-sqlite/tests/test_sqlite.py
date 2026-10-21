@@ -307,3 +307,53 @@ class TestSqliteSaver:
             # Nested digit-starting key via dotted path
             results = list(saver.list(None, filter={"user.123abc": "ok2"}))
             assert len(results) == 1
+
+    def test_delete_thread_removes_text_from_db_file(self, tmp_path) -> None:
+        secret = "forget-me-token-9362"
+        path = tmp_path / "checkpoints.sqlite"
+        metadata: CheckpointMetadata = {
+            "source": "input",
+            "step": 1,
+            "writes": {"note": secret},
+            "score": None,
+        }
+        with SqliteSaver.from_conn_string(str(path)) as saver:
+            saver.put(self.config_1, self.chkpnt_2, metadata, {})
+            saver.delete_thread("thread-1")
+        blob = path.read_bytes()
+        wal = path.with_name(path.name + "-wal")
+        if wal.exists():
+            blob += wal.read_bytes()
+        assert secret.encode() not in blob
+
+    def test_store_delete_cascades_vector_rows(self) -> None:
+        import sqlite3
+
+        from langgraph.store.sqlite import SqliteStore
+
+        conn = sqlite3.connect(":memory:")
+        store = SqliteStore(conn)
+        store.setup()
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS store_vectors (
+                prefix text NOT NULL,
+                key text NOT NULL,
+                field_name text NOT NULL,
+                embedding BLOB,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (prefix, key, field_name),
+                FOREIGN KEY (prefix, key) REFERENCES store(prefix, key) ON DELETE CASCADE
+            );
+            """
+        )
+        store.put(("ns",), "k", {"text": "secret"})
+        conn.execute(
+            "INSERT INTO store_vectors (prefix, key, field_name, embedding) VALUES (?, ?, ?, ?)",
+            ("ns", "k", "text", b"secret-embedding-bytes"),
+        )
+        conn.commit()
+        store.delete(("ns",), "k")
+        count = conn.execute("SELECT COUNT(*) FROM store_vectors").fetchone()
+        assert count is not None and count[0] == 0

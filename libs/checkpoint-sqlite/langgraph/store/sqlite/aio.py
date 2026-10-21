@@ -235,6 +235,9 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
         if not self.is_setup:
             await self.setup()
         async with self.lock:
+            # Required for store_vectors ON DELETE CASCADE.
+            await self.conn.execute("PRAGMA foreign_keys=ON")
+            await self.conn.execute("PRAGMA secure_delete=ON")
             if transaction:
                 await self.conn.execute("BEGIN")
 

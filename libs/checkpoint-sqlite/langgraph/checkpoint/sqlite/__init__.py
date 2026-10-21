@@ -504,6 +504,8 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         Returns:
             None
         """
+        # Overwrite freed pages, then drop the WAL copy of the deleted rows.
+        self.conn.execute("PRAGMA secure_delete=ON")
         with self.cursor() as cur:
             cur.execute(
                 "DELETE FROM checkpoints WHERE thread_id = ?",
@@ -513,6 +515,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 "DELETE FROM writes WHERE thread_id = ?",
                 (str(thread_id),),
             )
+        self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
     def get_delta_channel_history(
         self, *, config: RunnableConfig, channels: Sequence[str]
