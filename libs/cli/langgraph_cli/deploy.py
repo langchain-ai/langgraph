@@ -12,6 +12,7 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from functools import partial
 from typing import Protocol, TypeVar
 
 import click
@@ -2103,7 +2104,8 @@ OPT_AGENT_ID = click.option(
     help="Logical agent ID (requires agent mode enabled for the tenant).",
 )
 
-OPT_AGENT_ENVIRONMENT = click.option(
+OPT_AGENT_ENVIRONMENT = partial(
+    click.option,
     "--agent-environment",
     "environment",
     envvar="LANGSMITH_AGENT_ENVIRONMENT",
@@ -2211,7 +2213,9 @@ def _deploy_base_options(
             OPT_HOST_API_KEY,
             OPT_HOST_DEPLOYMENT_NAME,
             OPT_AGENT_ID,
-            OPT_AGENT_ENVIRONMENT,
+            OPT_AGENT_ENVIRONMENT()
+            if include_docker_args
+            else OPT_AGENT_ENVIRONMENT(type=str),
             click.option(
                 "--deployment-id",
                 help=(
@@ -2383,6 +2387,12 @@ def deploy(ctx: click.Context, **_: object):
     # otherwise, we return None here and click will proceed to actually run the subcommand (list or delete)
     if ctx.invoked_subcommand is not None:
         return
+    environment_param = next(
+        param for param in _deploy_cmd.params if param.name == "environment"
+    )
+    ctx.params["environment"] = environment_param.type_cast_value(
+        ctx, ctx.params["environment"]
+    )
     if (
         ctx.params.get("agent_id") is not None
         or ctx.params.get("environment") is not None
@@ -2588,7 +2598,7 @@ def _deploy_cmd(
 @OPT_HOST_API_KEY
 @OPT_HOST_URL
 @OPT_AGENT_ID
-@OPT_AGENT_ENVIRONMENT
+@OPT_AGENT_ENVIRONMENT()
 @click.option(
     "--name-contains",
     default="",
