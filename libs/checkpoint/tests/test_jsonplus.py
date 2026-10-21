@@ -595,6 +595,19 @@ def test_serde_jsonplus_bytearray() -> None:
     assert serde.loads_typed(dumped) == some_bytearray
 
 
+def test_serde_jsonplus_bytearray_mutation() -> None:
+    serde = JsonPlusSerializer()
+
+    buffer = bytearray(b"original")
+    dumped = serde.dumps_typed(buffer)
+
+    assert isinstance(dumped[1], bytes)
+    buffer[:] = b"mutated!"
+
+    restored = serde.loads_typed(dumped)
+    assert restored == bytearray(b"original")
+
+
 @pytest.mark.parametrize(
     "arr",
     [

@@ -720,3 +720,30 @@ class TestPreDeltaBlobTerminator:
         assert "PRE-DELTA-WRITE" in values
         # And the pending write at the target is never folded in.
         assert "PENDING-AT-TARGET" not in values
+
+
+def test_memory_saver_bytearray_mutation() -> None:
+    saver = InMemorySaver()
+    buffer = bytearray(b"original")
+    checkpoint = empty_checkpoint()
+    checkpoint["channel_values"] = {"buffer": buffer}
+    checkpoint["channel_versions"] = {"buffer": "1"}
+    config = {"configurable": {"thread_id": "repro", "checkpoint_ns": ""}}
+
+    saved = saver.put(config, checkpoint, {}, {"buffer": "1"})
+    buffer[:] = b"mutated!"
+    checkpoint_saved = saver.get(saved)
+    assert checkpoint_saved is not None
+    restored = checkpoint_saved["channel_values"]["buffer"]
+    assert restored == bytearray(b"original")
+
+    # Confirm that fresh retrieval does not expose unexpected changes
+    checkpoint_saved_2 = saver.get(saved)
+    assert checkpoint_saved_2 is not None
+    restored2 = checkpoint_saved_2["channel_values"]["buffer"]
+    assert restored2 == bytearray(b"original")
+
+    restored[:] = b"mutated_again!"
+    checkpoint_saved_3 = saver.get(saved)
+    assert checkpoint_saved_3 is not None
+    assert checkpoint_saved_3["channel_values"]["buffer"] == bytearray(b"original")

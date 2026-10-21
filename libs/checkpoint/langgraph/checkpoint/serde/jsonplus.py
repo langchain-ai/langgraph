@@ -283,7 +283,7 @@ class JsonPlusSerializer(SerializerProtocol):
         elif isinstance(obj, bytes):
             return "bytes", obj
         elif isinstance(obj, bytearray):
-            return "bytearray", obj
+            return "bytearray", bytes(obj)
         else:
             try:
                 return "msgpack", _msgpack_enc(obj)
