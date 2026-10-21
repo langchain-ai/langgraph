@@ -89,7 +89,11 @@ def build_serde_allowlist(
     schemas: list[type[Any]] | None = None,
     channels: dict[str, Any] | None = None,
 ) -> set[tuple[str, ...]]:
-    allowlist = curated_core_allowlist()
+    allowlist = curated_core_allowlist() | {
+        ("langgraph.types", "Send"),
+        ("langgraph.types", "Command"),
+        ("langgraph.types", "Overwrite"),
+    }
     if schemas:
         schemas = [schema for schema in schemas if schema is not None]
     return allowlist | collect_allowlist_from_schemas(

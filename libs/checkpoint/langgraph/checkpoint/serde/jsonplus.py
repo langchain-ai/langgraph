@@ -582,6 +582,32 @@ def _create_msgpack_ext_hook(
         """Check if type is allowed. Returns True if allowed, False if blocked."""
         key = (module, name)
 
+        if key in _lg_msgpack.MSGPACK_CONTROL_TYPES:
+            # Permissive mode still revives them. Strict mode and an explicit
+            # allowlist do not use the safe-set shortcut.
+            if allowed_modules is True or (
+                allowed_modules is not None and key in allowed_modules
+            ):
+                return True
+            emit_serde_event(
+                {
+                    "kind": "msgpack_blocked",
+                    "module": module,
+                    "name": name,
+                }
+            )
+            _warn_once(
+                _warned_blocked_types,
+                key,
+                "Blocked deserialization of %s.%s - not in allowed_msgpack_modules. "
+                "Add to allowed_msgpack_modules to allow: [(%r, %r)]",
+                module,
+                name,
+                module,
+                name,
+            )
+            return False
+
         if key in _lg_msgpack.SAFE_MSGPACK_TYPES:
             return True
 

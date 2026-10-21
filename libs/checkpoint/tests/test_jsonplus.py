@@ -1083,6 +1083,26 @@ def test_msgpack_regex_still_works_strict(caplog: pytest.LogCaptureFixture) -> N
     assert result.flags == pattern.flags
 
 
+def test_strict_msgpack_blocks_control_types_unless_allowlisted() -> None:
+    from langgraph.types import Send
+
+    payload = Send("node", {"x": 1})
+    blocked = JsonPlusSerializer(allowed_msgpack_modules=None)
+    loaded = blocked.loads_typed(blocked.dumps_typed(payload))
+    assert not isinstance(loaded, Send)
+
+    allowed = JsonPlusSerializer(
+        allowed_msgpack_modules=[("langgraph.types", "Send")]
+    )
+    revived = allowed.loads_typed(allowed.dumps_typed(payload))
+    assert isinstance(revived, Send)
+    assert revived.node == "node"
+
+    permissive = JsonPlusSerializer(allowed_msgpack_modules=True)
+    still = permissive.loads_typed(permissive.dumps_typed(payload))
+    assert isinstance(still, Send)
+
+
 def test_msgpack_path_constructor_still_works() -> None:
     serde = JsonPlusSerializer(allowed_msgpack_modules=None)
     path_obj = pathlib.Path("/tmp/foo")

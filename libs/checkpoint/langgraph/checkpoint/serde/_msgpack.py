@@ -84,6 +84,17 @@ SAFE_MSGPACK_TYPES: frozenset[tuple[str, ...]] = frozenset(
     }
 )
 
+# Reviving these schedules graph execution. Strict mode must not treat them as
+# unconditionally safe; they load only when the allowlist names them, or when
+# msgpack deserialization is permissive.
+MSGPACK_CONTROL_TYPES: frozenset[tuple[str, ...]] = frozenset(
+    {
+        ("langgraph.types", "Send"),
+        ("langgraph.types", "Command"),
+        ("langgraph.types", "Overwrite"),
+    }
+)
+
 # Allowed (module, name, method) triples for EXT_METHOD_SINGLE_ARG.
 # Only these specific method invocations are permitted during deserialization.
 # This is separate from SAFE_MSGPACK_TYPES which only governs construction.
