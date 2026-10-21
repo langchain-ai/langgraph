@@ -595,6 +595,22 @@ def test_serde_jsonplus_bytearray() -> None:
     assert serde.loads_typed(dumped) == some_bytearray
 
 
+def test_dumps_typed_snapshots_bytearray() -> None:
+    """A dumped bytearray must not change when the caller mutates the buffer.
+
+    Savers such as InMemorySaver keep the dumped payload as-is, so returning
+    the caller's mutable buffer would let later writes rewrite a checkpoint
+    that was already saved.
+    """
+    serde = JsonPlusSerializer()
+    buffer = bytearray(b"original")
+
+    dumped = serde.dumps_typed(buffer)
+    buffer[:] = b"mutated!"
+
+    assert serde.loads_typed(dumped) == bytearray(b"original")
+
+
 @pytest.mark.parametrize(
     "arr",
     [

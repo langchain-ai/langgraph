@@ -283,7 +283,10 @@ class JsonPlusSerializer(SerializerProtocol):
         elif isinstance(obj, bytes):
             return "bytes", obj
         elif isinstance(obj, bytearray):
-            return "bytearray", obj
+            # Snapshot the bytes: a saver may keep this payload in memory, and
+            # handing back the caller's mutable buffer would let later writes
+            # mutate an already-saved checkpoint.
+            return "bytearray", bytes(obj)
         else:
             try:
                 return "msgpack", _msgpack_enc(obj)
