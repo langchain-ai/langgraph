@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
 import warnings
 from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from typing import Any, cast
 
 import httpx
@@ -36,6 +38,29 @@ class SyncHttpClient:
     def __init__(self, client: httpx.Client) -> None:
         self.client = client
 
+    def _request(
+        self, method: str, path: str, *, stream: bool = False, **kwargs: Any
+    ) -> httpx.Response:
+        attempt = 0
+        while True:
+            request = self.client.build_request(method, path, **kwargs)
+            response = self.client.send(request, stream=stream)
+            if response.status_code != 504 or attempt == 3:
+                return response
+            response.close()
+            time.sleep(0.5 * 2**attempt)
+            attempt += 1
+
+    @contextmanager
+    def _stream(
+        self, method: str, path: str, **kwargs: Any
+    ) -> Iterator[httpx.Response]:
+        response = self._request(method, path, stream=True, **kwargs)
+        try:
+            yield response
+        finally:
+            response.close()
+
     def get(
         self,
         path: str,
@@ -45,7 +70,7 @@ class SyncHttpClient:
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a `GET` request."""
-        r = self.client.get(path, params=params, headers=headers)
+        r = self._request("GET", path, params=params, headers=headers)
         if on_response:
             on_response(r)
         _raise_for_status_typed(r)
@@ -67,8 +92,8 @@ class SyncHttpClient:
             request_headers, content = {}, b""
         if headers:
             request_headers.update(headers)
-        r = self.client.post(
-            path, headers=request_headers, content=content, params=params
+        r = self._request(
+            "POST", path, headers=request_headers, content=content, params=params
         )
         if on_response:
             on_response(r)
@@ -89,8 +114,8 @@ class SyncHttpClient:
         if headers:
             request_headers.update(headers)
 
-        r = self.client.put(
-            path, headers=request_headers, content=content, params=params
+        r = self._request(
+            "PUT", path, headers=request_headers, content=content, params=params
         )
         if on_response:
             on_response(r)
@@ -110,8 +135,8 @@ class SyncHttpClient:
         request_headers, content = _encode_json(json)
         if headers:
             request_headers.update(headers)
-        r = self.client.patch(
-            path, headers=request_headers, content=content, params=params
+        r = self._request(
+            "PATCH", path, headers=request_headers, content=content, params=params
         )
         if on_response:
             on_response(r)
@@ -128,9 +153,7 @@ class SyncHttpClient:
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> None:
         """Send a `DELETE` request."""
-        r = self.client.request(
-            "DELETE", path, json=json, params=params, headers=headers
-        )
+        r = self._request("DELETE", path, json=json, params=params, headers=headers)
         if on_response:
             on_response(r)
         _raise_for_status_typed(r)
@@ -150,7 +173,7 @@ class SyncHttpClient:
         request_headers, content = _encode_json(json)
         if headers:
             request_headers.update(headers)
-        with self.client.stream(
+        with self._stream(
             method, path, headers=request_headers, content=content, params=params
         ) as r:
             if on_response:
@@ -227,7 +250,7 @@ class SyncHttpClient:
             current_params = params if reconnect_path is None else None
 
             retry = False
-            with self.client.stream(
+            with self._stream(
                 current_method,
                 reconnect_path or path,
                 headers=current_headers,
