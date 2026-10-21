@@ -932,6 +932,17 @@ class PregelLoop:
         #   - Same run_id: re-entry into an ongoing run (e.g. stream reconnect)
         configurable = self.config.get(CONF, {})
         input_is_command = isinstance(self.input, Command)
+        # The parent copies its resume flag onto every subgraph. A subgraph that
+        # already finished has no pending interrupt; a later call in the same
+        # thread brings new input and must not replay the previous checkpoint.
+        if (
+            self.is_nested
+            and configurable.get(CONFIG_KEY_RESUMING)
+            and self.input is not None
+            and not input_is_command
+            and not self._pending_interrupts()
+        ):
+            configurable[CONFIG_KEY_RESUMING] = False
         is_resuming = bool(self.checkpoint["channel_versions"]) and bool(
             configurable.get(
                 CONFIG_KEY_RESUMING,
