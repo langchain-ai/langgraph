@@ -166,7 +166,12 @@ from langgraph.pregel._utils import (
 )
 from langgraph.pregel._validate import validate_graph, validate_keys
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
-from langgraph.pregel.debug import get_bolded_text, get_colored_text, tasks_w_writes
+from langgraph.pregel.debug import (
+    get_bolded_text,
+    get_colored_text,
+    snapshot_interrupts,
+    tasks_w_writes,
+)
 from langgraph.pregel.protocol import PregelProtocol, StreamChunk, StreamProtocol
 from langgraph.runtime import (
     DEFAULT_RUNTIME,
@@ -1332,7 +1337,9 @@ class Pregel(
             saved.checkpoint["ts"],
             patch_checkpoint_map(saved.parent_config, saved.metadata),
             tasks_with_writes,
-            tuple([i for task in tasks_with_writes for i in task.interrupts]),
+            snapshot_interrupts(
+                tasks_with_writes, saved.pending_writes, live=live
+            ),
         )
 
     async def _aprepare_state_snapshot(
@@ -1458,7 +1465,9 @@ class Pregel(
             saved.checkpoint["ts"],
             patch_checkpoint_map(saved.parent_config, saved.metadata),
             tasks_with_writes,
-            tuple([i for task in tasks_with_writes for i in task.interrupts]),
+            snapshot_interrupts(
+                tasks_with_writes, saved.pending_writes, live=live
+            ),
         )
 
     def get_state(

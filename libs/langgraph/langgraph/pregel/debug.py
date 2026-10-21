@@ -29,6 +29,7 @@ from langgraph.pregel._io import read_channels
 from langgraph.pregel._task_status import TaskStatus, read_task_statuses
 from langgraph.types import (
     CheckpointPayload,
+    Interrupt,
     PregelExecutableTask,
     PregelTask,
     StateSnapshot,
@@ -207,6 +208,27 @@ def map_debug_checkpoint(
             for t in tasks_w_writes(tasks, pending_writes, task_states, output_keys)
         ],
     }
+
+
+def snapshot_interrupts(
+    tasks: Iterable[PregelTask],
+    pending_writes: list[PendingWrite] | None,
+    *,
+    live: bool,
+) -> tuple[Interrupt, ...]:
+    """Interrupts to report on a state snapshot.
+
+    `tasks` only covers tasks `prepare_next_tasks` will run again. An interrupt
+    raised by a node error handler is stored on that handler's task id, which is
+    not one of those tasks, so it has to be read from the write log as well.
+    """
+    collected = [interrupt for task in tasks for interrupt in task.interrupts]
+    seen = {task.id for task in tasks}
+    for task_id, status in read_task_statuses(pending_writes or []).items():
+        if task_id in seen:
+            continue
+        collected.extend(status.pending_interrupts if live else status.interrupts)
+    return tuple(collected)
 
 
 def tasks_w_writes(
