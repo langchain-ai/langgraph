@@ -211,6 +211,7 @@ class PregelLoop:
     _migrate_checkpoint: Callable[[Checkpoint], None] | None
     submit: Submit
     channels: Mapping[str, BaseChannel]
+    _available_channels: set[str]
     # Futures from `checkpointer.put_writes` calls that produced delta-channel
     # writes. `_put_checkpoint` hands this list to the save it submits, which
     # waits for them first, so a checkpoint never becomes durable before the
@@ -764,6 +765,7 @@ class PregelLoop:
             self.tasks.values(),
             self.checkpointer_get_next_version,
             self.trigger_to_nodes,
+            available_channels=self._available_channels,
         )
         # produce values output
         if not self.updated_channels.isdisjoint(
@@ -1066,6 +1068,7 @@ class PregelLoop:
                 [PregelTaskWrites((), INPUT, null_writes, [])],
                 self.checkpointer_get_next_version,
                 self.trigger_to_nodes,
+                available_channels=self._available_channels,
             )
             if updated_channels is not None:
                 updated_channels.update(null_updated_channels)
@@ -1140,6 +1143,7 @@ class PregelLoop:
                 ],
                 self.checkpointer_get_next_version,
                 self.trigger_to_nodes,
+                available_channels=self._available_channels,
             )
             # Input writes go through `apply_writes` directly (above) — they
             # never enter `checkpoint_pending_writes`, so the after_tick
@@ -1526,6 +1530,7 @@ class PregelLoop:
                     self.tasks.values(),
                     self.checkpointer_get_next_version,
                     self.trigger_to_nodes,
+                    available_channels=self._available_channels,
                 )
                 if not updated_channels.isdisjoint(
                     (self.output_keys,)
@@ -1875,6 +1880,9 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             saver=self.checkpointer,
             config=self.checkpoint_config,
         )
+        self._available_channels: set[str] = {
+            k for k, v in self.channels.items() if v.is_available()
+        }
         self.stack.push(self._suppress_interrupt)
         self.status = "input"
         self.step = self.checkpoint_metadata["step"] + 1
@@ -2133,6 +2141,9 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             saver=self.checkpointer,
             config=self.checkpoint_config,
         )
+        self._available_channels: set[str] = {
+            k for k, v in self.channels.items() if v.is_available()
+        }
         self.stack.push(self._suppress_interrupt)
         self.status = "input"
         self.step = self.checkpoint_metadata["step"] + 1
