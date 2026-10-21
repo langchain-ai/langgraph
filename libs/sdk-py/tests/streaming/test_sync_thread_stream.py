@@ -10,10 +10,13 @@ import uuid
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
+from unittest.mock import MagicMock
 
 import httpx
 import orjson
 import pytest
+from websockets.exceptions import ConnectionClosedError
+from websockets.frames import Close
 
 import langgraph_sdk.stream.sync_controller as _ctrl_mod
 from langgraph_sdk._sync.http import SyncHttpClient
@@ -902,6 +905,55 @@ def test_sync_lifecycle_error_frame_becomes_the_run_error():
     )
 
 
+@pytest.mark.parametrize("terminal", [False, True])
+@pytest.mark.parametrize("raise_on_close", [False, True])
+def test_sync_lifecycle_terminal_error_prevents_1011_reconnect(
+    terminal, raise_on_close
+):
+    error = ConnectionClosedError(Close(1011, "internal error"), None)
+
+    def events(reopened=False):
+        if reopened:
+            yield lifecycle_completed_event(seq=2)
+            return
+        yield lifecycle_event(seq=1, phase="running")
+        if terminal:
+            yield thread_stream_failed_frame()
+        if raise_on_close:
+            raise error
+
+    first = SyncEventStreamHandle(
+        events=events(), error=lambda: error, close=lambda: None
+    )
+    reopened = SyncEventStreamHandle(
+        events=events(True),
+        error=lambda: None,
+        close=lambda: None,
+    )
+    with httpx.Client(base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(assistant_id="agent") as thread:
+            transport = MagicMock(spec=SyncProtocolSseTransport)
+            transport.open_event_stream.side_effect = [first, reopened]
+            thread._transport = transport
+
+            thread._run_lifecycle_watcher()
+
+            assert transport.open_event_stream.call_count == (1 if terminal else 2)
+            assert thread._run_done is not None
+            result = thread._run_done.result(timeout=2.0)
+            if terminal:
+                with pytest.raises(RuntimeError) as exc:
+                    _ = thread.output
+                assert exc.value is result.error
+                assert str(exc.value) == (
+                    "Protocol error [unknown_error]: Thread event stream failed."
+                )
+            else:
+                assert result.status == "completed"
+                assert result.error is None
+
+
 def test_sync_lifecycle_watcher_stops_on_a_404_without_retrying():
     fake = SyncFakeServer()
     fake.script_sequence([SyncStreamScript(events=[], status=404)])
@@ -986,23 +1038,20 @@ def test_sync_lifecycle_watcher_retries_a_404_that_arrives_after_run_start():
     assert len(fake.stream_request_bodies) == 2
 
 
-def test_sync_lifecycle_watcher_reports_the_error_frame_when_reconnects_run_out():
+def test_sync_lifecycle_watcher_reports_the_error_frame_without_reconnecting():
     fake = SyncFakeServer()
     with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
         threads = SyncThreadsClient(SyncHttpClient(raw))
         stream = threads.stream(thread_id="t-1", assistant_id="agent")
-        stream._lifecycle_max_reconnect_attempts = 1
         fake.script_sequence(
-            [
-                SyncStreamScript(events=[thread_stream_failed_frame()], fail_after=1)
-                for _ in range(stream._lifecycle_max_reconnect_attempts + 1)
-            ]
+            [SyncStreamScript(events=[thread_stream_failed_frame()], fail_after=1)]
         )
         with stream as thread:
             run_done = thread._run_done
             assert run_done is not None
             terminal = run_done.result(timeout=2.0)
 
+    assert len(fake.stream_request_bodies) == 1
     assert (
         str(terminal.error)
         == "Protocol error [unknown_error]: Thread event stream failed."

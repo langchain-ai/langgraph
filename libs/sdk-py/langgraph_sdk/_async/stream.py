@@ -1639,11 +1639,13 @@ class AsyncThreadStream:
             shared = self._shared_stream
             if shared is None:
                 return
+            terminal_error = False
             try:
                 async for event in self._dedup_iter(shared.events):
                     if self._closed:
                         break
                     if (frame_error := stream_error_frame(event)) is not None:
+                        terminal_error = True
                         logger.warning(
                             "Thread %s event stream failed: %s",
                             self.thread_id,
@@ -1674,6 +1676,7 @@ class AsyncThreadStream:
                 err = await shared.done
                 if (
                     err is not None
+                    and not terminal_error
                     and not isinstance(err, asyncio.CancelledError)
                     and not is_non_retryable_stream_error(err)
                     and not self._closed
@@ -1879,8 +1882,8 @@ class AsyncThreadStream:
         if self._transport is None:
             return
         reconnect_attempts = 0
-        frame_error: RuntimeError | None = None
         while not self._closed:
+            frame_error: RuntimeError | None = None
             # A stream opened before run.start can 404 for the thread that
             # run.start creates, so it gets one more try once a run has started.
             opened_before_run = not self._run_seen
@@ -1896,6 +1899,9 @@ class AsyncThreadStream:
                     frame_error = stream_error_frame(event) or frame_error
                     self._observe_lifecycle_event(event)
                     await self._apply_lifecycle_event(event)
+                if frame_error is not None:
+                    self._fail_run_done(frame_error)
+                    return
                 err = await handle.done
                 if err is None or isinstance(err, asyncio.CancelledError):
                     # Clean EOF: stream ended without a terminal lifecycle
@@ -1903,10 +1909,7 @@ class AsyncThreadStream:
                     # `thread.output` don't hang.
                     if err is None:
                         self._fail_run_done(
-                            frame_error
-                            or RuntimeError(
-                                "lifecycle stream ended before terminal event"
-                            )
+                            RuntimeError("lifecycle stream ended before terminal event")
                         )
                     return
                 reconnect_attempts += 1
@@ -1919,6 +1922,9 @@ class AsyncThreadStream:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
+                if frame_error is not None:
+                    self._fail_run_done(frame_error)
+                    return
                 if is_non_retryable_stream_error(exc):
                     if opened_before_run and self._run_seen:
                         continue
@@ -1929,9 +1935,7 @@ class AsyncThreadStream:
                 if reconnect_attempts <= self._lifecycle_max_reconnect_attempts:
                     await asyncio.sleep(0.05)
                     continue
-                self._fail_run_done(
-                    frame_error or RuntimeError(f"Lifecycle transport failed: {exc}")
-                )
+                self._fail_run_done(RuntimeError(f"Lifecycle transport failed: {exc}"))
                 return
 
     def _fail_run_done(self, error: BaseException) -> None:

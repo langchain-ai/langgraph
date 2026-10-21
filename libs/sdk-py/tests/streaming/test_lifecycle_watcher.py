@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from typing import Any
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
+from websockets.exceptions import ConnectionClosedError
+from websockets.frames import Close
 
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.threads import ThreadsClient
@@ -296,6 +299,59 @@ async def test_lifecycle_error_frame_becomes_the_run_error():
     )
 
 
+@pytest.mark.parametrize("terminal", [False, True])
+@pytest.mark.parametrize("raise_on_close", [False, True])
+async def test_lifecycle_terminal_error_prevents_1011_reconnect(
+    terminal, raise_on_close
+):
+    error = ConnectionClosedError(Close(1011, "internal error"), None)
+
+    def make_handle(reopened=False):
+        loop = asyncio.get_running_loop()
+        ready = loop.create_future()
+        ready.set_result(None)
+        done = loop.create_future()
+        done.set_result(None if reopened else error)
+
+        async def events():
+            if reopened:
+                yield lifecycle_completed_event(seq=2)
+                return
+            yield lifecycle_event(seq=1, phase="running")
+            if terminal:
+                yield thread_stream_failed_frame()
+            if raise_on_close:
+                raise error
+
+        async def close():
+            return None
+
+        return EventStreamHandle(events=events(), ready=ready, done=done, close=close)
+
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(assistant_id="agent") as thread:
+            transport = MagicMock(spec=ProtocolSseTransport)
+            transport.open_event_stream.side_effect = [make_handle(), make_handle(True)]
+            thread._transport = transport
+
+            await asyncio.wait_for(thread._run_lifecycle_watcher(), timeout=2.0)
+
+            assert transport.open_event_stream.call_count == (1 if terminal else 2)
+            assert thread._run_done is not None
+            result = thread._run_done.result()
+            if terminal:
+                with pytest.raises(RuntimeError) as exc:
+                    await thread.output
+                assert exc.value is result.error
+                assert str(exc.value) == (
+                    "Protocol error [unknown_error]: Thread event stream failed."
+                )
+            else:
+                assert result.status == "completed"
+                assert result.error is None
+
+
 async def test_lifecycle_watcher_stops_on_a_404_without_retrying():
     fake = FakeServer()
     fake.script_sequence([_StreamScript(events=[], status=404)])
@@ -386,25 +442,22 @@ async def test_lifecycle_watcher_retries_a_404_that_arrives_after_run_start():
     assert len(fake.stream_request_bodies) == 2
 
 
-async def test_lifecycle_watcher_reports_the_error_frame_when_reconnects_run_out():
+async def test_lifecycle_watcher_reports_the_error_frame_without_reconnecting():
     fake = FakeServer()
     async with httpx.AsyncClient(
         transport=fake.transport, base_url="http://test"
     ) as raw:
         threads = ThreadsClient(HttpClient(raw))
         stream = threads.stream(thread_id="t-1", assistant_id="agent")
-        stream._lifecycle_max_reconnect_attempts = 1
         fake.script_sequence(
-            [
-                _StreamScript(events=[thread_stream_failed_frame()], fail_after=1)
-                for _ in range(stream._lifecycle_max_reconnect_attempts + 1)
-            ]
+            [_StreamScript(events=[thread_stream_failed_frame()], fail_after=1)]
         )
         async with stream as thread:
             run_done = thread._run_done
             assert run_done is not None
             terminal = await asyncio.wait_for(run_done, timeout=2.0)
 
+    assert len(fake.stream_request_bodies) == 1
     assert (
         str(terminal.error)
         == "Protocol error [unknown_error]: Thread event stream failed."

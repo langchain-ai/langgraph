@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import httpx
+import pytest
+from websockets.exceptions import ConnectionClosedError
+from websockets.frames import Close
 
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk._sync.threads import SyncThreadsClient
 from langgraph_sdk.stream.sync_controller import SyncStreamController
-from langgraph_sdk.stream.transport.sync_http import SyncProtocolSseTransport
-from streaming._events import values_event
+from langgraph_sdk.stream.transport.sync_http import (
+    SyncEventStreamHandle,
+    SyncProtocolSseTransport,
+)
+from streaming._events import thread_stream_failed_frame, values_event
 from streaming._sync_fake_server import SyncFakeServer, SyncStreamScript
 
 
@@ -25,6 +33,42 @@ def test_sync_controller_fans_out_to_subscription():
         assert sub.queue.get(timeout=1) == values_event(seq=1, counter=1)
         assert sub.queue.get(timeout=1) is None
         controller.close()
+
+
+@pytest.mark.parametrize("raise_on_close", [False, True])
+def test_sync_shared_stream_terminal_error_prevents_1011_reconnect(raise_on_close):
+    transport = MagicMock(spec=SyncProtocolSseTransport)
+    transport.thread_id = "t-1"
+    controller = SyncStreamController(transport)
+    controller._shared_stream_filter = {"channels": ["values"]}
+    sub = controller.register_subscription({"channels": ["values"]})
+    error = ConnectionClosedError(Close(1011, "internal error"), None)
+
+    # A later attempt on the same controller must still retry a standalone 1011.
+    for seq, terminal in enumerate([True, False], start=1):
+        event = values_event(seq=seq)
+
+        def events(terminal=terminal, event=event):
+            if terminal:
+                yield thread_stream_failed_frame()
+            yield event
+            if raise_on_close:
+                raise error
+
+        controller._shared_stream = SyncEventStreamHandle(
+            events=events(), error=lambda: error, close=lambda: None
+        )
+        transport.open_event_stream.reset_mock()
+        transport.open_event_stream.return_value = SyncEventStreamHandle(
+            events=iter([]), error=lambda: None, close=lambda: None
+        )
+
+        controller._fanout()
+
+        assert sub.queue.get_nowait() == event
+        assert sub.queue.get_nowait() is None
+        assert sub.queue.empty()
+        assert transport.open_event_stream.call_count == (0 if terminal else 1)
 
 
 def test_sync_send_command_applied_through_seq_seeds_shared_stream_since():

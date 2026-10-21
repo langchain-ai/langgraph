@@ -6,6 +6,7 @@ from typing import Any, cast
 from unittest.mock import MagicMock
 
 import httpx
+import pytest
 from websockets.exceptions import ConnectionClosedError
 from websockets.frames import Close
 
@@ -13,7 +14,12 @@ from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.threads import ThreadsClient
 from langgraph_sdk.stream.controller import StreamController
 from langgraph_sdk.stream.transport.http import EventStreamHandle, ProtocolSseTransport
-from streaming._events import lifecycle_completed_event, lifecycle_event, values_event
+from streaming._events import (
+    lifecycle_completed_event,
+    lifecycle_event,
+    thread_stream_failed_frame,
+    values_event,
+)
 from streaming._fake_server import FakeServer, _StreamScript
 
 
@@ -209,6 +215,8 @@ async def test_values_projection_registers_via_delegation_not_controller_directl
 def _make_handle(
     events: list[dict[str, Any]],
     err: BaseException | None = None,
+    *,
+    raise_on_close: bool = False,
 ) -> tuple[EventStreamHandle, asyncio.Queue]:
     """Build a synthetic EventStreamHandle for reconnect tests.
 
@@ -233,6 +241,8 @@ def _make_handle(
         while True:
             item = await queue.get()
             if item is None:
+                if raise_on_close and err is not None:
+                    raise err
                 return
             yield item
 
@@ -285,6 +295,36 @@ async def test_shared_stream_reconnects_with_since_after_transport_drop():
     assert "since" not in opened_params[0]
     assert opened_params[1]["channels"] == ["values"]
     assert opened_params[1]["since"] == 1
+
+
+@pytest.mark.parametrize("raise_on_close", [False, True])
+async def test_shared_stream_terminal_error_prevents_1011_reconnect(raise_on_close):
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        thread = ThreadsClient(HttpClient(raw)).stream(assistant_id="agent")
+        transport = MagicMock(spec=ProtocolSseTransport)
+        thread._transport = transport
+        thread._shared_stream_filter = {"channels": ["values"]}
+        sub = thread._register_subscription({"channels": ["values"]})
+
+        # A later attempt on the same thread must still retry a standalone 1011.
+        for seq, terminal in enumerate([True, False], start=1):
+            event = values_event(seq=seq)
+            first, _ = _make_handle(
+                [thread_stream_failed_frame(), event] if terminal else [event],
+                ConnectionClosedError(Close(1011, "internal error"), None),
+                raise_on_close=raise_on_close,
+            )
+            reopened, _ = _make_handle([])
+            transport.open_event_stream.reset_mock()
+            transport.open_event_stream.return_value = reopened
+            thread._shared_stream = first
+
+            await asyncio.wait_for(thread._fanout(), timeout=2.0)
+
+            assert sub.queue.get_nowait() == event
+            assert sub.queue.get_nowait() is None
+            assert sub.queue.empty()
+            assert transport.open_event_stream.call_count == (0 if terminal else 1)
 
 
 async def test_shared_stream_reconnect_dedupes_replayed_overlap():

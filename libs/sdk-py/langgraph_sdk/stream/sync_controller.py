@@ -169,9 +169,11 @@ class SyncStreamController:
                 shared = self._shared_stream
             if shared is None:
                 return
+            terminal_error = False
             try:
                 for event in self._dedup_iter(shared.events):
                     if (frame_error := stream_error_frame(event)) is not None:
+                        terminal_error = True
                         _logger.warning(
                             "Thread %s event stream failed: %s",
                             self._transport.thread_id,
@@ -203,6 +205,7 @@ class SyncStreamController:
             err = shared.error()
             if (
                 err is not None
+                and not terminal_error
                 and not is_non_retryable_stream_error(err)
                 and not self._closed
             ):

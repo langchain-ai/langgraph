@@ -1538,8 +1538,8 @@ class SyncThreadStream:
         if self._transport is None:
             return
         reconnect_attempts = 0
-        frame_error: RuntimeError | None = None
         while not self._closed:
+            frame_error: RuntimeError | None = None
             # A stream opened before run.start can 404 for the thread that
             # run.start creates, so it gets one more try once a run has started.
             opened_before_run = not self._run_seen
@@ -1554,6 +1554,9 @@ class SyncThreadStream:
                     frame_error = stream_error_frame(event) or frame_error
                     self._observe_lifecycle_event(event)
                     self._apply_lifecycle_event(event)
+                if frame_error is not None:
+                    self._fail_run_done(frame_error)
+                    return
                 err = handle.error()
                 if err is None:
                     # Clean EOF: stream ended without a terminal lifecycle
@@ -1561,10 +1564,7 @@ class SyncThreadStream:
                     # doesn't block forever.
                     if not self._closed:
                         self._fail_run_done(
-                            frame_error
-                            or RuntimeError(
-                                "lifecycle stream ended before terminal event"
-                            )
+                            RuntimeError("lifecycle stream ended before terminal event")
                         )
                     return
                 reconnect_attempts += 1
@@ -1574,6 +1574,9 @@ class SyncThreadStream:
                 ):
                     raise err
             except Exception as exc:
+                if frame_error is not None:
+                    self._fail_run_done(frame_error)
+                    return
                 if is_non_retryable_stream_error(exc):
                     if self._stop_rejected_lifecycle_watcher(
                         exc, unless_run_started=opened_before_run
@@ -1583,9 +1586,7 @@ class SyncThreadStream:
                 reconnect_attempts += 1
                 if reconnect_attempts <= self._lifecycle_max_reconnect_attempts:
                     continue
-                self._fail_run_done(
-                    frame_error or RuntimeError(f"Lifecycle transport failed: {exc}")
-                )
+                self._fail_run_done(RuntimeError(f"Lifecycle transport failed: {exc}"))
                 return
 
     def _stop_rejected_lifecycle_watcher(
