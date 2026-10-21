@@ -1333,6 +1333,10 @@ def _validate_namespace_labels(namespace: tuple[str, ...]) -> None:
             raise InvalidNamespaceError(
                 f"Invalid namespace label '{label}' found in {namespace}. Namespace labels cannot contain periods ('.')."
             )
+        elif "\x00" in label:
+            raise InvalidNamespaceError(
+                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels cannot contain NUL bytes ('\\x00')."
+            )
         elif not label:
             raise InvalidNamespaceError(
                 f"Namespace labels cannot be empty strings. Got {label} in {namespace}"
