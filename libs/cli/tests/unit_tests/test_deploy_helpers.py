@@ -33,6 +33,7 @@ from langgraph_cli.deploy import (
     _Emitter,
     _env_without_deployment_name,
     _parse_env_from_config,
+    _print_deployment_result,
     _resolve_env_path,
     _resolve_pushed_image_digest,
     _resource_spec,
@@ -534,6 +535,39 @@ class TestEmitterTextMode:
         lines = [line.strip() for line in captured.out.splitlines() if line.strip()]
         assert "Deployment successful!" in lines
         assert "URL: https://app.test" in lines
+
+
+@pytest.mark.parametrize(
+    ("deployment", "expected_url_lines"),
+    [
+        pytest.param(
+            {
+                "id": "dep-1",
+                "source_config": {"custom_url": "https://agent.example.com"},
+            },
+            ["URL: https://agent.example.com"],
+            id="custom_url_is_printed",
+        ),
+        pytest.param(
+            {"id": "dep-1", "source_config": {}}, [], id="no_custom_url_no_line"
+        ),
+    ],
+)
+def test_a_deployed_result_prints_the_deployment_url(
+    capsys, monkeypatch, deployment, expected_url_lines
+):
+    class FakeClient:
+        def get_deployment(self, deployment_id: str) -> dict:
+            return deployment
+
+    monkeypatch.setattr(deploy_mod, "_emitter", None)
+
+    _print_deployment_result(
+        FakeClient(), "dep-1", "DEPLOYED", dashboard_label="Deployment dashboard"
+    )
+
+    lines = [line.strip() for line in capsys.readouterr().out.splitlines()]
+    assert [line for line in lines if line.startswith("URL:")] == expected_url_lines
 
 
 # ---------------------------------------------------------------------------

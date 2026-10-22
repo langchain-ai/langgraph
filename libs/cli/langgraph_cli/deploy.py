@@ -1049,20 +1049,15 @@ def _print_deployment_result(
     dashboard_label: str,
     status_url: str | None = None,
 ) -> None:
-    """Print final deployment status and raise on failure."""
     em = _get_emitter()
-    dep_info = client.get_deployment(deployment_id)
-    custom_url = None
-    if isinstance(dep_info, dict):
-        sc = dep_info.get("source_config")
-        if isinstance(sc, dict):
-            custom_url = sc.get("custom_url")
+    deployment = client.get_deployment(deployment_id)
+    url = _deployment_url(deployment) if isinstance(deployment, Mapping) else None
 
     if last_status == "DEPLOYED":
         em.result(
             "succeeded",
             deployment_id=deployment_id,
-            url=custom_url,
+            url=url,
             status_url=status_url,
         )
     elif last_status in ("BUILD_FAILED", "DEPLOY_FAILED", "CREATE_FAILED"):
