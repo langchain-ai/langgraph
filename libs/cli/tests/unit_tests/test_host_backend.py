@@ -575,7 +575,7 @@ def test_list_listeners_asks_for_a_full_page():
     )
 
     assert c.list_listeners() == [{"id": "listener-1"}]
-    assert seen["url"] == "https://api.example.com/v2/listeners?limit=100"
+    assert seen["url"] == "https://api.example.com/v2/listeners?limit=100&offset=0"
 
 
 @pytest.mark.parametrize(
@@ -646,8 +646,15 @@ def test_list_deployments_sends_one_name_filter(call, expected_params):
     assert seen == expected_params
 
 
-def test_list_deployments_reads_every_page():
-    deployments = [{"id": f"dep-{index}"} for index in range(101)]
+@pytest.mark.parametrize(
+    "list_every",
+    [
+        pytest.param(HostBackendClient.list_deployments, id="deployments"),
+        pytest.param(HostBackendClient.list_listeners, id="listeners"),
+    ],
+)
+def test_list_endpoints_read_every_page(list_every):
+    resources = [{"id": f"resource-{index}"} for index in range(101)]
     offsets: list[str] = []
 
     def handler(req: httpx.Request) -> httpx.Response:
@@ -655,14 +662,14 @@ def test_list_deployments_reads_every_page():
         limit = int(req.url.params["limit"])
         offsets.append(req.url.params["offset"])
         return httpx.Response(
-            200, json={"resources": deployments[offset : offset + limit]}
+            200, json={"resources": resources[offset : offset + limit]}
         )
 
     c = HostBackendClient(
         "https://api.example.com", "key", transport=httpx.MockTransport(handler)
     )
 
-    assert c.list_deployments() == deployments
+    assert list_every(c) == resources
     assert offsets == ["0", "100"]
 
 

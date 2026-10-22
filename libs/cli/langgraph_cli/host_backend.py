@@ -253,7 +253,7 @@ class HostBackendClient:
             page_ids = {resource.get("id") for resource in page}
             if page_ids and page_ids <= seen_ids:
                 raise HostBackendError(
-                    f"GET {path} returned the same deployments again: this control "
+                    f"GET {path} returned the same resources again: this control "
                     "plane ignores 'offset', so the CLI cannot read past the first page."
                 )
             seen_ids |= page_ids
@@ -264,10 +264,8 @@ class HostBackendClient:
     def get_listener(self, listener_id: str) -> dict[str, Any]:
         return self._request("GET", f"/v2/listeners/{listener_id}")
 
-    def list_listeners(self) -> list[dict[str, Any]]:
-        return _resources(
-            self._request("GET", "/v2/listeners", params={"limit": MAX_PAGE_SIZE})
-        )
+    def list_listeners(self) -> list[dict[str, object]]:
+        return self._every_page("/v2/listeners", {})
 
     def get_deployment(self, deployment_id: str) -> dict[str, Any]:
         return self._request("GET", f"/v2/deployments/{deployment_id}")

@@ -111,7 +111,11 @@ class ControlPlaneDouble:
     def _respond(self, request: httpx.Request) -> httpx.Response:
         method, path = request.method, request.url.path
         if (method, path) == ("GET", "/v2/listeners"):
-            return httpx.Response(200, json={"resources": self.listeners})
+            offset = int(request.url.params.get("offset", 0))
+            limit = int(request.url.params.get("limit", 20))
+            return httpx.Response(
+                200, json={"resources": self.listeners[offset : offset + limit]}
+            )
         if method == "GET" and path.startswith("/v2/listeners/"):
             listener_id = path.rsplit("/", 1)[-1]
             if not _looks_like_a_uuid(listener_id):
@@ -1288,14 +1292,16 @@ def test_listener_flags_without_push_to_make_no_call_at_all(
     assert deploy_project.timeline == []
 
 
-def test_a_truncated_listener_page_says_so(deploy_project: DeployProject) -> None:
+def test_listeners_beyond_the_first_page_are_counted(
+    deploy_project: DeployProject,
+) -> None:
     deploy_project.control_plane.listeners = [
         {
             "id": str(uuid.UUID(int=index)),
             "compute_id": "cluster",
             "compute_config": {"k8s_namespaces": ["agents"]},
         }
-        for index in range(100)
+        for index in range(101)
     ]
 
     result = deploy_project.run(
@@ -1303,7 +1309,8 @@ def test_a_truncated_listener_page_says_so(deploy_project: DeployProject) -> Non
     )
 
     assert result.exit_code != 0
-    assert "first 100" in result.output
+    assert "... and 91 more" in result.output
+    assert "first 100" not in result.output
 
 
 def test_a_managed_build_in_a_listener_workspace_points_at_push_to(

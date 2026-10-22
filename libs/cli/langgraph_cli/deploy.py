@@ -26,7 +26,6 @@ from langgraph_cli.dependency_tracking import find_tracked_packages
 from langgraph_cli.docker import build_docker_image, can_build_locally
 from langgraph_cli.exec import CommandRunner, Runner, subp_exec
 from langgraph_cli.host_backend import (
-    MAX_PAGE_SIZE,
     ControlPlaneEndpoints,
     HostBackendClient,
     HostBackendError,
@@ -279,8 +278,6 @@ def _describe_listeners(listeners: Sequence[Listener]) -> str:
     ]
     if len(listeners) > len(shown):
         lines.append(f"  ... and {len(listeners) - len(shown)} more")
-    if len(listeners) == MAX_PAGE_SIZE:
-        lines.append(f"  (only the first {MAX_PAGE_SIZE} listeners were read)")
     return "\n".join(lines)
 
 
