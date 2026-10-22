@@ -1523,7 +1523,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "langchain-core", specifier = ">=1.4.7" },
+    { name = "langchain-core", specifier = ">=1.4.7,<2" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-prebuilt", editable = "../prebuilt" },
     { name = "langgraph-sdk", editable = "../sdk-py" },
@@ -1799,7 +1799,7 @@ inmem = [
 requires-dist = [
     { name = "click", specifier = ">=8.1.7" },
     { name = "httpx", specifier = ">=0.24.0" },
-    { name = "langgraph-api", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.5.35" },
+    { name = "langgraph-api", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.5.35,<1.0.0" },
     { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.7" },
     { name = "langgraph-sdk", marker = "python_full_version >= '3.11'", specifier = ">=0.1.0" },
     { name = "pathspec", specifier = ">=0.11.0" },
@@ -1916,7 +1916,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.25.2" },
-    { name = "langchain-core", specifier = ">=1.4.0" },
+    { name = "langchain-core", specifier = ">=1.4.0,<2" },
     { name = "langchain-protocol", specifier = ">=0.0.15" },
     { name = "orjson", specifier = ">=3.11.5" },
     { name = "websockets", specifier = ">=14" },

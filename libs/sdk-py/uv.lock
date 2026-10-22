@@ -314,7 +314,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "langchain-core", specifier = ">=1.4.7" },
+    { name = "langchain-core", specifier = ">=1.4.7,<2" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-prebuilt", editable = "../prebuilt" },
     { name = "langgraph-sdk", editable = "." },
@@ -522,7 +522,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.25.2" },
-    { name = "langchain-core", specifier = ">=1.4.0" },
+    { name = "langchain-core", specifier = ">=1.4.0,<2" },
     { name = "langchain-protocol", specifier = ">=0.0.15" },
     { name = "orjson", specifier = ">=3.11.5" },
     { name = "websockets", specifier = ">=14" },
