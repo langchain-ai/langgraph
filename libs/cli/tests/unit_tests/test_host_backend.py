@@ -666,6 +666,41 @@ def test_list_deployments_reads_every_page():
     assert offsets == ["0", "100"]
 
 
+FIRST_PAGE_OF_DEPLOYMENTS = [
+    {"id": f"dep-{index}", "status": "DEPLOYED"} for index in range(100)
+]
+
+
+@pytest.mark.parametrize(
+    "repeated_page",
+    [
+        pytest.param(FIRST_PAGE_OF_DEPLOYMENTS, id="same_page_again"),
+        pytest.param(
+            [
+                {"id": "dep-99", "status": "DEPLOYING"},
+                *FIRST_PAGE_OF_DEPLOYMENTS[:99],
+            ],
+            id="same_deployments_reordered_and_updated",
+        ),
+    ],
+)
+def test_list_deployments_fails_when_the_server_ignores_the_offset(repeated_page):
+    pages = iter([FIRST_PAGE_OF_DEPLOYMENTS, repeated_page])
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        page = next(pages, None)
+        if page is None:
+            return httpx.Response(500, json={"detail": "the guard let paging run on"})
+        return httpx.Response(200, json={"resources": page})
+
+    c = HostBackendClient(
+        "https://api.example.com", "key", transport=httpx.MockTransport(handler)
+    )
+
+    with pytest.raises(HostBackendError, match="ignores 'offset'"):
+        c.list_deployments()
+
+
 @pytest.mark.parametrize(
     ("body", "expected"),
     [

@@ -237,6 +237,7 @@ class HostBackendClient:
         self, path: str, filters: Mapping[str, object]
     ) -> list[dict[str, object]]:
         resources: list[dict[str, object]] = []
+        seen_ids: set[object] = set()
         while True:
             page = _resources(
                 self._request(
@@ -249,6 +250,13 @@ class HostBackendClient:
                     },
                 )
             )
+            page_ids = {resource.get("id") for resource in page}
+            if page_ids and page_ids <= seen_ids:
+                raise HostBackendError(
+                    f"GET {path} returned the same deployments again: this control "
+                    "plane ignores 'offset', so the CLI cannot read past the first page."
+                )
+            seen_ids |= page_ids
             resources.extend(page)
             if len(page) < MAX_PAGE_SIZE:
                 return resources
