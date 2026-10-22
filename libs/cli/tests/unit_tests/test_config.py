@@ -1337,15 +1337,22 @@ def test_config_to_docker_python_priority_js_path(ext: str):
 
 
 def test_config_to_docker_nodejs_priority():
-    # Test that priority config is rejected for Node.js-only projects
-    with pytest.raises(click.UsageError, match="`priority` requires a Python"):
+    # Test that a Node.js-only project can name a Python priority file
+    actual_docker_stdin, _ = config_to_docker(
+        PATH_TO_CONFIG,
         validate_config(
             {
                 "node_version": "20",
                 "graphs": {"agent": "./graphs/agent.js:graph"},
                 "priority": {"path": "./priority.py:priority"},
             }
-        )
+        ),
+        base_image="langchain/langgraphjs-api",
+    )
+    assert (
+        """ENV LANGGRAPH_PRIORITY='{"path": "./priority.py:priority"}'"""
+        in actual_docker_stdin
+    )
 
 
 def test_config_to_docker_python_priority_formatted():

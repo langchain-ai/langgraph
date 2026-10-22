@@ -609,11 +609,6 @@ def validate_config(
                 )
     # Validate priority config
     if priority_conf := config.get("priority"):
-        if config.get("node_version") and not config.get("python_version"):
-            raise click.UsageError(
-                "`priority` requires a Python deployment (`python_version`). "
-                "It isn't supported for Node.js-only graphs."
-            )
         if "path" in priority_conf:
             if ":" not in priority_conf["path"]:
                 raise ValueError(

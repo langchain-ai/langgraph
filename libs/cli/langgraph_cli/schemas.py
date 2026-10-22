@@ -377,7 +377,8 @@ class PriorityConfig(TypedDict, total=False):
     """Configuration for custom run priority logic.
 
     Allows you to decide each thread's priority settings with a Python function
-    that the server calls at the thread's first run."""
+    that the server calls at the first run on a thread with no settings, which
+    can come long after the thread was created."""
 
     path: str
     """Required. Path to an instance of the Priority() class that registers an assign function.
@@ -776,7 +777,8 @@ class Config(TypedDict, total=False):
     priority: PriorityConfig | None
     """Optional. Custom run priority config, including the path to your Python priority logic.
 
-    Allows you to decide each thread's priority settings when the thread gets its first run.
+    Allows you to decide each thread's priority settings at the first run on a thread with no settings,
+    which can come long after the thread was created.
     """
 
     http: HttpConfig | None

@@ -205,7 +205,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Custom run priority config, including the path to your Python priority logic.\n\nAllows you to decide each thread's priority settings when the thread gets its first run.\n"
+              "description": "Optional. Custom run priority config, including the path to your Python priority logic.\n\nAllows you to decide each thread's priority settings at the first run on a thread with no settings,\nwhich can come long after the thread was created.\n"
             },
             "source": {
               "anyOf": [
@@ -458,7 +458,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Custom run priority config, including the path to your Python priority logic.\n\nAllows you to decide each thread's priority settings when the thread gets its first run.\n"
+              "description": "Optional. Custom run priority config, including the path to your Python priority logic.\n\nAllows you to decide each thread's priority settings at the first run on a thread with no settings,\nwhich can come long after the thread was created.\n"
             },
             "source": {
               "$ref": "#/$defs/UvSource"
@@ -697,7 +697,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Custom run priority config, including the path to your Python priority logic.\n\nAllows you to decide each thread's priority settings when the thread gets its first run.\n"
+              "description": "Optional. Custom run priority config, including the path to your Python priority logic.\n\nAllows you to decide each thread's priority settings at the first run on a thread with no settings,\nwhich can come long after the thread was created.\n"
             },
             "source": {
               "anyOf": [
@@ -1205,7 +1205,7 @@
     },
     "PriorityConfig": {
       "title": "PriorityConfig",
-      "description": "Configuration for custom run priority logic.\n\nAllows you to decide each thread's priority settings with a Python function\nthat the server calls at the thread's first run.",
+      "description": "Configuration for custom run priority logic.\n\nAllows you to decide each thread's priority settings with a Python function\nthat the server calls at the first run on a thread with no settings, which\ncan come long after the thread was created.",
       "type": "object",
       "properties": {
         "path": {
