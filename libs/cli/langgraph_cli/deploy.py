@@ -1106,12 +1106,24 @@ class _ProgressReader:
         return self._file_size
 
 
-def _upload_to_gcs(signed_url: str, file_path: str, file_size: int) -> None:
-    """Upload tarball to GCS via signed PUT URL with progress display."""
+def _upload_to_gcs(
+    signed_url: str,
+    file_path: str,
+    file_size: int,
+    upload_headers: dict[str, str] | None,
+) -> None:
+    """Upload tarball via signed PUT URL with progress display."""
     import urllib.error
     import urllib.request
 
     em = _get_emitter()
+    # Control planes that return no `upload_headers` sign for the Cloud Storage
+    # size range. Content-Type is a fallback: without one, urllib sends a form
+    # content type, which breaks signatures that cover it.
+    headers = {
+        "Content-Type": "application/gzip",
+        **(upload_headers or {"X-Goog-Content-Length-Range": "0,209715200"}),
+    }
 
     with open(file_path, "rb") as f:
         reader = _ProgressReader(f, file_size, em)
@@ -1119,11 +1131,7 @@ def _upload_to_gcs(signed_url: str, file_path: str, file_size: int) -> None:
             signed_url,
             data=reader,
             method="PUT",
-            headers={
-                "Content-Type": "application/gzip",
-                "Content-Length": str(file_size),
-                "X-Goog-Content-Length-Range": "0,209715200",
-            },
+            headers={**headers, "Content-Length": str(file_size)},
         )
         try:
             urllib.request.urlopen(req, timeout=_UPLOAD_TIMEOUT_SECONDS)
@@ -1443,7 +1451,9 @@ def _run_remote_build(
         step += 1
 
         _log_deploy_step(step, "Uploading source")
-        _upload_to_gcs(signed_url, archive_path, file_size)
+        _upload_to_gcs(
+            signed_url, archive_path, file_size, upload_data.get("upload_headers")
+        )
     step += 1
 
     _log_deploy_step(step, "Triggering remote build")
