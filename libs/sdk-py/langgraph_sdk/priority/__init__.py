@@ -4,9 +4,9 @@
     This API is in beta and may change in future versions.
 
 This module lets developers decide the priority settings of each thread with
-an async function that the server calls at the thread's first run. Similar to
-the Auth and Encryption systems, the function is registered on an object that
-`langgraph.json` names, and runs server-side.
+an async function that the server calls at the first run on a thread with no
+settings. The function is registered on an object that `langgraph.json` names,
+and runs server-side.
 """
 
 from __future__ import annotations
@@ -85,26 +85,25 @@ class Priority:
     }
     ```
 
-    The server calls the assign function at a thread's first run and stores the
+    The server calls the assign function at the first run on a thread with no
+    settings, which can come long after the thread was created, and stores the
     settings it returns on the thread. Later runs on the thread use the stored
-    settings without calling the function again. If the function raises, nothing
-    is stored and the thread's next run calls it again. If two first runs on a
-    thread race, both can call it, and one result is kept for both.
+    settings. The function can be called more than once for one thread, for
+    example after it raises, and only one result is stored, so keep it free of
+    side effects.
 
     ???+ example "Basic Usage"
 
         ```python
-        from langgraph_sdk import Priority
+        from langgraph_sdk import Priority, PriorityContext, PrioritySettings
 
         priority = Priority()
 
         @priority.assign
-        async def assign(
-            ctx: Priority.types.PriorityContext,
-        ) -> Priority.types.PrioritySettings | None:
+        async def assign(ctx: PriorityContext) -> PrioritySettings | None:
             return {
                 "priority": 3 if "premium" in ctx.permissions else 0,
-                # An opaque id your auth handler adds to the user, never an email.
+                # Stored unencrypted, so an opaque ID rather than personal data.
                 "fairness_group": ctx.user["org_id"],
             }
         ```
@@ -133,9 +132,7 @@ class Priority:
         Example:
             ```python
             @priority.assign
-            async def assign(
-                ctx: Priority.types.PriorityContext,
-            ) -> Priority.types.PrioritySettings | None:
+            async def assign(ctx: PriorityContext) -> PrioritySettings | None:
                 if ctx.cron_id is not None:
                     return {"priority": -2}
                 return None

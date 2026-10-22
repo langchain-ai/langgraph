@@ -36,9 +36,9 @@
 
 - **`Priority` (beta)** — register an async function with `@priority.assign`
   and name the object in the `priority` section of `langgraph.json`. The
-  server calls the function with a `PriorityContext` at a thread's first run
-  and stores the `PrioritySettings` it returns (`priority`, `fairness_group`,
-  `fairness_weight`) on the thread.
+  server calls the function with a `PriorityContext` at the first run on a
+  thread with no settings and stores the `PrioritySettings` it returns
+  (`priority`, `fairness_group`, `fairness_weight`) on the thread.
 
 ### Changed
 
