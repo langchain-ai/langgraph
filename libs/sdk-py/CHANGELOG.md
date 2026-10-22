@@ -34,6 +34,14 @@
 - **`thread.output`** — awaitable that resolves to the terminal thread state
   `values` dict after the run lifecycle completes.
 
+- **`Priority` (beta)** — register an async function with `@priority.assign`
+  and name the object in the `priority` section of `langgraph.json`. The
+  server calls the function with a `PriorityContext` at the first run on a
+  thread with no settings and stores the `PrioritySettings` it returns
+  (`priority`, `fairness_group`, `fairness_weight`) on the thread. Requires
+  `langgraph-api` 0.18.0 or later and a `langgraph-cli` that supports the
+  section; older versions of either ignore it.
+
 ### Changed
 
 - `client.threads.stream()` now accepts `transport="sse"` (default) or
