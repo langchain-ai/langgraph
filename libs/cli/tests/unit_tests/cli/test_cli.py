@@ -454,6 +454,44 @@ def test_deploy_list_command_no_results(monkeypatch) -> None:
     assert result.output.strip() == "No deployments found."
 
 
+def test_deploy_list_prints_an_aligned_table(monkeypatch) -> None:
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def list_deployments(self, name_contains: str = ""):
+            return [
+                {
+                    "id": "dep-123",
+                    "name": "alpha",
+                    "source_config": {"custom_url": "https://alpha.example.com"},
+                },
+                {"id": "dep-4567", "name": "beta-agent", "source_config": {}},
+            ]
+
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "deploy",
+            "list",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines() == [
+        "Deployment ID  Deployment Name  Deployment URL           ",
+        "-------------  ---------------  -------------------------",
+        "dep-123        alpha            https://alpha.example.com",
+        "dep-4567       beta-agent       -                        ",
+    ]
+
+
 def test_deploy_listeners_list_command(monkeypatch) -> None:
     runner = CliRunner()
     captured: dict[str, str] = {}
@@ -534,6 +572,51 @@ def test_deploy_listeners_list_command_no_results(monkeypatch) -> None:
 
     assert result.exit_code == 0, result.output
     assert result.output.strip() == "No listeners found for this workspace."
+
+
+def test_deploy_listeners_list_prints_an_aligned_table(monkeypatch) -> None:
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def list_listeners(self):
+            return [
+                {
+                    "id": "listener-1",
+                    "compute_id": "prod-cluster",
+                    "compute_config": {"k8s_namespaces": ["agents"]},
+                },
+                {
+                    "id": "listener-22",
+                    "compute_id": "multi",
+                    "compute_config": {"k8s_namespaces": ["agents", "agents-staging"]},
+                },
+                {"id": "listener-3", "compute_id": "", "compute_config": {}},
+            ]
+
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "deploy",
+            "listeners",
+            "list",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines() == [
+        "Listener ID  Compute ID    Namespaces            ",
+        "-----------  ------------  ----------------------",
+        "listener-1   prod-cluster  agents                ",
+        "listener-22  multi         agents, agents-staging",
+        "listener-3   -             -                     ",
+    ]
 
 
 def test_deploy_listeners_list_command_json(monkeypatch) -> None:
@@ -736,6 +819,54 @@ def test_deploy_revisions_list_command_no_results(monkeypatch) -> None:
 
     assert result.exit_code == 0, result.output
     assert result.output.strip() == "No revisions found for deployment dep-123."
+
+
+def test_deploy_revisions_list_marks_older_deployed_revisions_as_replaced(
+    monkeypatch,
+) -> None:
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def list_revisions(self, deployment_id: str, limit: int = 1):
+            return [
+                {
+                    "id": "rev-3",
+                    "status": "DEPLOYING",
+                    "created_at": "2026-10-20T10:00:00Z",
+                },
+                {
+                    "id": "rev-2",
+                    "status": "DEPLOYED",
+                    "created_at": "2026-10-19T10:00:00Z",
+                },
+                {"id": "rev-1", "status": "DEPLOYED", "created_at": None},
+            ]
+
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "deploy",
+            "revisions",
+            "list",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+            "dep-123",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines() == [
+        "Revision ID  Status     Created At          ",
+        "-----------  ---------  --------------------",
+        "rev-3        DEPLOYING  2026-10-20T10:00:00Z",
+        "rev-2        DEPLOYED   2026-10-19T10:00:00Z",
+        "rev-1        REPLACED   -                   ",
+    ]
 
 
 def test_deploy_revisions_list_command_with_explicit_limit(monkeypatch) -> None:

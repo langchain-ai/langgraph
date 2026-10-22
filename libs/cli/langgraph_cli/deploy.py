@@ -583,103 +583,144 @@ def _validate_prebuilt_image(
     _get_emitter().info(f"Image is available for {_DEPLOYMENT_PLATFORM}")
 
 
-def _extract_deployment_url(deployment: dict[str, object]) -> str:
-    source_config = deployment.get("source_config")
-    if isinstance(source_config, dict):
-        custom_url = source_config.get("custom_url")
-        if isinstance(custom_url, str) and custom_url:
-            return custom_url
-    return "-"
+Resource = Mapping[str, object]
 
 
-def format_deployments_table(deployments: Sequence[dict[str, object]]) -> str:
-    headers = ("Deployment ID", "Deployment Name", "Deployment URL")
-    rows = [
-        (
-            str(deployment.get("id", "-") or "-"),
-            str(deployment.get("name", "-") or "-"),
-            _extract_deployment_url(deployment),
+@dataclass(frozen=True, slots=True)
+class Table:
+    headers: tuple[str, ...]
+    cells: Callable[[Resource], tuple[str | None, ...]]
+
+    def render(self, resources: Sequence[Resource]) -> str:
+        grid = [
+            self.headers,
+            *(
+                tuple(cell or "-" for cell in self.cells(resource))
+                for resource in resources
+            ),
+        ]
+        widths = [max(map(len, column)) for column in zip(*grid, strict=True)]
+        rule = tuple("-" * width for width in widths)
+        return "\n".join(
+            "  ".join(
+                cell.ljust(width) for cell, width in zip(row, widths, strict=True)
+            )
+            for row in (grid[0], rule, *grid[1:])
         )
-        for deployment in deployments
-    ]
-    widths = [
-        max(len(headers[index]), *(len(row[index]) for row in rows))
-        for index in range(len(headers))
-    ]
-
-    def format_row(row: Sequence[str]) -> str:
-        return "  ".join(value.ljust(widths[index]) for index, value in enumerate(row))
-
-    lines = [format_row(headers), format_row(tuple("-" * width for width in widths))]
-    lines.extend(format_row(row) for row in rows)
-    return "\n".join(lines)
 
 
-def _extract_listener_namespaces(listener: dict[str, object]) -> str:
+@dataclass(frozen=True, slots=True)
+class Listing:
+    table: Table
+    empty_message: str
+    json_view: Callable[[Resource], object]
+
+    def as_table(self, resources: Sequence[Resource]) -> str:
+        return self.table.render(resources) if resources else self.empty_message
+
+    def as_json(self, resources: Sequence[Resource]) -> str:
+        return json_mod.dumps([self.json_view(resource) for resource in resources])
+
+
+class ListOutput(Protocol):
+    @property
+    def no_input(self) -> bool: ...
+
+    def show(self, listing: Listing, resources: Sequence[Resource]) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class TableOutput:
+    @property
+    def no_input(self) -> bool:
+        return False
+
+    def show(self, listing: Listing, resources: Sequence[Resource]) -> None:
+        click.echo(listing.as_table(resources))
+
+
+@dataclass(frozen=True, slots=True)
+class JsonOutput:
+    @property
+    def no_input(self) -> bool:
+        return True
+
+    def show(self, listing: Listing, resources: Sequence[Resource]) -> None:
+        click.echo(listing.as_json(resources))
+
+
+def _text(resource: Resource, key: str) -> str | None:
+    value = resource.get(key)
+    return str(value) if value else None
+
+
+def _deployment_url(deployment: Resource) -> str | None:
+    source_config = deployment.get("source_config")
+    custom_url = (
+        source_config.get("custom_url") if isinstance(source_config, Mapping) else None
+    )
+    return custom_url if isinstance(custom_url, str) and custom_url else None
+
+
+def _listener_namespaces(listener: Resource) -> str | None:
     compute_config = listener.get("compute_config")
     namespaces = (
         compute_config.get("k8s_namespaces")
-        if isinstance(compute_config, dict)
+        if isinstance(compute_config, Mapping)
         else None
     )
-    if isinstance(namespaces, list) and namespaces:
+    if isinstance(namespaces, list):
         return ", ".join(str(namespace) for namespace in namespaces)
-    return "-"
+    return None
 
 
-def format_listeners_table(listeners: Sequence[dict[str, object]]) -> str:
-    headers = ("Listener ID", "Compute ID", "Namespaces")
-    rows = [
+def _with_replaced_status(revisions: Sequence[Resource]) -> list[Resource]:
+    live_index = next(
         (
-            str(listener.get("id", "-") or "-"),
-            str(listener.get("compute_id", "-") or "-"),
-            _extract_listener_namespaces(listener),
-        )
-        for listener in listeners
-    ]
-    widths = [
-        max(len(headers[index]), *(len(row[index]) for row in rows))
-        for index in range(len(headers))
-    ]
-
-    def format_row(row: Sequence[str]) -> str:
-        return "  ".join(value.ljust(widths[index]) for index, value in enumerate(row))
-
-    lines = [format_row(headers), format_row(tuple("-" * width for width in widths))]
-    lines.extend(format_row(row) for row in rows)
-    return "\n".join(lines)
-
-
-def format_revisions_table(revisions: Sequence[dict[str, object]]) -> str:
-    headers = ("Revision ID", "Status", "Created At")
-    latest_deployed_seen = False
-    rows = []
-    for revision in revisions:
-        status = str(revision.get("status", "-") or "-")
-        if status == "DEPLOYED":
-            if latest_deployed_seen:
-                status = "REPLACED"
-            else:
-                latest_deployed_seen = True
-        rows.append(
-            (
-                str(revision.get("id", "-") or "-"),
-                status,
-                str(revision.get("created_at", "-") or "-"),
-            )
-        )
-
-    widths = [
-        max(len(headers[index]), *(len(row[index]) for row in rows))
-        for index in range(len(headers))
+            index
+            for index, revision in enumerate(revisions)
+            if revision.get("status") == "DEPLOYED"
+        ),
+        None,
+    )
+    return [
+        {**revision, "status": "REPLACED"}
+        if revision.get("status") == "DEPLOYED" and index != live_index
+        else revision
+        for index, revision in enumerate(revisions)
     ]
 
-    def format_row(row: Sequence[str]) -> str:
-        return "  ".join(value.ljust(widths[index]) for index, value in enumerate(row))
 
-    lines = [format_row(headers), format_row(tuple("-" * width for width in widths))]
-    lines.extend(format_row(row) for row in rows)
-    return "\n".join(lines)
+DEPLOYMENTS_TABLE = Table(
+    ("Deployment ID", "Deployment Name", "Deployment URL"),
+    lambda deployment: (
+        _text(deployment, "id"),
+        _text(deployment, "name"),
+        _deployment_url(deployment),
+    ),
+)
+
+LISTENERS = Listing(
+    Table(
+        ("Listener ID", "Compute ID", "Namespaces"),
+        lambda listener: (
+            _text(listener, "id"),
+            _text(listener, "compute_id"),
+            _listener_namespaces(listener),
+        ),
+    ),
+    empty_message="No listeners found for this workspace.",
+    json_view=dict,
+)
+
+REVISIONS_TABLE = Table(
+    ("Revision ID", "Status", "Created At"),
+    lambda revision: (
+        _text(revision, "id"),
+        _text(revision, "status"),
+        _text(revision, "created_at"),
+    ),
+)
 
 
 def format_timestamp(ts) -> str:
@@ -2120,6 +2161,21 @@ OPT_VERBOSE = click.option(
 )
 
 
+def _list_output(
+    _ctx: click.Context, _param: click.Parameter, as_json: bool
+) -> ListOutput:
+    return JsonOutput() if as_json else TableOutput()
+
+
+OPT_LIST_OUTPUT = click.option(
+    "--json",
+    "output",
+    is_flag=True,
+    callback=_list_output,
+    help="Print a JSON array instead of a table.",
+)
+
+
 class NestedHelpGroup(click.Group):
     """Click group that shows one level of nested subcommands in top-level help."""
 
@@ -2622,7 +2678,7 @@ def deploy_list(
     if not deployments:
         click.echo("No deployments found.")
         return
-    click.echo(format_deployments_table(deployments))
+    click.echo(DEPLOYMENTS_TABLE.render(deployments))
 
 
 # ---------------------------------------------------------------------------
@@ -2641,13 +2697,7 @@ def deploy_listeners() -> None:
 
 @OPT_HOST_API_KEY
 @OPT_HOST_URL
-@click.option(
-    "--json",
-    "json_output",
-    is_flag=True,
-    default=False,
-    help="Emit the listeners as a JSON array instead of a table.",
-)
+@OPT_LIST_OUTPUT
 @deploy_listeners.command(
     "list",
     help=(
@@ -2657,19 +2707,13 @@ def deploy_listeners() -> None:
     ),
 )
 def deploy_listeners_list(
-    api_key: str | None, host_url: str | None, json_output: bool
+    api_key: str | None, host_url: str | None, output: ListOutput
 ) -> None:
-    client = _create_host_backend_client(host_url, api_key, no_input=json_output)
+    client = _create_host_backend_client(host_url, api_key, no_input=output.no_input)
     listeners = _call_host_backend_with_optional_tenant(
-        client, lambda c: c.list_listeners(), no_input=json_output
+        client, lambda c: c.list_listeners(), no_input=output.no_input
     )
-    if json_output:
-        click.echo(json_mod.dumps(listeners))
-        return
-    if not listeners:
-        click.echo("No listeners found for this workspace.")
-        return
-    click.echo(format_listeners_table(listeners))
+    output.show(LISTENERS, listeners)
 
 
 # ---------------------------------------------------------------------------
@@ -2712,7 +2756,7 @@ def deploy_revisions_list(
     if not revisions:
         click.echo(f"No revisions found for deployment {deployment_id}.")
         return
-    click.echo(format_revisions_table(revisions))
+    click.echo(REVISIONS_TABLE.render(_with_replaced_status(revisions)))
 
 
 # ---------------------------------------------------------------------------
