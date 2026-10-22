@@ -602,29 +602,30 @@ def test_is_cloud_recognises_the_managed_control_plane(control_plane_url, expect
     assert endpoints.is_cloud is expected
 
 
+FIRST_PAGE = {"limit": "100", "offset": "0"}
+
+
 @pytest.mark.parametrize(
     ("call", "expected_params"),
     [
         pytest.param(
             lambda c: c.list_deployments(name="agent"),
-            {"name": "agent"},
+            {"name": "agent", **FIRST_PAGE},
             id="exact_name_filters_server_side",
         ),
         pytest.param(
             lambda c: c.list_deployments(name_contains="age"),
-            {"name_contains": "age"},
+            {"name_contains": "age", **FIRST_PAGE},
             id="substring_search_keeps_its_own_parameter",
         ),
         pytest.param(
             lambda c: c.list_deployments(),
-            {},
-            id="no_filter_sends_no_parameters",
+            FIRST_PAGE,
+            id="no_filter_sends_only_the_page",
         ),
         pytest.param(
-            lambda c: c.list_deployments(
-                name="agent", name_contains="agent", limit=100
-            ),
-            {"name": "agent", "name_contains": "agent", "limit": "100"},
+            lambda c: c.list_deployments(name="agent", name_contains="agent"),
+            {"name": "agent", "name_contains": "agent", **FIRST_PAGE},
             id="both_filters_travel_together_for_older_servers",
         ),
     ],
@@ -643,6 +644,26 @@ def test_list_deployments_sends_one_name_filter(call, expected_params):
     )
 
     assert seen == expected_params
+
+
+def test_list_deployments_reads_every_page():
+    deployments = [{"id": f"dep-{index}"} for index in range(101)]
+    offsets: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        offset = int(req.url.params["offset"])
+        limit = int(req.url.params["limit"])
+        offsets.append(req.url.params["offset"])
+        return httpx.Response(
+            200, json={"resources": deployments[offset : offset + limit]}
+        )
+
+    c = HostBackendClient(
+        "https://api.example.com", "key", transport=httpx.MockTransport(handler)
+    )
+
+    assert c.list_deployments() == deployments
+    assert offsets == ["0", "100"]
 
 
 @pytest.mark.parametrize(

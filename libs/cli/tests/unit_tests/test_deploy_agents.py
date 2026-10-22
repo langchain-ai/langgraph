@@ -75,6 +75,7 @@ def test_agent_create(deployment_api, tmp_path, monkeypatch):
         "agent_id": "customer-support",
         "agent_environment": "staging",
         "limit": "100",
+        "offset": "0",
     }
     payload = json.loads(requests[1].content)
     assert payload["agent"] == {

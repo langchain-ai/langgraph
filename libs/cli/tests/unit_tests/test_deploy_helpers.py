@@ -1210,6 +1210,7 @@ def test_finding_a_deployment_by_name_narrows_the_search_for_every_server_versio
         "name": "agent",
         "name_contains": "agent",
         "limit": "100",
+        "offset": "0",
     }
     assert found == ExistingDeployment("dep-1", "github")
 
@@ -1237,20 +1238,29 @@ def test_a_server_that_ignores_the_exact_name_filter_never_matches_another_deplo
     assert find_deployment_by_name(client, "brand-new-agent") is None
 
 
-def test_a_full_page_without_a_match_refuses_to_claim_the_name_is_free():
-    page = [
-        {"id": f"dep-{index}", "name": f"other-agent-{index}"} for index in range(100)
-    ]
-    client = HostBackendClient(
-        "https://api.example.com",
-        "key",
-        transport=httpx.MockTransport(
-            lambda req: httpx.Response(200, json={"resources": page})
+def test_a_deployment_beyond_the_first_page_is_found_by_name():
+    deployments = [
+        *(
+            {"id": f"dep-{index}", "name": f"other-agent-{index}"}
+            for index in range(100)
         ),
+        {"id": "dep-target", "name": "agent", "source": "external_docker"},
+    ]
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        offset = int(req.url.params["offset"])
+        limit = int(req.url.params["limit"])
+        return httpx.Response(
+            200, json={"resources": deployments[offset : offset + limit]}
+        )
+
+    client = HostBackendClient(
+        "https://api.example.com", "key", transport=httpx.MockTransport(handler)
     )
 
-    with pytest.raises(click.ClickException, match="--deployment-id"):
-        find_deployment_by_name(client, "brand-new-agent")
+    assert find_deployment_by_name(client, "agent") == ExistingDeployment(
+        "dep-target", "external_docker"
+    )
 
 
 def test_a_partial_page_without_a_match_means_the_name_is_free():

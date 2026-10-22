@@ -499,16 +499,9 @@ def _source_of(resource: object) -> str | None:
 def find_deployment_by_name(
     client: HostBackendClient, name: str
 ) -> ExistingDeployment | None:
-    listed = client.list_deployments(name=name, name_contains=name, limit=MAX_PAGE_SIZE)
-    for resource in listed:
+    for resource in client.list_deployments(name=name, name_contains=name):
         if resource.get("name") == name and resource.get("id"):
             return ExistingDeployment(str(resource["id"]), _source_of(resource))
-    if len(listed) >= MAX_PAGE_SIZE:
-        raise click.ClickException(
-            "This workspace has more deployments than the CLI can search, so it "
-            f"cannot tell whether '{name}' already exists. Pass --deployment-id to "
-            "update an existing deployment."
-        )
     return None
 
 
@@ -882,7 +875,6 @@ def _find_deployment(
             lambda c: c.list_deployments(
                 agent_id=selector.agent_id,
                 agent_environment=selector.environment,
-                limit=MAX_PAGE_SIZE,
             ),
         )
         if len(existing) > 1:

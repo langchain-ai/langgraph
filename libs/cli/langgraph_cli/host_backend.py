@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -220,19 +221,37 @@ class HostBackendClient:
         *,
         name: str | None = None,
         name_contains: str | None = None,
-        limit: int | None = None,
         agent_id: str | None = None,
         agent_environment: str | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[dict[str, object]]:
         given = (
             ("name", name),
             ("name_contains", name_contains),
-            ("limit", limit),
             ("agent_id", agent_id),
             ("agent_environment", agent_environment),
         )
-        params = {key: value for key, value in given if value is not None}
-        return _resources(self._request("GET", "/v2/deployments", params=params))
+        filters = {key: value for key, value in given if value is not None}
+        return self._every_page("/v2/deployments", filters)
+
+    def _every_page(
+        self, path: str, filters: Mapping[str, object]
+    ) -> list[dict[str, object]]:
+        resources: list[dict[str, object]] = []
+        while True:
+            page = _resources(
+                self._request(
+                    "GET",
+                    path,
+                    params={
+                        **filters,
+                        "limit": MAX_PAGE_SIZE,
+                        "offset": len(resources),
+                    },
+                )
+            )
+            resources.extend(page)
+            if len(page) < MAX_PAGE_SIZE:
+                return resources
 
     def get_listener(self, listener_id: str) -> dict[str, Any]:
         return self._request("GET", f"/v2/listeners/{listener_id}")
