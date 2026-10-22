@@ -725,6 +725,11 @@ def test_deploy_listeners_list_prints_an_aligned_table(monkeypatch) -> None:
                     "compute_config": {"k8s_namespaces": ["agents", "agents-staging"]},
                 },
                 {"id": "listener-3", "compute_id": "", "compute_config": {}},
+                {
+                    "id": "listener-4",
+                    "compute_id": None,
+                    "compute_config": {"k8s_namespaces": ["agents"]},
+                },
             ]
 
     monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
@@ -749,7 +754,35 @@ def test_deploy_listeners_list_prints_an_aligned_table(monkeypatch) -> None:
         "listener-1   prod-cluster  agents                ",
         "listener-22  multi         agents, agents-staging",
         "listener-3   -             -                     ",
+        "listener-4   -             agents                ",
     ]
+
+
+def test_deploy_listeners_list_rejects_a_listener_without_an_id(monkeypatch) -> None:
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def list_listeners(self):
+            return [{"compute_id": "prod-cluster"}]
+
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "deploy",
+            "listeners",
+            "list",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "listener without an id" in result.output
 
 
 def test_deploy_listeners_list_command_json(monkeypatch) -> None:

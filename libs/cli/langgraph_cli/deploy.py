@@ -183,11 +183,14 @@ class Listener:
         )
         return cls(
             identifier,
-            str(resource.get("compute_id", "")),
+            str(resource.get("compute_id") or ""),
             tuple(str(namespace) for namespace in namespaces)
             if isinstance(namespaces, list)
             else (),
         )
+
+    def cells(self) -> tuple[str | None, ...]:
+        return (self.id, self.compute_id, ", ".join(self.namespaces))
 
 
 @dataclass(frozen=True, slots=True)
@@ -655,18 +658,6 @@ def _deployment_url(deployment: Resource) -> str | None:
     return custom_url if isinstance(custom_url, str) and custom_url else None
 
 
-def _listener_namespaces(listener: Resource) -> str | None:
-    compute_config = listener.get("compute_config")
-    namespaces = (
-        compute_config.get("k8s_namespaces")
-        if isinstance(compute_config, Mapping)
-        else None
-    )
-    if isinstance(namespaces, list):
-        return ", ".join(str(namespace) for namespace in namespaces)
-    return None
-
-
 def _with_replaced_status(revisions: Sequence[Resource]) -> list[Resource]:
     live_index = next(
         (
@@ -718,11 +709,7 @@ DEPLOYMENTS = Listing(
 LISTENERS = Listing(
     Table(
         ("Listener ID", "Compute ID", "Namespaces"),
-        lambda listener: (
-            _text(listener, "id"),
-            _text(listener, "compute_id"),
-            _listener_namespaces(listener),
-        ),
+        lambda listener: Listener.from_resource(listener).cells(),
     ),
     empty_message="No listeners found for this workspace.",
     json_view=dict,
