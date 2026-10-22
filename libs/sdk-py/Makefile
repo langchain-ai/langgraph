@@ -1,7 +1,9 @@
 .PHONY: lint type format test
 
+TEST ?= tests
+
 test:
-	uv run pytest tests
+	uv run pytest $(TEST)
 
 ######################
 # LINTING AND FORMATTING
