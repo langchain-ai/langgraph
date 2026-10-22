@@ -684,13 +684,35 @@ def _with_replaced_status(revisions: Sequence[Resource]) -> list[Resource]:
     ]
 
 
-DEPLOYMENTS_TABLE = Table(
-    ("Deployment ID", "Deployment Name", "Deployment URL"),
-    lambda deployment: (
-        _text(deployment, "id"),
-        _text(deployment, "name"),
-        _deployment_url(deployment),
+@dataclass(frozen=True, slots=True)
+class DeploymentRow:
+    id: str
+    name: str | None
+    url: str | None
+
+    @classmethod
+    def from_resource(cls, deployment: Resource) -> "DeploymentRow":
+        identifier = _text(deployment, "id")
+        if identifier is None:
+            raise HostBackendError(
+                "The control plane returned a deployment without an id."
+            )
+        return cls(identifier, _text(deployment, "name"), _deployment_url(deployment))
+
+    def cells(self) -> tuple[str | None, ...]:
+        return (self.id, self.name, self.url)
+
+    def as_json(self) -> dict[str, str | None]:
+        return {"id": self.id, "name": self.name}
+
+
+DEPLOYMENTS = Listing(
+    Table(
+        ("Deployment ID", "Deployment Name", "Deployment URL"),
+        lambda deployment: DeploymentRow.from_resource(deployment).cells(),
     ),
+    empty_message="No deployments found.",
+    json_view=lambda deployment: DeploymentRow.from_resource(deployment).as_json(),
 )
 
 LISTENERS = Listing(
@@ -2642,6 +2664,7 @@ def _deploy_cmd(
     default="",
     help="Only show deployments whose names contain this value.",
 )
+@OPT_LIST_OUTPUT
 @deploy.command("list", help="[Beta] List LangSmith Deployments.")
 def deploy_list(
     api_key: str | None,
@@ -2649,11 +2672,13 @@ def deploy_list(
     name_contains: str,
     agent_id: str | None,
     environment: str | None,
+    output: ListOutput,
 ) -> None:
     if agent_id is not None or environment is not None:
         click.secho(
             "Note: --agent-id and --agent-environment flags are in private beta",
             fg="yellow",
+            err=True,
         )
     if agent_id is not None and not agent_id.strip():
         raise click.UsageError("--agent-id must not be empty.")
@@ -2662,15 +2687,13 @@ def deploy_list(
         filters["agent_id"] = agent_id
     if environment is not None:
         filters["agent_environment"] = environment
-    client = _create_host_backend_client(host_url, api_key)
+    client = _create_host_backend_client(host_url, api_key, no_input=output.no_input)
     deployments = _call_host_backend_with_optional_tenant(
         client,
         lambda c: c.list_deployments(name_contains=name_contains, **filters),
+        no_input=output.no_input,
     )
-    if not deployments:
-        click.echo("No deployments found.")
-        return
-    click.echo(DEPLOYMENTS_TABLE.render(deployments))
+    output.show(DEPLOYMENTS, deployments)
 
 
 # ---------------------------------------------------------------------------

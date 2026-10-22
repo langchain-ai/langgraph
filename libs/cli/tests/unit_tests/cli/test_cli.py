@@ -492,6 +492,139 @@ def test_deploy_list_prints_an_aligned_table(monkeypatch) -> None:
     ]
 
 
+def _deploy_list_json(
+    monkeypatch, deployments: list[dict], *extra_args: str
+) -> click.testing.Result:
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def list_deployments(
+            self,
+            name_contains: str = "",
+            agent_id: str | None = None,
+            agent_environment: str | None = None,
+        ):
+            return deployments
+
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
+    return CliRunner().invoke(
+        cli,
+        [
+            "deploy",
+            "list",
+            "--json",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+            *extra_args,
+        ],
+    )
+
+
+def test_deploy_list_command_json(monkeypatch) -> None:
+    result = _deploy_list_json(
+        monkeypatch,
+        [
+            {
+                "id": "dep-123",
+                "name": "alpha",
+                "source_config": {"custom_url": "https://alpha.example.com"},
+            },
+            {"id": "dep-456", "name": "beta", "source_config": {}},
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == [
+        {"id": "dep-123", "name": "alpha"},
+        {"id": "dep-456", "name": "beta"},
+    ]
+
+
+def test_deploy_list_json_never_prints_deployment_secrets(monkeypatch) -> None:
+    result = _deploy_list_json(
+        monkeypatch,
+        [
+            {
+                "id": "dep-123",
+                "name": "alpha",
+                "source_config": {"custom_url": None},
+                "secrets": [{"name": "OPENAI_API_KEY", "value": "sk-plain-value"}],
+            }
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "sk-plain-value" not in result.output
+    assert json.loads(result.stdout) == [{"id": "dep-123", "name": "alpha"}]
+
+
+def test_deploy_list_command_json_no_results(monkeypatch) -> None:
+    result = _deploy_list_json(monkeypatch, [])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == []
+
+
+def test_deploy_list_rejects_a_deployment_without_an_id(monkeypatch) -> None:
+    result = _deploy_list_json(monkeypatch, [{"name": "alpha"}])
+
+    assert result.exit_code != 0
+    assert "deployment without an id" in result.output
+
+
+def test_deploy_list_json_keeps_the_agent_note_off_stdout(monkeypatch) -> None:
+    result = _deploy_list_json(
+        monkeypatch,
+        [{"id": "dep-123", "name": "alpha"}],
+        "--agent-id",
+        "customer-support",
+        "--agent-environment",
+        "staging",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == [{"id": "dep-123", "name": "alpha"}]
+    assert "private beta" in result.stderr
+
+
+def test_deploy_list_json_never_prompts_for_a_workspace(monkeypatch) -> None:
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def list_deployments(self, name_contains: str = ""):
+            raise HostBackendError("requires workspace specification", status_code=403)
+
+        def set_tenant(self, tenant_id: str) -> None:
+            raise AssertionError("must not retry with a prompted tenant with --json")
+
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
+    prompt_calls = []
+    monkeypatch.setattr(
+        click, "prompt", lambda *a, **k: prompt_calls.append((a, k)) or "unreachable"
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "deploy",
+            "list",
+            "--json",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert prompt_calls == []
+    assert result.exit_code != 0
+    assert "LANGSMITH_TENANT_ID" in result.output
+
+
 def test_deploy_listeners_list_command(monkeypatch) -> None:
     runner = CliRunner()
     captured: dict[str, str] = {}
