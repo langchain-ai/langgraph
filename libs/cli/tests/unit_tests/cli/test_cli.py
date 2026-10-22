@@ -2,10 +2,12 @@ import json
 import pathlib
 import re
 import shutil
+import sys
 import tempfile
 import textwrap
 from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import click
 from click.testing import CliRunner
@@ -369,6 +371,32 @@ def test_dev_command_requires_ssl_certfile_and_keyfile_together(tmp_path) -> Non
 
     assert result.exit_code != 0
     assert "Both --ssl-certfile and --ssl-keyfile must be provided" in result.output
+
+
+def test_dev_command_passes_priority_to_the_server(tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+                "priority": {"path": "./priority.py:priority"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    # The test environment doesn't install langgraph-api, so stand in for its server.
+    server = MagicMock()
+    monkeypatch.setitem(sys.modules, "langgraph_api.cli", server)
+    # dev appends the working directory and its dependencies to sys.path.
+    monkeypatch.setattr(sys, "path", list(sys.path))
+
+    result = CliRunner().invoke(cli, ["dev", "--config", str(config_path)])
+
+    assert result.exit_code == 0, result.output
+    assert server.run_server.call_args.kwargs["priority"] == {
+        "path": "./priority.py:priority"
+    }
 
 
 def test_deploy_list_command(monkeypatch) -> None:

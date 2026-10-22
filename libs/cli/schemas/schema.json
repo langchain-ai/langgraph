@@ -196,6 +196,17 @@
                 }
               ]
             },
+            "priority": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PriorityConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Custom run priority config, including the path to your Python priority logic.\n\nAllows you to decide each thread's priority settings when the thread gets its first run.\n"
+            },
             "source": {
               "anyOf": [
                 {
@@ -438,6 +449,17 @@
                 }
               ]
             },
+            "priority": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PriorityConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Custom run priority config, including the path to your Python priority logic.\n\nAllows you to decide each thread's priority settings when the thread gets its first run.\n"
+            },
             "source": {
               "$ref": "#/$defs/UvSource"
             },
@@ -665,6 +687,17 @@
                   "type": "null"
                 }
               ]
+            },
+            "priority": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PriorityConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Custom run priority config, including the path to your Python priority logic.\n\nAllows you to decide each thread's priority settings when the thread gets its first run.\n"
             },
             "source": {
               "anyOf": [
@@ -1166,6 +1199,18 @@
         "max_age": {
           "type": "integer",
           "description": "Optional. How many seconds the browser may cache preflight responses.\n\nDefault might be 600 (10 minutes). Larger values reduce preflight requests but can cause stale configurations.\n"
+        }
+      },
+      "required": []
+    },
+    "PriorityConfig": {
+      "title": "PriorityConfig",
+      "description": "Configuration for custom run priority logic.\n\nAllows you to decide each thread's priority settings with a Python function\nthat the server calls at the thread's first run.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Required. Path to an instance of the Priority() class that registers an assign function.\n"
         }
       },
       "required": []

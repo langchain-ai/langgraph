@@ -16,6 +16,7 @@ from langgraph_cli.config import (
     config_to_docker,
     default_base_image,
     docker_tag,
+    get_unknown_keys,
     has_disallowed_build_command_content,
     validate_config,
     validate_config_file,
@@ -155,6 +156,7 @@ def test_validate_config():
         "store": None,
         "auth": None,
         "encryption": None,
+        "priority": None,
         "webhooks": None,
         "checkpointer": None,
         "http": None,
@@ -184,6 +186,7 @@ def test_validate_config():
         "store": None,
         "auth": None,
         "encryption": None,
+        "priority": None,
         "webhooks": None,
         "checkpointer": None,
         "http": None,
@@ -1289,6 +1292,102 @@ def test_config_to_docker_python_encryption_formatted():
     )
 
 
+@pytest.mark.parametrize(
+    "path", ["./priority.py:priority", "my_package.priority:priority"]
+)
+def test_config_to_docker_python_priority(path: str):
+    # Test that priority config is kept by validation and isn't an unknown key
+    raw_config = {
+        "python_version": "3.11",
+        "graphs": {"agent": "./agent.py:graph"},
+        "dependencies": ["."],
+        "priority": {"path": path},
+    }
+    validated = validate_config(raw_config)
+
+    assert validated["priority"] == {"path": path}
+    assert get_unknown_keys(raw_config) == []
+
+
+def test_config_to_docker_python_priority_bad_path():
+    # Test that invalid priority path format raises ValueError
+    with pytest.raises(ValueError, match="Invalid priority.path format"):
+        validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {"agent": "./agent.py:graph"},
+                "dependencies": ["."],
+                "priority": {"path": "./priority.py"},  # Missing :attribute
+            }
+        )
+
+
+@pytest.mark.parametrize("ext", [".ts", ".mts", ".cts", ".js", ".mjs", ".cjs"])
+def test_config_to_docker_python_priority_js_path(ext: str):
+    # Test that a JavaScript priority path is rejected
+    with pytest.raises(ValueError, match="JavaScript priority callbacks"):
+        validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {"agent": "./agent.py:graph"},
+                "dependencies": ["."],
+                "priority": {"path": f"./priority{ext}:priority"},
+            }
+        )
+
+
+def test_config_to_docker_nodejs_priority():
+    # Test that priority config is rejected for Node.js-only projects
+    with pytest.raises(click.UsageError, match="`priority` requires a Python"):
+        validate_config(
+            {
+                "node_version": "20",
+                "graphs": {"agent": "./graphs/agent.js:graph"},
+                "priority": {"path": "./priority.py:priority"},
+            }
+        )
+
+
+def test_config_to_docker_python_priority_formatted():
+    # Test that priority config is written to the Docker output with its container path
+    actual_docker_stdin, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": {"agent": "./graphs/agent.py:graph"},
+                "priority": {"path": "./agent.py:my_priority"},
+            }
+        ),
+        base_image="langchain/langgraph-api",
+    )
+    assert (
+        "ENV LANGGRAPH_PRIORITY="
+        """'{"path": "/deps/outer-unit_tests/unit_tests/agent.py:my_priority"}'"""
+        in actual_docker_stdin
+    )
+
+
+def test_config_to_docker_python_priority_not_in_dependencies():
+    # Test that a priority file outside the dependencies raises ValueError
+    with pytest.raises(
+        ValueError, match="Priority file .* not covered by dependencies"
+    ):
+        config_to_docker(
+            PATH_TO_CONFIG,
+            validate_config(
+                {
+                    "python_version": "3.11",
+                    "dependencies": ["./graphs"],
+                    "graphs": {"agent": "./graphs/agent.py:graph"},
+                    "priority": {"path": "./agent.py:my_priority"},
+                }
+            ),
+            base_image="langchain/langgraph-api",
+        )
+
+
 def test_config_to_docker_nodejs_internal_docker_tag():
     graphs = {"agent": "./graphs/agent.js:graph"}
     actual_docker_stdin, additional_contexts = config_to_docker(
@@ -1727,6 +1826,38 @@ def test_config_to_docker_uv_lock_honors_root_workspace_sources():
         )
         assert (
             '"path": "/deps/workspace/libs/shared/src/shared/auth.py:create_auth"'
+            in docker
+        )
+
+
+def test_config_to_docker_uv_lock_rewrites_priority_path():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root, config_path = _write_uv_lock_workspace(
+            tmpdir_path,
+            agent_sources="[tool.uv.sources]\nshared = { workspace = true }",
+        )
+        (project_root / "libs" / "shared" / "src" / "shared" / "priority.py").touch()
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {
+                    "agent": "../../apps/agent/src/agent/graph.py:graph",
+                },
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
+                "priority": {
+                    "path": "../../libs/shared/src/shared/priority.py:priority"
+                },
+            }
+        )
+        docker, _ = config_to_docker(
+            config_path, config, base_image="langchain/langgraph-api:0.2.47"
+        )
+
+        assert (
+            "ENV LANGGRAPH_PRIORITY="
+            """'{"path": "/deps/workspace/libs/shared/src/shared/priority.py:priority"}'"""
             in docker
         )
 

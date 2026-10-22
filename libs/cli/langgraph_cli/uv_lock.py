@@ -910,6 +910,7 @@ def python_config_to_docker_uv_lock(
     for section, key in [
         ("auth", "path"),
         ("encryption", "path"),
+        ("priority", "path"),
         ("checkpointer", "path"),
         ("http", "app"),
     ]:
