@@ -1081,6 +1081,8 @@ def _docker_config_for_token(registry_host: str, token: str, username: str):
 
 _UPLOAD_TIMEOUT_SECONDS = 300
 _BYTES_PER_MIB = 1_048_576
+# Byte range Cloud Storage signs into upload URLs, up to the 200 MB archive limit.
+_GCS_SIZE_RANGE = f"0,{200 * _BYTES_PER_MIB}"
 
 
 class _ProgressReader:
@@ -1106,7 +1108,7 @@ class _ProgressReader:
         return self._file_size
 
 
-def _upload_to_gcs(
+def _upload_source_tarball(
     signed_url: str,
     file_path: str,
     file_size: int,
@@ -1122,7 +1124,7 @@ def _upload_to_gcs(
     # content type, which breaks signatures that cover it.
     headers = {
         "Content-Type": "application/gzip",
-        **(upload_headers or {"X-Goog-Content-Length-Range": "0,209715200"}),
+        **(upload_headers or {"X-Goog-Content-Length-Range": _GCS_SIZE_RANGE}),
     }
 
     with open(file_path, "rb") as f:
@@ -1451,7 +1453,7 @@ def _run_remote_build(
         step += 1
 
         _log_deploy_step(step, "Uploading source")
-        _upload_to_gcs(
+        _upload_source_tarball(
             signed_url, archive_path, file_size, upload_data.get("upload_headers")
         )
     step += 1

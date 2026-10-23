@@ -1465,7 +1465,7 @@ def test_source_upload_sends_the_headers_the_signed_url_requires(
         "urllib.request.urlopen", side_effect=lambda req, timeout: sent.append(req)
     )
 
-    deploy_mod._upload_to_gcs(
+    deploy_mod._upload_source_tarball(
         "https://storage.example/signed", str(archive), 7, upload_headers
     )
 

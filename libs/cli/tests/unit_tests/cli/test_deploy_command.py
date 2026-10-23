@@ -351,7 +351,7 @@ def deploy_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DeployPro
     )
     monkeypatch.setattr(deploy_module.platform, "machine", lambda: "x86_64")
     monkeypatch.setattr(archive_module, "create_archive", fake_create_archive)
-    monkeypatch.setattr(deploy_module, "_upload_to_gcs", fake_upload)
+    monkeypatch.setattr(deploy_module, "_upload_source_tarball", fake_upload)
     return DeployProject(control_plane, docker, timeline, uploads)
 
 
