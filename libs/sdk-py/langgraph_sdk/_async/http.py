@@ -179,7 +179,7 @@ class HttpClient:
                 return await self.request_reconnect(
                     loc,
                     "GET",
-                    headers=request_headers,
+                    headers=headers,
                     # don't pass on_response so it's only called once
                     reconnect_limit=reconnect_limit - 1,
                 )
