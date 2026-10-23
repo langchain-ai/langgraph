@@ -819,6 +819,50 @@ async def test_astream():
     ]
 
 
+_CALLER_CONFIG: RunnableConfig = {
+    "configurable": {"thread_id": "thread_1", "checkpoint_ns": "outer:123"}
+}
+_SUBGRAPH_PARTS = [
+    StreamPart(event="values|sub:abc", data={"chunk": "inner"}),
+    StreamPart(event="values", data={"chunk": "root"}),
+]
+_CALLER_PREFIXED = [
+    (("outer:123", "sub:abc"), {"chunk": "inner"}),
+    (("outer:123",), {"chunk": "root"}),
+]
+
+
+def test_stream_subgraphs_keeps_caller_namespace():
+    mock_sync_client = MagicMock()
+    mock_sync_client.runs.stream.return_value = _SUBGRAPH_PARTS
+    remote_pregel = RemoteGraph("test_graph_id", sync_client=mock_sync_client)
+
+    stream_parts = list(
+        remote_pregel.stream(
+            {"input": "data"}, _CALLER_CONFIG, stream_mode="values", subgraphs=True
+        )
+    )
+
+    assert stream_parts == _CALLER_PREFIXED
+
+
+async def test_astream_subgraphs_keeps_caller_namespace():
+    mock_async_client = MagicMock()
+    async_iter = MagicMock()
+    async_iter.__aiter__.return_value = _SUBGRAPH_PARTS
+    mock_async_client.runs.stream.return_value = async_iter
+    remote_pregel = RemoteGraph("test_graph_id", client=mock_async_client)
+
+    stream_parts = [
+        part
+        async for part in remote_pregel.astream(
+            {"input": "data"}, _CALLER_CONFIG, stream_mode="values", subgraphs=True
+        )
+    ]
+
+    assert stream_parts == _CALLER_PREFIXED
+
+
 def test_invoke():
     # set up test
     mock_sync_client = MagicMock()
