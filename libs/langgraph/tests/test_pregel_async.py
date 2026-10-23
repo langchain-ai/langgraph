@@ -6732,6 +6732,31 @@ async def test_multiple_updates() -> None:
 
 
 @NEEDS_CONTEXTVARS
+async def test_task_in_subgraph_node_returns_its_value_with_tools_mode() -> None:
+    class State(TypedDict):
+        out: int | None
+
+    @task
+    async def double(x: int) -> int:
+        return x * 2
+
+    async def node(state: State) -> State:
+        return {"out": await double(21)}
+
+    inner = StateGraph(State).add_node("node", node).add_edge(START, "node").compile()
+    graph = (
+        StateGraph(State).add_node("inner", inner).add_edge(START, "inner").compile()
+    )
+
+    chunks = [
+        chunk
+        async for chunk in graph.astream({"out": None}, stream_mode=["values", "tools"])
+    ]
+
+    assert chunks[-1] == ("values", {"out": 42})
+
+
+@NEEDS_CONTEXTVARS
 async def test_falsy_return_from_task(async_checkpointer: BaseCheckpointSaver) -> None:
     """Test with a falsy return from a task."""
 
