@@ -994,9 +994,14 @@ class Pregel(
 
     def with_config(self, config: RunnableConfig | None = None, **kwargs: Any) -> Self:
         """Create a copy of the Pregel object with an updated config."""
-        return self.copy(
-            {"config": merge_configs(self.config, config, cast(RunnableConfig, kwargs))}
-        )
+        configs = (self.config, config, cast(RunnableConfig, kwargs))
+        merged = merge_configs(*configs)
+        # `merge_configs` drops a `recursion_limit` equal to the default, taking
+        # it for one `ensure_config` filled in; bound configs never come from there.
+        for c in configs:
+            if c and (limit := c.get("recursion_limit")):
+                merged["recursion_limit"] = limit
+        return self.copy({"config": merged})
 
     def validate(self) -> Self:
         for name, node in self.nodes.items():
