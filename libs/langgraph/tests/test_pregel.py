@@ -6880,6 +6880,22 @@ def test_named_tasks_functional() -> None:
     ]
 
 
+def test_invoke_tags_reach_a_node_three_subgraphs_deep_once() -> None:
+    class State(TypedDict):
+        copies: int
+
+    def leaf(state: State, config: RunnableConfig) -> State:
+        return {"copies": config["tags"].count("my-tag")}
+
+    graph = StateGraph(State).add_node("leaf", leaf).add_edge(START, "leaf").compile()
+    for _ in range(3):
+        graph = (
+            StateGraph(State).add_node("sub", graph).add_edge(START, "sub").compile()
+        )
+
+    assert graph.invoke({"copies": 0}, {"tags": ["my-tag"]}) == {"copies": 1}
+
+
 def test_tags_stream_mode_messages() -> None:
     model = GenericFakeChatModel(messages=iter(["foo"]), tags=["meow"])
     graph = (
