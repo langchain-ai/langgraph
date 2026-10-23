@@ -132,6 +132,9 @@ class AsyncBackgroundExecutor(AbstractAsyncContextManager):
         self.tasks: dict[asyncio.Future, tuple[bool, bool]] = {}
         self.sentinel = object()
         self.loop = asyncio.get_running_loop()
+        # To prevent deadlocks when max_concurrency=1, we avoid wrapping 
+        # the coroutine in a gated function before scheduling. Instead,
+        # we allow the task to start and handle the semaphore internally.
         if max_concurrency := config.get("max_concurrency"):
             self.semaphore: asyncio.Semaphore | None = asyncio.Semaphore(
                 max_concurrency
@@ -149,9 +152,15 @@ class AsyncBackgroundExecutor(AbstractAsyncContextManager):
         __next_tick__: bool = False,  # noop in async (always True)
         **kwargs: P.kwargs,
     ) -> asyncio.Future[T]:
-        coro = cast(Coroutine[None, None, T], fn(*args, **kwargs))
-        if self.semaphore:
-            coro = gated(self.semaphore, coro)
+        # Instead of wrapping in 'gated' here, we create a wrapper 
+        // that acquires the semaphore inside the task.
+        async def wrapped():
+            if self.semaphore:
+                async with self.semaphore:
+                    return await fn(*args, **kwargs)
+            return await fn(*args, **kwargs)
+
+        coro = wrapped()
         if CONTEXT_NOT_SUPPORTED:
             task = run_coroutine_threadsafe(
                 coro, self.loop, name=__name__, lazy=__next_tick__
