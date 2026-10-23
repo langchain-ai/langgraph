@@ -199,9 +199,19 @@ class BranchSpec(NamedTuple):
         if not isinstance(result, (list, tuple)):
             result = [result]
         if self.ends:
-            destinations: Sequence[Send | str] = [
-                r if isinstance(r, Send) else self.ends[r] for r in result
-            ]
+            mapped_destinations: list[Send | str] = []
+            for route in result:
+                if isinstance(route, Send):
+                    mapped_destinations.append(route)
+                    continue
+                try:
+                    mapped_destinations.append(self.ends[route])
+                except KeyError:
+                    raise ValueError(
+                        f"Conditional edge returned {route!r}, which is not a key "
+                        f"in path_map. Valid keys: {list(self.ends)!r}."
+                    ) from None
+            destinations: Sequence[Send | str] = mapped_destinations
         else:
             destinations = cast(Sequence[Send | str], result)
         if any(dest is None or dest == START for dest in destinations):

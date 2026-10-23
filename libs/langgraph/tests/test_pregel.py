@@ -9859,3 +9859,24 @@ async def test_delta_channel_async_write_ordering() -> None:
 
     state = await graph.aget_state(config)
     assert len(state.values["messages"]) == 6  # 3 human + 3 AI
+
+
+def test_conditional_edge_with_unknown_path_map_key() -> None:
+    class State(TypedDict):
+        items: list[str]
+
+    builder = StateGraph(State)
+    builder.add_node("router", lambda state: state)
+    builder.add_node("retry", lambda state: state)
+    builder.add_conditional_edges(
+        "router", lambda _state: "count_retry", {"retry": "retry"}
+    )
+    builder.set_entry_point("router")
+
+    with pytest.raises(ValueError) as exc_info:
+        builder.compile().invoke({"items": []})
+
+    assert str(exc_info.value) == (
+        "Conditional edge returned 'count_retry', which is not a key in path_map. "
+        "Valid keys: ['retry']."
+    )
