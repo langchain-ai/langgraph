@@ -335,6 +335,7 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
         recursion_limit=DEFAULT_RECURSION_LIMIT,
         configurable={},
     )
+    inherited_tags: set[str] = set()
     if var_config := var_child_runnable_config.get():
         empty.update(
             {
@@ -343,6 +344,7 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
                 if _is_not_empty(v)
             },
         )
+        inherited_tags.update(empty["tags"])
     # An explicit config that supplies its own checkpoint coordinate (a
     # thread_id, or any checkpoint_ns/checkpoint_id/checkpoint_map) is addressing
     # its own checkpoint lineage, so drop the inherited ambient configurable
@@ -395,12 +397,14 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
                 elif k == "tags":
                     # Concatenate tags across configs so values bound via
                     # with_config(...) are preserved when later configs
-                    # supply additional tags. Matches merge_configs.
+                    # supply additional tags. Matches merge_configs. Tags the
+                    # ambient config already has are skipped: a subgraph gets
+                    # its parent's config both explicitly and as the ambient
+                    # one, so they would double at every nesting level.
                     existing_tags: list[str] | None = empty.get("tags")
+                    new_tags = [t for t in cast(list, v) if t not in inherited_tags]
                     empty["tags"] = (
-                        [*existing_tags, *cast(list, v)]
-                        if existing_tags
-                        else list(cast(list, v))
+                        [*existing_tags, *new_tags] if existing_tags else new_tags
                     )
                 else:
                     empty[k] = v  # type: ignore[literal-required]
