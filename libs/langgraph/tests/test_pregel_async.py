@@ -5809,6 +5809,60 @@ async def test_store_injected_async(
     )  # still overwriting the same one
 
 
+@pytest.mark.parametrize("stream_mode", ["tasks", "debug"])
+async def test_failing_task_result_is_streamed_before_the_error(
+    stream_mode: str,
+) -> None:
+    class State(TypedDict):
+        x: str
+
+    async def failing(state: State) -> State:
+        raise ValueError("boom")
+
+    graph = StateGraph(State).add_node("failing", failing).add_edge(START, "failing")
+    errors = []
+    with pytest.raises(ValueError, match="boom"):
+        async for chunk in graph.compile().astream({"x": ""}, stream_mode=stream_mode):
+            payload = chunk["payload"] if stream_mode == "debug" else chunk
+            if "error" in payload:
+                errors.append(payload["error"])
+
+    assert [type(error) for error in errors] == [ValueError]
+
+
+@pytest.mark.parametrize(
+    ("parallel", "stream_mode"), [(False, "custom"), (True, "values")]
+)
+async def test_graph_error_handler_recovers_on_the_executor_path(
+    parallel: bool, stream_mode: str
+) -> None:
+    class State(TypedDict):
+        x: str
+
+    async def failing(state: State) -> State:
+        raise ValueError("boom")
+
+    async def handler(state: State) -> Command:
+        return Command(update={"x": "handled"}, goto=END)
+
+    builder = (
+        StateGraph(State)
+        .add_node("failing", failing, error_handler=handler)
+        .add_edge(START, "failing")
+    )
+    if parallel:
+        builder.add_node("sibling", lambda state: {}).add_edge(START, "sibling")
+
+    chunks = [
+        chunk
+        async for chunk in builder.compile().astream(
+            {"x": ""}, stream_mode=[stream_mode, "values"]
+        )
+    ]
+
+    assert [c[-1] for c in chunks if c[0] == "values"][-1] == {"x": "handled"}
+
+
 async def test_debug_retry(async_checkpointer: BaseCheckpointSaver):
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
