@@ -258,10 +258,13 @@ class HostBackendClient:
         )
 
     def request_upload_url(self, deployment_id: str) -> dict[str, Any]:
-        """Get a signed GCS URL for uploading the source tarball."""
+        """Get a signed URL for uploading the source tarball."""
+        # Tells the control plane this client sends the returned
+        # `upload_headers` with its upload, which some storage requires.
         return self._request(
             "POST",
             f"/v2/deployments/{deployment_id}/upload-url",
+            {"supports_upload_headers": True},
         )
 
     def update_deployment(

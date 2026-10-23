@@ -96,6 +96,7 @@ class ControlPlaneDouble:
     existing_deployments: list[dict] = field(default_factory=list)
     push_token_status: int = 200
     push_token_extra: dict = field(default_factory=dict)
+    upload_url_extra: dict = field(default_factory=dict)
     create_error: str | None = None
     listeners: list[dict] = field(default_factory=list)
     listeners_by_id: dict[str, dict] = field(default_factory=dict)
@@ -159,7 +160,12 @@ class ControlPlaneDouble:
             )
         if path.endswith("/upload-url"):
             return httpx.Response(
-                200, json={"upload_url": SIGNED_UPLOAD_URL, "object_path": OBJECT_PATH}
+                200,
+                json={
+                    "upload_url": SIGNED_UPLOAD_URL,
+                    "object_path": OBJECT_PATH,
+                    **self.upload_url_extra,
+                },
             )
         if method == "PATCH":
             return httpx.Response(200, json={"tenant_id": "tenant-1"})
@@ -276,7 +282,7 @@ class DeployProject:
     control_plane: ControlPlaneDouble
     docker: DockerDouble
     timeline: list[str]
-    uploads: list[tuple[str, str, int]]
+    uploads: list[tuple[str, str, int, dict[str, str] | None]]
 
     def run(self, *args: str, host_url: str = CONTROL_PLANE_URL) -> Result:
         return CliRunner().invoke(
@@ -313,16 +319,21 @@ def deploy_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DeployPro
     timeline: list[str] = []
     control_plane = ControlPlaneDouble(timeline)
     docker = DockerDouble(timeline)
-    uploads: list[tuple[str, str, int]] = []
+    uploads: list[tuple[str, str, int, dict[str, str] | None]] = []
 
     @contextmanager
     def fake_create_archive(config_path: Path, config: dict) -> Iterator[tuple]:
         timeline.append("create_archive")
         yield ARCHIVE
 
-    def fake_upload(signed_url: str, file_path: str, file_size: int) -> None:
+    def fake_upload(
+        signed_url: str,
+        file_path: str,
+        file_size: int,
+        upload_headers: dict[str, str] | None,
+    ) -> None:
         timeline.append("upload_archive")
-        uploads.append((signed_url, file_path, file_size))
+        uploads.append((signed_url, file_path, file_size, upload_headers))
 
     monkeypatch.setattr(deploy_module, "_no_input", False)
     monkeypatch.setattr(deploy_module, "_emitter", None)
@@ -340,7 +351,7 @@ def deploy_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DeployPro
     )
     monkeypatch.setattr(deploy_module.platform, "machine", lambda: "x86_64")
     monkeypatch.setattr(archive_module, "create_archive", fake_create_archive)
-    monkeypatch.setattr(deploy_module, "_upload_to_gcs", fake_upload)
+    monkeypatch.setattr(deploy_module, "_upload_source_tarball", fake_upload)
     return DeployProject(control_plane, docker, timeline, uploads)
 
 
@@ -699,6 +710,9 @@ def test_deployment_not_created_by_the_cli_gets_an_actionable_error(
 def test_remote_build_creates_an_internal_source_deployment_and_uploads_the_archive(
     deploy_project: DeployProject,
 ) -> None:
+    upload_headers = {"Content-Type": "application/gzip", "x-ms-blob-type": "BlockBlob"}
+    deploy_project.control_plane.upload_url_extra = {"upload_headers": upload_headers}
+
     result = deploy_project.run("--remote", "--install-command", "yarn install")
 
     assert result.exit_code == 0, result.output
@@ -713,7 +727,12 @@ def test_remote_build_creates_an_internal_source_deployment_and_uploads_the_arch
     assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source"] == (
         "internal_source"
     )
-    assert deploy_project.uploads == [(SIGNED_UPLOAD_URL, ARCHIVE[0], ARCHIVE[1])]
+    assert deploy_project.control_plane.bodies[_upload_url(CREATED_ID)] == {
+        "supports_upload_headers": True
+    }
+    assert deploy_project.uploads == [
+        (SIGNED_UPLOAD_URL, ARCHIVE[0], ARCHIVE[1], upload_headers)
+    ]
     assert deploy_project.control_plane.bodies[_patch(CREATED_ID)] == {
         "revision_source": "internal_source",
         "source_revision_config": {
