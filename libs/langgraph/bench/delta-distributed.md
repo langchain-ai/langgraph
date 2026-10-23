@@ -29,6 +29,52 @@ construction/provisioning is intentionally separate; no image or paid fleet has
 been created by this change. This is a normal standalone benchmark project using
 the LangSmith SDK, not a change to the Open SWE workspace image.
 
+## Create the snapshot
+
+`delta_snapshot.py` builds the required image from the dedicated
+`delta-snapshot/Dockerfile` context. Only that Dockerfile is uploaded, never your
+working directory, `.env`, git credentials or LangSmith key. It uses Postgres
+14.7, uv 0.13.4 and Python 3.14.3, checks out a full public LangGraph commit SHA,
+and syncs the frozen dev dependencies. OS packages and version-tagged base images
+are not digest/apt-repository pinned; reuse the resulting immutable snapshot ID
+for comparable measurements rather than rebuilding between shards.
+
+From `libs/langgraph`, after checking out this PR and syncing dependencies:
+
+```bash
+uv run python bench/delta_snapshot.py \
+  --name delta-bench --output ./snapshot-plan.json
+```
+
+This dry run creates no resources. By default, the revision is local HEAD: it must
+already be pushed and reachable in the public repository. Uncommitted local code
+is **not** included. For a paid build, use a fresh receipt path:
+
+```bash
+uv run python bench/delta_snapshot.py \
+  --name delta-bench --output ./snapshot.json --execute
+```
+
+Optional flags: `--revision FULL_40_CHAR_SHA --vcpus 2 --memory-gib 8 --disk-gib 30
+--timeout 1800`. The defaults are builder sizing, not fleet concurrency. The SDK
+creates one temporary billable builder sandbox and a persistent snapshot, using
+`LANGSMITH_API_KEY`/`LANGSMITH_ENDPOINT` only on the coordinator. It cleans up the
+builder when the call exits; verify cleanup in LangSmith after a crash or failed
+build. The snapshot remains until you explicitly delete it. This command does not
+launch benchmark shards or alter an Open SWE workspace image.
+
+On success, `snapshot.json` contains `snapshot_id`, revision and build parameters:
+
+```bash
+export SNAPSHOT_ID="$(python -c 'import json; print(json.load(open("snapshot.json"))["snapshot_id"])')"
+```
+
+Then use `--snapshot-id "$SNAPSHOT_ID"` in the pilot command below. Build failures
+leave a `building` receipt: inspect LangSmith before retrying with a new name/path;
+do not assume a timeout means no snapshot or builder was created. Remote image
+build and pilot have not yet been executed; local SDK-contract tests are not a
+substitute for that end-to-end verification.
+
 ## Plan first
 
 From `libs/langgraph`:

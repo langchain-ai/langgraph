@@ -109,15 +109,15 @@ def run_shard(
                 fs_capacity_bytes=plan["fs_capacity_bytes"],
             )
             _atomic_json(ledger, {"sandbox_name": sandbox_name, "state": "running"})
-            sandbox.write_file(
+            sandbox.write(
                 f"{REMOTE}/tests/test_delta_channel_benchmark.py",
                 BENCHMARK.read_bytes(),
             )
-            sandbox.write_file(
+            sandbox.write(
                 "/tmp/delta_shard.py",
                 Path(__file__).with_name("delta_shard.py").read_bytes(),
             )
-            sandbox.write_file(
+            sandbox.write(
                 "/tmp/delta-job.json",
                 json.dumps(
                     {
@@ -137,8 +137,8 @@ def run_shard(
                 raise RuntimeError(
                     "Shard command failed; sandbox logs withheld from shared output"
                 )
-            data = sandbox.read_file("/tmp/delta-results.csv")
-            metadata = json.loads(sandbox.read_file("/tmp/delta-results.metadata.json"))
+            data = sandbox.read("/tmp/delta-results.csv")
+            metadata = json.loads(sandbox.read("/tmp/delta-results.metadata.json"))
             if metadata["script_sha256"] != plan["source_sha256"]:
                 raise ValueError("Remote benchmark source differs")
             validate_csv(data, shard, plan["lengths"])

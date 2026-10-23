@@ -47,13 +47,13 @@ def test_shard_cleanup_resume_and_validation(tmp_path, command_fails):
     deleted = []
 
     class FakeSandbox:
-        def write_file(self, path, content):
+        def write(self, path, content):
             assert "API_KEY" not in str(content)
 
         def run(self, *args, **kwargs):
             return SimpleNamespace(exit_code=1 if command_fails else 0)
 
-        def read_file(self, path):
+        def read(self, path):
             return (
                 json.dumps({"script_sha256": "hash"}).encode()
                 if path.endswith("json")
