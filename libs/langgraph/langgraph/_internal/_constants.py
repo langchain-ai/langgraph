@@ -74,6 +74,8 @@ CONFIG_KEY_RUNTIME = sys.intern("__pregel_runtime")
 # holds a `Runtime` instance with context, store, stream writer, etc.
 CONFIG_KEY_RESUME_MAP = sys.intern("__pregel_resume_map")
 # holds a mapping of task ns -> resume value for resuming tasks
+CONFIG_KEY_RESUME_MAP_SENT = sys.intern("__pregel_resume_map_sent")
+# holds the set of resume map ids already forwarded to a remote graph in this run
 CONFIG_KEY_STREAM_MESSAGES_V2 = sys.intern("__pregel_stream_messages_v2")
 # when True, attach StreamMessagesHandlerV2 so content-block (v2) events
 # flow through stream_mode="messages"; set by StreamingHandler only.
@@ -134,6 +136,7 @@ RESERVED = {
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
     CONFIG_KEY_RESUME_MAP,
+    CONFIG_KEY_RESUME_MAP_SENT,
     CONFIG_KEY_STREAM_MESSAGES_V2,
     # other constants
     PUSH,
