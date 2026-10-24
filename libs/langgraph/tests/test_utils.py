@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from typing_extensions import NotRequired, Required, TypedDict
 
 from langgraph._internal._config import (
+    DEFAULT_RECURSION_LIMIT,
     _is_not_empty,
     _merge_callbacks,
     ensure_config,
@@ -618,6 +619,16 @@ def test_merge_configs_merges_metadata_lc_versions() -> None:
         "langchain-core": "1.2.0",
     }
     assert merged["metadata"]["lc_agent_name"] == "agent"
+
+
+def test_merge_configs_skips_only_the_injected_default_recursion_limit() -> None:
+    bound = {"recursion_limit": 50}
+    explicit_default = int(DEFAULT_RECURSION_LIMIT)
+    assert merge_configs(bound, ensure_config())["recursion_limit"] == 50
+    assert (
+        merge_configs(bound, {"recursion_limit": explicit_default})["recursion_limit"]
+        == explicit_default
+    )
 
 
 def test_ensure_config_merges_metadata_lc_versions() -> None:

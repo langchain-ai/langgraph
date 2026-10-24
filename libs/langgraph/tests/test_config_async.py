@@ -12,6 +12,8 @@ from langgraph.pregel import Pregel
 
 pytestmark = pytest.mark.anyio
 
+EXPLICIT_DEFAULT_LIMIT = int(DEFAULT_RECURSION_LIMIT)
+
 
 def test_new_async_manager_includes_tags() -> None:
     config = {"callbacks": None}
@@ -125,12 +127,12 @@ async def test_with_config_tags_preserved_on_invoke() -> None:
 @pytest.mark.parametrize(
     "rebind",
     [
-        lambda g: g.with_config(recursion_limit=DEFAULT_RECURSION_LIMIT),
-        lambda g: g.with_config({"recursion_limit": DEFAULT_RECURSION_LIMIT}),
+        lambda g: g.with_config(recursion_limit=EXPLICIT_DEFAULT_LIMIT),
+        lambda g: g.with_config({"recursion_limit": EXPLICIT_DEFAULT_LIMIT}),
         lambda g: g.with_config(
-            {"recursion_limit": 1}, recursion_limit=DEFAULT_RECURSION_LIMIT
+            {"recursion_limit": 1}, recursion_limit=EXPLICIT_DEFAULT_LIMIT
         ),
-        lambda g: g.with_config(recursion_limit=DEFAULT_RECURSION_LIMIT).with_config(
+        lambda g: g.with_config(recursion_limit=EXPLICIT_DEFAULT_LIMIT).with_config(
             tags=["t"]
         ),
     ],
@@ -142,5 +144,5 @@ def test_with_config_applies_recursion_limit_equal_to_default(
     builder = StateGraph(dict)
     builder.add_node("node", lambda state: state)
     builder.add_edge("__start__", "node")
-    graph = builder.compile().with_config(recursion_limit=DEFAULT_RECURSION_LIMIT + 1)
-    assert rebind(graph).config["recursion_limit"] == DEFAULT_RECURSION_LIMIT
+    graph = builder.compile().with_config(recursion_limit=EXPLICIT_DEFAULT_LIMIT + 1)
+    assert rebind(graph).config["recursion_limit"] == EXPLICIT_DEFAULT_LIMIT
