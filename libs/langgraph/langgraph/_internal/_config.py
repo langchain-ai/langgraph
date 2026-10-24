@@ -33,8 +33,9 @@ from langgraph._internal._constants import (
 class _DefaultRecursionLimit(int):
     """The limit `ensure_config` fills in when none is given.
 
-    `merge_configs` skips this exact object rather than any equal value, so an
-    explicit limit that happens to equal the default still applies.
+    `merge_configs` skips values of this type rather than any equal value, so an
+    explicit limit that happens to equal the default still applies. It checks the
+    type, not identity, because copying or pickling a config rebuilds the value.
     """
 
 
@@ -193,7 +194,7 @@ def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
                     base.get("callbacks"), cast(Callbacks, value)
                 )
             elif key == "recursion_limit":
-                if config["recursion_limit"] is not DEFAULT_RECURSION_LIMIT:
+                if not isinstance(config["recursion_limit"], _DefaultRecursionLimit):
                     base["recursion_limit"] = config["recursion_limit"]
             else:
                 base[key] = config[key]  # type: ignore[literal-required]

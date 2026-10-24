@@ -1,4 +1,6 @@
+import copy
 import functools
+import pickle
 import sys
 import uuid
 from collections.abc import Callable
@@ -621,14 +623,28 @@ def test_merge_configs_merges_metadata_lc_versions() -> None:
     assert merged["metadata"]["lc_agent_name"] == "agent"
 
 
-def test_merge_configs_skips_only_the_injected_default_recursion_limit() -> None:
-    bound = {"recursion_limit": 50}
+@pytest.mark.parametrize(
+    "rebuild",
+    [
+        lambda config: config,
+        copy.deepcopy,
+        lambda config: pickle.loads(pickle.dumps(config)),
+    ],
+    ids=["as_is", "deepcopy", "pickle"],
+)
+def test_merge_configs_skips_the_injected_default_recursion_limit(
+    rebuild: Callable[[RunnableConfig], RunnableConfig],
+) -> None:
+    merged = merge_configs({"recursion_limit": 50}, rebuild(ensure_config()))
+    assert merged["recursion_limit"] == 50
+
+
+def test_merge_configs_applies_an_explicit_recursion_limit_equal_to_default() -> None:
     explicit_default = int(DEFAULT_RECURSION_LIMIT)
-    assert merge_configs(bound, ensure_config())["recursion_limit"] == 50
-    assert (
-        merge_configs(bound, {"recursion_limit": explicit_default})["recursion_limit"]
-        == explicit_default
+    merged = merge_configs(
+        {"recursion_limit": 50}, {"recursion_limit": explicit_default}
     )
+    assert merged["recursion_limit"] == explicit_default
 
 
 def test_ensure_config_merges_metadata_lc_versions() -> None:
