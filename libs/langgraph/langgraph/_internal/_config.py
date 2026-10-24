@@ -29,7 +29,19 @@ from langgraph._internal._constants import (
     NS_SEP,
 )
 
-DEFAULT_RECURSION_LIMIT = int(getenv("LANGGRAPH_DEFAULT_RECURSION_LIMIT", "10007"))
+
+class _DefaultRecursionLimit(int):
+    """The limit `ensure_config` fills in when none is given.
+
+    `merge_configs` skips values of this type rather than any equal value, so an
+    explicit limit that happens to equal the default still applies. It checks the
+    type, not identity, because copying or pickling a config rebuilds the value.
+    """
+
+
+DEFAULT_RECURSION_LIMIT = _DefaultRecursionLimit(
+    getenv("LANGGRAPH_DEFAULT_RECURSION_LIMIT", "10007")
+)
 DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT = int(
     getenv("LANGGRAPH_DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT", "5000")
 )
@@ -182,7 +194,7 @@ def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
                     base.get("callbacks"), cast(Callbacks, value)
                 )
             elif key == "recursion_limit":
-                if config["recursion_limit"] != DEFAULT_RECURSION_LIMIT:
+                if not isinstance(config["recursion_limit"], _DefaultRecursionLimit):
                     base["recursion_limit"] = config["recursion_limit"]
             else:
                 base[key] = config[key]  # type: ignore[literal-required]
