@@ -7,9 +7,9 @@ from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
 
-from langgraph._internal._constants import NS_SEP
 from langgraph.constants import TAG_NOSTREAM
 from langgraph.errors import GraphDrained, GraphInterrupt
+from langgraph.pregel._messages import graph_namespace
 from langgraph.pregel.protocol import StreamChunk
 
 try:
@@ -92,12 +92,9 @@ class StreamToolCallHandler(BaseCallbackHandler, _StreamingCallbackHandler):
     ) -> tuple[str, ...] | None:
         """Resolve the namespace this tool call should emit at, or `None` to skip.
 
-        Mirrors `StreamMessagesHandler.on_chat_model_start`'s namespace
-        derivation: parses `langgraph_checkpoint_ns` (which ends with
-        the `node_name:task_id` of the calling node), drops that
-        trailing segment, and returns the containing subgraph's own
-        namespace. Returns `None` when the call should be silently
-        suppressed:
+        Mirrors `StreamMessagesHandler.on_chat_model_start`: the namespace
+        is that of the graph the tool runs in (`graph_namespace`). Returns
+        `None` when the call should be silently suppressed:
 
         - `metadata` is missing — handler is attached to a context
           without Pregel routing info.
@@ -110,11 +107,9 @@ class StreamToolCallHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             return None
         if tags and TAG_NOSTREAM in tags:
             return None
-        nskey = metadata.get("langgraph_checkpoint_ns")
-        if not nskey:
-            ns: tuple[str, ...] = ()
-        else:
-            ns = tuple(cast(str, nskey).split(NS_SEP))[:-1]
+        ns = (
+            graph_namespace(metadata) if metadata.get("langgraph_checkpoint_ns") else ()
+        )
         if not self.subgraphs and len(ns) > 0 and ns != self.parent_ns:
             return None
         return ns
