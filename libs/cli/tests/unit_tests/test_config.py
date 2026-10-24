@@ -259,6 +259,91 @@ def test_validate_config():
 
 
 @pytest.mark.parametrize(
+    "section,value",
+    [
+        # Non-object sections
+        ("auth", "x"),
+        ("encryption", "x"),
+        ("priority", "x"),
+        ("http", "x"),
+        ("checkpointer", "x"),
+        # Missing required path
+        ("auth", {}),
+        ("encryption", {}),
+        ("priority", {}),
+        # Non-string path/app (used to raise a bare TypeError)
+        ("auth", {"path": 123}),
+        ("encryption", {"path": 123}),
+        ("priority", {"path": 123}),
+        ("http", {"app": 123}),
+        ("checkpointer", {"path": 123}),
+        # Missing ':' separator
+        ("auth", {"path": "./auth.py"}),
+        ("encryption", {"path": "./encryption.py"}),
+        ("priority", {"path": "./priority.py"}),
+        ("http", {"app": "./app.py"}),
+        ("checkpointer", {"path": "./checkpointer.py"}),
+        # Empty module or attribute
+        ("auth", {"path": ":"}),
+        ("auth", {"path": "./auth.py:"}),
+        ("auth", {"path": ":auth"}),
+        ("encryption", {"path": "./p.py:"}),
+        ("priority", {"path": ":"}),
+        ("http", {"app": ":"}),
+        ("checkpointer", {"path": ":"}),
+    ],
+)
+def test_validate_config_rejects_malformed_path_sections(section, value):
+    with pytest.raises(ValueError, match=f"Invalid {section}"):
+        validate_config(
+            {
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+                section: value,
+            }
+        )
+
+
+def test_validate_config_rejects_node_priority_path():
+    with pytest.raises(ValueError, match="JavaScript priority callbacks"):
+        validate_config(
+            {
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+                "priority": {"path": "./priority.mts:assign"},
+            }
+        )
+
+
+def test_validate_config_accepts_valid_path_sections():
+    config = validate_config(
+        {
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "auth": {"path": "./auth.py:auth"},
+            "encryption": {"path": "my_package.encryption:encrypt"},
+            "priority": {"path": "./priority.py:assign"},
+            "http": {"app": "./app.py:app", "disable_ui": True},
+            "checkpointer": {"path": "./checkpointer.py:checkpointer"},
+        }
+    )
+    assert config["auth"] == {"path": "./auth.py:auth"}
+    assert config["priority"] == {"path": "./priority.py:assign"}
+
+    # `http.app` and `checkpointer.path` are optional: sections that only
+    # set other options remain valid.
+    config = validate_config(
+        {
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "http": {"disable_ui": True},
+            "checkpointer": {},
+        }
+    )
+    assert config["http"] == {"disable_ui": True}
+
+
+@pytest.mark.parametrize(
     "dependency",
     [
         "git+https://user:secret-token@github.com/org/private.git@main",

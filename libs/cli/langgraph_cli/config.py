@@ -381,6 +381,46 @@ def _get_source_kind(config: Config) -> str | None:
     return kind if isinstance(kind, str) else None
 
 
+def _validate_path_entry(
+    config: Config, section: str, key: str, *, required: bool
+) -> str | None:
+    """Validate a `section.key` import-path entry (e.g. `auth.path`).
+
+    The section must be an object, and when the entry is present (or
+    `required`) it must be a string in 'file.py:name' or 'module:name'
+    format with a non-empty module and attribute. Returns the validated
+    path, or None when the section or an optional entry is absent.
+    """
+    section_conf = config.get(section)  # type: ignore[call-overload]
+    if section_conf is None:
+        return None
+    if not isinstance(section_conf, dict):
+        raise ValueError(
+            f"Invalid {section}: expected an object, got {section_conf!r}. "
+            f'For example:\n  "{section}": {{"{key}": "./path/to/file.py:name"}}'
+        )
+    value = section_conf.get(key)
+    if value is None:
+        if required:
+            raise ValueError(
+                f"Invalid {section}.{key}: '{key}' is required. "
+                "Must be in format './path/to/file.py:attribute_name'"
+            )
+        return None
+    if not isinstance(value, str):
+        raise ValueError(
+            f"Invalid {section}.{key}: expected a string in format "
+            f"'file.py:name' or 'module:name', got {value!r}"
+        )
+    module, sep, attr = value.rpartition(":")
+    if not sep or not module or not attr:
+        raise ValueError(
+            f"Invalid {section}.{key} format: '{value}'. "
+            "Must be in format './path/to/file.py:attribute_name'"
+        )
+    return value
+
+
 def validate_config(
     config: Config, *, source_path: pathlib.Path | None = None
 ) -> Config:
@@ -592,41 +632,20 @@ def validate_config(
         )
 
     # Validate auth config
-    if auth_conf := config.get("auth"):
-        if "path" in auth_conf:
-            if ":" not in auth_conf["path"]:
-                raise ValueError(
-                    f"Invalid auth.path format: '{auth_conf['path']}'. "
-                    "Must be in format './path/to/file.py:attribute_name'"
-                )
+    _validate_path_entry(config, "auth", "path", required=True)
     # Validate encryption config
-    if encryption_conf := config.get("encryption"):
-        if "path" in encryption_conf:
-            if ":" not in encryption_conf["path"]:
-                raise ValueError(
-                    f"Invalid encryption.path format: '{encryption_conf['path']}'. "
-                    "Must be in format './path/to/file.py:attribute_name'"
-                )
+    _validate_path_entry(config, "encryption", "path", required=True)
     # Validate priority config
-    if priority_conf := config.get("priority"):
-        if "path" in priority_conf:
-            if ":" not in priority_conf["path"]:
-                raise ValueError(
-                    f"Invalid priority.path format: '{priority_conf['path']}'. "
-                    "Must be in format './path/to/file.py:attribute_name'"
-                )
-            if _is_node_graph(priority_conf["path"]):
-                raise ValueError(
-                    "JavaScript priority callbacks are not supported: "
-                    f"'{priority_conf['path']}'. Use a Python file or module instead."
-                )
-    if http_conf := config.get("http"):
-        if "app" in http_conf:
-            if ":" not in http_conf["app"]:
-                raise ValueError(
-                    f"Invalid http.app format: '{http_conf['app']}'. "
-                    "Must be in format './path/to/file.py:attribute_name'"
-                )
+    if priority_path := _validate_path_entry(config, "priority", "path", required=True):
+        if _is_node_graph(priority_path):
+            raise ValueError(
+                "JavaScript priority callbacks are not supported: "
+                f"'{priority_path}'. Use a Python file or module instead."
+            )
+    # Validate http config
+    _validate_path_entry(config, "http", "app", required=False)
+    # Validate checkpointer config
+    _validate_path_entry(config, "checkpointer", "path", required=False)
     if keep_pkg_tools := config.get("keep_pkg_tools"):
         if isinstance(keep_pkg_tools, list):
             for tool in keep_pkg_tools:
