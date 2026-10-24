@@ -13,6 +13,7 @@ from typing import Annotated, Any
 import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import ToolNode, ToolRuntime
 from typing_extensions import TypedDict
 
@@ -20,6 +21,7 @@ from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.pregel._tools import _tool_call_writer
+from langgraph.types import Command, interrupt
 
 
 class _State(TypedDict):
@@ -54,14 +56,14 @@ def _caller_async(tool_name: str, tool_args: dict[str, Any], tc_id: str = "tc1")
     return caller
 
 
-def _build_graph(caller, tools) -> Any:
+def _build_graph(caller, tools, checkpointer=None) -> Any:
     sg = StateGraph(_State)
     sg.add_node("caller", caller)
     sg.add_node("tools", ToolNode(tools))
     sg.add_edge(START, "caller")
     sg.add_edge("caller", "tools")
     sg.add_edge("tools", END)
-    return sg.compile()
+    return sg.compile(checkpointer=checkpointer)
 
 
 def _tool_events(stream) -> list[tuple[tuple[str, ...], dict]]:
@@ -146,6 +148,73 @@ class TestSyncGraphSyncTool:
         assert kinds == ["tool-started", "tool-error"]
         assert events[1][1]["message"] == "nope"
 
+    def test_interrupt_in_tool_is_not_a_tool_error(self) -> None:
+        @tool
+        def ask() -> str:
+            """asks."""
+            return interrupt("ok?")
+
+        graph = _build_graph(_caller_sync("ask", {}), [ask], InMemorySaver())
+        config = {"configurable": {"thread_id": "1"}}
+        paused = _tool_events(
+            graph.stream(
+                {"messages": []}, config, stream_mode=["tools"], subgraphs=True
+            )
+        )
+        resumed = _tool_events(
+            graph.stream(
+                Command(resume="yes"), config, stream_mode=["tools"], subgraphs=True
+            )
+        )
+
+        assert [p["event"] for _, p in paused] == ["tool-started"]
+        assert [(p["event"], p["tool_call_id"]) for _, p in resumed] == [
+            ("tool-started", "tc1"),
+            ("tool-finished", "tc1"),
+        ]
+
+    def test_tool_handing_off_to_the_parent_still_ends_its_call(self) -> None:
+        class State(TypedDict):
+            messages: Annotated[list, add_messages]
+            done: bool
+
+        def hand_off(state: State) -> Command:
+            return Command(graph=Command.PARENT, goto="finish", update={"done": True})
+
+        inner = StateGraph(State).add_node("hand_off", hand_off)
+        inner = inner.add_edge(START, "hand_off").compile()
+
+        @tool
+        def handoff() -> str:
+            """hands off."""
+            inner.invoke({"messages": [], "done": False})
+            return "unreachable"
+
+        graph = (
+            StateGraph(State)
+            .add_node("caller", _caller_sync("handoff", {}))
+            .add_node("tools", ToolNode([handoff]))
+            .add_node("finish", lambda state: {"done": True})
+            .add_edge(START, "caller")
+            .add_edge("caller", "tools")
+            .add_edge("tools", END)
+            .add_edge("finish", END)
+            .compile()
+        )
+        events = [
+            payload["event"]
+            for _, payload in _tool_events(
+                graph.stream(
+                    {"messages": [], "done": False},
+                    stream_mode=["tools"],
+                    subgraphs=True,
+                )
+            )
+        ]
+
+        assert events[0] == "tool-started"
+        assert events[-1] in ("tool-finished", "tool-error"), events
+
     def test_writer_unset_outside_tool(self) -> None:
         # Outside any tool body the ContextVar that ToolRuntime reads
         # is unset — emitting from there would be a no-op.
@@ -195,6 +264,25 @@ class TestAsyncGraphAsyncTool:
         kinds = [p["event"] for _, p in events]
         assert kinds == ["tool-started", "tool-output-delta", "tool-finished"]
         assert events[1][1]["delta"] == "hi"
+
+    @pytest.mark.anyio
+    async def test_interrupt_in_async_tool_is_not_a_tool_error(self) -> None:
+        @tool
+        async def aask() -> str:
+            """asks."""
+            return interrupt("ok?")
+
+        graph = _build_graph(_caller_async("aask", {}), [aask], InMemorySaver())
+        config = {"configurable": {"thread_id": "1"}}
+        events = []
+        for graph_input in ({"messages": []}, Command(resume="yes")):
+            async for ns, mode, payload in graph.astream(
+                graph_input, config, stream_mode=["tools"], subgraphs=True
+            ):
+                if mode == "tools":
+                    events.append(payload["event"])
+
+        assert events == ["tool-started", "tool-started", "tool-finished"]
 
 
 class TestConcurrentToolCalls:
