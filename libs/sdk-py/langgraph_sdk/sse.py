@@ -104,7 +104,7 @@ class SSEDecoder:
             if (
                 not self._event
                 and not self._data
-                and not self._last_event_id
+                and self._last_event_id is None
                 and self._retry is None
             ):
                 return None

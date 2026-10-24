@@ -219,6 +219,12 @@ class SyncHttpClient:
             current_headers = dict(
                 request_headers if reconnect_path is None else reconnect_headers
             )
+            if last_event_id is not None:
+                current_headers = {
+                    key: value
+                    for key, value in current_headers.items()
+                    if key.lower() != "last-event-id"
+                }
             if last_event_id:
                 current_headers["Last-Event-ID"] = last_event_id
 
