@@ -657,48 +657,11 @@ class PregelLoop:
         # check if iteration limit is reached
         if self.step > self.stop:
             self.status = "out_of_steps"
+            # stream the checkpoint the last step saved, as a tick that runs would
+            self._prepare_tasks_and_emit_checkpoint()
             return False
 
-        # prepare next tasks
-        self.tasks = prepare_next_tasks(
-            self.checkpoint,
-            self.checkpoint_pending_writes,
-            self.nodes,
-            self.channels,
-            self.managed,
-            self.config,
-            self.step,
-            self.stop,
-            for_execution=True,
-            manager=self.manager,
-            store=self.store,
-            checkpointer=self.checkpointer,
-            trigger_to_nodes=self.trigger_to_nodes,
-            updated_channels=self.updated_channels,
-            retry_policy=self.retry_policy,
-            cache_policy=self.cache_policy,
-        )
-
-        # produce debug output
-        if self._checkpointer_put_after_previous is not None:
-            self._emit(
-                "checkpoints",
-                map_debug_checkpoint,
-                {
-                    **self.checkpoint_config,
-                    CONF: {
-                        **self.checkpoint_config[CONF],
-                        CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
-                    },
-                },
-                self.channels,
-                self.stream_keys,
-                self.checkpoint_metadata,
-                self.tasks.values(),
-                self.checkpoint_pending_writes,
-                self.prev_checkpoint_config,
-                self.output_keys,
-            )
+        self._prepare_tasks_and_emit_checkpoint()
 
         # if no more tasks, we're done
         if not self.tasks:
@@ -806,9 +769,52 @@ class PregelLoop:
             self.checkpoint, self.interrupt_after, self.tasks.values()
         ):
             self.status = "interrupt_after"
+            # the next tick, which streams this checkpoint, never runs
+            self._prepare_tasks_and_emit_checkpoint()
             raise GraphInterrupt()
         # unset resuming flag
         self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
+
+    def _prepare_tasks_and_emit_checkpoint(self) -> None:
+        self.tasks = prepare_next_tasks(
+            self.checkpoint,
+            self.checkpoint_pending_writes,
+            self.nodes,
+            self.channels,
+            self.managed,
+            self.config,
+            self.step,
+            self.stop,
+            for_execution=True,
+            manager=self.manager,
+            store=self.store,
+            checkpointer=self.checkpointer,
+            trigger_to_nodes=self.trigger_to_nodes,
+            updated_channels=self.updated_channels,
+            retry_policy=self.retry_policy,
+            cache_policy=self.cache_policy,
+        )
+
+        # produce debug output
+        if self._checkpointer_put_after_previous is not None:
+            self._emit(
+                "checkpoints",
+                map_debug_checkpoint,
+                {
+                    **self.checkpoint_config,
+                    CONF: {
+                        **self.checkpoint_config[CONF],
+                        CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
+                    },
+                },
+                self.channels,
+                self.stream_keys,
+                self.checkpoint_metadata,
+                self.tasks.values(),
+                self.checkpoint_pending_writes,
+                self.prev_checkpoint_config,
+                self.output_keys,
+            )
 
     def match_cached_writes(self) -> Sequence[PregelExecutableTask]:
         raise NotImplementedError
