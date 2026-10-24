@@ -861,11 +861,6 @@ class RemoteGraph(PregelProtocol):
                     )
                 yield {"type": mode, "ns": ns, "data": chunk.data, "interrupts": ints}
             elif subgraphs:
-                if NS_SEP in chunk.event:
-                    mode, ns_ = chunk.event.split(NS_SEP, 1)
-                    ns = tuple(ns_.split(NS_SEP))
-                else:
-                    mode, ns = chunk.event, ()
                 if req_single:
                     yield ns, chunk.data
                 else:
@@ -1016,11 +1011,6 @@ class RemoteGraph(PregelProtocol):
                     )
                 yield {"type": mode, "ns": ns, "data": chunk.data, "interrupts": ints}
             elif subgraphs:
-                if NS_SEP in chunk.event:
-                    mode, ns_ = chunk.event.split(NS_SEP, 1)
-                    ns = tuple(ns_.split(NS_SEP))
-                else:
-                    mode, ns = chunk.event, ()
                 if req_single:
                     yield ns, chunk.data
                 else:
