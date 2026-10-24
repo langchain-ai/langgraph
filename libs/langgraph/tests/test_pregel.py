@@ -4346,6 +4346,25 @@ def test_enum_node_names():
     assert graph.invoke({"foo": "hello"}) == {"foo": "hello", "bar": "hello!"}
 
 
+@pytest.mark.parametrize("stream_mode", ["tasks", "debug"])
+def test_failing_task_result_is_streamed_before_the_error(stream_mode: str) -> None:
+    class State(TypedDict):
+        x: str
+
+    def failing(state: State) -> State:
+        raise ValueError("boom")
+
+    graph = StateGraph(State).add_node("failing", failing).add_edge(START, "failing")
+    errors = []
+    with pytest.raises(ValueError, match="boom"):
+        for chunk in graph.compile().stream({"x": ""}, stream_mode=stream_mode):
+            payload = chunk["payload"] if stream_mode == "debug" else chunk
+            if "error" in payload:
+                errors.append(payload["error"])
+
+    assert [type(error) for error in errors] == [ValueError]
+
+
 def test_debug_retry(sync_checkpointer: BaseCheckpointSaver):
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
