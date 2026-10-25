@@ -210,6 +210,7 @@ class PregelLoop:
     )
     _migrate_checkpoint: Callable[[Checkpoint], None] | None
     submit: Submit
+    submit_task: Submit
     channels: Mapping[str, BaseChannel]
     # Futures from `checkpointer.put_writes` calls that produced delta-channel
     # writes. `_put_checkpoint` hands this list to the save it submits, which
@@ -1876,6 +1877,9 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             config=self.checkpoint_config,
         )
         self.stack.push(self._suppress_interrupt)
+        # Finish node tasks and their commit callbacks before flushing writes.
+        # The persistence executor remains open until after the flush.
+        self.submit_task = self.stack.enter_context(BackgroundExecutor(self.config))
         self.status = "input"
         self.step = self.checkpoint_metadata["step"] + 1
         self.stop = self.step + self.config["recursion_limit"] + 1
@@ -2134,6 +2138,11 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             config=self.checkpoint_config,
         )
         self.stack.push(self._suppress_interrupt)
+        # Cancel and await node tasks and their commit callbacks before flushing
+        # writes, while the persistence executor can still accept submissions.
+        self.submit_task = await self.stack.enter_async_context(
+            AsyncBackgroundExecutor(self.config)
+        )
         self.status = "input"
         self.step = self.checkpoint_metadata["step"] + 1
         self.stop = self.step + self.config["recursion_limit"] + 1

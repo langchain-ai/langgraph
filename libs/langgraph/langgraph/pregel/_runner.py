@@ -75,6 +75,7 @@ SKIP_RERAISE_SET: weakref.WeakSet[concurrent.futures.Future | asyncio.Future] = 
 
 class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
     event: E
+    all_done: E
     callback: weakref.ref[Callable[[PregelExecutableTask, BaseException | None], None]]
     # Stop condition is injected by PregelRunner instead of hard-coded here.
     # This lets the runner treat graph-error-handled exceptions as non-fatal
@@ -97,10 +98,15 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
         super().__init__()
         self.lock = threading.Lock()
         self.event = event
+        # Unlike `event`, this only wakes after every commit callback finishes.
+        self.all_done = type(event)()
+        self.all_done.set()
         self.callback = callback
         self.should_stop = should_stop
         self.counter = 0
         self.done: set[F] = set()
+        self.closing = False
+        self.scheduling: set[F] = set()
 
     def __setitem__(
         self,
@@ -111,8 +117,13 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
         if value is not None:
             with self.lock:
                 self.event.clear()
+                self.all_done.clear()
                 self.counter += 1
+                closing = self.closing
             key.add_done_callback(partial(self.on_done, value))
+            if closing:
+                # Register the commit callback before cancelling a late task.
+                key.cancel()
 
     def on_done(
         self,
@@ -124,13 +135,48 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
             if cb := self.callback():
                 cb(task, _exception(fut))
         finally:
-            with self.lock:
-                self.done.add(fut)
-                self.counter -= 1
-                # Wake waiter when all tracked futures are done, or when runner-level
-                # stop condition is met (for example, a non-handled fatal exception).
-                if self.counter == 0 or self.should_stop(self.done):
-                    self.event.set()
+            self._finish(fut)
+
+    def add_scheduling(
+        self,
+        fut: F,
+        destination: asyncio.Future[Any] | concurrent.futures.Future[Any],
+    ) -> None:
+        """Track task admission, including asynchronous cache lookups."""
+        self[fut] = None
+        with self.lock:
+            self.scheduling.add(fut)
+            self.counter += 1
+            self.event.clear()
+            self.all_done.clear()
+            closing = self.closing
+        fut.add_done_callback(partial(self.on_scheduling_done, destination))
+        if closing:
+            fut.cancel()
+
+    def on_scheduling_done(
+        self,
+        destination: asyncio.Future[Any] | concurrent.futures.Future[Any],
+        fut: F,
+    ) -> None:
+        try:
+            if fut.cancelled():
+                destination.cancel()
+            elif (exc := fut.exception()) is not None and not destination.done():
+                destination.set_exception(exc)
+        finally:
+            self._finish(fut)
+
+    def _finish(self, fut: F) -> None:
+        with self.lock:
+            self.scheduling.discard(fut)
+            self.done.add(fut)
+            self.counter -= 1
+            if self.counter == 0:
+                self.all_done.set()
+            # Failures wake the runner early; shutdown waits for all callbacks.
+            if self.counter == 0 or self.should_stop(self.done):
+                self.event.set()
 
 
 class PregelRunner:
@@ -168,6 +214,39 @@ class PregelRunner:
         # These ids are consulted by stop/panic checks to avoid re-raising handled
         # exceptions via the normal fatal path in the same run.
         self._handled_exception_ids: set[int] = set()
+        self._sync_futures: (
+            FuturesDict[concurrent.futures.Future, threading.Event] | None
+        ) = None
+        self._async_futures: FuturesDict[asyncio.Future, asyncio.Event] | None = None
+
+    def close(self) -> None:
+        """Wait for node tasks and their commits, including external submissions."""
+        if self._sync_futures is not None:
+            with self._sync_futures.lock:
+                self._sync_futures.closing = True
+            self._sync_futures.all_done.wait()
+
+    async def aclose(self) -> None:
+        """Cancel node tasks and wait for their commits before persistence exits."""
+        if self._async_futures is not None:
+            with self._async_futures.lock:
+                self._async_futures.closing = True
+            for fut, task in list(self._async_futures.items()):
+                if task is not None or fut in self._async_futures.scheduling:
+                    fut.cancel()
+            # A second cancellation must not let the exit stack flush writes
+            # while node cleanup or commit callbacks are still running.
+            waiter = asyncio.create_task(self._async_futures.all_done.wait())
+            cancelled: asyncio.CancelledError | None = None
+            while not waiter.done():
+                try:
+                    await asyncio.shield(waiter)
+                except asyncio.CancelledError as exc:
+                    if cancelled is None:
+                        cancelled = exc
+            waiter.result()
+            if cancelled is not None:
+                raise cancelled
 
     def _should_route_to_error_handler(self, task: PregelExecutableTask) -> bool:
         if task.name in self.error_handler_nodes:
@@ -196,6 +275,7 @@ class PregelRunner:
             ),
             future_type=concurrent.futures.Future,
         )
+        self._sync_futures = futures
         # give control back to the caller
         yield
         # fast path if single task with no timeout and no waiter
@@ -385,6 +465,7 @@ class PregelRunner:
             ),
             future_type=asyncio.Future,
         )
+        self._async_futures = futures
         # give control back to the caller
         yield
         # fast path if single task with no waiter and no timeout
@@ -480,6 +561,11 @@ class PregelRunner:
         end_time = timeout + loop.time() if timeout else None
         handled_futures: set[asyncio.Future[Any]] = set()
         while len(futures) > (1 if get_waiter is not None else 0):
+            # A fast-path node may fail while a child is still being admitted.
+            if _should_stop_others(
+                futures.done, handled_exception_ids=self._handled_exception_ids
+            ):
+                break
             done, inflight = await asyncio.wait(
                 futures,
                 return_when=asyncio.FIRST_COMPLETED,
@@ -544,10 +630,13 @@ class PregelRunner:
             # give control back to the caller
             yield
         # wait for done callbacks
-        await asyncio.wait_for(
-            futures.event.wait(),
-            timeout=(max(0, end_time - loop.time()) if end_time else None),
-        )
+        if not _should_stop_others(
+            futures.done, handled_exception_ids=self._handled_exception_ids
+        ):
+            await asyncio.wait_for(
+                futures.event.wait(),
+                timeout=(max(0, end_time - loop.time()) if end_time else None),
+            )
         # give control back to the caller
         yield
         # cancel waiter task
@@ -719,6 +808,8 @@ def _call(
     ],
     submit: weakref.ref[Submit],
 ) -> concurrent.futures.Future[Any]:
+    if (tracked := futures()) is None or tracked.closing:
+        raise RuntimeError("Cannot schedule new tasks while the runner is closing")
     if inspect.iscoroutinefunction(func):
         raise RuntimeError("In an sync context async tasks cannot be called")
 
@@ -738,6 +829,8 @@ def _call(
             timeout=timeout,
         ),
     ):
+        if tracked.closing:
+            raise RuntimeError("Cannot schedule new tasks while the runner is closing")
         if fut := next(
             (
                 f
@@ -825,26 +918,44 @@ def _acall(
         )
     else:
         fut = concurrent.futures.Future()
-    # schedule the next task
-    run_coroutine_threadsafe(
-        _acall_impl(
-            fut,
-            task,
-            func,
-            input,
-            retry_policy=retry_policy,
-            cache_policy=cache_policy,
-            timeout=timeout,
-            callbacks=callbacks,
-            futures=futures,
-            schedule_task=schedule_task,
-            submit=submit,
-            loop=loop,
-            stream=stream,
-        ),
-        loop,
-        lazy=False,
-    )
+
+    def schedule() -> None:
+        if (tracked := futures()) is None or tracked.closing:
+            fut.cancel()
+            return
+        admission = run_coroutine_threadsafe(
+            _acall_impl(
+                fut,
+                task,
+                func,
+                input,
+                retry_policy=retry_policy,
+                cache_policy=cache_policy,
+                timeout=timeout,
+                callbacks=callbacks,
+                futures=futures,
+                schedule_task=schedule_task,
+                submit=submit,
+                loop=loop,
+                stream=stream,
+            ),
+            loop,
+            lazy=False,
+        )
+        tracked.add_scheduling(admission, fut)
+
+        def cancel_admission(destination: Any) -> None:
+            if destination.cancelled() and not admission.done():
+                loop.call_soon_threadsafe(admission.cancel)
+
+        fut.add_done_callback(cancel_admission)
+
+    # Register admission on the graph's event loop, also for sync nodes running
+    # in a worker thread. Registration precedes the worker's result callback.
+    if asyncio._get_running_loop() is loop:
+        schedule()
+    else:
+        loop.call_soon_threadsafe(schedule)
     return fut
 
 
@@ -869,6 +980,9 @@ async def _acall_impl(
     stream: bool = False,
 ) -> None:
     try:
+        if (tracked := futures()) is None or tracked.closing:
+            destination.cancel()
+            return
         fut: asyncio.Future | None = None
         # schedule PUSH tasks, collect futures
         scratchpad: PregelScratchpad = task().config[CONF][CONFIG_KEY_SCRATCHPAD]  # type: ignore[union-attr]
@@ -885,6 +999,10 @@ async def _acall_impl(
                 timeout=timeout,
             ),
         ):
+            # Cache lookup in `schedule_task` may yield while shutdown starts.
+            if tracked.closing:
+                destination.cancel()
+                return
             if fut := next(
                 (
                     f
@@ -945,4 +1063,5 @@ async def _acall_impl(
         else:
             destination.set_exception(RuntimeError("Task not scheduled"))
     except Exception as exc:
-        destination.set_exception(exc)
+        if not destination.done():
+            destination.set_exception(exc)

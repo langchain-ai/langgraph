@@ -3013,13 +3013,14 @@ class Pregel(
                 # create runner
                 runner = PregelRunner(
                     submit=config[CONF].get(
-                        CONFIG_KEY_RUNNER_SUBMIT, weakref.WeakMethod(loop.submit)
+                        CONFIG_KEY_RUNNER_SUBMIT, weakref.WeakMethod(loop.submit_task)
                     ),
                     put_writes=weakref.WeakMethod(loop.put_writes),
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
                     node_error_handler_map=self.node_error_handler_map,
                     schedule_error_handler=loop.schedule_error_handler,
                 )
+                loop.stack.callback(runner.close)
                 # enable subgraph streaming
                 if subgraphs:
                     loop.config[CONF][CONFIG_KEY_STREAM] = loop.stream
@@ -3465,7 +3466,7 @@ class Pregel(
                 # create runner
                 runner = PregelRunner(
                     submit=config[CONF].get(
-                        CONFIG_KEY_RUNNER_SUBMIT, weakref.WeakMethod(loop.submit)
+                        CONFIG_KEY_RUNNER_SUBMIT, weakref.WeakMethod(loop.submit_task)
                     ),
                     put_writes=weakref.WeakMethod(loop.put_writes),
                     use_astream=do_stream,
@@ -3473,6 +3474,7 @@ class Pregel(
                     node_error_handler_map=self.node_error_handler_map,
                     aschedule_error_handler=loop.aschedule_error_handler,
                 )
+                loop.stack.push_async_callback(runner.aclose)
                 # enable subgraph streaming
                 if subgraphs:
                     loop.config[CONF][CONFIG_KEY_STREAM] = StreamProtocol(
