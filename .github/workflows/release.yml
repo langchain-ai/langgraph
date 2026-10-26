@@ -5,8 +5,22 @@ on:
     inputs:
       working-directory:
         required: true
-        type: string
+        type: choice
         default: "libs/langgraph"
+        options:
+          - libs/langgraph
+          - libs/checkpoint
+          - libs/checkpoint-conformance
+          - libs/checkpoint-postgres
+          - libs/checkpoint-sqlite
+          - libs/cli
+          - libs/prebuilt
+          - libs/sdk-py
+      dangerous-nonmain-release:
+        required: false
+        type: boolean
+        default: false
+        description: "Release from a non-main branch (danger!) - Only use for hotfixes or dev builds"
 
 permissions:
   contents: read
@@ -23,9 +37,20 @@ jobs:
       short-pkg-name: ${{ steps.check-version.outputs.short-pkg-name }}
       version: ${{ steps.check-version.outputs.version }}
       tag: ${{ steps.check-version.outputs.tag }}
+      dist-sha256: ${{ steps.dist-hashes.outputs.sha256 }}
 
     steps:
+      - name: Verify release branch
+        if: github.ref != 'refs/heads/main' && !inputs.dangerous-nonmain-release
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          echo "Releases must run from main (got $REF). Set dangerous-nonmain-release to override."
+          exit 1
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: ./.github/actions/uv_setup
@@ -49,6 +74,17 @@ jobs:
       - name: Build project for distribution
         run: uv build
         working-directory: ${{ inputs.working-directory }}
+
+      - name: Compute dist hashes
+        id: dist-hashes
+        working-directory: ${{ inputs.working-directory }}/dist
+        run: |
+          delimiter="EOF_$(openssl rand -hex 16)"
+          {
+            echo "sha256<<$delimiter"
+            sha256sum -- *
+            echo "$delimiter"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Upload build
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -95,6 +131,7 @@ jobs:
             ${{ inputs.working-directory }}
           ref: main # this scopes to just master branch
           fetch-depth: 0 # this fetches entire commit history
+          persist-credentials: false
       - name: Check Tags
         id: check-tags
         shell: bash
@@ -127,8 +164,9 @@ jobs:
           TAG: ${{ needs.build.outputs.tag }}
           PREV_TAG: ${{ steps.check-tags.outputs.prev-tag }}
         run: |
+          delimiter="EOF_$(openssl rand -hex 16)"
           {
-            echo 'release-body<<EOF'
+            echo "release-body<<$delimiter"
             if [ -z "$PREV_TAG" ]; then
               echo "Initial release"
             else
@@ -136,7 +174,7 @@ jobs:
               echo
               git log --format="%s" "$PREV_TAG"..HEAD -- $WORKING_DIR | awk '{print "* " $0}'
             fi
-            echo EOF
+            echo "$delimiter"
           } >> "$GITHUB_OUTPUT"
 
   pre-release-checks:
@@ -146,6 +184,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # We explicitly *don't* set up caching here. This ensures our tests are
       # maximally sensitive to catching breakage.
@@ -227,7 +267,6 @@ jobs:
     uses: ./.github/workflows/_test_release.yml
     with:
       working-directory: ${{ inputs.working-directory }}
-    secrets: inherit
 
   publish:
     needs:
@@ -250,6 +289,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: ./.github/actions/uv_setup
@@ -263,6 +304,13 @@ jobs:
         with:
           name: dist
           path: ${{ inputs.working-directory }}/dist/
+
+      - name: Verify dist hashes
+        working-directory: ${{ inputs.working-directory }}/dist
+        env:
+          EXPECTED_SHA256: ${{ needs.build.outputs.dist-sha256 }}
+        run: |
+          diff <(printf '%s\n' "$EXPECTED_SHA256") <(sha256sum -- *)
 
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
@@ -292,6 +340,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: ./.github/actions/uv_setup
