@@ -799,6 +799,15 @@ def test_ensure_config_tags_concat_preserves_order_and_duplicates() -> None:
     assert merged["tags"] == ["shared", "alpha", "shared", "beta"]
 
 
+def test_ensure_config_skips_tags_inherited_from_ambient() -> None:
+    token = var_child_runnable_config.set({"tags": ["inherited"]})
+    try:
+        merged = ensure_config({"tags": ["inherited", "own"]})
+    finally:
+        var_child_runnable_config.reset(token)
+    assert merged["tags"] == ["inherited", "own"]
+
+
 def test_ensure_config_merges_callbacks_across_configs() -> None:
     a_cb = _TrackingCB("a")
     b_cb = _TrackingCB("b")
