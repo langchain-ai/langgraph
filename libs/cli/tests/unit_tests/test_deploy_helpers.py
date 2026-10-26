@@ -1458,3 +1458,59 @@ class TestPlacementOnAKnownListener:
     def test_refuses_and_names_the_namespaces(self, request_, listener, message):
         with pytest.raises(click.UsageError, match=message):
             request_.on(listener)
+
+
+DEFAULT_UPLOAD_HEADERS = {
+    "content-type": "application/gzip",
+    "content-length": "7",
+    "x-goog-content-length-range": "0,209715200",
+}
+
+
+@pytest.mark.parametrize(
+    ("upload_headers", "expected"),
+    [
+        pytest.param(None, DEFAULT_UPLOAD_HEADERS, id="missing_sends_defaults"),
+        pytest.param({}, DEFAULT_UPLOAD_HEADERS, id="empty_sends_defaults"),
+        pytest.param(
+            {
+                "content-type": "application/x-gzip",
+                "x-ms-blob-type": "BlockBlob",
+                "content-length": "1",
+            },
+            {
+                "content-type": "application/x-gzip",
+                "x-ms-blob-type": "BlockBlob",
+                "content-length": "7",
+            },
+            id="returned_headers_replace_defaults",
+        ),
+        pytest.param(
+            {"x-ms-blob-type": "BlockBlob"},
+            {
+                "content-type": "application/gzip",
+                "x-ms-blob-type": "BlockBlob",
+                "content-length": "7",
+            },
+            id="returned_headers_keep_a_content_type",
+        ),
+    ],
+)
+def test_source_upload_sends_the_headers_the_signed_url_requires(
+    tmp_path, mocker, upload_headers, expected
+):
+    archive = tmp_path / "source.tar.gz"
+    archive.write_bytes(b"tarball")
+    sent = []
+    mocker.patch(
+        "langgraph_cli.deploy._get_emitter", return_value=MagicMock(json_mode=True)
+    )
+    mocker.patch(
+        "urllib.request.urlopen", side_effect=lambda req, timeout: sent.append(req)
+    )
+
+    deploy_mod._upload_source_tarball(
+        "https://storage.example/signed", str(archive), 7, upload_headers
+    )
+
+    assert {name.lower(): value for name, value in sent[0].header_items()} == expected
