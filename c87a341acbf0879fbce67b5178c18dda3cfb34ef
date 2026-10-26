@@ -1,0 +1,19 @@
+libs/langgraph/tests/conftest.py
+  s_6445d5d93ff311::t_b072bc8cb2836b 227-229
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.11",
+  "base_commit_sha": "c87a341acbf0879fbce67b5178c18dda3cfb34ef",
+  "prompts": {},
+  "sessions": {
+    "s_6445d5d93ff311": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d4e97492-8daa-4296-9c4e-8a5250b7e54f",
+        "model": "default"
+      },
+      "human_author": "Quanzheng Long <long@langchain.dev>"
+    }
+  }
+}

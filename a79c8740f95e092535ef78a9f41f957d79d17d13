@@ -1,0 +1,14 @@
+libs/cli/langgraph_cli/deploy.py
+  h_e6aca5e1220677 1985,2144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a79c8740f95e092535ef78a9f41f957d79d17d13",
+  "prompts": {},
+  "humans": {
+    "h_e6aca5e1220677": {
+      "author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  }
+}

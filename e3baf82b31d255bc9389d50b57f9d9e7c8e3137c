@@ -1,0 +1,25 @@
+libs/sdk-py/langgraph_sdk/_async/stream.py
+  s_2e97b14210dcd3::t_d174f7bd5cc6e7 27,155,1906
+libs/sdk-py/tests/streaming/test_thread_stream_path_encoding.py
+  s_2e97b14210dcd3::t_6fcbe98f25eea4 3,6-7,19-24,29,33,44,50,53,57,63,66,70,76,79,83,89,92
+  s_2e97b14210dcd3::t_fe41f2f04f4705 4-5,15,17-18,26,28,31-32,34-38,43,46,48-49,51,59,61-62,64-65,67-69,72,74-75,77,85,87-88,90
+  s_2e97b14210dcd3::t_a8074c1cde0de6 1-2,8-14,16,25,27,30,39-42,45,47,52,54-56,58,60,71,73,78,80-82,84,86,91
+libs/sdk-py/langgraph_sdk/_sync/stream.py
+  s_2e97b14210dcd3::t_d174f7bd5cc6e7 25,198,1556
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e3baf82b31d255bc9389d50b57f9d9e7c8e3137c",
+  "prompts": {},
+  "sessions": {
+    "s_2e97b14210dcd3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d48e1739-4ecc-4111-a25a-d948488ef02b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": null
+    }
+  }
+}

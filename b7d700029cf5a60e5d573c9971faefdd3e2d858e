@@ -1,0 +1,27 @@
+examples/delta-channel-dump/dump.py
+  s_6c2e57a851fd60::t_379238fc105ff7 250-255
+  s_6c2e57a851fd60::t_b20f02c860a309 262
+examples/delta-channel-dump/README.md
+  h_afb7144b798558 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "b7d700029cf5a60e5d573c9971faefdd3e2d858e",
+  "prompts": {},
+  "humans": {
+    "h_afb7144b798558": {
+      "author": "Quanzheng Long <long@langchain.dev>"
+    }
+  },
+  "sessions": {
+    "s_6c2e57a851fd60": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "667ff431-212e-42ab-bc65-37658e2475bd",
+        "model": "default"
+      },
+      "human_author": "Quanzheng Long <long@langchain.dev>"
+    }
+  }
+}

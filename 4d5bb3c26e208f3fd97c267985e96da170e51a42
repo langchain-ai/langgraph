@@ -1,0 +1,14 @@
+libs/cli/langgraph_cli/__init__.py
+  h_e6aca5e1220677 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4d5bb3c26e208f3fd97c267985e96da170e51a42",
+  "prompts": {},
+  "humans": {
+    "h_e6aca5e1220677": {
+      "author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  }
+}

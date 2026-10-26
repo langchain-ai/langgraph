@@ -1,0 +1,51 @@
+.github/workflows/baseline.yml
+  s_eff0059de44524::t_3f156411372fb4 20,33
+.github/workflows/require_issue_link.yml
+  s_eff0059de44524::t_3f156411372fb4 53,286,315,369
+.github/workflows/bench.yml
+  s_eff0059de44524::t_3f156411372fb4 18,33,60
+.github/workflows/tag-external-issues.yml
+  s_eff0059de44524::t_3f156411372fb4 58,66,105,158,171,193,199
+.github/workflows/_test.yml
+  s_eff0059de44524::t_3f156411372fb4 28
+.github/workflows/_test_release.yml
+  s_eff0059de44524::t_3f156411372fb4 26,51,77,79
+.github/workflows/tag-external-prs.yml
+  s_eff0059de44524::t_3f156411372fb4 43,51,93,148,164
+.github/workflows/_lint.yml
+  s_eff0059de44524::t_3f156411372fb4 34
+.github/workflows/_integration_test.yml
+  s_eff0059de44524::t_3f156411372fb4 40
+.github/workflows/deploy-redirects.yml
+  s_eff0059de44524::t_3f156411372fb4 29,32,40,43,49
+.github/workflows/_sdk_integration_test.yml
+  s_eff0059de44524::t_3f156411372fb4 26
+.github/workflows/uv_lock_ugprade.yml
+  s_eff0059de44524::t_3f156411372fb4 19
+.github/actions/uv_setup/action.yml
+  s_eff0059de44524::t_3f156411372fb4 27
+.github/workflows/_test_langgraph.yml
+  s_eff0059de44524::t_3f156411372fb4 26
+.github/workflows/ci.yml
+  s_eff0059de44524::t_3f156411372fb4 33,115,117,133
+.github/workflows/release.yml
+  s_eff0059de44524::t_3f156411372fb4 28,54,90,161,265,275,307,317
+.github/workflows/reopen_on_assignment.yml
+  s_eff0059de44524::t_3f156411372fb4 29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "de94e7625186dec0e0ef27fca12ede6859754e2e",
+  "prompts": {},
+  "sessions": {
+    "s_eff0059de44524": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4e96db7b-19f0-4075-8749-e2b450ef4687",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Mason Daugherty <github@mdrxy.com>"
+    }
+  }
+}

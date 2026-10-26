@@ -1,0 +1,25 @@
+libs/langgraph/langgraph/pregel/_loop.py
+  s_0974e7e2c39ca4::t_eebccb183b85ad 1276
+  s_0974e7e2c39ca4::t_59bdfa75a28463 105
+libs/langgraph/langgraph/pregel/_checkpoint.py
+  s_0974e7e2c39ca4::t_73a1812646bb69 38-48
+  s_0974e7e2c39ca4::t_095447483ba9df 3
+libs/langgraph/tests/test_delta_channel_exit_mode.py
+  s_0974e7e2c39ca4::t_648974e0030b0f 9,21,26-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "a5384ac454eac1d56109bcdb21304baf7f9f336b",
+  "prompts": {},
+  "sessions": {
+    "s_0974e7e2c39ca4": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f1d0e5d0-daea-4a4b-a58c-023b8bc8f0c0",
+        "model": "default"
+      },
+      "human_author": "Quanzheng Long <long@langchain.dev>"
+    }
+  }
+}

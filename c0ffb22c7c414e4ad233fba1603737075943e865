@@ -1,0 +1,24 @@
+libs/sdk-py/tests/streaming/test_thread_stream_path_encoding.py
+  s_2e97b14210dcd3::t_a8074c1cde0de6 1-3,8-14,16,20,28,30,33,42-45,48,50,58,60-62,64,66,80,82,90,92-94,96,98,106
+  s_2e97b14210dcd3::t_fe41f2f04f4705 4-7,15,17-19,21-27,29,31-32,34-41,46-47,49,51-57,59,63,65,67-79,81,83-89,91,95,97,99-105,107
+libs/sdk-py/langgraph_sdk/_sync/stream.py
+  s_2e97b14210dcd3::t_d174f7bd5cc6e7 25,198,1556
+libs/sdk-py/langgraph_sdk/_async/stream.py
+  s_2e97b14210dcd3::t_d174f7bd5cc6e7 27,155,1906
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c0ffb22c7c414e4ad233fba1603737075943e865",
+  "prompts": {},
+  "sessions": {
+    "s_2e97b14210dcd3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d48e1739-4ecc-4111-a25a-d948488ef02b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "nick-hollon-lc <nick.hollon@langchain.dev>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+libs/langgraph/langgraph/pregel/_checkpoint.py
+  s_b3d27cd44c008d::t_adf6761083373e 105-109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ff1c3af67c99ca5bbf6b63ed8bc8c045467d0495",
+  "prompts": {},
+  "sessions": {
+    "s_b3d27cd44c008d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1b2c018f-65f2-4ee8-a4ad-350f395ce217",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Quanzheng Long <long@langchain.dev>"
+    }
+  }
+}

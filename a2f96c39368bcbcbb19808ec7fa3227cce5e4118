@@ -1,0 +1,27 @@
+libs/cli/langgraph_cli/schemas.py
+  s_0cc02d70436d28::t_11f5d0e3952424 442-459,494-495
+libs/cli/generate_schema.py
+  s_0cc02d70436d28::t_11f5d0e3952424 26-27,120-121
+.gitignore
+  s_0cc02d70436d28::t_11f5d0e3952424 79-80
+libs/cli/schemas/schema.json
+  s_0cc02d70436d28::t_0664b2abe53fae 1068-1071,1177-1212
+libs/cli/schemas/schema.v0.json
+  s_0cc02d70436d28::t_a899fe57c95066 1068-1071,1177-1212
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a2f96c39368bcbcbb19808ec7fa3227cce5e4118",
+  "prompts": {},
+  "sessions": {
+    "s_0cc02d70436d28": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09c1a-9c10-7f13-af6f-e1e83b42e6f9",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  }
+}

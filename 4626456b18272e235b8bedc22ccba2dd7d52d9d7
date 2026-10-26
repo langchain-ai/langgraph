@@ -1,0 +1,23 @@
+.github/workflows/deploy-redirects.yml
+  s_2e49bce44cfa6c::t_25753781d8d9ef 10-13
+docs/generate_redirects.py
+  s_2e49bce44cfa6c::t_7d2d518bfab203 17-19,25-33,90-139,191-198,200-203
+docs/llms.txt
+  s_2e49bce44cfa6c::t_bb9d7f87e99db2 1-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4626456b18272e235b8bedc22ccba2dd7d52d9d7",
+  "prompts": {},
+  "sessions": {
+    "s_2e49bce44cfa6c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "95d70c76-80f7-4762-b766-db8d53e0501d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Lauren Hirata Singh <lauren@langchain.dev>"
+    }
+  }
+}
