@@ -175,31 +175,6 @@ PRUNE_DELETE_THREADS_SQL = (
 # threads worth pruning, and can go quadratic. They look rows up by primary key
 # instead (`LATERAL ... LIMIT 1`, `= ANY`).
 
-# A `DeltaChannel` leaves update counters in checkpoint metadata, or a
-# snapshot: an inline `true` marker with a blob behind it, which a plain `True`
-# value never has. LangGraph.js inlines no values, but marks the threads its
-# DeltaChannel graphs start with `delta_writes_versioned`.
-PRUNE_DELTA_THREADS_SQL = """
-SELECT thread_id FROM checkpoints
-WHERE thread_id = ANY(%s) AND (
-    metadata ? 'counters_since_delta_snapshot'
-    OR metadata ? 'delta_writes_versioned'
-)
-UNION
-SELECT c.thread_id
-FROM checkpoints c
-CROSS JOIN LATERAL jsonb_each(c.checkpoint -> 'channel_values') AS v
-CROSS JOIN LATERAL (
-    SELECT 1 FROM checkpoint_blobs b
-    WHERE b.thread_id = c.thread_id
-    AND b.checkpoint_ns = c.checkpoint_ns
-    AND b.channel = v.key
-    AND b.version = c.checkpoint -> 'channel_versions' ->> v.key
-    LIMIT 1
-) AS snapshot
-WHERE c.thread_id = ANY(%s) AND v.value = 'true'::jsonb
-"""
-
 # Per namespace: the latest checkpoint, the parent it reads its pending sends
 # from when it predates v4, and the root graph's checkpoint its subgraph call
 # started from, with whether that one is saved.
@@ -283,6 +258,30 @@ PRUNE_SUBGRAPH_CALLS_SQL = (
     "DELETE FROM checkpoint_blobs WHERE thread_id = %s AND checkpoint_ns = ANY(%s)",
 )
 
+# Walk from a head checkpoint back through its parent chain while the current
+# checkpoint's metadata indicates a DeltaChannel mid-cycle. The walk stops at
+# the first ancestor that holds a _DeltaSnapshot blob (no delta metadata key).
+# All returned checkpoint IDs must survive pruning so the delta reconstruction
+# chain stays intact. For plain-channel threads the head has no delta metadata,
+# so the CTE returns only the head itself — existing behavior is unchanged.
+PRUNE_DELTA_ANCESTOR_WALK_SQL = """
+WITH RECURSIVE delta_keep AS (
+    SELECT checkpoint_id, parent_checkpoint_id, metadata
+    FROM checkpoints
+    WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s
+    UNION ALL
+    SELECT c.checkpoint_id, c.parent_checkpoint_id, c.metadata
+    FROM checkpoints c
+    JOIN delta_keep k
+        ON c.thread_id = %s
+        AND c.checkpoint_ns = %s
+        AND c.checkpoint_id = k.parent_checkpoint_id
+    WHERE k.metadata ? 'counters_since_delta_snapshot'
+        OR k.metadata ? 'delta_writes_versioned'
+)
+SELECT checkpoint_id FROM delta_keep
+"""
+
 
 def _garbage_blobs(
     freed: Sequence[Mapping[str, Any]], referenced: Sequence[Mapping[str, Any]]
@@ -299,14 +298,6 @@ def _garbage_blobs(
 _Statements = Generator[tuple[str, Sequence[Any], bool], list[DictRow], None]
 
 
-def _refuse_delta_threads(thread_ids: Sequence[str]) -> _Statements:
-    rows = yield PRUNE_DELTA_THREADS_SQL, (thread_ids, thread_ids), True
-    if delta := sorted(r["thread_id"] for r in rows):
-        raise NotImplementedError(
-            f"keep_latest can't prune threads that use a DeltaChannel: {', '.join(delta)}"
-        )
-
-
 def _keep_latest(thread_id: str) -> _Statements:
     """The statements of one thread's keep_latest transaction, for `_execute`
     and `_aexecute` to run. Each comes with whether its rows are sent back.
@@ -316,12 +307,21 @@ def _keep_latest(thread_id: str) -> _Statements:
     """
     yield PRUNE_SNAPSHOT_SQL, (), False
     heads = yield PRUNE_HEADS_SQL, (thread_id,) * 4, True
-    # Catches a thread that started using a DeltaChannel after the batch check.
-    yield from _refuse_delta_threads([thread_id])
     kept = {
         h["checkpoint_ns"]: [i for i in (h["head"], h["sends_parent"]) if i]
         for h in heads
     }
+    # Expand the kept set with DeltaChannel ancestor checkpoints so pruning
+    # does not sever the reconstruction chain (aegra/aegra#688).
+    for ns, ids in list(kept.items()):
+        for head_id in list(ids):
+            ancestors = yield PRUNE_DELTA_ANCESTOR_WALK_SQL, (
+                thread_id, ns, head_id,
+                thread_id, ns,
+            ), True
+            for row in ancestors:
+                if row["checkpoint_id"] not in ids:
+                    ids.append(row["checkpoint_id"])
     # A subgraph call's namespace has its task ID after a ":", unlike a
     # `checkpointer=True` subgraph's, whose state outlives each call. A call
     # goes with the root checkpoint it started from, but only once that one is

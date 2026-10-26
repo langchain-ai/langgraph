@@ -9,7 +9,7 @@ import pytest
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.postgres import PostgresSaver
-from langgraph.checkpoint.postgres.base import PRUNE_DELTA_THREADS_SQL, PRUNE_HEADS_SQL
+from langgraph.checkpoint.postgres.base import PRUNE_HEADS_SQL
 from typing_extensions import TypedDict
 
 from langgraph.channels.delta import DeltaChannel
@@ -367,81 +367,22 @@ def test_keep_latest_keeps_a_turn_saved_after_it_read_the_heads() -> None:
         )
 
 
-def test_keep_latest_refuses_a_thread_that_switches_to_a_delta_channel_mid_batch() -> (
-    None
-):
-    with (
-        _checkpointer_postgres() as checkpointer,
-        PostgresSaver.from_conn_string(
-            DEFAULT_POSTGRES_URI + checkpointer.conn.info.dbname
-        ) as pruner,
-    ):
-        graph, delta_graph = _graph(checkpointer), _delta_graph(checkpointer)
-        for i in range(3):
-            for thread_id in ("switched", "twin"):
-                graph.invoke(_say(i), _config(thread_id))
-        _run_once_after(
-            pruner,
-            PRUNE_DELTA_THREADS_SQL,
-            lambda: delta_graph.invoke(_say(3), _config("switched")),
-        )
-
-        with pytest.raises(NotImplementedError, match="switched"):
-            pruner.prune(["switched"])
-
-        delta_graph.invoke(_say(3), _config("twin"))
-        assert (
-            delta_graph.get_state(_config("switched")).values
-            == delta_graph.get_state(_config("twin")).values
-        )
-
-
-def test_keep_latest_keeps_a_delta_channel_turn_saved_after_the_thread_check() -> None:
-    with (
-        _checkpointer_postgres() as checkpointer,
-        PostgresSaver.from_conn_string(
-            DEFAULT_POSTGRES_URI + checkpointer.conn.info.dbname
-        ) as pruner,
-    ):
-        graph, delta_graph = _graph(checkpointer), _delta_graph(checkpointer)
-        for i in range(3):
-            for thread_id in ("switched", "twin"):
-                graph.invoke(_say(i), _config(thread_id))
-        head = _checkpoint_ids(checkpointer, "switched")[0]
-        _run_once_after(
-            pruner,
-            PRUNE_DELTA_THREADS_SQL,
-            lambda: delta_graph.invoke(_say(3), _config("switched")),
-            nth=2,
-        )
-
-        pruner.prune(["switched"])
-
-        assert _checkpoint_ids(checkpointer, "switched")[-1] == head
-        delta_graph.invoke(_say(3), _config("twin"))
-        assert (
-            delta_graph.get_state(_config("switched")).values
-            == delta_graph.get_state(_config("twin")).values
-        )
-
-
 @pytest.mark.parametrize("make_checkpointer", SYNC)
-def test_keep_latest_refuses_a_batch_with_a_delta_channel_thread(
+def test_keep_latest_prunes_a_batch_with_a_delta_channel_thread(
     make_checkpointer: Any,
 ) -> None:
+    """DeltaChannel threads are pruned while preserving their ancestor chain."""
     with make_checkpointer() as checkpointer:
         graph, delta_graph = _graph(checkpointer), _delta_graph(checkpointer)
         for i in range(3):
             graph.invoke(_say(i), _config("ordinary"))
             delta_graph.invoke(_say(i), _config("delta"))
-        before = {t: _checkpoint_ids(checkpointer, t) for t in ("ordinary", "delta")}
         delta_before = delta_graph.get_state(_config("delta"))
 
-        with pytest.raises(NotImplementedError, match="delta"):
-            checkpointer.prune(["ordinary", "delta"])
+        checkpointer.prune(["ordinary", "delta"])
 
-        assert {t: _checkpoint_ids(checkpointer, t) for t in before} == before
-        assert delta_graph.get_state(_config("delta")) == delta_before
+        assert len(_checkpoint_ids(checkpointer, "ordinary")) == 1
+        assert delta_graph.get_state(_config("delta")).values == delta_before.values
 
 
 @NEEDS_CONTEXTVARS
@@ -472,19 +413,19 @@ async def test_akeep_latest_keeps_a_pending_interrupt_resumable(
 
 
 @pytest.mark.parametrize("make_checkpointer", ASYNC)
-async def test_akeep_latest_refuses_a_batch_with_a_delta_channel_thread(
+async def test_akeep_latest_prunes_a_batch_with_a_delta_channel_thread(
     make_checkpointer: Any,
 ) -> None:
+    """Async: DeltaChannel threads are pruned while preserving their ancestor chain."""
     async with make_checkpointer() as checkpointer:
         graph, delta_graph = _graph(checkpointer), _delta_graph(checkpointer)
         for i in range(3):
             await graph.ainvoke(_say(i), _config("ordinary"))
             await delta_graph.ainvoke(_say(i), _config("delta"))
-        before = {
-            t: await _acheckpoint_ids(checkpointer, t) for t in ("ordinary", "delta")
-        }
+        delta_before = await delta_graph.aget_state(_config("delta"))
 
-        with pytest.raises(NotImplementedError, match="delta"):
-            await checkpointer.aprune(["ordinary", "delta"])
+        await checkpointer.aprune(["ordinary", "delta"])
 
-        assert {t: await _acheckpoint_ids(checkpointer, t) for t in before} == before
+        assert len(await _acheckpoint_ids(checkpointer, "ordinary")) == 1
+        delta_after = await delta_graph.aget_state(_config("delta"))
+        assert delta_after.values == delta_before.values

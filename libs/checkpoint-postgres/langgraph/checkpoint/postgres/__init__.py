@@ -35,7 +35,6 @@ from langgraph.checkpoint.postgres.base import (
     _DeltaStage2Row,
     _execute,
     _keep_latest,
-    _refuse_delta_threads,
 )
 from langgraph.checkpoint.postgres.shallow import ShallowPostgresSaver
 
@@ -429,10 +428,9 @@ class PostgresSaver(BasePostgresSaver):
         deleted is not. A thread that fails because another transaction changed
         it leaves the threads before it pruned, and retrying is safe.
 
-        `"keep_latest"` refuses threads that use a `DeltaChannel`, since it
-        rebuilds the latest value from older checkpoints: if any requested
-        thread does, nothing is pruned. A thread that starts using one before
-        its turn in the batch is refused then, after the threads before it.
+        For threads that use a `DeltaChannel`, `"keep_latest"` preserves
+        the ancestor chain back to each channel's last snapshot so the
+        reconstruction path stays intact.
 
         Args:
             thread_ids: The thread IDs to prune.
@@ -441,8 +439,6 @@ class PostgresSaver(BasePostgresSaver):
         Raises:
             TypeError: If `thread_ids` is a single string.
             ValueError: If `strategy` is unknown.
-            NotImplementedError: If `strategy` is `"keep_latest"` and a thread
-                uses a `DeltaChannel`.
             psycopg.errors.SerializationFailure: If another transaction, such
                 as a second prune, changes a thread's rows while `"keep_latest"`
                 prunes it.
@@ -461,8 +457,6 @@ class PostgresSaver(BasePostgresSaver):
                 for sql in PRUNE_DELETE_THREADS_SQL:
                     cur.execute(sql, (thread_ids,))
             return
-        with self._cursor() as cur:
-            _execute(cur, _refuse_delta_threads(thread_ids))
         for thread_id in thread_ids:
             with self._cursor() as cur:
                 if self.pipe:

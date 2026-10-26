@@ -35,7 +35,6 @@ from langgraph.checkpoint.postgres.base import (
     _build_delta_stage2_sql,
     _DeltaStage2Row,
     _keep_latest,
-    _refuse_delta_threads,
 )
 from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
 
@@ -382,8 +381,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
         Raises:
             TypeError: If `thread_ids` is a single string.
             ValueError: If `strategy` is unknown.
-            NotImplementedError: If `strategy` is `"keep_latest"` and a thread
-                uses a `DeltaChannel`.
             psycopg.errors.SerializationFailure: If another transaction, such
                 as a second prune, changes a thread's rows while `"keep_latest"`
                 prunes it.
@@ -402,8 +399,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 for sql in PRUNE_DELETE_THREADS_SQL:
                     await cur.execute(sql, (thread_ids,))
             return
-        async with self._cursor() as cur:
-            await _aexecute(cur, _refuse_delta_threads(thread_ids))
         for thread_id in thread_ids:
             async with self._cursor() as cur:
                 if self.pipe:

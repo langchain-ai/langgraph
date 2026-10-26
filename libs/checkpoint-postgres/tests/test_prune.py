@@ -14,7 +14,6 @@ from psycopg import AsyncConnection
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.postgres.base import (
-    PRUNE_DELTA_THREADS_SQL,
     PRUNE_HEADS_SQL,
     PRUNE_REFERENCED_BLOBS_SQL,
 )
@@ -221,19 +220,40 @@ async def test_keep_latest_keeps_each_namespace_head_with_its_writes_and_blobs(
 
 @pytest.mark.parametrize("evidence", ["counters", "snapshot", "versioned"])
 @pytest.mark.parametrize("name", SAVERS)
-async def test_keep_latest_refuses_a_batch_with_a_delta_channel_thread(
+async def test_keep_latest_preserves_delta_channel_ancestor_chain(
     name: str, evidence: str
 ) -> None:
+    """DeltaChannel threads keep ancestors back to the snapshot boundary."""
+    async with _saver(name) as saver:
+        delta_id = str(uuid4())
+        await _delta_thread(saver, delta_id, evidence)
+        before_rows = await _rows(saver, delta_id)
+
+        await _call(saver, "prune", [delta_id])
+
+        after_rows = await _rows(saver, delta_id)
+        assert after_rows["checkpoints"] == before_rows["checkpoints"]
+        assert after_rows["writes"] == before_rows["writes"]
+
+
+@pytest.mark.parametrize("name", SAVERS)
+async def test_keep_latest_mixed_batch_prunes_plain_keeps_delta(name: str) -> None:
+    """A batch with both plain and DeltaChannel threads handles each correctly."""
     async with _saver(name) as saver:
         ordinary_id, delta_id = str(uuid4()), str(uuid4())
-        await _three_checkpoints(saver, ordinary_id)
-        await _delta_thread(saver, delta_id, evidence)
-        before = [await _rows(saver, t) for t in (ordinary_id, delta_id)]
+        ordinary_head = await _three_checkpoints(saver, ordinary_id)
+        await _delta_thread(saver, delta_id, "counters")
+        delta_before = await _rows(saver, delta_id)
 
-        with pytest.raises(NotImplementedError, match=delta_id):
-            await _call(saver, "prune", [ordinary_id, delta_id])
+        await _call(saver, "prune", [ordinary_id, delta_id])
 
-        assert [await _rows(saver, t) for t in (ordinary_id, delta_id)] == before
+        ordinary_rows = await _rows(saver, ordinary_id)
+        assert ordinary_rows["checkpoints"] == [
+            ("", ordinary_head["configurable"]["checkpoint_id"])
+        ]
+        delta_after = await _rows(saver, delta_id)
+        assert delta_after["checkpoints"] == delta_before["checkpoints"]
+        assert delta_after["writes"] == delta_before["writes"]
 
 
 @pytest.mark.parametrize("name", SAVERS)
@@ -381,64 +401,49 @@ async def test_keep_latest_keeps_a_checkpoint_saved_while_it_runs(after: str) ->
         assert loaded.parent_config == head
 
 
-async def test_keep_latest_refuses_a_thread_that_turns_delta_after_the_batch_check() -> (
-    None
-):
-    async with _saver("aio_base") as saver, _second_saver(saver) as other:
+@pytest.mark.parametrize("name", SAVERS)
+async def test_keep_latest_prunes_ancestors_older_than_delta_snapshot(
+    name: str,
+) -> None:
+    """When a snapshot exists mid-chain, checkpoints before it are pruned."""
+    async with _saver(name) as saver:
         thread_id = str(uuid4())
-        head = await _three_checkpoints(saver, thread_id)
-
-        async def save_a_delta_checkpoint() -> None:
-            await _put(
-                other,
-                thread_id,
-                head,
-                3,
-                {},
-                {"a": "4", "s": "1"},
-                metadata={"counters_since_delta_snapshot": {"a": [1, 1]}},
-            )
-
-        _run_once_after(saver, PRUNE_DELTA_THREADS_SQL, save_a_delta_checkpoint)
-        with pytest.raises(NotImplementedError, match=thread_id):
-            await saver.aprune([thread_id])
-
-        assert len((await _rows(saver, thread_id))["checkpoints"]) == 4
-
-
-async def test_keep_latest_keeps_the_history_of_a_delta_checkpoint_saved_after_the_thread_check() -> (
-    None
-):
-    async with _saver("aio_base") as saver, _second_saver(saver) as other:
-        thread_id = str(uuid4())
-        head = await _three_checkpoints(saver, thread_id)
-        saved: list[dict] = []
-
-        async def save_a_delta_checkpoint() -> None:
-            saved.append(
-                await _put(
-                    other,
-                    thread_id,
-                    head,
-                    3,
-                    {},
-                    {"a": "4", "s": "1"},
-                    metadata={"counters_since_delta_snapshot": {"a": [1, 1]}},
-                )
-            )
-
-        _run_once_after(saver, PRUNE_DELTA_THREADS_SQL, save_a_delta_checkpoint, nth=2)
-        await saver.aprune([thread_id])
-
-        assert (await _rows(saver, thread_id))["checkpoints"] == [
-            ("", head["configurable"]["checkpoint_id"]),
-            ("", saved[0]["configurable"]["checkpoint_id"]),
-        ]
-        history = await saver.aget_delta_channel_history(
-            config=saved[0], channels=["a"]
+        # Build: root -> snap (has _DeltaSnapshot) -> mid -> head (delta metadata)
+        root = await _put(saver, thread_id, None, 0, {"m": [0]}, {"m": "1"})
+        await _call(saver, "put_writes", root, [("m", "w0")], str(uuid4()))
+        snap = await _put(
+            saver, thread_id, root, 1, {"m": _DeltaSnapshot([0, 1])}, {"m": "2"}
         )
-        assert history["a"]["seed"] == [1, 2, 3]
-        assert [value for _, _, value in history["a"]["writes"]] == [2]
+        await _call(saver, "put_writes", snap, [("m", "w1")], str(uuid4()))
+        mid = await _put(
+            saver,
+            thread_id,
+            snap,
+            2,
+            {},
+            {"m": "3"},
+            metadata={"counters_since_delta_snapshot": {"m": [1, 10]}},
+        )
+        await _call(saver, "put_writes", mid, [("m", "w2")], str(uuid4()))
+        head = await _put(
+            saver,
+            thread_id,
+            mid,
+            3,
+            {},
+            {"m": "4"},
+            metadata={"counters_since_delta_snapshot": {"m": [2, 10]}},
+        )
+
+        await _call(saver, "prune", [thread_id])
+
+        rows = await _rows(saver, thread_id)
+        kept_ids = {cid for _, cid in rows["checkpoints"]}
+        # root should be pruned; snap, mid, head kept
+        assert root["configurable"]["checkpoint_id"] not in kept_ids
+        assert snap["configurable"]["checkpoint_id"] in kept_ids
+        assert mid["configurable"]["checkpoint_id"] in kept_ids
+        assert head["configurable"]["checkpoint_id"] in kept_ids
 
 
 @pytest.mark.parametrize("name", SAVERS)
