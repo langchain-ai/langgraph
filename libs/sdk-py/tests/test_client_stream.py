@@ -413,6 +413,20 @@ async def test_async_stream_id_replaces_a_lowercase_caller_cursor():
     assert reconnect.headers.get_list("last-event-id") == ["1"]
 
 
+def test_sync_stream_keeps_the_caller_cursor_until_the_stream_sends_an_id():
+    reconnect = _sync_reconnect([b"event: values\ndata: 1\n\n"], {"Last-Event-ID": "5"})
+
+    assert reconnect.headers.get_list("last-event-id") == ["5"]
+
+
+async def test_async_stream_keeps_the_caller_cursor_until_the_stream_sends_an_id():
+    reconnect = await _async_reconnect(
+        [b"event: values\ndata: 1\n\n"], {"Last-Event-ID": "5"}
+    )
+
+    assert reconnect.headers.get_list("last-event-id") == ["5"]
+
+
 # --- _sse_to_v2_dict conversion ---
 
 
