@@ -3310,7 +3310,9 @@ class Pregel(
                         True
                         for h in run_manager.handlers
                         if isinstance(h, _StreamingCallbackHandler)
-                        and not isinstance(h, StreamMessagesHandler)
+                        and not isinstance(
+                            h, (StreamMessagesHandler, StreamToolCallHandler)
+                        )
                     ),
                     False,
                 )
