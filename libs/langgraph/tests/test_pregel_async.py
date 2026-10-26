@@ -69,7 +69,6 @@ from langgraph.errors import (
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState, _messages_delta_reducer, add_messages
-from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.pregel._loop import AsyncPregelLoop, PregelLoop
 from langgraph.pregel._runner import PregelRunner
 from langgraph.runtime import RunControl
@@ -95,6 +94,7 @@ from tests.messages import (
     _AnyIdHumanMessage,
     _AnyIdToolMessage,
 )
+from tests.raw_pregel import NodeBuilder, RawPregel
 
 logger = logging.getLogger(__name__)
 
@@ -1446,7 +1446,7 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
 
-    app = Pregel(
+    app = RawPregel(
         nodes={
             "one": chain,
         },
@@ -1479,7 +1479,7 @@ async def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> N
         .write_to("output", fixed=5, output_plus_one=lambda x: x + 1)
     )
 
-    app = Pregel(
+    app = RawPregel(
         nodes={"one": chain},
         channels={
             "input": LastValue(int),
@@ -1515,7 +1515,7 @@ async def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
 
-    app = Pregel(
+    app = RawPregel(
         nodes={"one": chain},
         channels={"input": LastValue(int), "output": LastValue(int)},
         input_channels="input",
@@ -1540,7 +1540,7 @@ async def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> 
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
 
-    app = Pregel(
+    app = RawPregel(
         nodes={"one": chain},
         channels={"input": LastValue(int), "output": LastValue(int)},
         input_channels=["input"],
@@ -1567,7 +1567,7 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     one = NodeBuilder().subscribe_only("input").do(add_one).write_to("inbox")
     two = NodeBuilder().subscribe_only("inbox").do(add_one).write_to("output")
 
-    app = Pregel(
+    app = RawPregel(
         nodes={"one": one, "two": two},
         channels={
             "inbox": LastValue(int),
@@ -1607,7 +1607,7 @@ async def test_batch_two_processes_in_out() -> None:
     one = NodeBuilder().subscribe_only("input").do(add_one_with_delay).write_to("one")
     two = NodeBuilder().subscribe_only("one").do(add_one_with_delay).write_to("output")
 
-    app = Pregel(
+    app = RawPregel(
         nodes={"one": one, "two": two},
         channels={
             "one": LastValue(int),
@@ -1639,7 +1639,7 @@ async def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
         )
     nodes["last"] = NodeBuilder().subscribe_only(str(i)).do(add_one).write_to("output")
 
-    app = Pregel(
+    app = RawPregel(
         nodes=nodes,
         channels={str(i): LastValue(int) for i in range(-1, test_size - 2)}
         | {"input": LastValue(int), "output": LastValue(int)},
@@ -1668,7 +1668,7 @@ async def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
         )
     nodes["last"] = NodeBuilder().subscribe_only(str(i)).do(add_one).write_to("output")
 
-    app = Pregel(
+    app = RawPregel(
         nodes=nodes,
         channels={str(i): LastValue(int) for i in range(-1, test_size - 2)}
         | {"input": LastValue(int), "output": LastValue(int)},
@@ -1704,7 +1704,7 @@ async def test_invoke_two_processes_two_in_two_out_invalid(
     one = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
     two = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
 
-    app = Pregel(
+    app = RawPregel(
         nodes={"one": one, "two": two},
         channels={"output": LastValue(int), "input": LastValue(int)},
         input_channels="input",
@@ -1722,7 +1722,7 @@ async def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) 
     one = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
     two = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
 
-    app = Pregel(
+    app = RawPregel(
         nodes={"one": one, "two": two},
         channels={
             "input": LastValue(int),
@@ -1763,7 +1763,7 @@ async def test_invoke_checkpoint(
         .do(raise_if_above_10)
     )
 
-    app = Pregel(
+    app = RawPregel(
         nodes={"one": one},
         channels={
             "total": BinaryOperatorAggregate(int, operator.add),
@@ -3641,7 +3641,7 @@ async def test_invoke_checkpoint_three(
         .do(raise_if_above_10)
     )
 
-    app = Pregel(
+    app = RawPregel(
         nodes={"one": one},
         channels={
             "total": BinaryOperatorAggregate(int, operator.add),
@@ -3765,7 +3765,7 @@ async def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -
         NodeBuilder().subscribe_only("inbox").do(add_10_each).write_to("output")
     )
 
-    app = Pregel(
+    app = RawPregel(
         nodes={
             "one": one,
             "chain_three": chain_three,
@@ -3799,7 +3799,7 @@ async def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> Non
     )
     two = NodeBuilder().subscribe_only("between").do(add_one).write_to("output")
 
-    app = Pregel(
+    app = RawPregel(
         nodes={"one": one, "two": two},
         channels={
             "input": LastValue(int),
@@ -3823,7 +3823,7 @@ async def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
     one = NodeBuilder().subscribe_only("input").do(add_one).write_to("between")
     two = NodeBuilder().subscribe_only("between").do(add_one)
 
-    app = Pregel(
+    app = RawPregel(
         nodes={"one": one, "two": two},
         channels={
             "input": LastValue(int),

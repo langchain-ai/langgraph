@@ -47,7 +47,6 @@ from langgraph.errors import (
 )
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph, add_messages
-from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.pregel._read import PregelNode
 from langgraph.pregel._retry import (
     _checkpoint_ns_for_parent_command,
@@ -67,6 +66,7 @@ from langgraph.types import (
     TimeoutPolicy,
     interrupt,
 )
+from tests.raw_pregel import NodeBuilder, RawPregel
 
 NEEDS_CONTEXTVARS = pytest.mark.skipif(
     sys.version_info < (3, 11),
@@ -1260,7 +1260,7 @@ def test_pregel_validate_rejects_sync_writer_timeout():
         return value
 
     with pytest.raises(ValueError, match="only supported for async nodes"):
-        Pregel(
+        RawPregel(
             nodes={
                 "slow": PregelNode(
                     channels="input",
@@ -1284,7 +1284,7 @@ def test_pregel_validate_rejects_wrapped_sync_runnable_lambda_timeout():
         return value + 1
 
     with pytest.raises(ValueError, match="only supported for async nodes"):
-        Pregel(
+        RawPregel(
             nodes={
                 "slow": (
                     NodeBuilder()
@@ -1307,7 +1307,7 @@ def test_pregel_validate_accepts_wrapped_async_runnable_lambda_timeout():
     async def slow(value: int) -> int:
         return value + 1
 
-    Pregel(
+    RawPregel(
         nodes={
             "slow": (
                 NodeBuilder()
@@ -1334,7 +1334,7 @@ def test_pregel_validate_rejects_parallel_sync_branch_timeout():
         return value + 1
 
     with pytest.raises(ValueError, match="only supported for async nodes"):
-        Pregel(
+        RawPregel(
             nodes={
                 "parallel": (
                     NodeBuilder()
@@ -1363,7 +1363,7 @@ def test_pregel_validate_rejects_sync_node_timeout():
         return value + 1
 
     with pytest.raises(ValueError, match="only supported for async nodes"):
-        Pregel(
+        RawPregel(
             nodes={
                 "slow": (
                     NodeBuilder()
@@ -1388,7 +1388,7 @@ async def test_pregel_validate_accepts_async_runnable_lambda_timeout():
         await asyncio.sleep(0.2)
         return value + 1
 
-    graph = Pregel(
+    graph = RawPregel(
         nodes={
             "slow": (
                 NodeBuilder()
@@ -1418,7 +1418,7 @@ async def test_pregel_validate_accepts_runnable_callable_with_sync_and_async_tim
         await asyncio.sleep(0.2)
         return value + 1
 
-    graph = Pregel(
+    graph = RawPregel(
         nodes={
             "slow": (
                 NodeBuilder()
@@ -1632,7 +1632,7 @@ async def test_node_builder_timeout_e2e():
         await asyncio.sleep(0.2)
         return value + 1
 
-    graph = Pregel(
+    graph = RawPregel(
         nodes={
             "slow": (
                 NodeBuilder()

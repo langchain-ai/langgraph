@@ -39,7 +39,6 @@ from langgraph.constants import END, START
 from langgraph.graph import MessagesState
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import StateGraph
-from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.types import PregelTask, Send, StateSnapshot, StreamWriter
 from tests.any_int import AnyInt
 from tests.any_str import AnyDict, AnyStr, UnsortedSequence
@@ -51,6 +50,7 @@ from tests.messages import (
     _AnyIdHumanMessage,
     _AnyIdToolMessage,
 )
+from tests.raw_pregel import NodeBuilder, RawPregel
 
 pytestmark = pytest.mark.anyio
 
@@ -61,7 +61,7 @@ async def test_invoke_two_processes_in_out_interrupt(
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     one = NodeBuilder().subscribe_only("input").do(add_one).write_to("inbox")
     two = NodeBuilder().subscribe_only("inbox").do(add_one).write_to("output")
-    app = Pregel(
+    app = RawPregel(
         nodes={"one": one, "two": two},
         channels={
             "inbox": LastValue(int),

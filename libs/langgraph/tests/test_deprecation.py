@@ -13,13 +13,13 @@ from langgraph.errors import NodeInterrupt
 from langgraph.func import entrypoint, task
 from langgraph.graph import StateGraph
 from langgraph.graph.message import MessageGraph
-from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.types import GraphOutput, Interrupt, RetryPolicy
 from langgraph.warnings import (
     LangGraphDeprecatedSinceV05,
     LangGraphDeprecatedSinceV10,
     LangGraphDeprecatedSinceV11,
 )
+from tests.raw_pregel import NodeBuilder, RawPregel
 
 
 class PlainState(TypedDict): ...
@@ -157,7 +157,7 @@ def test_config_type_deprecation_pregel(mocker: MockerFixture) -> None:
         LangGraphDeprecatedSinceV10,
         match="`config_type` is deprecated and will be removed. Please use `context_schema` instead.",
     ):
-        instance = Pregel(
+        instance = RawPregel(
             nodes={
                 "one": chain,
             },

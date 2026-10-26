@@ -1,3 +1,3 @@
-from langgraph.pregel.main import NodeBuilder, Pregel
+from langgraph.pregel.main import Pregel
 
-__all__ = ("Pregel", "NodeBuilder")
+__all__ = ("Pregel",)

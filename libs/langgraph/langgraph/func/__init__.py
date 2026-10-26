@@ -255,6 +255,11 @@ R = TypeVar("R")
 S = TypeVar("S")
 
 
+class _EntrypointPregel(Pregel):
+    """The graph that `@entrypoint` builds. `Pregel` itself cannot be constructed
+    directly."""
+
+
 # The decorator was wrapped in a class to support the `final` attribute.
 # In this form, the `final` attribute should play nicely with IDE autocompletion,
 # and type checking tools.
@@ -573,7 +578,7 @@ class entrypoint(Generic[ContextT]):
                 else:
                     output_type = save_type = sig.return_annotation
 
-        graph: Pregel[Any, ContextT, Any, Any] = Pregel(
+        graph: Pregel[Any, ContextT, Any, Any] = _EntrypointPregel(
             nodes={
                 func.__name__: PregelNode(
                     bound=bound,
