@@ -43,7 +43,7 @@ from langgraph._internal._typing import MISSING
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import GraphBubbleUp, GraphInterrupt, is_invalid_resume
 from langgraph.pregel._algo import Call
-from langgraph.pregel._executor import Submit
+from langgraph.pregel._executor import SKIP_RERAISE_SET, Submit
 from langgraph.pregel._retry import arun_with_retry, run_with_retry
 from langgraph.pregel._task_status import CONTROL_WRITES
 from langgraph.types import (
@@ -66,10 +66,6 @@ EXCLUDED_FRAME_FNAMES = (
     "langchain_core/runnables/config.py",
     "concurrent/futures/thread.py",
     "concurrent/futures/_base.py",
-)
-
-SKIP_RERAISE_SET: weakref.WeakSet[concurrent.futures.Future | asyncio.Future] = (
-    weakref.WeakSet()
 )
 
 
@@ -239,6 +235,8 @@ class PregelRunner:
                         fut.set_exception(exc)
                         futures.done.add(fut)
                 elif reraise and id(exc) not in self._handled_exception_ids:
+                    # let the caller stream this task's result before it raises
+                    yield
                     if tb := exc.__traceback__:
                         while tb.tb_next is not None and any(
                             tb.tb_frame.f_code.co_filename.endswith(name)
@@ -430,6 +428,8 @@ class PregelRunner:
                         fut.set_exception(exc)
                         futures.done.add(fut)
                 elif reraise and id(exc) not in self._handled_exception_ids:
+                    # let the caller stream this task's result before it raises
+                    yield
                     if tb := exc.__traceback__:
                         while tb.tb_next is not None and any(
                             tb.tb_frame.f_code.co_filename.endswith(name)
