@@ -163,6 +163,7 @@ def test_empty_data_lines_preserve_their_newlines():
     assert decoder._data == b"\n1\n\n"
     assert decoder.decode(b"") == StreamPart(event="", data=1, id=None)  # ty: ignore[invalid-argument-type]
     decoder.decode(b"data:")
+    decoder.decode(b"data:")
     assert decoder.decode(b"") == StreamPart(event="", data=None, id=None)  # ty: ignore[invalid-argument-type]
     assert decoder._has_data
     assert decoder.decode(b"") is None
