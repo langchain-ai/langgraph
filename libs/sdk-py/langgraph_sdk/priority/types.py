@@ -50,7 +50,7 @@ class PrioritySettings(typing.TypedDict, total=False):
 
     Every key is optional: a missing key or a key set to `None` takes its
     default, and returning `None` instead of a dict gives every key its default.
-    A value outside its range, or an empty `fairness_group`, is an error.
+    A `priority` outside -5 to 5, or an empty `fairness_group`, is an error.
     """
 
     priority: int | None
@@ -62,6 +62,3 @@ class PrioritySettings(typing.TypedDict, total=False):
     The server stores it unencrypted, even when the deployment uses custom
     encryption, so use an opaque ID rather than personal data.
     """
-
-    fairness_weight: int | None
-    """The weight of the thread's fairness group, an integer from 1 to 100. Defaults to 1."""
