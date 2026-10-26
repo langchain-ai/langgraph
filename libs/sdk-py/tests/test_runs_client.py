@@ -88,3 +88,32 @@ def test_sync_wait_raises_the_run_error():
             runs.wait("t1", "agent", input={}, raise_error=True)
 
     assert "raise_error" not in json.loads(requests[0].content)
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+async def test_wait_returns_the_run_error_without_raise_error(asynchronous):
+    requests: list[httpx.Request] = []
+    run_error = {"__error__": {"error": "RuntimeError", "message": "boom"}}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json=run_error)
+
+    transport = httpx.MockTransport(handler)
+    if asynchronous:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="https://example.com"
+        ) as client:
+            result = await RunsClient(HttpClient(client)).wait(
+                "t1", "agent", input={}, raise_error=False
+            )
+    else:
+        with httpx.Client(
+            transport=transport, base_url="https://example.com"
+        ) as client:
+            result = SyncRunsClient(SyncHttpClient(client)).wait(
+                "t1", "agent", input={}, raise_error=False
+            )
+
+    assert result == run_error
+    assert "raise_error" not in json.loads(requests[0].content)
