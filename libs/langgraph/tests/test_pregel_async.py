@@ -5875,6 +5875,55 @@ async def test_debug_retry(async_checkpointer: BaseCheckpointSaver):
         assert stream_parent_conf == history_parent_conf
 
 
+async def test_interrupt_after_streams_the_checkpoint_it_pauses_on(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        x: int
+
+    graph = (
+        StateGraph(State)
+        .add_node("one", lambda state: {"x": 1})
+        .add_node("two", lambda state: {"x": 2})
+        .add_edge(START, "one")
+        .add_edge("one", "two")
+        .compile(checkpointer=async_checkpointer, interrupt_after=["one"])
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    checkpoints = [
+        chunk
+        async for chunk in graph.astream({"x": 0}, config, stream_mode="checkpoints")
+    ]
+
+    state = await graph.aget_state(config)
+    assert checkpoints[-1]["config"] == state.config
+    assert checkpoints[-1]["next"] == ["two"]
+
+
+async def test_recursion_limit_streams_the_last_checkpoint_saved(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        x: int
+
+    graph = (
+        StateGraph(State)
+        .add_node("loop", lambda state: {"x": state["x"] + 1})
+        .add_edge(START, "loop")
+        .add_edge("loop", "loop")
+        .compile(checkpointer=async_checkpointer)
+    )
+    config = {"configurable": {"thread_id": "1"}, "recursion_limit": 3}
+    checkpoints = []
+
+    with pytest.raises(GraphRecursionError):
+        async for chunk in graph.astream({"x": 0}, config, stream_mode="checkpoints"):
+            checkpoints.append(chunk)
+
+    assert checkpoints[-1]["config"] == (await graph.aget_state(config)).config
+
+
 async def test_debug_subgraphs(
     async_checkpointer: BaseCheckpointSaver, durability: Durability
 ):
