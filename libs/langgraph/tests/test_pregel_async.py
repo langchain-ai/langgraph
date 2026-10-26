@@ -7599,6 +7599,40 @@ async def test_entrypoint_from_async_generator() -> None:
 
 
 @NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("timeout", [None, 30])
+@pytest.mark.parametrize("version", ["v1", "v2"])
+async def test_awaited_task_returns_its_value_under_astream_events(
+    version: Literal["v1", "v2"], timeout: int | None
+) -> None:
+    class State(TypedDict):
+        doubled: int
+        zeroed: int
+
+    @task(timeout=timeout)
+    async def double(x: int) -> int:
+        return x * 2
+
+    @task(timeout=timeout)
+    async def zero() -> int:
+        return 0
+
+    async def node(state: State) -> State:
+        return {"doubled": await double(21), "zeroed": await zero()}
+
+    graph = StateGraph(State).add_node("node", node).add_edge(START, "node").compile()
+
+    outputs = [
+        event["data"]["output"]
+        async for event in graph.astream_events(
+            {"doubled": 0, "zeroed": 1}, version=version
+        )
+        if event["event"] == "on_chain_end" and event["name"] == "node"
+    ]
+
+    assert outputs == [{"doubled": 42, "zeroed": 0}]
+
+
+@NEEDS_CONTEXTVARS
 async def test_named_tasks_functional() -> None:
     class Foo:
         async def foo(self, value: str) -> dict:
