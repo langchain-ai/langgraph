@@ -240,7 +240,7 @@ class HttpClient:
                 async with self.client.stream(
                     current_method,
                     reconnect_path or path,
-                    headers=current_headers,
+                    headers=httpx.Headers(current_headers, encoding="utf-8"),
                     content=current_content,
                     params=current_params,
                 ) as res:
@@ -265,13 +265,14 @@ class HttpClient:
 
                     # parse SSE
                     decoder = SSEDecoder()
+                    decoder._last_event_id = last_event_id
                     try:
                         async for line in aiter_lines_raw(res):
                             sse = decoder.decode(line=cast("bytes", line).rstrip(b"\n"))
                             if sse is not None:
                                 if decoder.last_event_id is not None:
                                     last_event_id = decoder.last_event_id
-                                if sse.event or sse.data is not None:
+                                if sse.event or decoder._has_data:
                                     # Progress since the last drop earns a fresh
                                     # set of reconnect attempts.
                                     reconnect_attempts = 0
@@ -286,7 +287,7 @@ class HttpClient:
                         if sse := decoder.decode(b""):
                             if decoder.last_event_id is not None:
                                 last_event_id = decoder.last_event_id
-                            if sse.event or sse.data is not None:
+                            if sse.event or decoder._has_data:
                                 # decoder.decode(b"") flushes the in-flight event and may
                                 # return an empty placeholder when there is no pending
                                 # message. Skip these no-op events so the stream doesn't
