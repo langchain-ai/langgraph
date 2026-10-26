@@ -9,6 +9,11 @@
   weight 1 for now. A callback that still returns `fairness_weight` keeps
   working: the server ignores the key and logs a warning.
 
+### Changed
+
+- **`PrioritySettings.priority`** — now says -5 runs first and 5 runs last,
+  matching how the server orders runs. The 0.4.9 docstring said the reverse.
+
 ## 0.4.9 and earlier
 
 ### Added

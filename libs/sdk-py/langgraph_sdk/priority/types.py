@@ -55,7 +55,7 @@ class PrioritySettings(typing.TypedDict, total=False):
     """
 
     priority: int | None
-    """An integer from -5 to 5, where 5 runs first and -5 runs last. Defaults to 0."""
+    """An integer from -5 to 5, where -5 runs first and 5 runs last. Defaults to 0."""
 
     fairness_group: str | None
     """The thread's fairness group, a non-empty string of at most 256 characters.
