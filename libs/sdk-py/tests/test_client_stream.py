@@ -130,6 +130,104 @@ def test_sse_decoder_strips_a_leading_bom():
     assert decoder.decode(b"") == StreamPart(event="values", data=1, id=None)  # ty: ignore[invalid-argument-type]
 
 
+def test_cr_lines_are_emitted_without_waiting_for_another_chunk():
+    decoder = BytesLineDecoder()
+    assert decoder.decode(b"data: 1\r\r") == [b"data: 1", b""]
+    assert decoder.decode(b"\n") == []
+    assert decoder.decode(b"data: 2\r") == [b"data: 2"]
+    assert decoder.decode(b"") == []
+    assert decoder.decode(b"\n\r") == [b""]
+    assert decoder.flush() == []
+
+
+def test_empty_data_lines_preserve_their_newlines():
+    decoder = SSEDecoder()
+    for line in (b"data", b"data: 1", b"data:"):
+        decoder.decode(line)
+    assert decoder._data == b"\n1\n\n"
+    assert decoder.decode(b"") == StreamPart(event="", data=1, id=None)  # ty: ignore[invalid-argument-type]
+    decoder.decode(b"data:")
+    assert decoder.decode(b"") == StreamPart(event="", data=None, id=None)  # ty: ignore[invalid-argument-type]
+    assert decoder._has_data
+    assert decoder.decode(b"") is None
+    assert not decoder._has_data
+
+
+@pytest.mark.parametrize("value", [b"-1", b"+5", b"  5", b"5 ", b"1_000", b"5x", b""])
+def test_invalid_retry_does_not_overwrite_a_valid_value(value: bytes):
+    decoder = SSEDecoder()
+    decoder.decode(b"retry:100")
+    decoder.decode(b"retry:" + value)
+    assert decoder._retry == 100
+
+
+def test_malformed_utf8_is_replaced_in_fields_and_json_strings():
+    decoder = SSEDecoder()
+    for line in (b"event: \xff", b"id: \xff", b'data: "\xff"'):
+        decoder.decode(line)
+    assert decoder.decode(b"") == StreamPart(event="\ufffd", data="\ufffd", id="\ufffd")  # ty: ignore[invalid-argument-type]
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+async def test_null_and_empty_data_are_not_dropped(asynchronous: bool):
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            content=b"data: null\n\ndata:\n\n",
+        )
+
+    transport = httpx.MockTransport(handler)
+    if asynchronous:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="https://example.com"
+        ) as client:
+            parts = [part async for part in HttpClient(client).stream("/stream", "GET")]
+    else:
+        with httpx.Client(
+            transport=transport, base_url="https://example.com"
+        ) as client:
+            parts = list(SyncHttpClient(client).stream("/stream", "GET"))
+    assert parts == [StreamPart(event="", data=None), StreamPart(event="", data=None)]  # ty: ignore[invalid-argument-type]
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+async def test_unicode_cursor_is_sent_and_inherited_after_reconnect(asynchronous: bool):
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if len(requests) == 1:
+            stream_cls = AsyncListByteStream if asynchronous else ListByteStream
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/event-stream", "Location": "/reconnect"},
+                stream=stream_cls(
+                    ["id: \u03b1\nevent: values\ndata: 1\n\n".encode()],
+                    httpx.RemoteProtocolError("incomplete chunked read"),
+                ),
+            )
+        assert (b"Last-Event-ID", "\u03b1".encode()) in request.headers.raw
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            content=b"event: values\ndata: 2\n\n",
+        )
+
+    transport = httpx.MockTransport(handler)
+    if asynchronous:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="https://example.com"
+        ) as client:
+            parts = [part async for part in HttpClient(client).stream("/stream", "GET")]
+    else:
+        with httpx.Client(
+            transport=transport, base_url="https://example.com"
+        ) as client:
+            parts = list(SyncHttpClient(client).stream("/stream", "GET"))
+    assert [part.id for part in parts] == ["\u03b1", "\u03b1"]
+
+
 # --- HTTP client streaming ---
 
 

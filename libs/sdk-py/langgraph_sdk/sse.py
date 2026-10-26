@@ -30,18 +30,14 @@ class BytesLineDecoder:
         # See https://docs.python.org/3/glossary.html#term-universal-newlines
         NEWLINE_CHARS = b"\n\r"
 
-        # We always push a trailing `\r` into the next decode iteration.
-        if self.trailing_cr:
-            text = b"\r" + text
-            self.trailing_cr = False
-        if text.endswith(b"\r"):
-            self.trailing_cr = True
-            text = text[:-1]
+        if not text:
+            return []
+        if self.trailing_cr and text.startswith(b"\n"):
+            text = text[1:]
+        self.trailing_cr = text.endswith(b"\r")
 
         if not text:
-            # NOTE: the edge case input of empty text doesn't occur in practice,
-            # because other httpx internals filter out this value
-            return []  # pragma: no cover
+            return []
 
         trailing_newline = text[-1] in NEWLINE_CHARS
         lines = cast(list[BytesLike], text.splitlines())
@@ -66,7 +62,7 @@ class BytesLineDecoder:
         return lines
 
     def flush(self) -> list[BytesLike]:
-        if not self.buffer and not self.trailing_cr:
+        if not self.buffer:
             return []
 
         lines: list[BytesLike] = [self.buffer]
@@ -82,6 +78,7 @@ class SSEDecoder:
         self._last_event_id: str | None = None
         self._retry: int | None = None
         self._at_stream_start = True
+        self._has_data = False
 
     @property
     def last_event_id(self) -> str | None:
@@ -101,6 +98,7 @@ class SSEDecoder:
             line = line.removeprefix(b"\xef\xbb\xbf")
 
         if not line:
+            self._has_data = bool(self._data)
             if (
                 not self._event
                 and not self._data
@@ -111,7 +109,9 @@ class SSEDecoder:
 
             sse = StreamPart(
                 event=self._event,
-                data=orjson.loads(self._data) if self._data else None,  # ty: ignore[invalid-argument-type]
+                data=orjson.loads(self._data[:-1].decode(errors="replace"))
+                if len(self._data) > 1
+                else None,  # ty: ignore[invalid-argument-type]
                 id=self._last_event_id or None,
             )
 
@@ -131,19 +131,19 @@ class SSEDecoder:
             value = value[1:]
 
         if fieldname == b"event":
-            self._event = value.decode()
+            self._event = value.decode(errors="replace")
         elif fieldname == b"data":
-            if self._data:
-                self._data.extend(b"\n")
             self._data.extend(value)
+            self._data.extend(b"\n")
         elif fieldname == b"id":
             if b"\0" in value:
                 pass
             else:
-                self._last_event_id = value.decode()
+                self._last_event_id = value.decode(errors="replace")
         elif fieldname == b"retry":
-            with contextlib.suppress(TypeError, ValueError):
-                self._retry = int(value)
+            if value and value.isdigit():
+                with contextlib.suppress(ValueError):
+                    self._retry = int(value)
         else:
             pass  # Field is ignored.
 
