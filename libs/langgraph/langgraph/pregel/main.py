@@ -2782,6 +2782,13 @@ class Pregel(
                 - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
                 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
                     - Will be emitted as 2-tuples `(LLM token, metadata)`.
+                    By default every state key whose value is a list of messages is emitted.
+                    To restrict which state keys are streamed as `messages` (so internal
+                    message fields are not sent to the client), set the experimental config
+                    key `__pregel_stream_messages_keys` to the list of keys to include.
+                    Note this only filters which channel *values* are emitted: a chat model
+                    invoked inside a filtered node still streams its own tokens unless it is
+                    run under the `TAG_NOSTREAM` tag (`langgraph.constants.TAG_NOSTREAM`).
                 - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by `get_state()`.
                 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
                 - `"debug"`: Emit debug events with as much information as possible for each step.
@@ -3189,6 +3196,13 @@ class Pregel(
                 - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
                 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
                     - Will be emitted as 2-tuples `(LLM token, metadata)`.
+                    By default every state key whose value is a list of messages is emitted.
+                    To restrict which state keys are streamed as `messages` (so internal
+                    message fields are not sent to the client), set the experimental config
+                    key `__pregel_stream_messages_keys` to the list of keys to include.
+                    Note this only filters which channel *values* are emitted: a chat model
+                    invoked inside a filtered node still streams its own tokens unless it is
+                    run under the `TAG_NOSTREAM` tag (`langgraph.constants.TAG_NOSTREAM`).
                 - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by `get_state()`.
                 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
                 - `"debug"`: Emit debug events with as much information as possible for each step.
