@@ -18,9 +18,11 @@ from langgraph.prebuilt import ToolNode, ToolRuntime
 from typing_extensions import TypedDict
 
 from langgraph.constants import END, START
+from langgraph.errors import GraphDrained
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.pregel._tools import _tool_call_writer
+from langgraph.runtime import RunControl
 from langgraph.types import Command, interrupt
 
 
@@ -213,7 +215,39 @@ class TestSyncGraphSyncTool:
         ]
 
         assert events[0] == "tool-started"
-        assert events[-1] in ("tool-finished", "tool-error"), events
+        assert events[-1] == "tool-error", events
+
+    def test_drained_tool_is_not_a_tool_error(self) -> None:
+        control = RunControl()
+
+        def request_drain(state: _State) -> dict:
+            control.request_drain()
+            return {}
+
+        inner = (
+            StateGraph(_State)
+            .add_node("request_drain", request_drain)
+            .add_node("after", lambda state: {})
+            .add_edge(START, "request_drain")
+            .add_edge("request_drain", "after")
+            .compile()
+        )
+
+        @tool
+        def drained() -> str:
+            """drains."""
+            inner.invoke({"messages": []}, control=control)
+            return "unreachable"
+
+        graph = _build_graph(_caller_sync("drained", {}), [drained])
+        chunks: list = []
+        with pytest.raises(GraphDrained):
+            for chunk in graph.stream(
+                {"messages": []}, stream_mode=["tools"], subgraphs=True
+            ):
+                chunks.append(chunk)
+
+        assert [p["event"] for _, p in _tool_events(chunks)] == ["tool-started"]
 
     def test_writer_unset_outside_tool(self) -> None:
         # Outside any tool body the ContextVar that ToolRuntime reads
