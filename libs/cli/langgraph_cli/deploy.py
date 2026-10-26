@@ -12,7 +12,7 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Protocol, TypeVar
+from typing import Generic, Protocol, TypeVar
 
 import click
 import click.exceptions
@@ -577,69 +577,27 @@ def _validate_prebuilt_image(
 
 
 Resource = Mapping[str, object]
+RowT = TypeVar("RowT")
 
 
 @dataclass(frozen=True, slots=True)
-class Table:
+class Table(Generic[RowT]):
     headers: tuple[str, ...]
-    cells: Callable[[Resource], tuple[str | None, ...]]
+    cells: Callable[[RowT], tuple[str | None, ...]]
 
-    def render(self, resources: Sequence[Resource]) -> str:
+    def render(self, rows: Sequence[RowT]) -> str:
         grid = [
             self.headers,
-            *(
-                tuple(cell or "-" for cell in self.cells(resource))
-                for resource in resources
-            ),
+            *(tuple(cell or "-" for cell in self.cells(row)) for row in rows),
         ]
         widths = [max(map(len, column)) for column in zip(*grid, strict=True)]
         rule = tuple("-" * width for width in widths)
         return "\n".join(
             "  ".join(
-                cell.ljust(width) for cell, width in zip(row, widths, strict=True)
+                cell.ljust(width) for cell, width in zip(line, widths, strict=True)
             )
-            for row in (grid[0], rule, *grid[1:])
+            for line in (grid[0], rule, *grid[1:])
         )
-
-
-@dataclass(frozen=True, slots=True)
-class Listing:
-    table: Table
-    empty_message: str
-    json_view: Callable[[Resource], object]
-
-    def as_table(self, resources: Sequence[Resource]) -> str:
-        return self.table.render(resources) if resources else self.empty_message
-
-    def as_json(self, resources: Sequence[Resource]) -> str:
-        return json_mod.dumps([self.json_view(resource) for resource in resources])
-
-
-class ListOutput(Protocol):
-    @property
-    def no_input(self) -> bool: ...
-
-    def show(self, listing: Listing, resources: Sequence[Resource]) -> None: ...
-
-
-@dataclass(frozen=True, slots=True)
-class TableOutput:
-    @property
-    def no_input(self) -> bool:
-        return False
-
-    def show(self, listing: Listing, resources: Sequence[Resource]) -> None:
-        click.echo(listing.as_table(resources))
-
-
-@dataclass(frozen=True, slots=True)
-class JsonOutput:
-    @property
-    def no_input(self) -> bool:
-        return True
-
-    def show(self, listing: Listing, resources: Sequence[Resource]) -> None:
-        click.echo(listing.as_json(resources))
 
 
 def _text(resource: Resource, key: str) -> str | None:
@@ -694,23 +652,11 @@ class DeploymentRow:
         return {"id": self.id, "name": self.name}
 
 
-DEPLOYMENTS = Listing(
-    Table(
-        ("Deployment ID", "Deployment Name", "Deployment URL"),
-        lambda deployment: DeploymentRow.from_resource(deployment).cells(),
-    ),
-    empty_message="No deployments found.",
-    json_view=lambda deployment: DeploymentRow.from_resource(deployment).as_json(),
+DEPLOYMENTS_TABLE = Table(
+    ("Deployment ID", "Deployment Name", "Deployment URL"), DeploymentRow.cells
 )
 
-LISTENERS = Listing(
-    Table(
-        ("Listener ID", "Compute ID", "Namespaces"),
-        lambda listener: Listener.from_resource(listener).cells(),
-    ),
-    empty_message="No listeners found for this workspace.",
-    json_view=dict,
-)
+LISTENERS_TABLE = Table(("Listener ID", "Compute ID", "Namespaces"), Listener.cells)
 
 REVISIONS_TABLE = Table(
     ("Revision ID", "Status", "Created At"),
@@ -2154,21 +2100,6 @@ OPT_VERBOSE = click.option(
 )
 
 
-def _list_output(
-    _ctx: click.Context, _param: click.Parameter, as_json: bool
-) -> ListOutput:
-    return JsonOutput() if as_json else TableOutput()
-
-
-OPT_LIST_OUTPUT = click.option(
-    "--json",
-    "output",
-    is_flag=True,
-    callback=_list_output,
-    help="Print a JSON array instead of a table.",
-)
-
-
 class NestedHelpGroup(click.Group):
     """Click group that shows one level of nested subcommands in top-level help."""
 
@@ -2643,7 +2574,13 @@ def _deploy_cmd(
     default="",
     help="Only show deployments whose names contain this value.",
 )
-@OPT_LIST_OUTPUT
+@click.option(
+    "--json",
+    "json_output",
+    is_flag=True,
+    default=False,
+    help="Print the deployments as a JSON array of {id, name} instead of a table.",
+)
 @deploy.command("list", help="[Beta] List LangSmith Deployments.")
 def deploy_list(
     api_key: str | None,
@@ -2651,7 +2588,7 @@ def deploy_list(
     name_contains: str,
     agent_id: str | None,
     environment: str | None,
-    output: ListOutput,
+    json_output: bool,
 ) -> None:
     if agent_id is not None or environment is not None:
         click.secho(
@@ -2666,13 +2603,19 @@ def deploy_list(
         filters["agent_id"] = agent_id
     if environment is not None:
         filters["agent_environment"] = environment
-    client = _create_host_backend_client(host_url, api_key, no_input=output.no_input)
-    deployments = _call_host_backend_with_optional_tenant(
+    client = _create_host_backend_client(host_url, api_key, no_input=json_output)
+    resources = _call_host_backend_with_optional_tenant(
         client,
         lambda c: c.list_deployments(name_contains=name_contains, **filters),
-        no_input=output.no_input,
+        no_input=json_output,
     )
-    output.show(DEPLOYMENTS, deployments)
+    deployments = [DeploymentRow.from_resource(resource) for resource in resources]
+    if json_output:
+        click.echo(json_mod.dumps([deployment.as_json() for deployment in deployments]))
+    elif not deployments:
+        click.echo("No deployments found.")
+    else:
+        click.echo(DEPLOYMENTS_TABLE.render(deployments))
 
 
 # ---------------------------------------------------------------------------
@@ -2691,7 +2634,13 @@ def deploy_listeners() -> None:
 
 @OPT_HOST_API_KEY
 @OPT_HOST_URL
-@OPT_LIST_OUTPUT
+@click.option(
+    "--json",
+    "json_output",
+    is_flag=True,
+    default=False,
+    help="Emit the listeners as a JSON array instead of a table.",
+)
 @deploy_listeners.command(
     "list",
     help=(
@@ -2701,13 +2650,22 @@ def deploy_listeners() -> None:
     ),
 )
 def deploy_listeners_list(
-    api_key: str | None, host_url: str | None, output: ListOutput
+    api_key: str | None, host_url: str | None, json_output: bool
 ) -> None:
-    client = _create_host_backend_client(host_url, api_key, no_input=output.no_input)
+    client = _create_host_backend_client(host_url, api_key, no_input=json_output)
     listeners = _call_host_backend_with_optional_tenant(
-        client, lambda c: c.list_listeners(), no_input=output.no_input
+        client, lambda c: c.list_listeners(), no_input=json_output
     )
-    output.show(LISTENERS, listeners)
+    if json_output:
+        click.echo(json_mod.dumps(listeners))
+    elif not listeners:
+        click.echo("No listeners found for this workspace.")
+    else:
+        click.echo(
+            LISTENERS_TABLE.render(
+                [Listener.from_resource(listener) for listener in listeners]
+            )
+        )
 
 
 # ---------------------------------------------------------------------------
