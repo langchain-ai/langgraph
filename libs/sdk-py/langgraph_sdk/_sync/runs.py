@@ -825,7 +825,6 @@ class SyncRunsClient:
             "checkpoint_during": checkpoint_during,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
-            "raise_error": raise_error,
             "durability": durability,
             "langsmith_tracer": langsmith_tracing,
         }
@@ -840,7 +839,7 @@ class SyncRunsClient:
             if thread_id is not None
             else "/runs/wait"
         )
-        return self.http.request_reconnect(
+        response = self.http.request_reconnect(
             endpoint,
             "POST",
             json={k: v for k, v in payload.items() if v is not None},
@@ -848,6 +847,16 @@ class SyncRunsClient:
             headers=headers,
             on_response=on_response if on_run_created else None,
         )
+        if (
+            raise_error
+            and isinstance(response, dict)
+            and "__error__" in response
+            and isinstance(response["__error__"], dict)
+        ):
+            raise Exception(
+                f"{response['__error__'].get('error')}: {response['__error__'].get('message')}"
+            )
+        return response
 
     def list(
         self,

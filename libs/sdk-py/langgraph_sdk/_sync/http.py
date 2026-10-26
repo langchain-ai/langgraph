@@ -179,7 +179,7 @@ class SyncHttpClient:
                 return self.request_reconnect(
                     loc,
                     "GET",
-                    headers=request_headers,
+                    headers=headers,
                     # don't pass on_response so it's only called once
                     reconnect_limit=reconnect_limit - 1,
                 )
@@ -286,7 +286,9 @@ class SyncHttpClient:
             break
 
 
-def _encode_json(json: Any) -> tuple[dict[str, str], bytes]:
+def _encode_json(json: Any) -> tuple[dict[str, str], bytes | None]:
+    if json is None:
+        return {}, None
     body = orjson.dumps(
         json,
         _orjson_default,
