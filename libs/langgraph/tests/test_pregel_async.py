@@ -7496,19 +7496,20 @@ async def test_entrypoint_from_async_generator() -> None:
 
 
 @NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("timeout", [None, 30])
 @pytest.mark.parametrize("version", ["v1", "v2"])
 async def test_awaited_task_returns_its_value_under_astream_events(
-    version: Literal["v1", "v2"],
+    version: Literal["v1", "v2"], timeout: int | None
 ) -> None:
     class State(TypedDict):
         doubled: int
         zeroed: int
 
-    @task
+    @task(timeout=timeout)
     async def double(x: int) -> int:
         return x * 2
 
-    @task
+    @task(timeout=timeout)
     async def zero() -> int:
         return 0
 
