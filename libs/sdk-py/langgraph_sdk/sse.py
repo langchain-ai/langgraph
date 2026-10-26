@@ -107,11 +107,17 @@ class SSEDecoder:
             ):
                 return None
 
+            body = self._data[:-1]
+            data = None
+            if body and not body.isspace():
+                try:
+                    data = orjson.loads(body)
+                except orjson.JSONDecodeError:
+                    data = orjson.loads(body.decode(errors="replace"))
+
             sse = StreamPart(
                 event=self._event,
-                data=orjson.loads(self._data[:-1].decode(errors="replace"))
-                if len(self._data) > 1
-                else None,  # ty: ignore[invalid-argument-type]
+                data=data,  # ty: ignore[invalid-argument-type]
                 id=self._last_event_id or None,
             )
 
