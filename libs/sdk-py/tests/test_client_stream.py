@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import orjson
 import pytest
 from typing_extensions import assert_type
 
@@ -108,6 +109,25 @@ def test_stream_sse():
 
         assert decoder.decode(b"") is None
         assert len(parts) == 79
+
+
+def test_sse_decoder_joins_data_lines_with_a_newline():
+    decoder = SSEDecoder()
+    for line in (b"data: [1,", b"data: 2]"):
+        decoder.decode(line)
+    assert decoder.decode(b"") == StreamPart(event="", data=[1, 2], id=None)  # ty: ignore[invalid-argument-type]
+
+    for line in (b"data: [1", b"data: 0]"):
+        decoder.decode(line)
+    with pytest.raises(orjson.JSONDecodeError):
+        decoder.decode(b"")
+
+
+def test_sse_decoder_strips_a_leading_bom():
+    decoder = SSEDecoder()
+    for line in (b"\xef\xbb\xbfevent: values", b"data: 1"):
+        decoder.decode(line)
+    assert decoder.decode(b"") == StreamPart(event="values", data=1, id=None)  # ty: ignore[invalid-argument-type]
 
 
 # --- HTTP client streaming ---
@@ -290,6 +310,52 @@ async def test_http_client_stream_recovers_after_disconnect():
         StreamPart(event="values", data={"step": 2}, id="2"),
         StreamPart(event="end", data=None, id="2"),  # ty: ignore[invalid-argument-type]
     ]
+
+
+def _drop_after_an_empty_id(stream_cls: type, reconnects: list[httpx.Request]):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/event-stream", "Location": "/reconnect"},
+                stream=stream_cls(
+                    [
+                        b"id: 1\nevent: values\ndata: 1\n\n",
+                        b"id:\nevent: values\ndata: 2\n\n",
+                    ],
+                    httpx.RemoteProtocolError("incomplete chunked read"),
+                ),
+            )
+        reconnects.append(request)
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            stream=stream_cls([b"event: end\ndata: null\n\n"]),
+        )
+
+    return handler
+
+
+def test_sync_stream_reconnects_without_a_cursor_after_an_empty_id():
+    reconnects: list[httpx.Request] = []
+    transport = httpx.MockTransport(_drop_after_an_empty_id(ListByteStream, reconnects))
+    with httpx.Client(transport=transport, base_url="https://example.com") as client:
+        list(SyncHttpClient(client).stream("/stream", "POST", json={}))
+
+    assert "last-event-id" not in reconnects[0].headers
+
+
+async def test_async_stream_reconnects_without_a_cursor_after_an_empty_id():
+    reconnects: list[httpx.Request] = []
+    transport = httpx.MockTransport(
+        _drop_after_an_empty_id(AsyncListByteStream, reconnects)
+    )
+    async with httpx.AsyncClient(
+        transport=transport, base_url="https://example.com"
+    ) as client:
+        [part async for part in HttpClient(client).stream("/stream", "POST", json={})]
+
+    assert "last-event-id" not in reconnects[0].headers
 
 
 # --- _sse_to_v2_dict conversion ---

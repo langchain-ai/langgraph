@@ -79,17 +79,26 @@ class SSEDecoder:
     def __init__(self) -> None:
         self._event = ""
         self._data = bytearray()
-        self._last_event_id = ""
+        self._last_event_id: str | None = None
         self._retry: int | None = None
+        self._at_stream_start = True
 
     @property
     def last_event_id(self) -> str | None:
-        """Return the last event identifier that was seen."""
+        """Return the last event identifier that was seen.
 
-        return self._last_event_id or None
+        `None` until the stream sends an `id` field, and `""` after an empty
+        one, which resets the reconnect cursor.
+        """
+
+        return self._last_event_id
 
     def decode(self, line: bytes) -> StreamPart | None:
         # See: https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation
+
+        if self._at_stream_start:
+            self._at_stream_start = False
+            line = line.removeprefix(b"\xef\xbb\xbf")
 
         if not line:
             if (
@@ -103,7 +112,7 @@ class SSEDecoder:
             sse = StreamPart(
                 event=self._event,
                 data=orjson.loads(self._data) if self._data else None,  # ty: ignore[invalid-argument-type]
-                id=self.last_event_id,
+                id=self._last_event_id or None,
             )
 
             # NOTE: as per the SSE spec, do not reset last_event_id.
@@ -124,6 +133,8 @@ class SSEDecoder:
         if fieldname == b"event":
             self._event = value.decode()
         elif fieldname == b"data":
+            if self._data:
+                self._data.extend(b"\n")
             self._data.extend(value)
         elif fieldname == b"id":
             if b"\0" in value:
