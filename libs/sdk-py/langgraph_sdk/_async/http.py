@@ -234,7 +234,7 @@ class HttpClient:
             async with self.client.stream(
                 current_method,
                 reconnect_path or path,
-                headers=httpx.Headers(current_headers, encoding="utf-8"),
+                headers=current_headers,
                 content=current_content,
                 params=current_params,
             ) as res:
