@@ -155,9 +155,8 @@ class SSEDecoder:
                 self._last_event_id = value.decode(errors="replace")
                 self._id_changed = True
         elif fieldname == b"retry":
-            if value and value.isdigit():
-                with contextlib.suppress(ValueError):
-                    self._retry = int(value)
+            with contextlib.suppress(TypeError, ValueError):
+                self._retry = int(value)
         else:
             pass  # Field is ignored.
 
