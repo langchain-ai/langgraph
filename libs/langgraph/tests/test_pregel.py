@@ -3115,7 +3115,14 @@ def test_tool_node_lists_tool_subagents_in_graph_metadata() -> None:
     task = TaskTool.from_function(run_task, name="task", description="Run a subagent.")
     task.subagents = [
         {"name": "researcher", "description": "Researches a topic."},
-        {"name": "critic", "description": "Reviews drafts.", "forked": True},
+        {
+            "name": "critic",
+            "description": "Reviews drafts.",
+            "forked": True,
+            "system_prompt": "You are a critic.",
+            "runnable": object(),
+        },
+        {"name": "planner", "description": None, "forked": "yes"},
     ]
 
     @tool
@@ -3135,6 +3142,7 @@ def test_tool_node_lists_tool_subagents_in_graph_metadata() -> None:
         "task": [
             {"name": "researcher", "description": "Researches a topic."},
             {"name": "critic", "description": "Reviews drafts.", "forked": True},
+            {"name": "planner"},
         ]
     }
     assert "__subagents" not in (nodes["agent"].get("metadata") or {})

@@ -299,8 +299,20 @@ def _get_tool_subagents(
                 for subagent in tool_subagents
             )
         ):
-            subagents[tool_name] = [dict(subagent) for subagent in tool_subagents]
+            subagents[tool_name] = [
+                _subagent_entry(subagent) for subagent in tool_subagents
+            ]
     return subagents
+
+
+def _subagent_entry(subagent: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep only the subagent fields graph viewers display."""
+    entry: dict[str, Any] = {"name": subagent["name"]}
+    if isinstance(description := subagent.get("description"), str):
+        entry["description"] = description
+    if subagent.get("forked") is True:
+        entry["forked"] = True
+    return entry
 
 
 def add_edge(
