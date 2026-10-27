@@ -9503,6 +9503,44 @@ async def test_subgraph_streaming_async() -> None:
     assert result["num_chunks"] == 9
 
 
+async def test_subgraph_streaming_node_output_messages_async() -> None:
+    """Messages returned by a node (not streamed by an LLM) are emitted when a
+    graph is explicitly streamed with `stream_mode="messages"` inside a node."""
+
+    async def respond(state: MessagesState) -> dict:
+        return {"messages": [AIMessage("hi there", id="ai1")]}
+
+    subgraph = (
+        StateGraph(MessagesState)
+        .add_node("respond", respond)
+        .add_edge(START, "respond")
+        .compile()
+    )
+    msgs = {"messages": [("user", "hello")]}
+
+    top_level = [msg async for msg, _ in subgraph.astream(msgs, stream_mode="messages")]
+
+    async def parent_node(state: MessagesState, config: RunnableConfig) -> dict:
+        nonlocal in_node
+        in_node = [
+            msg
+            async for msg, _ in subgraph.astream(msgs, config, stream_mode="messages")
+        ]
+        return {}
+
+    in_node: list = []
+    await (
+        StateGraph(MessagesState)
+        .add_node("parent", parent_node)
+        .add_edge(START, "parent")
+        .compile()
+        .ainvoke(msgs)
+    )
+
+    assert [m.content for m in top_level] == ["hi there"]
+    assert [m.content for m in in_node] == ["hi there"]
+
+
 @NEEDS_CONTEXTVARS
 async def test_null_resume_disallowed_with_multiple_interrupts(
     async_checkpointer: BaseCheckpointSaver,

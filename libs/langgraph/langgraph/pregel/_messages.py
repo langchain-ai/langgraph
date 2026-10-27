@@ -216,7 +216,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             ns = tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP))[
                 :-1
             ]
-            if not self.subgraphs and len(ns) > 0:
+            if not self.subgraphs and len(ns) > 0 and ns != self.parent_ns:
                 return
             self.metadata[run_id] = (ns, metadata)
             for value in _state_values(inputs):

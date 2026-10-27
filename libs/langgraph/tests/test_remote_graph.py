@@ -16,9 +16,11 @@ from langgraph_sdk.schema import StreamPart
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
+from langgraph._internal._constants import CONFIG_KEY_STREAM
 from langgraph.errors import GraphInterrupt
 from langgraph.graph import END, START, MessagesState, StateGraph, add_messages
 from langgraph.pregel import Pregel
+from langgraph.pregel.protocol import StreamProtocol
 from langgraph.pregel.remote import RemoteGraph
 from langgraph.types import Interrupt, StateSnapshot
 from tests.any_str import AnyStr
@@ -861,6 +863,87 @@ async def test_astream_subgraphs_keeps_caller_namespace():
     ]
 
     assert stream_parts == _CALLER_PREFIXED
+
+
+# Subgraph events requested only on behalf of a streaming parent graph
+_PARENT_STREAMED_PARTS = [
+    StreamPart(event="updates|sub:abc", data={"inner": {"chunk": "inner"}}),
+    StreamPart(event="messages|sub:abc", data=[{"content": "token"}, {}]),
+    StreamPart(event="updates", data={"sub": {"chunk": "root"}}),
+]
+
+
+def _parent_streamed_config(parent_parts: list) -> RunnableConfig:
+    return {
+        "configurable": {
+            "thread_id": "thread_1",
+            "checkpoint_ns": "outer:123",
+            CONFIG_KEY_STREAM: StreamProtocol(
+                parent_parts.append, {"updates", "messages"}
+            ),
+        }
+    }
+
+
+def test_stream_without_subgraphs_skips_parent_requested_subgraph_events():
+    mock_sync_client = MagicMock()
+    mock_sync_client.runs.stream.return_value = _PARENT_STREAMED_PARTS
+    remote_pregel = RemoteGraph("test_graph_id", sync_client=mock_sync_client)
+
+    for stream_mode, expected in [
+        ("updates", [{"sub": {"chunk": "root"}}]),
+        # messages are not filtered: the server dedupes them across namespaces
+        ("messages", [({"content": "token"}, {})]),
+    ]:
+        parent_parts: list = []
+        stream_parts = list(
+            remote_pregel.stream(
+                {"input": "data"},
+                _parent_streamed_config(parent_parts),
+                stream_mode=stream_mode,
+            )
+        )
+
+        assert stream_parts == expected
+        # subgraph events are still requested and forwarded to the parent
+        assert mock_sync_client.runs.stream.call_args.kwargs["stream_subgraphs"]
+        assert [ns for ns, _, _ in parent_parts] == [
+            ("outer:123", "sub:abc"),
+            ("outer:123", "sub:abc"),
+            ("outer:123",),
+        ]
+
+
+async def test_astream_without_subgraphs_skips_parent_requested_subgraph_events():
+    mock_async_client = MagicMock()
+    async_iter = MagicMock()
+    async_iter.__aiter__.return_value = _PARENT_STREAMED_PARTS
+    mock_async_client.runs.stream.return_value = async_iter
+    remote_pregel = RemoteGraph("test_graph_id", client=mock_async_client)
+
+    for stream_mode, expected in [
+        ("updates", [{"sub": {"chunk": "root"}}]),
+        # messages are not filtered: the server dedupes them across namespaces
+        ("messages", [({"content": "token"}, {})]),
+    ]:
+        parent_parts: list = []
+        stream_parts = [
+            part
+            async for part in remote_pregel.astream(
+                {"input": "data"},
+                _parent_streamed_config(parent_parts),
+                stream_mode=stream_mode,
+            )
+        ]
+
+        assert stream_parts == expected
+        # subgraph events are still requested and forwarded to the parent
+        assert mock_async_client.runs.stream.call_args.kwargs["stream_subgraphs"]
+        assert [ns for ns, _, _ in parent_parts] == [
+            ("outer:123", "sub:abc"),
+            ("outer:123", "sub:abc"),
+            ("outer:123",),
+        ]
 
 
 def test_invoke():
