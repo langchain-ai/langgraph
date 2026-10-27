@@ -72,20 +72,25 @@ class BytesLineDecoder:
 
 
 class SSEDecoder:
-    def __init__(self) -> None:
+    def __init__(self, *, last_event_id: str | None = None) -> None:
         self._event = ""
         self._data = bytearray()
-        self._last_event_id: str | None = None
+        self._last_event_id = last_event_id
         self._retry: int | None = None
         self._at_stream_start = True
         self._has_data = False
         self._id_changed = False
 
     @property
+    def has_data(self) -> bool:
+        """Whether the last decoded block contained a data field."""
+        return self._has_data
+
+    @property
     def last_event_id(self) -> str | None:
         """Return the last event identifier that was seen.
 
-        `None` until the stream sends an `id` field, and `""` after an empty
+        `None` until an ID is supplied or received, and `""` after an empty
         one, which resets the reconnect cursor.
         """
 
