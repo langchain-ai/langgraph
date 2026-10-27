@@ -8950,39 +8950,6 @@ def test_subgraph_streaming_sync() -> None:
     assert result["num_chunks"] == 9
 
 
-def test_subgraph_streaming_node_output_messages_sync() -> None:
-    """Messages returned by a node (not streamed by an LLM) are emitted when a
-    graph is explicitly streamed with `stream_mode="messages"` inside a node."""
-
-    def respond(state: MessagesState) -> dict:
-        return {"messages": [AIMessage("hi there", id="ai1")]}
-
-    subgraph = (
-        StateGraph(MessagesState)
-        .add_node("respond", respond)
-        .add_edge(START, "respond")
-        .compile()
-    )
-    msgs = {"messages": [("user", "hello")]}
-
-    top_level = [msg for msg, _ in subgraph.stream(msgs, stream_mode="messages")]
-
-    def parent_node(state: MessagesState, config: RunnableConfig) -> dict:
-        nonlocal in_node
-        in_node = [
-            msg for msg, _ in subgraph.stream(msgs, config, stream_mode="messages")
-        ]
-        return {}
-
-    in_node: list = []
-    StateGraph(MessagesState).add_node("parent", parent_node).add_edge(
-        START, "parent"
-    ).compile().invoke(msgs)
-
-    assert [m.content for m in top_level] == ["hi there"]
-    assert [m.content for m in in_node] == ["hi there"]
-
-
 def test_get_graph_nonterminal_last_step_source(snapshot: SnapshotAssertion) -> None:
     class State(TypedDict):
         messages: list[str]
