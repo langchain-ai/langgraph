@@ -1,3 +1,4 @@
+import sys
 from typing import Any
 
 import pytest
@@ -11,6 +12,11 @@ from langgraph.graph.message import push_message
 from langgraph.graph.state import CompiledStateGraph
 
 pytestmark = pytest.mark.anyio
+
+NEEDS_CONTEXTVARS = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 
 
 @tool
@@ -97,6 +103,7 @@ def test_task_events_stream_under_the_graph_namespace(
     assert [_summary(part) for part in parts] == _CHAT_AND_ECHO_EVENTS
 
 
+@NEEDS_CONTEXTVARS
 @_TASK_CALLERS
 @pytest.mark.parametrize("subgraphs", [False, True])
 async def test_task_events_stream_under_the_graph_namespace_async(
@@ -170,6 +177,7 @@ def test_child_graph_streams_only_to_the_node_streaming_it(
     assert len(received) == len(_CHAT_AND_ECHO_EVENTS)
 
 
+@NEEDS_CONTEXTVARS
 @_CHILD_CONFIGS
 async def test_child_graph_streams_only_to_the_node_streaming_it_async(
     child_config: dict | None,
@@ -209,6 +217,7 @@ def test_node_gets_the_events_of_every_subgraph_it_streams() -> None:
     assert counts == [len(_CHAT_AND_ECHO_EVENTS)] * 2
 
 
+@NEEDS_CONTEXTVARS
 async def test_node_gets_the_events_of_every_subgraph_it_streams_async() -> None:
     sub = _one_node_graph(_achat_and_echo)
     counts = []
