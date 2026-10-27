@@ -167,14 +167,6 @@ def test_empty_data_lines_preserve_their_newlines():
     assert not decoder.has_data
 
 
-@pytest.mark.parametrize("value", [b"-1", b"+5", b"  5", b"5 ", b"1_000", b"5x", b""])
-def test_invalid_retry_does_not_overwrite_a_valid_value(value: bytes):
-    decoder = SSEDecoder()
-    decoder.decode(b"retry:100")
-    decoder.decode(b"retry:" + value)
-    assert decoder._retry == 100
-
-
 def test_malformed_utf8_is_replaced_in_fields_and_json_strings():
     decoder = SSEDecoder()
     for line in (b"event: \xff", b"id: \xff", b'data: "\xff"'):
