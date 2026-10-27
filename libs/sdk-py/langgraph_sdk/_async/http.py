@@ -22,6 +22,17 @@ from langgraph_sdk.sse import SSEDecoder, aiter_lines_raw
 
 logger = logging.getLogger(__name__)
 
+# Retry transient network-level errors a few times with exponential backoff.
+# httpx.ReadError / ConnectError / RemoteProtocolError are TransportError
+# subclasses, and timeouts (httpx.TimeoutException) are retried too, since the
+# request never reached the server in those cases.
+DEFAULT_MAX_RETRIES = 3
+_MAX_BACKOFF = 4.0
+
+
+def _backoff(attempt: int) -> float:
+    return min(0.5 * 2**attempt, _MAX_BACKOFF)
+
 
 class HttpClient:
     """Handle async requests to the LangGraph API.
@@ -33,8 +44,27 @@ class HttpClient:
         client (httpx.AsyncClient): Underlying HTTPX async client.
     """
 
-    def __init__(self, client: httpx.AsyncClient) -> None:
+    def __init__(
+        self, client: httpx.AsyncClient, *, max_retries: int = DEFAULT_MAX_RETRIES
+    ) -> None:
         self.client = client
+        self.max_retries = max_retries
+
+    async def _arequest_with_retry(self, fn: Callable[[], Any]) -> httpx.Response:
+        last_exc: Exception | None = None
+        for attempt in range(self.max_retries):
+            try:
+                return await fn()
+            except (httpx.TransportError, httpx.TimeoutException) as e:
+                last_exc = e
+                if attempt < self.max_retries - 1:
+                    await asyncio.sleep(_backoff(attempt))
+                    continue
+                raise
+        # Every attempt raised a transient error.
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("retry loop ended without a result or error")
 
     async def get(
         self,
@@ -45,7 +75,9 @@ class HttpClient:
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a `GET` request."""
-        r = await self.client.get(path, params=params, headers=headers)
+        r = await self._arequest_with_retry(
+            lambda: self.client.get(path, params=params, headers=headers)
+        )
         if on_response:
             on_response(r)
         await _araise_for_status_typed(r)
@@ -68,8 +100,10 @@ class HttpClient:
         # Merge headers, with runtime headers taking precedence
         if headers:
             request_headers.update(headers)
-        r = await self.client.post(
-            path, headers=request_headers, content=content, params=params
+        r = await self._arequest_with_retry(
+            lambda: self.client.post(
+                path, headers=request_headers, content=content, params=params
+            )
         )
         if on_response:
             on_response(r)
@@ -89,8 +123,10 @@ class HttpClient:
         request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
-        r = await self.client.put(
-            path, headers=request_headers, content=content, params=params
+        r = await self._arequest_with_retry(
+            lambda: self.client.put(
+                path, headers=request_headers, content=content, params=params
+            )
         )
         if on_response:
             on_response(r)
@@ -110,8 +146,10 @@ class HttpClient:
         request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
-        r = await self.client.patch(
-            path, headers=request_headers, content=content, params=params
+        r = await self._arequest_with_retry(
+            lambda: self.client.patch(
+                path, headers=request_headers, content=content, params=params
+            )
         )
         if on_response:
             on_response(r)
@@ -128,8 +166,10 @@ class HttpClient:
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> None:
         """Send a `DELETE` request."""
-        r = await self.client.request(
-            "DELETE", path, json=json, params=params, headers=headers
+        r = await self._arequest_with_retry(
+            lambda: self.client.request(
+                "DELETE", path, json=json, params=params, headers=headers
+            )
         )
         if on_response:
             on_response(r)

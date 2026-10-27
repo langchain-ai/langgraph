@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
 import warnings
 from collections.abc import Callable, Iterator, Mapping
 from typing import Any, cast
@@ -21,6 +22,17 @@ from langgraph_sdk.sse import SSEDecoder, iter_lines_raw
 
 logger = logging.getLogger(__name__)
 
+# Retry transient network-level errors a few times with exponential backoff.
+# httpx.ReadError / ConnectError / RemoteProtocolError are TransportError
+# subclasses, and timeouts (httpx.TimeoutException) are retried too, since the
+# request never reached the server in those cases.
+DEFAULT_MAX_RETRIES = 3
+_MAX_BACKOFF = 4.0
+
+
+def _backoff(attempt: int) -> float:
+    return min(0.5 * 2**attempt, _MAX_BACKOFF)
+
 
 class SyncHttpClient:
     """Handle synchronous requests to the LangGraph API.
@@ -33,8 +45,27 @@ class SyncHttpClient:
         client (httpx.Client): Underlying HTTPX sync client.
     """
 
-    def __init__(self, client: httpx.Client) -> None:
+    def __init__(
+        self, client: httpx.Client, *, max_retries: int = DEFAULT_MAX_RETRIES
+    ) -> None:
         self.client = client
+        self.max_retries = max_retries
+
+    def _request_with_retry(self, fn: Callable[[], Any]) -> httpx.Response:
+        last_exc: Exception | None = None
+        for attempt in range(self.max_retries):
+            try:
+                return fn()
+            except (httpx.TransportError, httpx.TimeoutException) as e:
+                last_exc = e
+                if attempt < self.max_retries - 1:
+                    time.sleep(_backoff(attempt))
+                    continue
+                raise
+        # Every attempt raised a transient error.
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("retry loop ended without a result or error")
 
     def get(
         self,
@@ -45,7 +76,9 @@ class SyncHttpClient:
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a `GET` request."""
-        r = self.client.get(path, params=params, headers=headers)
+        r = self._request_with_retry(
+            lambda: self.client.get(path, params=params, headers=headers)
+        )
         if on_response:
             on_response(r)
         _raise_for_status_typed(r)
@@ -67,8 +100,10 @@ class SyncHttpClient:
             request_headers, content = {}, b""
         if headers:
             request_headers.update(headers)
-        r = self.client.post(
-            path, headers=request_headers, content=content, params=params
+        r = self._request_with_retry(
+            lambda: self.client.post(
+                path, headers=request_headers, content=content, params=params
+            )
         )
         if on_response:
             on_response(r)
@@ -89,8 +124,10 @@ class SyncHttpClient:
         if headers:
             request_headers.update(headers)
 
-        r = self.client.put(
-            path, headers=request_headers, content=content, params=params
+        r = self._request_with_retry(
+            lambda: self.client.put(
+                path, headers=request_headers, content=content, params=params
+            )
         )
         if on_response:
             on_response(r)
@@ -110,8 +147,10 @@ class SyncHttpClient:
         request_headers, content = _encode_json(json)
         if headers:
             request_headers.update(headers)
-        r = self.client.patch(
-            path, headers=request_headers, content=content, params=params
+        r = self._request_with_retry(
+            lambda: self.client.patch(
+                path, headers=request_headers, content=content, params=params
+            )
         )
         if on_response:
             on_response(r)
@@ -128,8 +167,10 @@ class SyncHttpClient:
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> None:
         """Send a `DELETE` request."""
-        r = self.client.request(
-            "DELETE", path, json=json, params=params, headers=headers
+        r = self._request_with_retry(
+            lambda: self.client.request(
+                "DELETE", path, json=json, params=params, headers=headers
+            )
         )
         if on_response:
             on_response(r)
