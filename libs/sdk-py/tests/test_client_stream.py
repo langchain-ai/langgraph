@@ -178,9 +178,9 @@ def test_empty_data_lines_preserve_their_newlines():
     decoder.decode(b"data:")
     decoder.decode(b"data:")
     assert decoder.decode(b"") == StreamPart(event="", data=None, id=None)  # ty: ignore[invalid-argument-type]
-    assert decoder._has_data
+    assert decoder.has_data
     assert decoder.decode(b"") is None
-    assert not decoder._has_data
+    assert not decoder.has_data
 
 
 @pytest.mark.parametrize("value", [b"-1", b"+5", b"  5", b"5 ", b"1_000", b"5x", b""])

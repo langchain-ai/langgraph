@@ -266,15 +266,14 @@ class SyncHttpClient:
                         )
                         reconnect_path = reconnect_location
 
-                    decoder = SSEDecoder()
-                    decoder._last_event_id = last_event_id
+                    decoder = SSEDecoder(last_event_id=last_event_id)
                     try:
                         for line in iter_lines_raw(res):
                             sse = decoder.decode(cast(bytes, line).rstrip(b"\n"))
                             if sse is not None:
                                 if decoder.last_event_id is not None:
                                     last_event_id = decoder.last_event_id
-                                if sse.event or decoder._has_data:
+                                if sse.event or decoder.has_data:
                                     # Progress since the last drop earns a fresh
                                     # set of reconnect attempts.
                                     reconnect_attempts = 0
@@ -289,7 +288,7 @@ class SyncHttpClient:
                         if sse := decoder.decode(b""):
                             if decoder.last_event_id is not None:
                                 last_event_id = decoder.last_event_id
-                            if sse.event or decoder._has_data:
+                            if sse.event or decoder.has_data:
                                 # See async stream implementation for rationale on
                                 # skipping empty flush events.
                                 yield sse
