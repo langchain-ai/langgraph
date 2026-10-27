@@ -3538,6 +3538,28 @@ def test_config_to_docker_with_api_version():
     assert from_line == "FROM langchain/langgraphjs-api:0.2.74-node20"
 
 
+@pytest.mark.parametrize(
+    "config", [{"dependencies": ["."], "graphs": {"agent": "./agent.py:graph"}}]
+)
+def test_config_to_docker_keeps_plain_newlines(monkeypatch, config):
+    """Test that the generated Dockerfile never embeds `os.linesep`.
+
+    `langgraph dockerfile` writes that text with `open(path, "w")`, and text mode turns every `\n` into
+    `\r\n` on Windows, so a `\r\n` produced by `os.linesep` came out as `\r\r\n` there.
+    """
+    monkeypatch.setattr(os, "linesep", "\r\n")
+
+    docker_stdin, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(copy.deepcopy(config)),
+        base_image="langchain/langgraph-api",
+        api_version="0.2.74",
+    )
+
+    assert "\r" not in docker_stdin
+    assert docker_stdin.split("\n")[0] == "FROM langchain/langgraph-api:0.2.74-py3.11"
+
+
 def test_config_to_compose_with_api_version():
     """Test config_to_compose function with api_version parameter."""
 
