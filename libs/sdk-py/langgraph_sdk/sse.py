@@ -79,6 +79,7 @@ class SSEDecoder:
         self._retry: int | None = None
         self._at_stream_start = True
         self._has_data = False
+        self._id_changed = False
 
     @property
     def last_event_id(self) -> str | None:
@@ -102,7 +103,7 @@ class SSEDecoder:
             if (
                 not self._event
                 and not self._data
-                and self._last_event_id is None
+                and not self._id_changed
                 and self._retry is None
             ):
                 return None
@@ -125,6 +126,7 @@ class SSEDecoder:
             self._event = ""
             self._data = bytearray()
             self._retry = None
+            self._id_changed = False
 
             return sse
 
@@ -146,6 +148,7 @@ class SSEDecoder:
                 pass
             else:
                 self._last_event_id = value.decode(errors="replace")
+                self._id_changed = True
         elif fieldname == b"retry":
             if value and value.isdigit():
                 with contextlib.suppress(ValueError):

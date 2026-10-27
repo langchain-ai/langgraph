@@ -130,6 +130,19 @@ def test_sse_decoder_strips_a_leading_bom():
     assert decoder.decode(b"") == StreamPart(event="values", data=1, id=None)  # ty: ignore[invalid-argument-type]
 
 
+def test_control_blocks_do_not_repeat_after_a_cursor_update():
+    decoder = SSEDecoder()
+    decoder.decode(b"id: cursor")
+    assert decoder.decode(b"") == StreamPart(event="", data=None, id="cursor")  # ty: ignore[invalid-argument-type]
+    decoder.decode(b": heartbeat")
+    assert decoder.decode(b"") is None
+    assert decoder.decode(b"") is None
+    decoder.decode(b"id:")
+    assert decoder.decode(b"") == StreamPart(event="", data=None, id=None)  # ty: ignore[invalid-argument-type]
+    assert decoder.last_event_id == ""
+    assert decoder.decode(b"") is None
+
+
 def test_cr_lines_are_emitted_without_waiting_for_another_chunk():
     decoder = BytesLineDecoder()
     assert decoder.decode(b"data: 1\r\r") == [b"data: 1", b""]
