@@ -207,6 +207,9 @@ class HttpClient:
             for key, value in request_headers.items()
             if key.lower() not in {"content-length", "content-type"}
         }
+        # The server's Location carries no query string. A GET reconnects to the
+        # same resource, so its params (e.g. stream_mode) still apply.
+        reconnect_params = params if method == "GET" else None
 
         last_event_id: str | None = None
         reconnect_path: str | None = None
@@ -228,7 +231,7 @@ class HttpClient:
 
             current_method = method if reconnect_path is None else "GET"
             current_content = content if reconnect_path is None else None
-            current_params = params if reconnect_path is None else None
+            current_params = params if reconnect_path is None else reconnect_params
 
             retry = False
             async with self.client.stream(
