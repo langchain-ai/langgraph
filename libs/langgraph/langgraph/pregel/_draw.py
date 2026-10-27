@@ -232,6 +232,8 @@ def draw_graph(
         tools_by_name = getattr(node.bound, "tools_by_name", None)
         if isinstance(tools_by_name, Mapping) and tools_by_name:
             metadata["__tools"] = list(tools_by_name)
+            if subagents := _get_tool_subagents(tools_by_name):
+                metadata["__subagents"] = subagents
         graph.add_node(node.bound, name, metadata=metadata or None)
     # add start node
     if START not in nodes:
@@ -279,6 +281,26 @@ def draw_graph(
                 graph.edges[idx] = edge
 
     return graph
+
+
+def _get_tool_subagents(
+    tools_by_name: Mapping[str, Any],
+) -> dict[str, list[dict[str, Any]]]:
+    """Collect the subagents each tool can run, keyed by tool name."""
+    subagents: dict[str, list[dict[str, Any]]] = {}
+    for tool_name, tool in tools_by_name.items():
+        tool_subagents = getattr(tool, "subagents", None)
+        if (
+            isinstance(tool_subagents, Sequence)
+            and not isinstance(tool_subagents, str)
+            and tool_subagents
+            and all(
+                isinstance(subagent, Mapping) and isinstance(subagent.get("name"), str)
+                for subagent in tool_subagents
+            )
+        ):
+            subagents[tool_name] = [dict(subagent) for subagent in tool_subagents]
+    return subagents
 
 
 def add_edge(
