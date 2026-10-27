@@ -16,7 +16,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-import random
 from collections.abc import AsyncGenerator, AsyncIterator, Generator, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict, cast
@@ -25,7 +24,7 @@ from langchain_core.language_models.chat_model_stream import AsyncChatModelStrea
 from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk._async.http import HttpClient
-from langgraph_sdk._shared.utilities import _quote_path_param
+from langgraph_sdk._shared.utilities import _quote_path_param, _reconnect_delay
 from langgraph_sdk.schema import LangSmithTracing, QueryParamTypes
 from langgraph_sdk.stream.controller import _SeenEventIds
 from langgraph_sdk.stream.decoders import (
@@ -1691,11 +1690,13 @@ class AsyncThreadStream:
 
     async def _reconnect_sleep(self, attempt: int) -> None:
         """Sleep with exponential backoff and jitter for reconnect attempt `attempt`."""
-        base = self._shared_reconnect_backoff_base
-        cap = self._shared_reconnect_backoff_cap
-        delay = min(cap, base * (2**attempt))
-        jitter = random.uniform(0, delay * 0.25)
-        await asyncio.sleep(delay + jitter)
+        await asyncio.sleep(
+            _reconnect_delay(
+                attempt,
+                base=self._shared_reconnect_backoff_base,
+                cap=self._shared_reconnect_backoff_cap,
+            )
+        )
 
     async def _reconnect_shared_stream(self) -> bool:
         """Attempt to reopen the shared stream after a post-ready transport drop.

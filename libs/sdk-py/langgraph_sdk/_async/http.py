@@ -14,9 +14,14 @@ import orjson
 
 from langgraph_sdk._shared.utilities import (
     _orjson_default,
+    _reconnect_delay,
     _validate_reconnect_location,
 )
-from langgraph_sdk.errors import _araise_for_status_typed
+from langgraph_sdk.errors import (
+    InternalServerError,
+    RateLimitError,
+    _araise_for_status_typed,
+)
 from langgraph_sdk.schema import QueryParamTypes, StreamPart
 from langgraph_sdk.sse import SSEDecoder, aiter_lines_raw
 
@@ -230,65 +235,80 @@ class HttpClient:
             current_content = content if reconnect_path is None else None
             current_params = params if reconnect_path is None else None
 
-            retry = False
-            async with self.client.stream(
-                current_method,
-                reconnect_path or path,
-                headers=current_headers,
-                content=current_content,
-                params=current_params,
-            ) as res:
-                if reconnect_path is None and on_response:
-                    on_response(res)
-                # check status
-                await _araise_for_status_typed(res)
-                # check content type
-                content_type = res.headers.get("content-type", "").partition(";")[0]
-                if "text/event-stream" not in content_type:
-                    raise httpx.TransportError(
-                        "Expected response header Content-Type to contain 'text/event-stream', "
-                        f"got {content_type!r}"
-                    )
+            reconnect_cause: httpx.HTTPError | None = None
+            try:
+                async with self.client.stream(
+                    current_method,
+                    reconnect_path or path,
+                    headers=current_headers,
+                    content=current_content,
+                    params=current_params,
+                ) as res:
+                    if reconnect_path is None and on_response:
+                        on_response(res)
+                    # check status
+                    await _araise_for_status_typed(res)
+                    # check content type
+                    content_type = res.headers.get("content-type", "").partition(";")[0]
+                    if "text/event-stream" not in content_type:
+                        raise httpx.TransportError(
+                            "Expected response header Content-Type to contain 'text/event-stream', "
+                            f"got {content_type!r}"
+                        )
 
-                reconnect_location = res.headers.get("location")
-                if reconnect_location:
-                    _validate_reconnect_location(
-                        self.client.base_url, reconnect_location
-                    )
-                    reconnect_path = reconnect_location
+                    reconnect_location = res.headers.get("location")
+                    if reconnect_location:
+                        _validate_reconnect_location(
+                            self.client.base_url, reconnect_location
+                        )
+                        reconnect_path = reconnect_location
 
-                # parse SSE
-                decoder = SSEDecoder()
-                try:
-                    async for line in aiter_lines_raw(res):
-                        sse = decoder.decode(line=cast("bytes", line).rstrip(b"\n"))
-                        if sse is not None:
+                    # parse SSE
+                    decoder = SSEDecoder()
+                    try:
+                        async for line in aiter_lines_raw(res):
+                            sse = decoder.decode(line=cast("bytes", line).rstrip(b"\n"))
+                            if sse is not None:
+                                if decoder.last_event_id is not None:
+                                    last_event_id = decoder.last_event_id
+                                if sse.event or sse.data is not None:
+                                    # Progress since the last drop earns a fresh
+                                    # set of reconnect attempts.
+                                    reconnect_attempts = 0
+                                    yield sse
+                    except httpx.HTTPError as err:
+                        # httpx.TransportError inherits from HTTPError, so transient
+                        # disconnects during streaming land here.
+                        if reconnect_path is None:
+                            raise
+                        reconnect_cause = err
+                    else:
+                        if sse := decoder.decode(b""):
                             if decoder.last_event_id is not None:
                                 last_event_id = decoder.last_event_id
                             if sse.event or sse.data is not None:
+                                # decoder.decode(b"") flushes the in-flight event and may
+                                # return an empty placeholder when there is no pending
+                                # message. Skip these no-op events so the stream doesn't
+                                # emit a trailing blank item after reconnects.
                                 yield sse
-                except httpx.HTTPError:
-                    # httpx.TransportError inherits from HTTPError, so transient
-                    # disconnects during streaming land here.
-                    if reconnect_path is None:
-                        raise
-                    retry = True
-                else:
-                    if sse := decoder.decode(b""):
-                        if decoder.last_event_id is not None:
-                            last_event_id = decoder.last_event_id
-                        if sse.event or sse.data is not None:
-                            # decoder.decode(b"") flushes the in-flight event and may
-                            # return an empty placeholder when there is no pending
-                            # message. Skip these no-op events so the stream doesn't
-                            # emit a trailing blank item after reconnects.
-                            yield sse
-            if retry:
+            except (httpx.TransportError, RateLimitError, InternalServerError) as err:
+                # A reconnect that can't open (connection refused, 429, 5xx or a
+                # non-SSE body) usually means the server is restarting or
+                # mid-deploy, so retry it like a drop. Before the server sends a
+                # Location there is nothing to reconnect to, so raise.
+                if reconnect_path is None:
+                    raise
+                reconnect_cause = err
+            if reconnect_cause is not None:
                 reconnect_attempts += 1
                 if reconnect_attempts > max_reconnect_attempts:
                     raise httpx.TransportError(
                         "Exceeded maximum SSE reconnection attempts"
-                    )
+                    ) from reconnect_cause
+                await asyncio.sleep(
+                    _reconnect_delay(reconnect_attempts - 1, base=1.0, cap=5.0)
+                )
                 continue
             break
 

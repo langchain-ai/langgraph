@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import random
 import threading
 import time
 from dataclasses import dataclass, field
@@ -13,6 +12,7 @@ from typing import Any
 
 from langchain_protocol import Event, SubscribeParams
 
+from langgraph_sdk._shared.utilities import _reconnect_delay
 from langgraph_sdk.stream.errors import (
     is_non_retryable_stream_error,
     stream_error_frame,
@@ -282,11 +282,13 @@ class SyncStreamController:
 
     def _reconnect_sleep(self, attempt: int) -> None:
         """Sleep with exponential backoff + jitter before a reconnect attempt."""
-        base = self._reconnect_backoff_base
-        cap = self._reconnect_backoff_cap
-        delay = min(cap, base * (2**attempt))
-        jitter = random.uniform(0, delay * 0.25)
-        time.sleep(delay + jitter)
+        time.sleep(
+            _reconnect_delay(
+                attempt,
+                base=self._reconnect_backoff_base,
+                cap=self._reconnect_backoff_cap,
+            )
+        )
 
     def _reconnect_shared_stream(self) -> bool:
         """Attempt to reopen the shared stream after a transport drop.

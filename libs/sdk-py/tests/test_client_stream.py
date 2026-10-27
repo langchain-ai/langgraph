@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+import asyncio
+import time
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +15,7 @@ from langgraph_sdk._async.runs import _wrap_stream_v2
 from langgraph_sdk._shared.utilities import _sse_to_v2_dict
 from langgraph_sdk._sync.runs import _wrap_stream_v2_sync
 from langgraph_sdk.client import HttpClient, SyncHttpClient
+from langgraph_sdk.errors import InternalServerError, NotFoundError
 from langgraph_sdk.schema import (
     CheckpointPayload,
     CheckpointsStreamPart,
@@ -65,6 +68,19 @@ class ListByteStream(httpx.ByteStream):
 
     def close(self) -> None:
         return None
+
+
+@pytest.fixture
+def no_sleep(monkeypatch):
+    """Record backoff sleeps without actually waiting."""
+    sleeps: list[float] = []
+
+    async def fake_async_sleep(d):
+        sleeps.append(d)
+
+    monkeypatch.setattr(asyncio, "sleep", fake_async_sleep)
+    monkeypatch.setattr(time, "sleep", lambda d: sleeps.append(d))
+    return sleeps
 
 
 def iter_lines_raw(payload: list[bytes]) -> Iterator[BytesLike]:
@@ -176,6 +192,7 @@ def test_sync_http_client_stream_flushes_trailing_event():
     assert parts == [StreamPart(event="foo", data={"bar": 1})]
 
 
+@pytest.mark.usefixtures("no_sleep")
 def test_sync_http_client_stream_recovers_after_disconnect():
     reconnect_path = "/reconnect"
     first_chunks = [
@@ -241,6 +258,7 @@ def test_sync_http_client_stream_recovers_after_disconnect():
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("no_sleep")
 async def test_http_client_stream_recovers_after_disconnect():
     reconnect_path = "/reconnect"
     first_chunks = [
@@ -375,6 +393,7 @@ _CALLER_CURSORS = pytest.mark.parametrize(
 
 @_EMPTY_IDS
 @_CALLER_CURSORS
+@pytest.mark.usefixtures("no_sleep")
 def test_sync_stream_reconnects_without_a_cursor_after_an_empty_id(
     empty_id: bytes, headers: dict[str, str] | None
 ):
@@ -387,6 +406,7 @@ def test_sync_stream_reconnects_without_a_cursor_after_an_empty_id(
 
 @_EMPTY_IDS
 @_CALLER_CURSORS
+@pytest.mark.usefixtures("no_sleep")
 async def test_async_stream_reconnects_without_a_cursor_after_an_empty_id(
     empty_id: bytes, headers: dict[str, str] | None
 ):
@@ -397,6 +417,7 @@ async def test_async_stream_reconnects_without_a_cursor_after_an_empty_id(
     assert "last-event-id" not in reconnect.headers
 
 
+@pytest.mark.usefixtures("no_sleep")
 def test_sync_stream_id_replaces_a_lowercase_caller_cursor():
     reconnect = _sync_reconnect(
         [b"id: 1\nevent: values\ndata: 1\n\n"], {"last-event-id": "5"}
@@ -405,6 +426,7 @@ def test_sync_stream_id_replaces_a_lowercase_caller_cursor():
     assert reconnect.headers.get_list("last-event-id") == ["1"]
 
 
+@pytest.mark.usefixtures("no_sleep")
 async def test_async_stream_id_replaces_a_lowercase_caller_cursor():
     reconnect = await _async_reconnect(
         [b"id: 1\nevent: values\ndata: 1\n\n"], {"last-event-id": "5"}
@@ -413,18 +435,243 @@ async def test_async_stream_id_replaces_a_lowercase_caller_cursor():
     assert reconnect.headers.get_list("last-event-id") == ["1"]
 
 
+@pytest.mark.usefixtures("no_sleep")
 def test_sync_stream_keeps_the_caller_cursor_until_the_stream_sends_an_id():
     reconnect = _sync_reconnect([b"event: values\ndata: 1\n\n"], {"Last-Event-ID": "5"})
 
     assert reconnect.headers.get_list("last-event-id") == ["5"]
 
 
+@pytest.mark.usefixtures("no_sleep")
 async def test_async_stream_keeps_the_caller_cursor_until_the_stream_sends_an_id():
     reconnect = await _async_reconnect(
         [b"event: values\ndata: 1\n\n"], {"Last-Event-ID": "5"}
     )
 
     assert reconnect.headers.get_list("last-event-id") == ["5"]
+
+
+# --- reconnects survive a server restart or a deploy ---
+
+SSE = {"Content-Type": "text/event-stream"}
+DROP = httpx.RemoteProtocolError("incomplete chunked read")
+
+
+def _event(i: int) -> bytes:
+    return f"id: {i}\nevent: values\ndata: {i}\n\n".encode()
+
+
+def _scripted(steps: list[Callable[[httpx.Request], httpx.Response]]):
+    """Handler that plays one step per request and records each request."""
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if len(seen) > len(steps):
+            raise AssertionError("unexpected request")
+        return steps[len(seen) - 1](request)
+
+    return handler, seen
+
+
+def _ok(stream_cls, chunks, *, drop=False, location=None):
+    headers = dict(SSE)
+    if location:
+        headers["Location"] = location
+
+    def step(_request):
+        return httpx.Response(
+            200, headers=headers, stream=stream_cls(chunks, DROP if drop else None)
+        )
+
+    return step
+
+
+def _status(code):
+    return lambda request: httpx.Response(
+        code, json={"detail": "upstream"}, request=request
+    )
+
+
+def _connect_error(request):
+    raise httpx.ConnectError("[Errno 61] Connection refused", request=request)
+
+
+def _transient_steps(stream_cls, failure):
+    """POST drops after event 1; first reconnect fails; second succeeds."""
+    return [
+        _ok(stream_cls, [_event(1)], drop=True, location="/reconnect"),
+        failure,
+        _ok(stream_cls, [_event(2), b"event: end\ndata: null\n\n"]),
+    ]
+
+
+def _long_stream_steps(stream_cls, drops):
+    """POST + `drops` reconnects, each delivering one event then dropping."""
+    steps = [_ok(stream_cls, [_event(0)], drop=True, location="/reconnect")]
+    for i in range(1, drops):
+        steps.append(_ok(stream_cls, [_event(i)], drop=True))
+    steps.append(_ok(stream_cls, [_event(drops), b"event: end\ndata: null\n\n"]))
+    return steps
+
+
+def _run_sync(steps):
+    handler, seen = _scripted(steps)
+    with httpx.Client(
+        transport=httpx.MockTransport(handler), base_url="https://example.com"
+    ) as client:
+        parts = list(SyncHttpClient(client).stream("/stream", "POST", json={}))
+    return parts, seen
+
+
+async def _run_async(steps):
+    sync_handler, seen = _scripted(steps)
+
+    async def handler(request):
+        return sync_handler(request)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://example.com"
+    ) as client:
+        parts = [p async for p in HttpClient(client).stream("/stream", "POST", json={})]
+    return parts, seen
+
+
+FAILURES = {
+    "429": _status(429),
+    "502": _status(502),
+    "503": _status(503),
+    "connect_error": _connect_error,
+}
+
+
+# A reconnect that hits a 429 / 502 / 503 / connect error, then succeeds, should
+# recover.
+
+
+@pytest.mark.usefixtures("no_sleep")
+@pytest.mark.parametrize("failure", FAILURES.values(), ids=FAILURES.keys())
+def test_sync_reconnect_recovers_from_transient_failure(failure):
+    parts, seen = _run_sync(_transient_steps(ListByteStream, failure))
+    assert [p.event for p in parts] == ["values", "values", "end"]
+    assert len(seen) == 3
+
+
+@pytest.mark.usefixtures("no_sleep")
+@pytest.mark.parametrize("failure", FAILURES.values(), ids=FAILURES.keys())
+async def test_async_reconnect_recovers_from_transient_failure(failure):
+    parts, seen = await _run_async(_transient_steps(AsyncListByteStream, failure))
+    assert [p.event for p in parts] == ["values", "values", "end"]
+    assert len(seen) == 3
+
+
+# Any other 4xx on a reconnect won't go away by retrying, so it raises.
+
+
+def _client_error_steps(stream_cls):
+    return [
+        _ok(stream_cls, [_event(1)], drop=True, location="/reconnect"),
+        _status(404),
+    ]
+
+
+@pytest.mark.usefixtures("no_sleep")
+def test_sync_reconnect_does_not_retry_a_client_error():
+    with pytest.raises(NotFoundError):
+        _run_sync(_client_error_steps(ListByteStream))
+
+
+@pytest.mark.usefixtures("no_sleep")
+async def test_async_reconnect_does_not_retry_a_client_error():
+    with pytest.raises(NotFoundError):
+        await _run_async(_client_error_steps(AsyncListByteStream))
+
+
+# The first request isn't a reconnect, so it raises even when it names a Location.
+
+
+def _first_request_503(request):
+    return httpx.Response(
+        503,
+        headers={"Location": "/reconnect"},
+        json={"detail": "upstream"},
+        request=request,
+    )
+
+
+@pytest.mark.usefixtures("no_sleep")
+def test_sync_first_request_failure_is_not_retried():
+    with pytest.raises(InternalServerError):
+        _run_sync([_first_request_503])
+
+
+@pytest.mark.usefixtures("no_sleep")
+async def test_async_first_request_failure_is_not_retried():
+    with pytest.raises(InternalServerError):
+        await _run_async([_first_request_503])
+
+
+# A server that stays down gets five reconnects, backing off 1, 2, 4, 5 and 5s
+# (each plus up to 25% jitter), so about 20s, before the stream gives up. The
+# error it gives up with is caused by the last failure, so callers see why.
+
+GIVE_UP = "Exceeded maximum SSE reconnection attempts"
+
+
+def _server_down_steps(stream_cls):
+    return [
+        _ok(stream_cls, [_event(1)], drop=True, location="/reconnect"),
+        *[_status(502)] * 5,
+    ]
+
+
+def _assert_backed_off_for_about_20s(sleeps: list[float]) -> None:
+    assert len(sleeps) == 5
+    for slept, delay in zip(sleeps, [1, 2, 4, 5, 5], strict=True):
+        assert delay <= slept <= delay * 1.25
+
+
+def test_sync_reconnect_gives_up_after_five_backed_off_attempts(no_sleep):
+    with pytest.raises(httpx.TransportError, match=GIVE_UP) as exc_info:
+        _run_sync(_server_down_steps(ListByteStream))
+    assert isinstance(exc_info.value.__cause__, InternalServerError)
+    _assert_backed_off_for_about_20s(no_sleep)
+
+
+async def test_async_reconnect_gives_up_after_five_backed_off_attempts(no_sleep):
+    with pytest.raises(httpx.TransportError, match=GIVE_UP) as exc_info:
+        await _run_async(_server_down_steps(AsyncListByteStream))
+    assert isinstance(exc_info.value.__cause__, InternalServerError)
+    _assert_backed_off_for_about_20s(no_sleep)
+
+
+# A long stream that drops 6 times, each reconnect succeeding and making
+# progress, should not run out of attempts.
+
+
+@pytest.mark.usefixtures("no_sleep")
+def test_sync_long_stream_survives_many_spaced_out_drops():
+    parts, _ = _run_sync(_long_stream_steps(ListByteStream, drops=6))
+    assert [p.data for p in parts] == [0, 1, 2, 3, 4, 5, 6, None]
+
+
+@pytest.mark.usefixtures("no_sleep")
+async def test_async_long_stream_survives_many_spaced_out_drops():
+    parts, _ = await _run_async(_long_stream_steps(AsyncListByteStream, drops=6))
+    assert [p.data for p in parts] == [0, 1, 2, 3, 4, 5, 6, None]
+
+
+# Reconnects should back off rather than hammer the server.
+
+
+def test_sync_reconnect_backs_off(no_sleep):
+    _run_sync(_long_stream_steps(ListByteStream, drops=2))
+    assert len(no_sleep) == 2 and all(d > 0 for d in no_sleep)
+
+
+async def test_async_reconnect_backs_off(no_sleep):
+    await _run_async(_long_stream_steps(AsyncListByteStream, drops=2))
+    assert len(no_sleep) == 2 and all(d > 0 for d in no_sleep)
 
 
 # --- _sse_to_v2_dict conversion ---
