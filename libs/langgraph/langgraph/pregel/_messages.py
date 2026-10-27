@@ -59,7 +59,9 @@ def graph_namespace(metadata: Mapping[str, Any]) -> tuple[str, ...]:
     """Namespace of the graph a task runs in, from the task's run metadata.
 
     Drops the task's own segment, plus one per enclosing `@task` call: a call
-    runs in its caller's graph but nests its segment under the caller's.
+    runs in its caller's graph but nests its segment under the caller's. A
+    call's `langgraph_path` is `(PUSH, <caller's path>, <index>, True)`, while
+    a `Send` task's ends in `False`.
     """
     ns = tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP))
     path = metadata.get("langgraph_path", ())
