@@ -5,7 +5,7 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
 
-from langgraph.func import task
+from langgraph.func import entrypoint, task
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.graph.message import push_message
 from langgraph.graph.state import CompiledStateGraph
@@ -68,51 +68,54 @@ _CHILD_CONFIGS = pytest.mark.parametrize(
 )
 
 
+_TASK_CALLERS = pytest.mark.parametrize(
+    "nested", [False, True], ids=["from_entrypoint", "from_task_in_task"]
+)
+
+
+@_TASK_CALLERS
 @pytest.mark.parametrize("subgraphs", [False, True])
-def test_nested_task_events_stream_under_the_graph_namespace(subgraphs: bool) -> None:
+def test_task_events_stream_under_the_graph_namespace(
+    nested: bool, subgraphs: bool
+) -> None:
     @task
-    def inner() -> None:
+    def chat_and_echo() -> None:
         _chat_and_echo({"messages": []})
 
     @task
     def outer() -> None:
-        inner().result()
+        chat_and_echo().result()
 
-    def node(state: MessagesState) -> dict:
-        outer().result()
-        return {}
+    @entrypoint()
+    def workflow(inputs: dict) -> None:
+        (outer() if nested else chat_and_echo()).result()
 
-    parts = _one_node_graph(node).stream(
-        {"messages": []},
-        stream_mode=["messages", "tools"],
-        subgraphs=subgraphs,
-        version="v2",
+    parts = workflow.stream(
+        {}, stream_mode=["messages", "tools"], subgraphs=subgraphs, version="v2"
     )
 
     assert [_summary(part) for part in parts] == _CHAT_AND_ECHO_EVENTS
 
 
+@_TASK_CALLERS
 @pytest.mark.parametrize("subgraphs", [False, True])
-async def test_nested_task_events_stream_under_the_graph_namespace_async(
-    subgraphs: bool,
+async def test_task_events_stream_under_the_graph_namespace_async(
+    nested: bool, subgraphs: bool
 ) -> None:
     @task
-    async def inner() -> None:
+    async def chat_and_echo() -> None:
         await _achat_and_echo({"messages": []})
 
     @task
     async def outer() -> None:
-        await inner()
+        await chat_and_echo()
 
-    async def node(state: MessagesState) -> dict:
-        await outer()
-        return {}
+    @entrypoint()
+    async def workflow(inputs: dict) -> None:
+        await (outer() if nested else chat_and_echo())
 
-    parts = _one_node_graph(node).astream(
-        {"messages": []},
-        stream_mode=["messages", "tools"],
-        subgraphs=subgraphs,
-        version="v2",
+    parts = workflow.astream(
+        {}, stream_mode=["messages", "tools"], subgraphs=subgraphs, version="v2"
     )
 
     assert [_summary(part) async for part in parts] == _CHAT_AND_ECHO_EVENTS
