@@ -6,8 +6,8 @@
 
 - **`PrioritySettings.fairness_weight`** — removed. The server stores
   `priority` and `fairness_group` on the thread, and every fairness group has
-  weight 1 for now. A callback that still returns `fairness_weight` keeps
-  working: the server ignores the key and logs a warning.
+  weight 1 for now. A callback that still returns `fairness_weight` gets an
+  error: the server rejects any key it doesn't know, and the run isn't created.
 
 ### Changed
 
