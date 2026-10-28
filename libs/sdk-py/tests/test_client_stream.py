@@ -497,6 +497,12 @@ def _connect_error(request):
     raise httpx.ConnectError("[Errno 61] Connection refused", request=request)
 
 
+def _not_sse(request):
+    return httpx.Response(
+        200, headers={"Content-Type": "text/html"}, text="<html>", request=request
+    )
+
+
 def _transient_steps(stream_cls, failure):
     """POST drops after event 1; first reconnect fails; second succeeds."""
     return [
@@ -542,11 +548,12 @@ FAILURES = {
     "502": _status(502),
     "503": _status(503),
     "connect_error": _connect_error,
+    "not_sse": _not_sse,
 }
 
 
-# A reconnect that hits a 429 / 502 / 503 / connect error, then succeeds, should
-# recover.
+# A reconnect that hits a 429 / 502 / 503 / connect error / non-SSE body, then
+# succeeds, should recover.
 
 
 @pytest.mark.usefixtures("no_sleep")
