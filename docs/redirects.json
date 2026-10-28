@@ -102,7 +102,7 @@
   "/tutorials/auth/resource_auth": "https://docs.langchain.com/langsmith/resource-auth",
   "/tutorials/auth/add_auth_server": "https://docs.langchain.com/langsmith/add-auth-server",
   "/how-tos/use-remote-graph": "https://docs.langchain.com/langsmith/use-remote-graph",
-  "/how-tos/autogen-integration": "https://docs.langchain.com/langsmith/autogen-integration",
+  "/how-tos/autogen-integration": "https://docs.langchain.com/langsmith/trace-with-autogen",
   "/how-tos/human_in_the_loop/wait-user-input": "https://docs.langchain.com/oss/python/langgraph/interrupts",
   "/cloud/how-tos/use_stream_react": "https://docs.langchain.com/langsmith/use-stream-react",
   "/cloud/how-tos/generative_ui_react": "https://docs.langchain.com/langsmith/generative-ui-react",
