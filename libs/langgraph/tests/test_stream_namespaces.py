@@ -202,6 +202,33 @@ async def test_child_graph_streams_only_to_the_node_streaming_it_async(
     assert len(received) == len(_CHAT_AND_ECHO_EVENTS)
 
 
+@pytest.mark.parametrize(
+    "child_config",
+    [
+        {"configurable": {"thread_id": "child"}},
+        {"configurable": {"thread_id": "parent"}},
+    ],
+    ids=["own_thread", "caller_thread"],
+)
+def test_child_graph_on_its_own_thread_skips_a_caller_streaming_subgraphs(
+    child_config: dict,
+) -> None:
+    child = _one_node_graph(_chat_and_echo)
+
+    def node(state: MessagesState) -> dict:
+        child.invoke({"messages": []}, child_config)
+        return {}
+
+    parts = _one_node_graph(node).stream(
+        {"messages": []},
+        {"configurable": {"thread_id": "parent"}},
+        stream_mode=["messages", "tools"],
+        subgraphs=True,
+    )
+
+    assert list(parts) == []
+
+
 def test_node_gets_the_events_of_every_subgraph_it_streams() -> None:
     sub = _one_node_graph(_chat_and_echo)
     counts = []

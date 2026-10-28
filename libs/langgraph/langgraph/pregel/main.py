@@ -2885,14 +2885,12 @@ class Pregel(
                 # this graph's namespace starts at the root, so a caller's
                 # handler would take this graph's events for its own graph's.
                 callback_manager.handlers = [
-                    h
-                    for h in callback_manager.handlers
-                    if not _streams_only_its_graph(h)
+                    h for h in callback_manager.handlers if not _is_stream_handler(h)
                 ]
                 callback_manager.inheritable_handlers = [
                     h
                     for h in callback_manager.inheritable_handlers
-                    if not _streams_only_its_graph(h)
+                    if not _is_stream_handler(h)
                 ]
             if "ls_integration" not in callback_manager.metadata:
                 callback_manager.add_metadata({"ls_integration": "langgraph"})
@@ -3302,14 +3300,12 @@ class Pregel(
                 # this graph's namespace starts at the root, so a caller's
                 # handler would take this graph's events for its own graph's.
                 callback_manager.handlers = [
-                    h
-                    for h in callback_manager.handlers
-                    if not _streams_only_its_graph(h)
+                    h for h in callback_manager.handlers if not _is_stream_handler(h)
                 ]
                 callback_manager.inheritable_handlers = [
                     h
                     for h in callback_manager.inheritable_handlers
-                    if not _streams_only_its_graph(h)
+                    if not _is_stream_handler(h)
                 ]
             if "ls_integration" not in callback_manager.metadata:
                 callback_manager.add_metadata({"ls_integration": "langgraph"})
@@ -4471,11 +4467,8 @@ def _coerce_checkpoint_values(payload: Any, mapper: Callable[[Any], Any]) -> Non
         payload["values"] = mapper(payload["values"])
 
 
-def _streams_only_its_graph(handler: object) -> bool:
-    return (
-        isinstance(handler, (StreamMessagesHandler, StreamToolCallHandler))
-        and not handler.subgraphs
-    )
+def _is_stream_handler(handler: object) -> bool:
+    return isinstance(handler, (StreamMessagesHandler, StreamToolCallHandler))
 
 
 def _resolve_parent_ns(
