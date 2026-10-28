@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-import time
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
@@ -68,19 +66,6 @@ class ListByteStream(httpx.ByteStream):
 
     def close(self) -> None:
         return None
-
-
-@pytest.fixture
-def no_sleep(monkeypatch):
-    """Record backoff sleeps without actually waiting."""
-    sleeps: list[float] = []
-
-    async def fake_async_sleep(d):
-        sleeps.append(d)
-
-    monkeypatch.setattr(asyncio, "sleep", fake_async_sleep)
-    monkeypatch.setattr(time, "sleep", lambda d: sleeps.append(d))
-    return sleeps
 
 
 def iter_lines_raw(payload: list[bytes]) -> Iterator[BytesLike]:
