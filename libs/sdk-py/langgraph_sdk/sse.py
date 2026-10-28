@@ -30,18 +30,14 @@ class BytesLineDecoder:
         # See https://docs.python.org/3/glossary.html#term-universal-newlines
         NEWLINE_CHARS = b"\n\r"
 
-        # We always push a trailing `\r` into the next decode iteration.
-        if self.trailing_cr:
-            text = b"\r" + text
-            self.trailing_cr = False
-        if text.endswith(b"\r"):
-            self.trailing_cr = True
-            text = text[:-1]
+        if not text:
+            return []
+        if self.trailing_cr and text.startswith(b"\n"):
+            text = text[1:]
+        self.trailing_cr = text.endswith(b"\r")
 
         if not text:
-            # NOTE: the edge case input of empty text doesn't occur in practice,
-            # because other httpx internals filter out this value
-            return []  # pragma: no cover
+            return []
 
         trailing_newline = text[-1] in NEWLINE_CHARS
         lines = cast(list[BytesLike], text.splitlines())
@@ -66,7 +62,7 @@ class BytesLineDecoder:
         return lines
 
     def flush(self) -> list[BytesLike]:
-        if not self.buffer and not self.trailing_cr:
+        if not self.buffer:
             return []
 
         lines: list[BytesLike] = [self.buffer]
@@ -76,18 +72,25 @@ class BytesLineDecoder:
 
 
 class SSEDecoder:
-    def __init__(self) -> None:
+    def __init__(self, *, last_event_id: str | None = None) -> None:
         self._event = ""
         self._data = bytearray()
-        self._last_event_id: str | None = None
+        self._last_event_id = last_event_id
         self._retry: int | None = None
         self._at_stream_start = True
+        self._has_data = False
+        self._id_changed = False
+
+    @property
+    def has_data(self) -> bool:
+        """Whether the last decoded block contained a data field."""
+        return self._has_data
 
     @property
     def last_event_id(self) -> str | None:
         """Return the last event identifier that was seen.
 
-        `None` until the stream sends an `id` field, and `""` after an empty
+        `None` until an ID is supplied or received, and `""` after an empty
         one, which resets the reconnect cursor.
         """
 
@@ -101,17 +104,26 @@ class SSEDecoder:
             line = line.removeprefix(b"\xef\xbb\xbf")
 
         if not line:
+            self._has_data = bool(self._data)
             if (
                 not self._event
                 and not self._data
-                and self._last_event_id is None
+                and not self._id_changed
                 and self._retry is None
             ):
                 return None
 
+            body = self._data[:-1]
+            data = None
+            if body and not body.isspace():
+                try:
+                    data = orjson.loads(body)
+                except orjson.JSONDecodeError:
+                    data = orjson.loads(body.decode(errors="replace"))
+
             sse = StreamPart(
                 event=self._event,
-                data=orjson.loads(self._data) if self._data else None,  # ty: ignore[invalid-argument-type]
+                data=data,  # ty: ignore[invalid-argument-type]
                 id=self._last_event_id or None,
             )
 
@@ -119,6 +131,7 @@ class SSEDecoder:
             self._event = ""
             self._data = bytearray()
             self._retry = None
+            self._id_changed = False
 
             return sse
 
@@ -131,16 +144,16 @@ class SSEDecoder:
             value = value[1:]
 
         if fieldname == b"event":
-            self._event = value.decode()
+            self._event = value.decode(errors="replace")
         elif fieldname == b"data":
-            if self._data:
-                self._data.extend(b"\n")
             self._data.extend(value)
+            self._data.extend(b"\n")
         elif fieldname == b"id":
             if b"\0" in value:
                 pass
             else:
-                self._last_event_id = value.decode()
+                self._last_event_id = value.decode(errors="replace")
+                self._id_changed = True
         elif fieldname == b"retry":
             with contextlib.suppress(TypeError, ValueError):
                 self._retry = int(value)
