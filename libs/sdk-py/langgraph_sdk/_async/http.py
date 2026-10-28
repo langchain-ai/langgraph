@@ -151,7 +151,8 @@ class HttpClient:
         on_response: Callable[[httpx.Response], None] | None = None,
         reconnect_limit: int = 5,
     ) -> Any:
-        """Send a request that automatically reconnects to Location header."""
+        """Send a request that reconnects to its Location header if the response is
+        cut off, with backoff between attempts."""
         request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
@@ -181,13 +182,27 @@ class HttpClient:
                     stacklevel=2,
                 )
                 await r.aclose()
-                return await self.request_reconnect(
-                    loc,
-                    "GET",
-                    headers=headers,
-                    # don't pass on_response so it's only called once
-                    reconnect_limit=reconnect_limit - 1,
-                )
+                for attempt in range(reconnect_limit):
+                    await asyncio.sleep(_reconnect_delay(attempt, base=1.0, cap=5.0))
+                    # A restart or a deploy looks like a refused connection, a
+                    # dropped body, a 429 or a 5xx; other errors won't go away.
+                    try:
+                        return await self.request_reconnect(
+                            loc,
+                            "GET",
+                            headers=headers,
+                            # don't pass on_response so it's only called once
+                            reconnect_limit=0,
+                        )
+                    except httpx.HTTPStatusError as err:
+                        status = err.response.status_code
+                        if attempt == reconnect_limit - 1 or (
+                            status != 429 and status < 500
+                        ):
+                            raise
+                    except httpx.TransportError:
+                        if attempt == reconnect_limit - 1:
+                            raise
 
     async def stream(
         self,
