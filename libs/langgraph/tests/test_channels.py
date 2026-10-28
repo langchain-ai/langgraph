@@ -108,6 +108,40 @@ def test_binop() -> None:
     assert channel.get() == 10
 
 
+def test_binop_first_value_overwrite_unwraps_value() -> None:
+    """An `Overwrite` as the *first* update must store its wrapped value, not
+    the `Overwrite` object itself.
+
+    `BinaryOperatorAggregate` starts with `self.value = typ()`, but a type that
+    cannot be instantiated with no arguments (e.g. `int | str`, an `Optional`,
+    or a `Literal`) leaves `self.value = MISSING`. The `update` path that seeds
+    an empty channel used to assign `values[0]` directly, so a leading
+    `Overwrite` leaked into the channel's value instead of being unwrapped.
+    """
+    # A type that cannot be instantiated with no arguments keeps the channel
+    # empty until the first update.
+    channel: BinaryOperatorAggregate = BinaryOperatorAggregate(
+        int | str,
+        lambda a, b: b,
+    )
+    assert channel.value is MISSING
+
+    channel.update([Overwrite("reset")])
+    assert channel.get() == "reset"
+    assert not isinstance(channel.get(), Overwrite)
+
+    # Regression: a leading Overwrite followed by a plain value must still
+    # treat the Overwrite as authoritative (subsequent values are dropped, as
+    # documented for a single-Overwrite super-step).
+    channel2: BinaryOperatorAggregate = BinaryOperatorAggregate(
+        int | str,
+        lambda a, b: b,
+    )
+    channel2.update([Overwrite("reset"), "ignored"])
+    assert channel2.get() == "reset"
+    assert not isinstance(channel2.get(), Overwrite)
+
+
 def test_untracked_value() -> None:
     channel = UntrackedValue(dict).from_checkpoint(MISSING)
     assert channel.ValueType is dict

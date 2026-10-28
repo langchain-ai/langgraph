@@ -128,9 +128,17 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
         if not values:
             return False
         if self.value is MISSING:
-            self.value = values[0]
-            values = values[1:]
-        seen_overwrite: bool = False
+            is_overwrite, overwrite_value = _get_overwrite(values[0])
+            if is_overwrite:
+                self.value = overwrite_value
+                values = values[1:]
+                seen_overwrite = True
+            else:
+                self.value = values[0]
+                values = values[1:]
+                seen_overwrite = False
+        else:
+            seen_overwrite = False
         for value in values:
             is_overwrite, overwrite_value = _get_overwrite(value)
             if is_overwrite:
