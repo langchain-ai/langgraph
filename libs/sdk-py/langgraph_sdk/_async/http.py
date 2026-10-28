@@ -230,6 +230,17 @@ class HttpClient:
                 }
             if last_event_id:
                 current_headers["Last-Event-ID"] = last_event_id
+            if reconnect_path is not None and not any(
+                key.lower() == "last-event-id" and value
+                for key, value in current_headers.items()
+            ):
+                warnings.warn(
+                    "Reconnecting without a Last-Event-ID, so events sent while "
+                    "disconnected are not replayed. Only runs created with "
+                    "stream_resumable=True send the event IDs a reconnect resumes "
+                    "from.",
+                    stacklevel=2,
+                )
 
             current_method = method if reconnect_path is None else "GET"
             current_content = content if reconnect_path is None else None
