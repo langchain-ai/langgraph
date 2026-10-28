@@ -501,9 +501,10 @@ _CALLER_CURSORS = pytest.mark.parametrize(
 def test_sync_stream_reconnects_without_a_cursor_after_an_empty_id(
     empty_id: bytes, headers: dict[str, str] | None
 ):
-    reconnect = _sync_reconnect(
-        [b"id: 1\nevent: values\ndata: 1\n\n", empty_id], headers
-    )
+    with pytest.warns(UserWarning, match="Last-Event-ID"):
+        reconnect = _sync_reconnect(
+            [b"id: 1\nevent: values\ndata: 1\n\n", empty_id], headers
+        )
 
     assert "last-event-id" not in reconnect.headers
 
@@ -514,9 +515,10 @@ def test_sync_stream_reconnects_without_a_cursor_after_an_empty_id(
 async def test_async_stream_reconnects_without_a_cursor_after_an_empty_id(
     empty_id: bytes, headers: dict[str, str] | None
 ):
-    reconnect = await _async_reconnect(
-        [b"id: 1\nevent: values\ndata: 1\n\n", empty_id], headers
-    )
+    with pytest.warns(UserWarning, match="Last-Event-ID"):
+        reconnect = await _async_reconnect(
+            [b"id: 1\nevent: values\ndata: 1\n\n", empty_id], headers
+        )
 
     assert "last-event-id" not in reconnect.headers
 
@@ -553,6 +555,45 @@ async def test_async_stream_keeps_the_caller_cursor_until_the_stream_sends_an_id
     )
 
     assert reconnect.headers.get_list("last-event-id") == ["5"]
+
+
+# A reconnect that sends no Last-Event-ID can't replay what was sent while it was
+# disconnected, so it warns.
+_RECONNECT_CURSORS = pytest.mark.parametrize(
+    ("chunks", "headers", "warns"),
+    [
+        ([b"event: values\ndata: 1\n\n"], None, True),
+        ([b"id: 1\nevent: values\ndata: 1\n\n"], None, False),
+        ([b"event: values\ndata: 1\n\n"], {"Last-Event-ID": "5"}, False),
+    ],
+    ids=["no-cursor", "stream-cursor", "caller-cursor"],
+)
+
+
+@_RECONNECT_CURSORS
+@pytest.mark.usefixtures("no_sleep")
+def test_sync_reconnect_warns_only_without_a_cursor(
+    chunks: list[bytes],
+    headers: dict[str, str] | None,
+    warns: bool,
+    recwarn: pytest.WarningsRecorder,
+):
+    _sync_reconnect(chunks, headers)
+
+    assert any("Last-Event-ID" in str(w.message) for w in recwarn) is warns
+
+
+@_RECONNECT_CURSORS
+@pytest.mark.usefixtures("no_sleep")
+async def test_async_reconnect_warns_only_without_a_cursor(
+    chunks: list[bytes],
+    headers: dict[str, str] | None,
+    warns: bool,
+    recwarn: pytest.WarningsRecorder,
+):
+    await _async_reconnect(chunks, headers)
+
+    assert any("Last-Event-ID" in str(w.message) for w in recwarn) is warns
 
 
 # --- reconnects survive a server restart or a deploy ---
