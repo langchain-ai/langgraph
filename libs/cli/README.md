@@ -86,6 +86,47 @@ langgraph dockerfile SAVE_PATH [OPTIONS]
   -c, --config FILE       Config file path
 ```
 
+### `langgraph deploy metrics`
+
+Fetch deployment monitoring time series as JSON through the LangSmith control plane.
+Use `langgraph deploy list` to find the deployment ID. Authentication uses the same
+API key and workspace configuration as the other deployment commands.
+
+```bash
+langgraph deploy metrics DEPLOYMENT_ID \
+  --start-time 2026-10-28T00:00:00Z \
+  --end-time 2026-10-28T01:00:00Z \
+  --step-seconds 60 \
+  --metrics cpu_usage,memory_usage,worker_count
+```
+
+Omit `--metrics` to fetch all available metrics. Time bounds and resolution default
+to the backend's settings (start of the current hour through now). Output contains
+charts and their time-series data, not traces. This command never prompts; for an
+organization-scoped key, set `LANGSMITH_TENANT_ID` to the workspace ID.
+
+### `langgraph deploy scale`
+
+Change a deployment's compute tier, dedicated Postgres tier, or both. Omitted
+settings remain unchanged. The backend enforces deployment permissions, supported
+tiers, and platform restrictions.
+
+```bash
+langgraph deploy scale DEPLOYMENT_ID \
+  --compute-tier DEDICATED_M --database-tier DEDICATED_L
+```
+
+Compute tiers are `SERVERLESS_S`, `SERVERLESS_M`, `SERVERLESS_L`, `DEDICATED_S`,
+`DEDICATED_M`, and `DEDICATED_L`. Database tiers are available only for dedicated
+deployments: `DEDICATED_S`, `DEDICATED_M`, and `DEDICATED_L`. Availability depends
+on the deployment's platform and enabled features.
+
+Scaling prompts for confirmation because it creates a revision, may interrupt
+service, and may change billing. Pass `--yes` to confirm without prompting, with
+credentials and workspace configured for non-interactive use. The command reports
+that scaling was requested; it does not wait for the revision to become healthy.
+Arbitrary worker replica overrides are not supported by this command.
+
 ## Configuration
 
 The CLI uses a `langgraph.json` configuration file with these key settings:
