@@ -13,8 +13,9 @@ from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.last_value import LastValue
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import _messages_delta_reducer
-from langgraph.pregel import NodeBuilder, Pregel
+from langgraph.pregel import Pregel
 from langgraph.types import Overwrite
+from tests.raw_pregel import NodeBuilder, RawPregel
 
 pytestmark = pytest.mark.anyio
 
@@ -36,7 +37,7 @@ def _extend(current: list, writes: list) -> list:
 
 def _delta_input_graph(saver: InMemorySaver) -> Pregel:
     node = NodeBuilder().subscribe_only("go").do(lambda _: [2]).write_to("log")
-    return Pregel(
+    return RawPregel(
         nodes={"n": node},
         channels={"log": DeltaChannel(_extend), "go": LastValue(int)},
         input_channels=["log", "go"],

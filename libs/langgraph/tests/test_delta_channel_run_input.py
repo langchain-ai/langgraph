@@ -7,8 +7,9 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.last_value import LastValue
-from langgraph.pregel import NodeBuilder, Pregel
+from langgraph.pregel import Pregel
 from langgraph.types import Durability
+from tests.raw_pregel import NodeBuilder, RawPregel
 
 pytestmark = pytest.mark.anyio
 
@@ -19,7 +20,7 @@ def _sorted_extend(current: list, writes: list) -> list:
 
 def _delta_input_graph() -> Pregel:
     node = NodeBuilder().subscribe_only("go").do(lambda _: [2]).write_to("log", "plain")
-    return Pregel(
+    return RawPregel(
         nodes={"n": node},
         channels={
             "log": DeltaChannel(_sorted_extend),

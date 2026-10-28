@@ -47,9 +47,7 @@ def validate_graph(
                             f"not in known channels: '{repr(sorted(channels))[:100]}'"
                         )
         else:
-            raise TypeError(
-                f"Invalid node type {type(node)}, expected PregelNode or NodeBuilder"
-            )
+            raise TypeError(f"Invalid node type {type(node)}, expected PregelNode")
 
     for chan in subscribed_channels:
         if chan not in channels:

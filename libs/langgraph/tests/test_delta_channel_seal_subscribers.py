@@ -3,7 +3,8 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.last_value import LastValue
-from langgraph.pregel import NodeBuilder, Pregel
+from langgraph.pregel import Pregel
+from tests.raw_pregel import NodeBuilder, RawPregel
 
 pytestmark = pytest.mark.anyio
 
@@ -17,7 +18,7 @@ def _extend(current: list, writes: list) -> list:
 def _graph(reads: list) -> Pregel:
     writer = NodeBuilder().subscribe_only("a").do(lambda _: [1]).write_to("d")
     reader = NodeBuilder().subscribe_only("d").do(lambda d: reads.append(list(d)))
-    return Pregel(
+    return RawPregel(
         nodes={"writer": writer, "reader": reader},
         channels={"a": LastValue(str), "d": DeltaChannel(_extend)},
         input_channels="a",

@@ -17,7 +17,6 @@ from collections.abc import (
     Sequence,
 )
 from dataclasses import is_dataclass, replace
-from datetime import timedelta
 from functools import partial
 from inspect import isclass
 from typing import (
@@ -35,7 +34,6 @@ from langchain_core.globals import get_debug
 from langchain_core.runnables import (
     RunnableSequence,
 )
-from langchain_core.runnables.base import Input, Output
 from langchain_core.runnables.config import (
     RunnableConfig,
     get_async_callback_manager_for_config,
@@ -93,13 +91,6 @@ from langgraph._internal._queue import (  # type: ignore[attr-defined]
     AsyncQueue,
     SyncQueue,
 )
-from langgraph._internal._runnable import (
-    Runnable,
-    RunnableLike,
-    RunnableSeq,
-    coerce_to_runnable,
-)
-from langgraph._internal._timeout import coerce_timeout_policy
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.callbacks import (
     GraphInterruptEvent,
@@ -155,7 +146,7 @@ from langgraph.pregel._messages import (
     StreamMessagesHandlerV2,
     ensure_message_ids,
 )
-from langgraph.pregel._read import DEFAULT_BOUND, PregelNode
+from langgraph.pregel._read import PregelNode
 from langgraph.pregel._retry import RetryPolicy
 from langgraph.pregel._runner import PregelRunner
 from langgraph.pregel._task_status import read_task_statuses
@@ -165,7 +156,6 @@ from langgraph.pregel._utils import (
     validate_timeout_supported,
 )
 from langgraph.pregel._validate import validate_graph, validate_keys
-from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.pregel.debug import get_bolded_text, get_colored_text, tasks_w_writes
 from langgraph.pregel.protocol import PregelProtocol, StreamChunk, StreamProtocol
 from langgraph.runtime import (
@@ -197,7 +187,6 @@ from langgraph.types import (
     StateUpdate,
     StreamMode,
     StreamPart,
-    TimeoutPolicy,
     ensure_valid_checkpointer,
 )
 from langgraph.typing import ContextT, InputT, OutputT, StateT
@@ -208,182 +197,7 @@ try:
 except ImportError:
     _StreamingCallbackHandler = None  # type: ignore
 
-__all__ = ("NodeBuilder", "Pregel")
-
-_WriteValue = Callable[[Input], Output] | Any
-
-
-class NodeBuilder:
-    __slots__ = (
-        "_channels",
-        "_triggers",
-        "_tags",
-        "_metadata",
-        "_writes",
-        "_bound",
-        "_retry_policy",
-        "_cache_policy",
-        "_timeout",
-    )
-
-    _channels: str | list[str]
-    _triggers: list[str]
-    _tags: list[str]
-    _metadata: dict[str, Any]
-    _writes: list[ChannelWriteEntry]
-    _bound: Runnable
-    _retry_policy: list[RetryPolicy]
-    _cache_policy: CachePolicy | None
-    _timeout: TimeoutPolicy | None
-
-    def __init__(
-        self,
-    ) -> None:
-        self._channels = []
-        self._triggers = []
-        self._tags = []
-        self._metadata = {}
-        self._writes = []
-        self._bound = DEFAULT_BOUND
-        self._retry_policy = []
-        self._cache_policy = None
-        self._timeout = None
-
-    def subscribe_only(
-        self,
-        channel: str,
-    ) -> Self:
-        """Subscribe to a single channel."""
-        if not self._channels:
-            self._channels = channel
-        else:
-            raise ValueError(
-                "Cannot subscribe to single channels when other channels are already subscribed to"
-            )
-
-        self._triggers.append(channel)
-
-        return self
-
-    def subscribe_to(
-        self,
-        *channels: str,
-        read: bool = True,
-    ) -> Self:
-        """Add channels to subscribe to.
-
-        Node will be invoked when any of these channels are updated, with a dict of the
-        channel values as input.
-
-        Args:
-            channels: Channel name(s) to subscribe to
-            read: If `True`, the channels will be included in the input to the node.
-                Otherwise, they will trigger the node without being sent in input.
-
-        Returns:
-            Self for chaining
-        """
-        if isinstance(self._channels, str):
-            raise ValueError(
-                "Cannot subscribe to channels when subscribed to a single channel"
-            )
-        if read:
-            if not self._channels:
-                self._channels = list(channels)
-            else:
-                self._channels.extend(channels)
-
-        if isinstance(channels, str):
-            self._triggers.append(channels)
-        else:
-            self._triggers.extend(channels)
-
-        return self
-
-    def read_from(
-        self,
-        *channels: str,
-    ) -> Self:
-        """Adds the specified channels to read from, without subscribing to them."""
-        assert isinstance(self._channels, list), (
-            "Cannot read additional channels when subscribed to single channels"
-        )
-        self._channels.extend(channels)
-        return self
-
-    def do(
-        self,
-        node: RunnableLike,
-    ) -> Self:
-        """Adds the specified node."""
-        if self._bound is not DEFAULT_BOUND:
-            self._bound = RunnableSeq(
-                self._bound, coerce_to_runnable(node, name=None, trace=True)
-            )
-        else:
-            self._bound = coerce_to_runnable(node, name=None, trace=True)
-        return self
-
-    def write_to(
-        self,
-        *channels: str | ChannelWriteEntry,
-        **kwargs: _WriteValue,
-    ) -> Self:
-        """Add channel writes.
-
-        Args:
-            *channels: Channel names to write to.
-            **kwargs: Channel name and value mappings.
-
-        Returns:
-            Self for chaining
-        """
-        self._writes.extend(
-            ChannelWriteEntry(c) if isinstance(c, str) else c for c in channels
-        )
-        self._writes.extend(
-            ChannelWriteEntry(k, mapper=v)
-            if callable(v)
-            else ChannelWriteEntry(k, value=v)
-            for k, v in kwargs.items()
-        )
-
-        return self
-
-    def meta(self, *tags: str, **metadata: Any) -> Self:
-        """Add tags or metadata to the node."""
-        self._tags.extend(tags)
-        self._metadata.update(metadata)
-        return self
-
-    def add_retry_policies(self, *policies: RetryPolicy) -> Self:
-        """Adds retry policies to the node."""
-        self._retry_policy.extend(policies)
-        return self
-
-    def add_cache_policy(self, policy: CachePolicy) -> Self:
-        """Adds cache policies to the node."""
-        self._cache_policy = policy
-        return self
-
-    def set_timeout(self, timeout: float | timedelta | TimeoutPolicy | None) -> Self:
-        """Set the per-attempt timeout policy for this node."""
-        self._timeout = coerce_timeout_policy(timeout)
-        return self
-
-    def build(self) -> PregelNode:
-        """Builds the node."""
-        return PregelNode(
-            channels=self._channels,
-            triggers=self._triggers,
-            tags=self._tags,
-            metadata=self._metadata,
-            writers=[ChannelWrite(self._writes)],
-            bound=self._bound,
-            retry_policy=self._retry_policy,
-            cache_policy=self._cache_policy,
-            timeout=self._timeout,
-        )
+__all__ = ("Pregel",)
 
 
 # Kwargs that ``stream_events(version="v3")`` / ``astream_events(version="v3")``
@@ -461,255 +275,22 @@ class Pregel(
     PregelProtocol[StateT, ContextT, InputT, OutputT],
     Generic[StateT, ContextT, InputT, OutputT],
 ):
-    """Pregel manages the runtime behavior for LangGraph applications.
+    """The compiled graph that runs a LangGraph application.
 
-    ## Overview
+    `StateGraph.compile()` and the `@entrypoint` decorator return an instance of
+    this class. It provides the methods that run and inspect the application,
+    such as `invoke`, `stream`, `get_state` and `update_state`.
 
-    Pregel combines [**actors**](https://en.wikipedia.org/wiki/Actor_model)
-    and **channels** into a single application.
-    **Actors** read data from channels and write data to channels.
-    Pregel organizes the execution of the application into multiple steps,
-    following the **Pregel Algorithm**/**Bulk Synchronous Parallel** model.
+    The runtime is named after Google's
+    [Pregel algorithm](https://research.google/pubs/pub37252/). It runs the
+    application in steps. In each step it plans which nodes to run, runs them in
+    parallel, and then applies their writes to the graph's state, so writes
+    become visible only in the next step. The run ends when no node is
+    scheduled, or when the recursion limit is reached.
 
-    Each step consists of three phases:
-
-    - **Plan**: Determine which **actors** to execute in this step. For example,
-        in the first step, select the **actors** that subscribe to the special
-        **input** channels; in subsequent steps,
-        select the **actors** that subscribe to channels updated in the previous step.
-    - **Execution**: Execute all selected **actors** in parallel,
-        until all complete, or one fails, or a timeout is reached. During this
-        phase, channel updates are invisible to actors until the next step.
-    - **Update**: Update the channels with the values written by the **actors**
-        in this step.
-
-    Repeat until no **actors** are selected for execution, or a maximum number of
-    steps is reached.
-
-    ## Actors
-
-    An **actor** is a `PregelNode`.
-    It subscribes to channels, reads data from them, and writes data to them.
-    It can be thought of as an **actor** in the Pregel algorithm.
-    `PregelNodes` implement LangChain's
-    Runnable interface.
-
-    ## Channels
-
-    Channels are used to communicate between actors (`PregelNodes`).
-    Each channel has a value type, an update type, and an update function – which
-    takes a sequence of updates and
-    modifies the stored value. Channels can be used to send data from one chain to
-    another, or to send data from a chain to itself in a future step. LangGraph
-    provides a number of built-in channels:
-
-    ### Basic channels: LastValue and Topic
-
-    - `LastValue`: The default channel, stores the last value sent to the channel,
-       useful for input and output values, or for sending data from one step to the next
-    - `Topic`: A configurable PubSub Topic, useful for sending multiple values
-       between *actors*, or for accumulating output. Can be configured to deduplicate
-       values, and/or to accumulate values over the course of multiple steps.
-
-    ### Advanced channels: Context and BinaryOperatorAggregate
-
-    - `Context`: exposes the value of a context manager, managing its lifecycle.
-        Useful for accessing external resources that require setup and/or teardown. e.g.
-        `client = Context(httpx.Client)`
-    - `BinaryOperatorAggregate`: stores a persistent value, updated by applying
-        a binary operator to the current value and each update
-        sent to the channel, useful for computing aggregates over multiple steps. e.g.
-        `total = BinaryOperatorAggregate(int, operator.add)`
-
-    ## Examples
-
-    Most users will interact with Pregel via a
-    [StateGraph (Graph API)][langgraph.graph.StateGraph] or via an
-    [entrypoint (Functional API)][langgraph.func.entrypoint].
-
-    However, for **advanced** use cases, Pregel can be used directly. If you're
-    not sure whether you need to use Pregel directly, then the answer is probably no
-    - you should use the Graph API or Functional API instead. These are higher-level
-    interfaces that will compile down to Pregel under the hood.
-
-    Here are some examples to give you a sense of how it works:
-
-    Example: Single node application
-        ```python
-        from langgraph.channels import EphemeralValue
-        from langgraph.pregel import Pregel, NodeBuilder
-
-        node1 = (
-            NodeBuilder().subscribe_only("a")
-            .do(lambda x: x + x)
-            .write_to("b")
-        )
-
-        app = Pregel(
-            nodes={"node1": node1},
-            channels={
-                "a": EphemeralValue(str),
-                "b": EphemeralValue(str),
-            },
-            input_channels=["a"],
-            output_channels=["b"],
-        )
-
-        app.invoke({"a": "foo"})
-        ```
-
-        ```con
-        {'b': 'foofoo'}
-        ```
-
-    Example: Using multiple nodes and multiple output channels
-        ```python
-        from langgraph.channels import LastValue, EphemeralValue
-        from langgraph.pregel import Pregel, NodeBuilder
-
-        node1 = (
-            NodeBuilder().subscribe_only("a")
-            .do(lambda x: x + x)
-            .write_to("b")
-        )
-
-        node2 = (
-            NodeBuilder().subscribe_to("b")
-            .do(lambda x: x["b"] + x["b"])
-            .write_to("c")
-        )
-
-
-        app = Pregel(
-            nodes={"node1": node1, "node2": node2},
-            channels={
-                "a": EphemeralValue(str),
-                "b": LastValue(str),
-                "c": EphemeralValue(str),
-            },
-            input_channels=["a"],
-            output_channels=["b", "c"],
-        )
-
-        app.invoke({"a": "foo"})
-        ```
-
-        ```con
-        {'b': 'foofoo', 'c': 'foofoofoofoo'}
-        ```
-
-    Example: Using a Topic channel
-        ```python
-        from langgraph.channels import LastValue, EphemeralValue, Topic
-        from langgraph.pregel import Pregel, NodeBuilder
-
-        node1 = (
-            NodeBuilder().subscribe_only("a")
-            .do(lambda x: x + x)
-            .write_to("b", "c")
-        )
-
-        node2 = (
-            NodeBuilder().subscribe_only("b")
-            .do(lambda x: x + x)
-            .write_to("c")
-        )
-
-
-        app = Pregel(
-            nodes={"node1": node1, "node2": node2},
-            channels={
-                "a": EphemeralValue(str),
-                "b": EphemeralValue(str),
-                "c": Topic(str, accumulate=True),
-            },
-            input_channels=["a"],
-            output_channels=["c"],
-        )
-
-        app.invoke({"a": "foo"})
-        ```
-
-        ```pycon
-        {"c": ["foofoo", "foofoofoofoo"]}
-        ```
-
-    Example: Using a `BinaryOperatorAggregate` channel
-        ```python
-        from langgraph.channels import EphemeralValue, BinaryOperatorAggregate
-        from langgraph.pregel import Pregel, NodeBuilder
-
-
-        node1 = (
-            NodeBuilder().subscribe_only("a")
-            .do(lambda x: x + x)
-            .write_to("b", "c")
-        )
-
-        node2 = (
-            NodeBuilder().subscribe_only("b")
-            .do(lambda x: x + x)
-            .write_to("c")
-        )
-
-
-        def reducer(current, update):
-            if current:
-                return current + " | " + update
-            else:
-                return update
-
-
-        app = Pregel(
-            nodes={"node1": node1, "node2": node2},
-            channels={
-                "a": EphemeralValue(str),
-                "b": EphemeralValue(str),
-                "c": BinaryOperatorAggregate(str, operator=reducer),
-            },
-            input_channels=["a"],
-            output_channels=["c"],
-        )
-
-        app.invoke({"a": "foo"})
-        ```
-
-        ```con
-        {'c': 'foofoo | foofoofoofoo'}
-        ```
-
-    Example: Introducing a cycle
-        This example demonstrates how to introduce a cycle in the graph, by having
-        a chain write to a channel it subscribes to.
-
-        Execution will continue until a `None` value is written to the channel.
-
-        ```python
-        from langgraph.channels import EphemeralValue
-        from langgraph.pregel import Pregel, NodeBuilder, ChannelWriteEntry
-
-        example_node = (
-            NodeBuilder()
-            .subscribe_only("value")
-            .do(lambda x: x + x if len(x) < 10 else None)
-            .write_to(ChannelWriteEntry(channel="value", skip_none=True))
-        )
-
-        app = Pregel(
-            nodes={"example_node": example_node},
-            channels={
-                "value": EphemeralValue(str),
-            },
-            input_channels=["value"],
-            output_channels=["value"],
-        )
-
-        app.invoke({"value": "a"})
-        ```
-
-        ```con
-        {'value': 'aaaaaaaaaaaaaaaa'}
-        ```
+    `Pregel` is not constructed directly. Build graphs with
+    [`StateGraph`][langgraph.graph.StateGraph] or
+    [`@entrypoint`][langgraph.func.entrypoint].
     """
 
     nodes: dict[str, PregelNode]
@@ -768,7 +349,7 @@ class Pregel(
     def __init__(
         self,
         *,
-        nodes: dict[str, PregelNode | NodeBuilder],
+        nodes: dict[str, PregelNode],
         channels: dict[str, BaseChannel | ManagedValueSpec] | None,
         auto_validate: bool = True,
         stream_mode: StreamMode = "values",
@@ -793,6 +374,13 @@ class Pregel(
         stream_transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
+        # LangGraph builds graphs through subclasses: `CompiledStateGraph` and
+        # the graph `@entrypoint` returns.
+        if type(self) is Pregel:
+            raise TypeError(
+                "`Pregel` cannot be constructed directly. "
+                "Build graphs with `StateGraph` or `@entrypoint`."
+            )
         if (
             config_type := deprecated_kwargs.get("config_type", MISSING)
         ) is not MISSING:
@@ -807,9 +395,7 @@ class Pregel(
 
         checkpointer = ensure_valid_checkpointer(checkpointer)
 
-        self.nodes = {
-            k: v.build() if isinstance(v, NodeBuilder) else v for k, v in nodes.items()
-        }
+        self.nodes = dict(nodes)
         self.channels = channels or {}
         if TASKS in self.channels and not isinstance(self.channels[TASKS], Topic):
             raise ValueError(

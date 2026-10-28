@@ -19,8 +19,8 @@ from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.last_value import LastValue
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import _messages_delta_reducer
-from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.types import Command, Durability, Overwrite
+from tests.raw_pregel import NodeBuilder, RawPregel
 
 pytestmark = pytest.mark.anyio
 
@@ -279,7 +279,7 @@ def _pregel_graph(seen: list[list[str | None]]) -> Any:
         .do(look)
         .write_to("messages")
     )
-    return Pregel(
+    return RawPregel(
         nodes={"look": node},
         channels={
             "messages": DeltaChannel(_messages_delta_reducer),

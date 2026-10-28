@@ -39,7 +39,6 @@ from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import MessagesState, add_messages
-from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.types import (
     Command,
     Durability,
@@ -62,6 +61,7 @@ from tests.messages import (
     _AnyIdHumanMessage,
     _AnyIdToolMessage,
 )
+from tests.raw_pregel import NodeBuilder, RawPregel
 
 
 def test_invoke_two_processes_in_out_interrupt(
@@ -72,7 +72,7 @@ def test_invoke_two_processes_in_out_interrupt(
     one = NodeBuilder().subscribe_only("input").do(add_one).write_to("inbox")
     two = NodeBuilder().subscribe_only("inbox").do(add_one).write_to("output")
 
-    app = Pregel(
+    app = RawPregel(
         nodes={"one": one, "two": two},
         channels={
             "inbox": LastValue(int),
