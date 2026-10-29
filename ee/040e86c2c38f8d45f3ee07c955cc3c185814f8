@@ -1,0 +1,25 @@
+libs/cli/langgraph_cli/config.py
+  s_98d971e0595cab::t_7c2421c7c5953d 1681-1685,1691-1692
+  s_98d971e0595cab::t_b8d09ec00c7b5a 1693-1695
+  s_98d971e0595cab::t_f21d70cf72054d 15,1696-1697
+libs/cli/langgraph_cli/_node_install.py
+  s_98d971e0595cab::t_3eaf26036bcd9a 1-359
+libs/cli/tests/unit_tests/test_node_install.py
+  s_98d971e0595cab::t_96f489fb592ca3 1-365
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ee040e86c2c38f8d45f3ee07c955cc3c185814f8",
+  "prompts": {},
+  "sessions": {
+    "s_98d971e0595cab": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "86e6924b-b30d-4039-8dd4-563a729ece60",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "David Asamu <david.asamu@langchain.dev>"
+    }
+  }
+}
