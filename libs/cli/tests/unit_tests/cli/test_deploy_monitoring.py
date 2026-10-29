@@ -33,7 +33,6 @@ def test_metrics(monkeypatch, filtered):
         {
             "start_time": "2026-10-28T00:00:00Z",
             "end_time": "2026-10-28T01:00:00Z",
-            "step_seconds": "60",
             "metrics": "cpu_usage,memory_usage",
         }
         if filtered
@@ -105,7 +104,7 @@ def test_scale_confirmation(monkeypatch, answer, expected_code):
     [
         ["scale", DEPLOYMENT_ID, "--yes"],
         ["scale", DEPLOYMENT_ID, "--database-tier", "SERVERLESS_M", "--yes"],
-        ["metrics", DEPLOYMENT_ID, "--step-seconds", "0"],
+        ["metrics", DEPLOYMENT_ID, "--step-seconds", "60"],
         ["metrics", "invalid-id"],
     ],
 )

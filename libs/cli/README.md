@@ -96,12 +96,12 @@ API key and workspace configuration as the other deployment commands.
 langgraph deploy metrics DEPLOYMENT_ID \
   --start-time 2026-10-28T00:00:00Z \
   --end-time 2026-10-28T01:00:00Z \
-  --step-seconds 60 \
   --metrics cpu_usage,memory_usage,worker_count
 ```
 
-Omit `--metrics` to fetch all available metrics. Time bounds and resolution default
-to the backend's settings (start of the current hour through now). Output contains
+Omit `--metrics` to fetch all available metrics. Time bounds default to the start of
+the current hour through now, and the backend picks the resolution from the time
+range. Output contains
 charts and their time-series data, not traces. This command never prompts; for an
 organization-scoped key, set `LANGSMITH_TENANT_ID` to the workspace ID.
 

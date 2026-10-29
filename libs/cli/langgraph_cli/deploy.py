@@ -2645,11 +2645,6 @@ def deploy_list(
 )
 @click.option("--end-time", help="ISO8601 end time. Defaults to now.")
 @click.option(
-    "--step-seconds",
-    type=click.IntRange(min=1),
-    help="Time-series resolution in seconds.",
-)
-@click.option(
     "--metrics", help="Comma-separated metric names. Defaults to all metrics."
 )
 @deploy.command(
@@ -2661,7 +2656,6 @@ def deploy_metrics(
     deployment_id: UUID,
     start_time: str | None,
     end_time: str | None,
-    step_seconds: int | None,
     metrics: str | None,
 ) -> None:
     params = {
@@ -2669,7 +2663,6 @@ def deploy_metrics(
         for key, value in {
             "start_time": start_time,
             "end_time": end_time,
-            "step_seconds": step_seconds,
             "metrics": metrics,
         }.items()
         if value is not None
