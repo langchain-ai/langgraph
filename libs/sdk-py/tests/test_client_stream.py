@@ -798,6 +798,39 @@ async def test_async_long_stream_survives_many_spaced_out_drops():
     assert [p.data for p in parts] == [0, 1, 2, 3, 4, 5, 6, None]
 
 
+# Each reconnect resumes after the newest event the stream got, so a reconnect
+# loop on a resumable run replays only what it missed. A failed reconnect keeps
+# the cursor for the next one.
+RECONNECT_LOOPS = {
+    "progress_between_drops": (
+        lambda stream_cls: _long_stream_steps(stream_cls, drops=3),
+        [None, "0", "1", "2"],
+    ),
+    "failed_reconnect": (
+        lambda stream_cls: _transient_steps(stream_cls, _status(502)),
+        [None, "1", "1"],
+    ),
+}
+
+
+@pytest.mark.usefixtures("no_sleep")
+@pytest.mark.parametrize(
+    ("steps", "cursors"), RECONNECT_LOOPS.values(), ids=RECONNECT_LOOPS.keys()
+)
+def test_sync_reconnect_loop_resumes_after_the_newest_event(steps, cursors):
+    _, seen = _run_sync(steps(ListByteStream))
+    assert [r.headers.get("last-event-id") for r in seen] == cursors
+
+
+@pytest.mark.usefixtures("no_sleep")
+@pytest.mark.parametrize(
+    ("steps", "cursors"), RECONNECT_LOOPS.values(), ids=RECONNECT_LOOPS.keys()
+)
+async def test_async_reconnect_loop_resumes_after_the_newest_event(steps, cursors):
+    _, seen = await _run_async(steps(AsyncListByteStream))
+    assert [r.headers.get("last-event-id") for r in seen] == cursors
+
+
 # Reconnects should back off rather than hammer the server.
 
 
