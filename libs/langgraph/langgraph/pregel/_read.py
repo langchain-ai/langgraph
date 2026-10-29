@@ -227,22 +227,24 @@ class PregelNode:
     def node(self) -> Runnable[Any, Any] | None:
         """Get a runnable that combines `bound` and `writers`."""
         writers = self.flat_writers
-        trace_inputs = self.trace_policy.process_inputs if self.trace_policy else None
-        trace_outputs = self.trace_policy.process_outputs if self.trace_policy else None
+        record_inputs = self.trace_policy.process_inputs if self.trace_policy else None
+        record_outputs = (
+            self.trace_policy.process_outputs if self.trace_policy else None
+        )
         if self.bound is DEFAULT_BOUND and not writers:
             return None
         elif self.bound is DEFAULT_BOUND and len(writers) == 1:
             return writers[0]
         elif self.bound is DEFAULT_BOUND:
             return RunnableSeq(
-                *writers, trace_inputs=trace_inputs, trace_outputs=trace_outputs
+                *writers, record_inputs=record_inputs, record_outputs=record_outputs
             )
         elif writers:
             return RunnableSeq(
                 self.bound,
                 *writers,
-                trace_inputs=trace_inputs,
-                trace_outputs=trace_outputs,
+                record_inputs=record_inputs,
+                record_outputs=record_outputs,
             )
         else:
             return self.bound

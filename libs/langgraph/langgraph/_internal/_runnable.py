@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import enum
 import inspect
 import logging
@@ -23,9 +24,16 @@ from typing import (
     Optional,
     Protocol,
     TypeGuard,
+    TypeVar,
     cast,
 )
 
+from langchain_core.callbacks.base import BaseCallbackManager
+from langchain_core.callbacks.manager import (
+    AsyncCallbackManagerForChainRun,
+    BaseRunManager,
+    CallbackManagerForChainRun,
+)
 from langchain_core.runnables.base import (
     Runnable,
     RunnableConfig,
@@ -83,6 +91,23 @@ def _trace_payload(value: Any, transform: Callable[[Any], Any] | None) -> Any:
             "trace input/output processor raised; recording untransformed payload"
         )
         return value
+
+
+_M = TypeVar("_M", bound=BaseCallbackManager | BaseRunManager)
+
+
+def _split_handlers(manager: _M) -> tuple[_M, _M]:
+    # Stream handlers feed the caller's own stream (`messages` mode, `astream_events`)
+    # and need the real payload. Any other handler, tracers included, may export what
+    # it receives, so it only gets the recorded payload. Inheritance decides, because
+    # isinstance on the runtime-checkable protocol also matches any exporter that just
+    # has the tap methods.
+    streams, others = copy.copy(manager), copy.copy(manager)
+    streams.handlers = [
+        h for h in manager.handlers if _StreamingCallbackHandler in type(h).__mro__
+    ]
+    others.handlers = [h for h in manager.handlers if h not in streams.handlers]
+    return streams, others
 
 
 def _set_config_context(
@@ -594,12 +619,20 @@ class RunnableSeq(Runnable):
         name: str | None = None,
         trace_inputs: Callable[[Any], Any] | None = None,
         trace_outputs: Callable[[Any], Any] | None = None,
+        record_inputs: Callable[[Any], Any] | None = None,
+        record_outputs: Callable[[Any], Any] | None = None,
     ) -> None:
         """Create a new RunnableSeq.
 
         Args:
             steps: The steps to include in the sequence.
             name: The name of the `Runnable`.
+            trace_inputs: Transforms the input every callback handler receives.
+            trace_outputs: Transforms the output every callback handler receives.
+            record_inputs: Transforms the input once more for every handler that is
+                not a stream handler, such as tracers.
+            record_outputs: Transforms the output once more for every handler that
+                is not a stream handler, such as tracers.
 
         Raises:
             ValueError: If the sequence has less than 2 steps.
@@ -620,6 +653,74 @@ class RunnableSeq(Runnable):
         self.name = name
         self.trace_inputs = trace_inputs
         self.trace_outputs = trace_outputs
+        self.record_inputs = record_inputs
+        self.record_outputs = record_outputs
+
+    def _start(self, input: Any, config: RunnableConfig) -> CallbackManagerForChainRun:
+        callback_manager = get_callback_manager_for_config(config)
+        payload = _trace_payload(input, self.trace_inputs)
+        recorded = _trace_payload(payload, self.record_inputs)
+        name = config.get("run_name") or self.get_name()
+        run_id = config.pop("run_id", None)
+        if recorded is payload:
+            return callback_manager.on_chain_start(
+                None, payload, name=name, run_id=run_id
+            )
+        streams, others = _split_handlers(callback_manager)
+        run_manager = streams.on_chain_start(None, payload, name=name, run_id=run_id)
+        others.on_chain_start(None, recorded, name=name, run_id=run_manager.run_id)
+        run_manager.handlers = callback_manager.handlers
+        return run_manager
+
+    async def _astart(
+        self, input: Any, config: RunnableConfig
+    ) -> AsyncCallbackManagerForChainRun:
+        callback_manager = get_async_callback_manager_for_config(config)
+        payload = _trace_payload(input, self.trace_inputs)
+        recorded = _trace_payload(payload, self.record_inputs)
+        name = config.get("run_name") or self.get_name()
+        run_id = config.pop("run_id", None)
+        if recorded is payload:
+            return await callback_manager.on_chain_start(
+                None, payload, name=name, run_id=run_id
+            )
+        streams, others = _split_handlers(callback_manager)
+        # Tracers start last, so a cancellation before then leaves no tracer run open.
+        run_manager = await streams.on_chain_start(
+            None, payload, name=name, run_id=run_id
+        )
+        await others.on_chain_start(
+            None, recorded, name=name, run_id=run_manager.run_id
+        )
+        run_manager.handlers = callback_manager.handlers
+        return run_manager
+
+    def _end(self, run_manager: CallbackManagerForChainRun, output: Any) -> None:
+        payload = _trace_payload(output, self.trace_outputs)
+        recorded = _trace_payload(payload, self.record_outputs)
+        if recorded is payload:
+            run_manager.on_chain_end(payload)
+        else:
+            streams, others = _split_handlers(run_manager)
+            streams.on_chain_end(payload)
+            others.on_chain_end(recorded)
+
+    async def _aend(
+        self, run_manager: AsyncCallbackManagerForChainRun, output: Any
+    ) -> None:
+        payload = _trace_payload(output, self.trace_outputs)
+        recorded = _trace_payload(payload, self.record_outputs)
+        if recorded is payload:
+            await run_manager.on_chain_end(payload)
+        else:
+            streams, others = _split_handlers(run_manager)
+            # One shielded unit, like the single dispatch: a cancellation must not
+            # skip the tracers' end and leave their run open.
+            await asyncio.shield(
+                asyncio.gather(
+                    streams.on_chain_end(payload), others.on_chain_end(recorded)
+                )
+            )
 
     def __or__(
         self,
@@ -676,15 +777,8 @@ class RunnableSeq(Runnable):
     ) -> Any:
         if config is None:
             config = ensure_config()
-        # setup callbacks and context
-        callback_manager = get_callback_manager_for_config(config)
         # start the root run
-        run_manager = callback_manager.on_chain_start(
-            None,
-            _trace_payload(input, self.trace_inputs),
-            name=config.get("run_name") or self.get_name(),
-            run_id=config.pop("run_id", None),
-        )
+        run_manager = self._start(input, config)
         # invoke all steps in sequence
         try:
             for i, step in enumerate(self.steps):
@@ -712,7 +806,7 @@ class RunnableSeq(Runnable):
             run_manager.on_chain_error(e)
             raise
         else:
-            run_manager.on_chain_end(_trace_payload(input, self.trace_outputs))
+            self._end(run_manager, input)
             return input
 
     async def ainvoke(
@@ -723,15 +817,8 @@ class RunnableSeq(Runnable):
     ) -> Any:
         if config is None:
             config = ensure_config()
-        # setup callbacks
-        callback_manager = get_async_callback_manager_for_config(config)
         # start the root run
-        run_manager = await callback_manager.on_chain_start(
-            None,
-            _trace_payload(input, self.trace_inputs),
-            name=config.get("run_name") or self.get_name(),
-            run_id=config.pop("run_id", None),
-        )
+        run_manager = await self._astart(input, config)
 
         # invoke all steps in sequence
         try:
@@ -765,7 +852,7 @@ class RunnableSeq(Runnable):
             await run_manager.on_chain_error(e)
             raise
         else:
-            await run_manager.on_chain_end(_trace_payload(input, self.trace_outputs))
+            await self._aend(run_manager, input)
             return input
 
     def stream(
@@ -776,15 +863,8 @@ class RunnableSeq(Runnable):
     ) -> Iterator[Any]:
         if config is None:
             config = ensure_config()
-        # setup callbacks
-        callback_manager = get_callback_manager_for_config(config)
         # start the root run
-        run_manager = callback_manager.on_chain_start(
-            None,
-            _trace_payload(input, self.trace_inputs),
-            name=config.get("run_name") or self.get_name(),
-            run_id=config.pop("run_id", None),
-        )
+        run_manager = self._start(input, config)
         # get the run object
         for h in run_manager.handlers:
             if isinstance(h, LangChainTracer):
@@ -826,7 +906,7 @@ class RunnableSeq(Runnable):
                 run_manager.on_chain_error(e)
                 raise
             else:
-                run_manager.on_chain_end(_trace_payload(output, self.trace_outputs))
+                self._end(run_manager, output)
 
     async def astream(
         self,
@@ -836,15 +916,8 @@ class RunnableSeq(Runnable):
     ) -> AsyncIterator[Any]:
         if config is None:
             config = ensure_config()
-        # setup callbacks
-        callback_manager = get_async_callback_manager_for_config(config)
         # start the root run
-        run_manager = await callback_manager.on_chain_start(
-            None,
-            _trace_payload(input, self.trace_inputs),
-            name=config.get("run_name") or self.get_name(),
-            run_id=config.pop("run_id", None),
-        )
+        run_manager = await self._astart(input, config)
         # stream the last steps
         # transform the input stream of each step with the next
         # steps that don't natively support transforming an input stream will
@@ -896,9 +969,7 @@ class RunnableSeq(Runnable):
                     await run_manager.on_chain_error(e)
                     raise
                 else:
-                    await run_manager.on_chain_end(
-                        _trace_payload(output, self.trace_outputs)
-                    )
+                    await self._aend(run_manager, output)
         else:
             try:
                 async with AsyncExitStack() as stack:
@@ -928,9 +999,7 @@ class RunnableSeq(Runnable):
                 await run_manager.on_chain_error(e)
                 raise
             else:
-                await run_manager.on_chain_end(
-                    _trace_payload(output, self.trace_outputs)
-                )
+                await self._aend(run_manager, output)
 
 
 def _consume_iter(it: Iterator[Any]) -> Any:

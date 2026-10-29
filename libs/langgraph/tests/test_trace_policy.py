@@ -1,11 +1,19 @@
 """End-to-end tests for `TracePolicy` input processing on node trace runs."""
 
+import asyncio
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
+from uuid import UUID
 
 import pytest
+from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+from langchain_core.messages import AIMessage, HumanMessage
 from typing_extensions import TypedDict
 
-from langgraph.graph import END, START, StateGraph
+from langgraph._internal._runnable import RunnableCallable, RunnableSeq
+from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import TracePolicy
 from tests.fake_tracer import FakeTracer, Run
 
@@ -147,3 +155,156 @@ async def test_trace_policy_transforms_recorded_inputs_async() -> None:
     run = _node_run(tracer, "n")
     assert run.inputs == {"scrubbed_in": True}
     assert run.outputs == {"value": 6}
+
+
+_RECORDING_POLICY = TracePolicy(
+    process_inputs=lambda _: {"recorded": "inputs"},
+    process_outputs=lambda _: {"recorded": "outputs"},
+)
+
+
+def _chat_graph() -> CompiledStateGraph:
+    model = FakeMessagesListChatModel(
+        responses=[AIMessage("model reply", id="ai-model")]
+    )
+
+    def chat(state: MessagesState) -> dict[str, Any]:
+        reply = model.invoke(state["messages"])
+        return {
+            "messages": [
+                *state["messages"],
+                reply,
+                AIMessage("from node", id="ai-node"),
+            ]
+        }
+
+    return (
+        StateGraph(MessagesState)
+        .add_node("chat", chat, trace_policy=_RECORDING_POLICY)
+        .add_edge(START, "chat")
+        .compile()
+    )
+
+
+def _assert_scrubbed_node_run_with_model_child(tracer: FakeTracer) -> None:
+    run = _node_run(tracer, "chat")
+    assert run.inputs == {"recorded": "inputs"}
+    assert run.outputs == {"recorded": "outputs"}
+    assert [child.name for child in run.child_runs] == ["FakeMessagesListChatModel"]
+
+
+def test_trace_policy_scrubs_tracer_not_messages_stream() -> None:
+    tracer = FakeTracer()
+    streamed = [
+        message.content
+        for message, _ in _chat_graph().stream(
+            {"messages": [HumanMessage("hello", id="h-1")]},
+            {"callbacks": [tracer]},
+            stream_mode="messages",
+        )
+    ]
+
+    assert streamed == ["model reply", "from node"]
+    _assert_scrubbed_node_run_with_model_child(tracer)
+
+
+@pytest.mark.anyio
+async def test_trace_policy_scrubs_tracer_not_messages_stream_async() -> None:
+    tracer = FakeTracer()
+    streamed = [
+        message.content
+        async for message, _ in _chat_graph().astream(
+            {"messages": [HumanMessage("hello", id="h-1")]},
+            {"callbacks": [tracer]},
+            stream_mode="messages",
+        )
+    ]
+
+    assert streamed == ["model reply", "from node"]
+    _assert_scrubbed_node_run_with_model_child(tracer)
+
+
+@pytest.mark.anyio
+async def test_trace_policy_scrubs_tracer_not_astream_events() -> None:
+    tracer = FakeTracer()
+    chat_events = [
+        event
+        async for event in _chat_graph().astream_events(
+            {"messages": [HumanMessage("hello", id="h-1")]},
+            {"callbacks": [tracer]},
+            version="v2",
+        )
+        if event["name"] == "chat"
+        and event["event"] in ("on_chain_start", "on_chain_end")
+    ]
+
+    assert [e["event"] for e in chat_events] == ["on_chain_start", "on_chain_end"]
+    start, end = (e["data"] for e in chat_events)
+    assert [m.content for m in start["input"]["messages"]] == ["hello"]
+    assert [m.content for m in end["output"]["messages"]] == [
+        "hello",
+        "model reply",
+        "from node",
+    ]
+    _assert_scrubbed_node_run_with_model_child(tracer)
+
+
+class _ExporterWithTapMethods(BaseCallbackHandler):
+    def __init__(self) -> None:
+        self.node_payloads: list[Any] = []
+        self.node_run_ids: set[UUID] = set()
+
+    def tap_output_iter(self, run_id: UUID, output: Iterator[Any]) -> Iterator[Any]:
+        return output
+
+    def tap_output_aiter(
+        self, run_id: UUID, output: AsyncIterator[Any]
+    ) -> AsyncIterator[Any]:
+        return output
+
+    def on_chain_start(
+        self, serialized: Any, inputs: Any, *, run_id: UUID, **kwargs: Any
+    ) -> None:
+        if kwargs.get("name") == "n":
+            self.node_run_ids.add(run_id)
+            self.node_payloads.append(inputs)
+
+    def on_chain_end(self, outputs: Any, *, run_id: UUID, **kwargs: Any) -> None:
+        if run_id in self.node_run_ids:
+            self.node_payloads.append(outputs)
+
+
+def test_trace_policy_scrubs_exporter_that_only_has_tap_methods() -> None:
+    graph = (
+        StateGraph(State)
+        .add_node("n", _incr, trace_policy=_RECORDING_POLICY)
+        .add_edge(START, "n")
+        .add_edge("n", END)
+        .compile()
+    )
+    exporter = _ExporterWithTapMethods()
+
+    assert graph.invoke({"value": 1}, {"callbacks": [exporter]}) == {"value": 2}
+    assert exporter.node_payloads == [{"recorded": "inputs"}, {"recorded": "outputs"}]
+
+
+@pytest.mark.anyio
+async def test_trace_policy_cancel_at_node_end_still_closes_tracer_run() -> None:
+    def cancel_own_task(value: Any) -> Any:
+        asyncio.current_task().cancel()
+        return value
+
+    tracer = FakeTracer()
+    seq = RunnableSeq(
+        RunnableCallable(lambda x: x, trace=False),
+        RunnableCallable(cancel_own_task, trace=False),
+        record_outputs=_RECORDING_POLICY.process_outputs,
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.create_task(seq.ainvoke({}, {"callbacks": [tracer]}))
+    for _ in range(100):
+        if tracer.runs:
+            break
+        await asyncio.sleep(0.01)
+
+    assert [r.outputs for r in tracer.runs] == [{"recorded": "outputs"}]
