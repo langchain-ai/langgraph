@@ -1,20 +1,23 @@
 # Changelog
 
-## 0.4.10
+## 0.4.11
 
 ### Removed
 
 - **`PrioritySettings.fairness_weight`** — removed. The server stores
-  `priority` and `fairness_group` on the thread, and every fairness group has
-  weight 1 for now. A callback that still returns `fairness_weight` gets an
-  error: the server rejects any key it doesn't know, and the run isn't created.
+  `priority` and `fairness_group` on the thread. A callback that still
+  returns `fairness_weight` gets an error: the server rejects any key it
+  doesn't know, and the run isn't created.
 
 ### Changed
 
 - **`PrioritySettings.priority`** — now says -5 runs first and 5 runs last,
-  matching how the server orders runs. The 0.4.9 docstring said the reverse.
+  matching how the server orders runs. Earlier docstrings said the reverse.
+- **`PrioritySettings.fairness_group`** — currently disabled: it has no effect
+  on run order for now. An empty string takes the default, like a missing key;
+  earlier docstrings called it an error.
 
-## 0.4.9 and earlier
+## 0.4.10 and earlier
 
 ### Added
 
