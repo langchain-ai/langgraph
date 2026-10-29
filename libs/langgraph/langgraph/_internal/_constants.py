@@ -75,6 +75,14 @@ CONFIG_KEY_RUNTIME = sys.intern("__pregel_runtime")
 CONFIG_KEY_RESUME_MAP = sys.intern("__pregel_resume_map")
 # holds a mapping of task ns -> resume value for resuming tasks
 CONFIG_KEY_STREAM_MESSAGES_V2 = sys.intern("__pregel_stream_messages_v2")
+# Restrict `stream_mode="messages"` to these state keys, so internal message
+# fields are not streamed to the client (#6798).
+CONFIG_KEY_STREAM_MESSAGES_KEYS = sys.intern("__pregel_stream_messages_keys")
+# Restrict `stream_mode="messages"` to these state keys, so internal message
+# fields are not streamed to the client (#6798). Experimental / private: there is
+# nothing in the public API that names this key, so pair it with `TAG_NOSTREAM`,
+# which is what actually suppresses token streaming from a chat model invoked
+# inside a node whose messages are filtered out.
 # when True, attach StreamMessagesHandlerV2 so content-block (v2) events
 # flow through stream_mode="messages"; set by StreamingHandler only.
 CONFIG_KEY_NODE_ERROR = sys.intern("__pregel_node_error")
