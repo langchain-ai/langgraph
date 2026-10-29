@@ -97,6 +97,7 @@ from langgraph._internal._runnable import (
     Runnable,
     RunnableLike,
     RunnableSeq,
+    _is_stream_handler,
     coerce_to_runnable,
 )
 from langgraph._internal._timeout import coerce_timeout_policy
@@ -202,11 +203,6 @@ from langgraph.types import (
 )
 from langgraph.typing import ContextT, InputT, OutputT, StateT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
-
-try:
-    from langchain_core.tracers._streaming import _StreamingCallbackHandler
-except ImportError:
-    _StreamingCallbackHandler = None  # type: ignore
 
 __all__ = ("NodeBuilder", "Pregel")
 
@@ -3304,20 +3300,10 @@ class Pregel(
                 run_id=run_manager.run_id,
             )
             # if running from astream_log() run each proc with streaming
-            do_stream = (
-                next(
-                    (
-                        True
-                        for h in run_manager.handlers
-                        if isinstance(h, _StreamingCallbackHandler)
-                        and not isinstance(
-                            h, (StreamMessagesHandler, StreamToolCallHandler)
-                        )
-                    ),
-                    False,
-                )
-                if _StreamingCallbackHandler is not None
-                else False
+            do_stream = any(
+                _is_stream_handler(h)
+                and not isinstance(h, (StreamMessagesHandler, StreamToolCallHandler))
+                for h in run_manager.handlers
             )
             if checkpointer is None and durability is not None:
                 warnings.warn(

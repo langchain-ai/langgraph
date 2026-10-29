@@ -28,7 +28,7 @@ from typing import (
     cast,
 )
 
-from langchain_core.callbacks.base import BaseCallbackManager
+from langchain_core.callbacks.base import BaseCallbackHandler, BaseCallbackManager
 from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForChainRun,
     BaseRunManager,
@@ -93,19 +93,22 @@ def _trace_payload(value: Any, transform: Callable[[Any], Any] | None) -> Any:
         return value
 
 
+def _is_stream_handler(handler: BaseCallbackHandler) -> bool:
+    # Inheritance, not isinstance on the runtime-checkable protocol, which also
+    # matches any exporter that merely has the tap methods: stream handlers get a
+    # node's real payload and its streamed output.
+    return _StreamingCallbackHandler in type(handler).__mro__
+
+
 _M = TypeVar("_M", bound=BaseCallbackManager | BaseRunManager)
 
 
 def _split_handlers(manager: _M) -> tuple[_M, _M]:
     # Stream handlers feed the caller's own stream (`messages` mode, `astream_events`)
     # and need the real payload. Any other handler, tracers included, may export what
-    # it receives, so it only gets the recorded payload. Inheritance decides, because
-    # isinstance on the runtime-checkable protocol also matches any exporter that just
-    # has the tap methods.
+    # it receives, so it only gets the recorded payload.
     streams, others = copy.copy(manager), copy.copy(manager)
-    streams.handlers = [
-        h for h in manager.handlers if _StreamingCallbackHandler in type(h).__mro__
-    ]
+    streams.handlers = [h for h in manager.handlers if _is_stream_handler(h)]
     others.handlers = [h for h in manager.handlers if h not in streams.handlers]
     return streams, others
 
@@ -702,8 +705,8 @@ class RunnableSeq(Runnable):
             run_manager.on_chain_end(payload)
         else:
             streams, others = _split_handlers(run_manager)
-            streams.on_chain_end(payload)
             others.on_chain_end(recorded)
+            streams.on_chain_end(payload)
 
     async def _aend(
         self, run_manager: AsyncCallbackManagerForChainRun, output: Any
@@ -714,13 +717,11 @@ class RunnableSeq(Runnable):
             await run_manager.on_chain_end(payload)
         else:
             streams, others = _split_handlers(run_manager)
-            # One shielded unit, like the single dispatch: a cancellation must not
-            # skip the tracers' end and leave their run open.
-            await asyncio.shield(
-                asyncio.gather(
-                    streams.on_chain_end(payload), others.on_chain_end(recorded)
-                )
-            )
+            # Tracers end first: on_chain_end is shielded once it starts, so a
+            # cancellation can only skip the stream handlers' end, never leave a
+            # tracer run open.
+            await others.on_chain_end(recorded)
+            await streams.on_chain_end(payload)
 
     def __or__(
         self,
@@ -894,10 +895,9 @@ class RunnableSeq(Runnable):
                         )
                         iterator = step.transform(iterator, config)
                 # populates streamed_output in astream_log() output if needed
-                if _StreamingCallbackHandler is not None:
-                    for h in run_manager.handlers:
-                        if isinstance(h, _StreamingCallbackHandler):
-                            iterator = h.tap_output_iter(run_manager.run_id, iterator)
+                for h in run_manager.handlers:
+                    if _is_stream_handler(h):
+                        iterator = h.tap_output_iter(run_manager.run_id, iterator)
                 # consume into final output
                 output = context.run(_consume_iter, iterator)
                 # sequence doesn't emit output, yield to mark as generator
@@ -953,12 +953,11 @@ class RunnableSeq(Runnable):
                             if hasattr(aiterator, "aclose"):
                                 stack.push_async_callback(aiterator.aclose)
                         # populates streamed_output in astream_log() output if needed
-                        if _StreamingCallbackHandler is not None:
-                            for h in run_manager.handlers:
-                                if isinstance(h, _StreamingCallbackHandler):
-                                    aiterator = h.tap_output_aiter(
-                                        run_manager.run_id, aiterator
-                                    )
+                        for h in run_manager.handlers:
+                            if _is_stream_handler(h):
+                                aiterator = h.tap_output_aiter(
+                                    run_manager.run_id, aiterator
+                                )
                         # consume into final output
                         output = await asyncio.create_task(
                             _consume_aiter(aiterator), context=context
@@ -985,12 +984,11 @@ class RunnableSeq(Runnable):
                         if hasattr(aiterator, "aclose"):
                             stack.push_async_callback(aiterator.aclose)
                     # populates streamed_output in astream_log() output if needed
-                    if _StreamingCallbackHandler is not None:
-                        for h in run_manager.handlers:
-                            if isinstance(h, _StreamingCallbackHandler):
-                                aiterator = h.tap_output_aiter(
-                                    run_manager.run_id, aiterator
-                                )
+                    for h in run_manager.handlers:
+                        if _is_stream_handler(h):
+                            aiterator = h.tap_output_aiter(
+                                run_manager.run_id, aiterator
+                            )
                     # consume into final output
                     output = await _consume_aiter(aiterator)
                     # sequence doesn't emit output, yield to mark as generator

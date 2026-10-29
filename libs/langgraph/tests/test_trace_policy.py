@@ -11,7 +11,11 @@ from langchain_core.language_models.fake_chat_models import FakeMessagesListChat
 from langchain_core.messages import AIMessage, HumanMessage
 from typing_extensions import TypedDict
 
-from langgraph._internal._runnable import RunnableCallable, RunnableSeq
+from langgraph._internal._runnable import (
+    ASYNCIO_ACCEPTS_CONTEXT,
+    RunnableCallable,
+    RunnableSeq,
+)
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import TracePolicy
@@ -186,11 +190,12 @@ def _chat_graph() -> CompiledStateGraph:
     )
 
 
-def _assert_scrubbed_node_run_with_model_child(tracer: FakeTracer) -> None:
+def _assert_scrubbed_node_run(tracer: FakeTracer, *, model_is_child: bool) -> None:
     run = _node_run(tracer, "chat")
     assert run.inputs == {"recorded": "inputs"}
     assert run.outputs == {"recorded": "outputs"}
-    assert [child.name for child in run.child_runs] == ["FakeMessagesListChatModel"]
+    if model_is_child:
+        assert [c.name for c in run.child_runs] == ["FakeMessagesListChatModel"]
 
 
 def test_trace_policy_scrubs_tracer_not_messages_stream() -> None:
@@ -205,7 +210,7 @@ def test_trace_policy_scrubs_tracer_not_messages_stream() -> None:
     ]
 
     assert streamed == ["model reply", "from node"]
-    _assert_scrubbed_node_run_with_model_child(tracer)
+    _assert_scrubbed_node_run(tracer, model_is_child=True)
 
 
 @pytest.mark.anyio
@@ -221,7 +226,7 @@ async def test_trace_policy_scrubs_tracer_not_messages_stream_async() -> None:
     ]
 
     assert streamed == ["model reply", "from node"]
-    _assert_scrubbed_node_run_with_model_child(tracer)
+    _assert_scrubbed_node_run(tracer, model_is_child=ASYNCIO_ACCEPTS_CONTEXT)
 
 
 @pytest.mark.anyio
@@ -246,7 +251,7 @@ async def test_trace_policy_scrubs_tracer_not_astream_events() -> None:
         "model reply",
         "from node",
     ]
-    _assert_scrubbed_node_run_with_model_child(tracer)
+    _assert_scrubbed_node_run(tracer, model_is_child=ASYNCIO_ACCEPTS_CONTEXT)
 
 
 class _ExporterWithTapMethods(BaseCallbackHandler):
@@ -254,27 +259,38 @@ class _ExporterWithTapMethods(BaseCallbackHandler):
         self.node_payloads: list[Any] = []
         self.node_run_ids: set[UUID] = set()
 
-    def tap_output_iter(self, run_id: UUID, output: Iterator[Any]) -> Iterator[Any]:
-        return output
+    def _record(self, run_id: UUID, payload: Any) -> None:
+        if run_id in self.node_run_ids:
+            self.node_payloads.append(payload)
 
-    def tap_output_aiter(
+    def tap_output_iter(self, run_id: UUID, output: Iterator[Any]) -> Iterator[Any]:
+        for chunk in output:
+            self._record(run_id, chunk)
+            yield chunk
+
+    async def tap_output_aiter(
         self, run_id: UUID, output: AsyncIterator[Any]
     ) -> AsyncIterator[Any]:
-        return output
+        async for chunk in output:
+            self._record(run_id, chunk)
+            yield chunk
 
     def on_chain_start(
         self, serialized: Any, inputs: Any, *, run_id: UUID, **kwargs: Any
     ) -> None:
         if kwargs.get("name") == "n":
             self.node_run_ids.add(run_id)
-            self.node_payloads.append(inputs)
+            self._record(run_id, inputs)
 
     def on_chain_end(self, outputs: Any, *, run_id: UUID, **kwargs: Any) -> None:
-        if run_id in self.node_run_ids:
-            self.node_payloads.append(outputs)
+        self._record(run_id, outputs)
 
 
-def test_trace_policy_scrubs_exporter_that_only_has_tap_methods() -> None:
+@pytest.mark.anyio
+@pytest.mark.parametrize("via_events", [False, True], ids=["ainvoke", "astream_events"])
+async def test_trace_policy_scrubs_exporter_that_only_has_tap_methods(
+    via_events: bool,
+) -> None:
     graph = (
         StateGraph(State)
         .add_node("n", _incr, trace_policy=_RECORDING_POLICY)
@@ -284,7 +300,15 @@ def test_trace_policy_scrubs_exporter_that_only_has_tap_methods() -> None:
     )
     exporter = _ExporterWithTapMethods()
 
-    assert graph.invoke({"value": 1}, {"callbacks": [exporter]}) == {"value": 2}
+    if via_events:
+        async for _ in graph.astream_events(
+            {"value": 1}, {"callbacks": [exporter]}, version="v2"
+        ):
+            pass
+    else:
+        assert await graph.ainvoke({"value": 1}, {"callbacks": [exporter]}) == {
+            "value": 2
+        }
     assert exporter.node_payloads == [{"recorded": "inputs"}, {"recorded": "outputs"}]
 
 
