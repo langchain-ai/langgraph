@@ -132,7 +132,7 @@ from langgraph.pregel.debug import (
     map_debug_tasks,
 )
 from langgraph.pregel.protocol import StreamChunk, StreamProtocol
-from langgraph.runtime import RunControl, Runtime
+from langgraph.runtime import RunControl, Runtime, _RunExits
 from langgraph.types import (
     All,
     CachePolicy,
@@ -1497,6 +1497,10 @@ class PregelLoop:
             if self._delta_write_futs is not None:
                 self._delta_write_futs.append(fut)
 
+    def _run_exits(self) -> _RunExits | None:
+        runtime = self.config[CONF].get(CONFIG_KEY_RUNTIME)
+        return runtime._run_exits if isinstance(runtime, Runtime) else None
+
     def _suppress_interrupt(
         self,
         exc_type: type[BaseException] | None,
@@ -1874,6 +1878,10 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         self._exit_delta_writes = (
             [] if self.durability == "exit" and self.checkpointer is not None else None
         )
+        # Bottom of the stack, so run-exit callbacks run last: after the
+        # executor has stopped every task and the final checkpoint is saved.
+        if (exits := self._run_exits()) is not None and exits.bind(is_async=False):
+            self.stack.push(exits.exit)
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
         self.channels, self.managed = channels_from_checkpoint(
             self.specs,
@@ -2130,6 +2138,10 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         self._exit_delta_writes = (
             [] if self.durability == "exit" and self.checkpointer is not None else None
         )
+        # Bottom of the stack, so run-exit callbacks run last: after the
+        # executor has stopped every task and the final checkpoint is saved.
+        if (exits := self._run_exits()) is not None and exits.bind(is_async=True):
+            self.stack.push_async_exit(exits.aexit)
         self.submit = await self.stack.enter_async_context(
             AsyncBackgroundExecutor(self.config)
         )

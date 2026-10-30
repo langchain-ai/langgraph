@@ -175,6 +175,7 @@ from langgraph.runtime import (
     RunControl,
     Runtime,
     ServerInfo,
+    _RunExits,
 )
 from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import StreamTransformer
@@ -2966,6 +2967,8 @@ class Pregel(
                 execution_info=None,
                 server_info=server_info,
                 control=control or parent_runtime.control or RunControl(),
+                # a subgraph shares the root run's exit callbacks
+                _run_exits=parent_runtime._run_exits or _RunExits(),
             )
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
@@ -3404,6 +3407,8 @@ class Pregel(
                 execution_info=None,
                 server_info=server_info,
                 control=control or parent_runtime.control or RunControl(),
+                # a subgraph shares the root run's exit callbacks
+                _run_exits=parent_runtime._run_exits or _RunExits(),
             )
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
