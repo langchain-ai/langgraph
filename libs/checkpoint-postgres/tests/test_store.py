@@ -56,14 +56,6 @@ def store(request) -> PostgresStore:
         conn.execute(f"CREATE DATABASE {database}")
     try:
         with PostgresStore.from_conn_string(conn_string, ttl=ttl_config) as store:
-            store.MIGRATIONS = [
-                (
-                    mig.replace("ttl_minutes INT;", "ttl_minutes FLOAT;")
-                    if isinstance(mig, str)
-                    else mig
-                )
-                for mig in store.MIGRATIONS
-            ]
             store.setup()
 
         if request.param == "pipe":

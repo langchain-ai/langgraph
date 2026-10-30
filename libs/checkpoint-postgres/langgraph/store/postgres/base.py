@@ -81,12 +81,20 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS store_prefix_idx ON store USING btree (p
 -- Add expires_at column to store table
 ALTER TABLE store
 ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP WITH TIME ZONE,
-ADD COLUMN IF NOT EXISTS ttl_minutes INT;
+ADD COLUMN IF NOT EXISTS ttl_minutes DOUBLE PRECISION;
 """,
     """
 -- Add indexes for efficient TTL sweeping
 CREATE INDEX IF NOT EXISTS idx_store_expires_at ON store (expires_at)
 WHERE expires_at IS NOT NULL;
+""",
+    """
+-- Store TTL in fractional minutes. The column was originally INT, which rounded
+-- sub-minute TTLs (e.g. 15 seconds) down to 0 minutes and expired the item on the
+-- very next read. DOUBLE PRECISION keeps fractional TTLs intact, matching the
+-- SQLite store's REAL column.
+ALTER TABLE store
+ALTER COLUMN ttl_minutes TYPE DOUBLE PRECISION USING ttl_minutes::double precision;
 """,
 ]
 
@@ -283,7 +291,7 @@ class BasePostgresStore(Generic[C]):
                 ),
                 updated AS (
                     UPDATE store s
-                    SET expires_at = NOW() + (s.ttl_minutes || ' minutes')::interval
+                    SET expires_at = NOW() + (s.ttl_minutes * interval '1 minute')
                     FROM passed_in p
                     WHERE s.prefix = %s
                     AND s.key    = p.key
@@ -571,7 +579,7 @@ class BasePostgresStore(Generic[C]):
                         ),
                         updated AS (
                             UPDATE store s
-                            SET expires_at = NOW() + (s.ttl_minutes || ' minutes')::interval
+                            SET expires_at = NOW() + (s.ttl_minutes * interval '1 minute')
                             FROM search_results sr
                             WHERE s.prefix = sr.prefix
                             AND s.key = sr.key

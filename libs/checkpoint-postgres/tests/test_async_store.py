@@ -59,14 +59,6 @@ async def store(request) -> AsyncIterator[AsyncPostgresStore]:
         async with AsyncPostgresStore.from_conn_string(
             conn_string, ttl=ttl_config
         ) as store:
-            store.MIGRATIONS = [
-                (
-                    mig.replace("ttl_minutes INT;", "ttl_minutes FLOAT;")
-                    if isinstance(mig, str)
-                    else mig
-                )
-                for mig in store.MIGRATIONS
-            ]
             await store.setup()
             async with store._cursor() as cur:
                 # drop the migration index
