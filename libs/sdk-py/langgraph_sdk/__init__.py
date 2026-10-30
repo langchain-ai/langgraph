@@ -5,7 +5,7 @@ from langgraph_sdk.encryption.types import DecryptResult, EncryptionContext
 from langgraph_sdk.priority import Priority
 from langgraph_sdk.priority.types import PriorityContext, PrioritySettings
 
-__version__ = "0.4.10"
+__version__ = "0.4.11"
 
 __all__ = [
     "Auth",
