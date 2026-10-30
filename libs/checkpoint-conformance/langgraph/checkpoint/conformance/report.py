@@ -123,13 +123,20 @@ class CapabilityReport:
                 return False
         return True
 
+    @property
+    def detected_capabilities(self) -> list[str]:
+        """Names of the capabilities that were found on the checkpointer."""
+        return [name for name, r in self.results.items() if r.detected]
+
     def conformance_level(self) -> str:
         """Return a human-readable conformance level string."""
-        if self.passed_all():
+        if not self.passed_all_base():
+            return "BASE" if self._any_base_passed() else "NONE"
+        # A saver that implements nothing passes every detected test
+        # vacuously, so an empty detection set is not FULL.
+        if self.passed_all() and self.detected_capabilities:
             return "FULL"
-        if self.passed_all_base():
-            return "BASE+PARTIAL"
-        return "BASE" if self._any_base_passed() else "NONE"
+        return "BASE+PARTIAL"
 
     def _any_base_passed(self) -> bool:
         for cap in BASE_CAPABILITIES:
