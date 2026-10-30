@@ -19,6 +19,7 @@ from typing import Literal, cast
 
 import ormsgpack
 import pytest
+from Crypto.Cipher import AES
 from pydantic import BaseModel
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, _with_msgpack_allowlist
@@ -442,3 +443,78 @@ def test_with_allowlist_uses_copy_protocol() -> None:
     assert updated is not saver
     assert updated.copy_was_used is True
     assert saver.copy_was_used is False
+
+
+class TestEncryptedSerializerMacLen:
+    """Test EncryptedSerializer with non-default and default mac_len."""
+
+    @pytest.mark.parametrize("mac_len", [8, 12, 16])
+    def test_aes_roundtrip_eax_mac_len(self, mac_len: int) -> None:
+        """Test AES round trip with mac_len=8, mac_len=12, mac_len=16 in default EAX mode."""
+        serde = EncryptedSerializer.from_pycryptodome_aes(
+            key=b"1234567890123456",
+            mac_len=mac_len,
+        )
+        obj = {"message": "hello world", "numbers": [1, 2, 3], "nested": {"a": True}}
+        dumped = serde.dumps_typed(obj)
+        loaded = serde.loads_typed(dumped)
+        assert loaded == obj
+
+    @pytest.mark.parametrize("mac_len", [8, 12, 16])
+    def test_aes_roundtrip_gcm_mac_len(self, mac_len: int) -> None:
+        """Test AES round trip with mac_len=8, mac_len=12, mac_len=16 in GCM mode."""
+        serde = EncryptedSerializer.from_pycryptodome_aes(
+            key=b"1234567890123456",
+            mode=AES.MODE_GCM,
+            mac_len=mac_len,
+        )
+        obj = {"message": "gcm test", "data": [42, "foo"]}
+        dumped = serde.dumps_typed(obj)
+        loaded = serde.loads_typed(dumped)
+        assert loaded == obj
+
+    @pytest.mark.parametrize("mode", [AES.MODE_EAX, AES.MODE_GCM])
+    @pytest.mark.parametrize("mac_len", [8, 12])
+    def test_aes_tamper_detection_non_default_mac_len(
+        self, mode: int, mac_len: int
+    ) -> None:
+        """Test tamper detection with non-default mac_len raises ValueError."""
+        serde = EncryptedSerializer.from_pycryptodome_aes(
+            key=b"1234567890123456",
+            mode=mode,
+            mac_len=mac_len,
+        )
+        type_str, raw_bytes = serde.dumps_typed({"secret": "data"})
+
+        # Tamper with the actual ciphertext part
+        tampered_ciphertext = bytearray(raw_bytes)
+        tampered_ciphertext[-1] ^= 0x01
+        with pytest.raises(ValueError, match="MAC check failed"):
+            serde.loads_typed((type_str, bytes(tampered_ciphertext)))
+
+        # Tamper with the tag part
+        tampered_tag = bytearray(raw_bytes)
+        tampered_tag[16] ^= 0x01
+        with pytest.raises(ValueError, match="MAC check failed"):
+            serde.loads_typed((type_str, bytes(tampered_tag)))
+
+    def test_aes_default_mac_len_backwards_compatibility(self) -> None:
+        """Ensure backwards compatibility with default 16-byte mac_len."""
+        # Serde with default mac_len (unspecified)
+        default_serde = EncryptedSerializer.from_pycryptodome_aes(
+            key=b"1234567890123456",
+        )
+        # Serde with explicit mac_len=16
+        explicit_serde = EncryptedSerializer.from_pycryptodome_aes(
+            key=b"1234567890123456",
+            mac_len=16,
+        )
+        obj = {"test": "compat", "list": [1, 2, 3]}
+
+        # Dump with default, load with explicit
+        dumped_default = default_serde.dumps_typed(obj)
+        assert explicit_serde.loads_typed(dumped_default) == obj
+
+        # Dump with explicit, load with default
+        dumped_explicit = explicit_serde.dumps_typed(obj)
+        assert default_serde.loads_typed(dumped_explicit) == obj

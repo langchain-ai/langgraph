@@ -62,6 +62,8 @@ class EncryptedSerializer(SerializerProtocol):
         if kwargs.get("mode") is None:
             kwargs["mode"] = AES.MODE_EAX
 
+        mac_len: int = kwargs.get("mac_len", 16)
+
         class PycryptodomeAesCipher(CipherProtocol):
             def encrypt(self, plaintext: bytes) -> tuple[str, bytes]:
                 cipher = AES.new(key, **kwargs)
@@ -71,9 +73,8 @@ class EncryptedSerializer(SerializerProtocol):
             def decrypt(self, ciphername: str, ciphertext: bytes) -> bytes:
                 assert ciphername == "aes", f"Unsupported cipher: {ciphername}"
                 nonce = ciphertext[:16]
-                tag = ciphertext[16:32]
-                actual_ciphertext = ciphertext[32:]
-
+                tag = ciphertext[16 : 16 + mac_len]
+                actual_ciphertext = ciphertext[16 + mac_len :]
                 cipher = AES.new(key, **kwargs, nonce=nonce)
                 return cipher.decrypt_and_verify(actual_ciphertext, tag)
 
