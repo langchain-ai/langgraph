@@ -743,6 +743,11 @@ def _create_msgpack_ext_hook(
                     return tup[2]
                 # module, name, kwargs, method
                 cls = getattr(importlib.import_module(tup[0]), tup[1])
+                if getattr(cls, "__pydantic_root_model__", False):
+                    try:
+                        return cls.model_validate(tup[2])
+                    except Exception:
+                        return cls.model_construct(root=tup[2])
                 try:
                     return cls(**tup[2])
                 except Exception:

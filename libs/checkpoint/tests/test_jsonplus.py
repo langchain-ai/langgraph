@@ -5,6 +5,7 @@ import os
 import pathlib
 import pickle
 import re
+import sqlite3
 import sys
 import tempfile
 import types
@@ -14,6 +15,7 @@ from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from enum import Enum
 from ipaddress import IPv4Address
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import dataclasses_json
@@ -23,7 +25,10 @@ import pandas as pd
 import pytest
 from langchain_core.documents.base import Document
 from langchain_core.messages import AIMessage, HumanMessage
-from pydantic import BaseModel, SecretStr
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import Command, interrupt
+from pydantic import BaseModel, RootModel, SecretStr
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import SecretStr as SecretStrV1
 
@@ -61,6 +66,22 @@ class MyPydantic(BaseModel):
 
 class AnotherPydantic(BaseModel):
     foo: str
+
+
+class IntListRoot(RootModel[list[int]]):
+    pass
+
+
+class StrRoot(RootModel[str]):
+    pass
+
+
+class DictRoot(RootModel[dict[str, Any]]):
+    pass
+
+
+class GraphStateWithRoot(BaseModel):
+    items: IntListRoot
 
 
 class InnerPydanticV1(BaseModelV1):
@@ -1291,3 +1312,56 @@ def test_msgpack_failed_reconstruction_returns_payload(
     )
 
     assert serde.loads_typed(("msgpack", payload)) == expected
+
+
+@pytest.mark.parametrize(
+    ("cls", "val"),
+    [
+        (IntListRoot, [1, 2, 3]),
+        (StrRoot, "test_string"),
+        (DictRoot, {"a": 1, "b": "c"}),
+    ],
+)
+def test_pydantic_root_model_round_trip(cls: type, val: Any) -> None:
+    serde = JsonPlusSerializer(allowed_msgpack_modules=True)
+    instance = cls(val)
+    dumped = serde.dumps_typed(instance)
+    loaded = serde.loads_typed(dumped)
+
+    assert isinstance(loaded, cls)
+    assert loaded == instance
+    assert loaded.root == val
+
+
+def test_pydantic_root_model_graph_interrupt_resume_sqlite() -> None:
+    def step1(state: GraphStateWithRoot) -> dict:
+        assert isinstance(state.items, IntListRoot)
+        res = interrupt("need_approval")
+        return {"items": IntListRoot(state.items.root + [res])}
+
+    def step2(state: GraphStateWithRoot) -> dict:
+        assert isinstance(state.items, IntListRoot)
+        return {"items": IntListRoot(state.items.root + [99])}
+
+    builder = StateGraph(GraphStateWithRoot)
+    builder.add_node("step1", step1)
+    builder.add_node("step2", step2)
+    builder.add_edge(START, "step1")
+    builder.add_edge("step1", "step2")
+    builder.add_edge("step2", END)
+
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+    checkpointer = SqliteSaver(conn)
+    checkpointer.serde = JsonPlusSerializer(allowed_msgpack_modules=True)
+
+    graph = builder.compile(checkpointer=checkpointer)
+    config = {"configurable": {"thread_id": "rootmodel_test"}}
+
+    # Initial run stops at interrupt
+    interrupted = graph.invoke({"items": IntListRoot([1, 2])}, config)
+    assert "__interrupt__" in interrupted
+    assert interrupted["items"] == IntListRoot([1, 2])
+
+    # Resume with value 3
+    resumed = graph.invoke(Command(resume=3), config)
+    assert resumed["items"] == IntListRoot([1, 2, 3, 99])
