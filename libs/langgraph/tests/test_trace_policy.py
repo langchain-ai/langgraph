@@ -9,6 +9,7 @@ import pytest
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
 from typing_extensions import TypedDict
 
 from langgraph._internal._runnable import (
@@ -254,7 +255,7 @@ async def test_trace_policy_scrubs_tracer_not_astream_events() -> None:
     _assert_scrubbed_node_run(tracer, model_is_child=ASYNCIO_ACCEPTS_CONTEXT)
 
 
-class _ExporterWithTapMethods(BaseCallbackHandler):
+class _HandlerWithTapMethods(BaseCallbackHandler):
     def __init__(self) -> None:
         self.node_payloads: list[Any] = []
         self.node_run_ids: set[UUID] = set()
@@ -288,7 +289,7 @@ class _ExporterWithTapMethods(BaseCallbackHandler):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("via_events", [False, True], ids=["ainvoke", "astream_events"])
-async def test_trace_policy_scrubs_exporter_that_only_has_tap_methods(
+async def test_trace_policy_reaches_tracers_but_not_custom_handlers(
     via_events: bool,
 ) -> None:
     graph = (
@@ -298,18 +299,21 @@ async def test_trace_policy_scrubs_exporter_that_only_has_tap_methods(
         .add_edge("n", END)
         .compile()
     )
-    exporter = _ExporterWithTapMethods()
+    handler = _HandlerWithTapMethods()
+    tracer = FakeTracer()
+    config: RunnableConfig = {"callbacks": [handler, tracer]}
 
     if via_events:
-        async for _ in graph.astream_events(
-            {"value": 1}, {"callbacks": [exporter]}, version="v2"
-        ):
+        async for _ in graph.astream_events({"value": 1}, config, version="v2"):
             pass
     else:
-        assert await graph.ainvoke({"value": 1}, {"callbacks": [exporter]}) == {
-            "value": 2
-        }
-    assert exporter.node_payloads == [{"recorded": "inputs"}, {"recorded": "outputs"}]
+        assert await graph.ainvoke({"value": 1}, config) == {"value": 2}
+    assert handler.node_payloads == [{"value": 1}, {"value": 2}]
+    run = _node_run(tracer, "n")
+    assert (run.inputs, run.outputs) == (
+        {"recorded": "inputs"},
+        {"recorded": "outputs"},
+    )
 
 
 @pytest.mark.anyio

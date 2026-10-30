@@ -49,6 +49,7 @@ from langchain_core.runnables.config import (
     var_child_runnable_config,
 )
 from langchain_core.runnables.utils import Input, Output
+from langchain_core.tracers.base import BaseTracer
 from langchain_core.tracers.langchain import LangChainTracer
 from langgraph.store.base import BaseStore
 
@@ -104,13 +105,16 @@ _M = TypeVar("_M", bound=BaseCallbackManager | BaseRunManager)
 
 
 def _split_handlers(manager: _M) -> tuple[_M, _M]:
-    # Stream handlers feed the caller's own stream (`messages` mode, `astream_events`)
-    # and need the real payload. Any other handler, tracers included, may export what
-    # it receives, so it only gets the recorded payload.
-    streams, others = copy.copy(manager), copy.copy(manager)
-    streams.handlers = [h for h in manager.handlers if _is_stream_handler(h)]
-    others.handlers = [h for h in manager.handlers if h not in streams.handlers]
-    return streams, others
+    # The recorded payload exists to keep tracer ingest small, so only tracers get it.
+    # `astream_log`'s handler is a tracer too, but it feeds the caller's own stream.
+    real, tracers = copy.copy(manager), copy.copy(manager)
+    tracers.handlers = [
+        h
+        for h in manager.handlers
+        if isinstance(h, BaseTracer) and not _is_stream_handler(h)
+    ]
+    real.handlers = [h for h in manager.handlers if h not in tracers.handlers]
+    return real, tracers
 
 
 def _set_config_context(
@@ -632,10 +636,8 @@ class RunnableSeq(Runnable):
             name: The name of the `Runnable`.
             trace_inputs: Transforms the input every callback handler receives.
             trace_outputs: Transforms the output every callback handler receives.
-            record_inputs: Transforms the input once more for every handler that is
-                not a stream handler, such as tracers.
-            record_outputs: Transforms the output once more for every handler that
-                is not a stream handler, such as tracers.
+            record_inputs: Transforms the input once more for tracers only.
+            record_outputs: Transforms the output once more for tracers only.
 
         Raises:
             ValueError: If the sequence has less than 2 steps.
@@ -669,9 +671,9 @@ class RunnableSeq(Runnable):
             return callback_manager.on_chain_start(
                 None, payload, name=name, run_id=run_id
             )
-        streams, others = _split_handlers(callback_manager)
-        run_manager = streams.on_chain_start(None, payload, name=name, run_id=run_id)
-        others.on_chain_start(None, recorded, name=name, run_id=run_manager.run_id)
+        real, tracers = _split_handlers(callback_manager)
+        run_manager = real.on_chain_start(None, payload, name=name, run_id=run_id)
+        tracers.on_chain_start(None, recorded, name=name, run_id=run_manager.run_id)
         run_manager.handlers = callback_manager.handlers
         return run_manager
 
@@ -687,12 +689,10 @@ class RunnableSeq(Runnable):
             return await callback_manager.on_chain_start(
                 None, payload, name=name, run_id=run_id
             )
-        streams, others = _split_handlers(callback_manager)
+        real, tracers = _split_handlers(callback_manager)
         # Tracers start last, so a cancellation before then leaves no tracer run open.
-        run_manager = await streams.on_chain_start(
-            None, payload, name=name, run_id=run_id
-        )
-        await others.on_chain_start(
+        run_manager = await real.on_chain_start(None, payload, name=name, run_id=run_id)
+        await tracers.on_chain_start(
             None, recorded, name=name, run_id=run_manager.run_id
         )
         run_manager.handlers = callback_manager.handlers
@@ -704,9 +704,9 @@ class RunnableSeq(Runnable):
         if recorded is payload:
             run_manager.on_chain_end(payload)
         else:
-            streams, others = _split_handlers(run_manager)
-            others.on_chain_end(recorded)
-            streams.on_chain_end(payload)
+            real, tracers = _split_handlers(run_manager)
+            tracers.on_chain_end(recorded)
+            real.on_chain_end(payload)
 
     async def _aend(
         self, run_manager: AsyncCallbackManagerForChainRun, output: Any
@@ -716,12 +716,12 @@ class RunnableSeq(Runnable):
         if recorded is payload:
             await run_manager.on_chain_end(payload)
         else:
-            streams, others = _split_handlers(run_manager)
+            real, tracers = _split_handlers(run_manager)
             # Tracers end first: on_chain_end is shielded once it starts, so a
-            # cancellation can only skip the stream handlers' end, never leave a
+            # cancellation can only skip the other handlers' end, never leave a
             # tracer run open.
-            await others.on_chain_end(recorded)
-            await streams.on_chain_end(payload)
+            await tracers.on_chain_end(recorded)
+            await real.on_chain_end(payload)
 
     def __or__(
         self,
