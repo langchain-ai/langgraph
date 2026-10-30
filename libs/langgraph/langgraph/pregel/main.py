@@ -97,6 +97,7 @@ from langgraph._internal._runnable import (
     Runnable,
     RunnableLike,
     RunnableSeq,
+    _is_stream_handler,
     coerce_to_runnable,
 )
 from langgraph._internal._timeout import coerce_timeout_policy
@@ -202,11 +203,6 @@ from langgraph.types import (
 )
 from langgraph.typing import ContextT, InputT, OutputT, StateT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
-
-try:
-    from langchain_core.tracers._streaming import _StreamingCallbackHandler
-except ImportError:
-    _StreamingCallbackHandler = None  # type: ignore
 
 __all__ = ("NodeBuilder", "Pregel")
 
@@ -2885,12 +2881,14 @@ class Pregel(
                 # this graph's namespace starts at the root, so a caller's
                 # handler would take this graph's events for its own graph's.
                 callback_manager.handlers = [
-                    h for h in callback_manager.handlers if not _is_stream_handler(h)
+                    h
+                    for h in callback_manager.handlers
+                    if not _is_stream_mode_handler(h)
                 ]
                 callback_manager.inheritable_handlers = [
                     h
                     for h in callback_manager.inheritable_handlers
-                    if not _is_stream_handler(h)
+                    if not _is_stream_mode_handler(h)
                 ]
             if "ls_integration" not in callback_manager.metadata:
                 callback_manager.add_metadata({"ls_integration": "langgraph"})
@@ -3300,12 +3298,14 @@ class Pregel(
                 # this graph's namespace starts at the root, so a caller's
                 # handler would take this graph's events for its own graph's.
                 callback_manager.handlers = [
-                    h for h in callback_manager.handlers if not _is_stream_handler(h)
+                    h
+                    for h in callback_manager.handlers
+                    if not _is_stream_mode_handler(h)
                 ]
                 callback_manager.inheritable_handlers = [
                     h
                     for h in callback_manager.inheritable_handlers
-                    if not _is_stream_handler(h)
+                    if not _is_stream_mode_handler(h)
                 ]
             if "ls_integration" not in callback_manager.metadata:
                 callback_manager.add_metadata({"ls_integration": "langgraph"})
@@ -3320,20 +3320,10 @@ class Pregel(
                 run_id=run_manager.run_id,
             )
             # if running from astream_log() run each proc with streaming
-            do_stream = (
-                next(
-                    (
-                        True
-                        for h in run_manager.handlers
-                        if isinstance(h, _StreamingCallbackHandler)
-                        and not isinstance(
-                            h, (StreamMessagesHandler, StreamToolCallHandler)
-                        )
-                    ),
-                    False,
-                )
-                if _StreamingCallbackHandler is not None
-                else False
+            do_stream = any(
+                _is_stream_handler(h)
+                and not isinstance(h, (StreamMessagesHandler, StreamToolCallHandler))
+                for h in run_manager.handlers
             )
             if checkpointer is None and durability is not None:
                 warnings.warn(
@@ -4467,7 +4457,7 @@ def _coerce_checkpoint_values(payload: Any, mapper: Callable[[Any], Any]) -> Non
         payload["values"] = mapper(payload["values"])
 
 
-def _is_stream_handler(handler: object) -> bool:
+def _is_stream_mode_handler(handler: object) -> bool:
     return isinstance(handler, (StreamMessagesHandler, StreamToolCallHandler))
 
 
