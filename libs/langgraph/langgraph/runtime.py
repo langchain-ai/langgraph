@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+import inspect
+import logging
+import threading
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
+from types import TracebackType
 from typing import Any, Generic, cast
 
 from langgraph.store.base import BaseStore
@@ -102,6 +106,129 @@ class RunControl:
     @property
     def drain_reason(self) -> str | None:
         return self._drain_reason
+
+
+logger = logging.getLogger(__name__)
+
+ExitCallback = Callable[[], Awaitable[None] | None]
+"""A cleanup callback registered with `Runtime.on_exit`."""
+
+
+class _RunExits:
+    """Cleanup callbacks for one root graph invocation.
+
+    Created by the root `stream`/`astream` call and shared by every subgraph
+    it runs, through `Runtime`. The root Pregel loop binds it at the bottom of
+    its exit stack, so callbacks run after the loop has stopped every task,
+    persisted its final checkpoint and handled any interrupt, whatever the
+    reason the run ended.
+    """
+
+    __slots__ = ("_callbacks", "_is_async", "_lock", "_state")
+
+    def __init__(self) -> None:
+        self._callbacks: list[ExitCallback] = []
+        self._lock = threading.Lock()
+        self._is_async = False
+        # "new" -> "bound" (owned by a loop) -> "closed" (callbacks ran)
+        self._state = "new"
+
+    def bind(self, *, is_async: bool) -> bool:
+        """Claim these exits for a loop. Only the first (root) loop wins."""
+        with self._lock:
+            if self._state != "new":
+                return False
+            self._state = "bound"
+            self._is_async = is_async
+            return True
+
+    def register(self, callback: ExitCallback) -> None:
+        if not callable(callback):
+            msg = "on_exit() expects a callable"
+            raise TypeError(msg)
+        with self._lock:
+            if self._state == "closed":
+                msg = "on_exit() called after the graph run has already exited"
+                raise RuntimeError(msg)
+            if not self._is_async and _is_async_callable(callback):
+                msg = (
+                    "on_exit() got an async callback in a synchronous graph run "
+                    "(invoke/stream). Register a sync callback, or run the graph "
+                    "with ainvoke/astream."
+                )
+                raise TypeError(msg)
+            self._callbacks.append(callback)
+
+    def _drain(self) -> list[ExitCallback]:
+        with self._lock:
+            self._state = "closed"
+            callbacks = self._callbacks[::-1]  # LIFO
+            self._callbacks = []
+        return callbacks
+
+    def exit(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool:
+        errors: list[Exception] = []
+        for callback in self._drain():
+            try:
+                result = callback()
+                if inspect.isawaitable(result):
+                    if inspect.iscoroutine(result):
+                        result.close()
+                    msg = (
+                        f"on_exit() callback {callback!r} returned an awaitable "
+                        "in a synchronous graph run; it was not awaited."
+                    )
+                    raise TypeError(msg)
+            except Exception as e:
+                errors.append(e)
+        return self._finish(errors, exc_value)
+
+    async def aexit(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool:
+        errors: list[Exception] = []
+        for callback in self._drain():
+            try:
+                result = callback()
+                if inspect.isawaitable(result):
+                    await result
+            except Exception as e:
+                errors.append(e)
+        return self._finish(errors, exc_value)
+
+    @staticmethod
+    def _finish(errors: list[Exception], exc_value: BaseException | None) -> bool:
+        # Every callback runs even if an earlier one failed. A failing callback
+        # never replaces the run's own exception (error, cancellation, stream
+        # close): it is logged instead. If the run otherwise ended cleanly, the
+        # first callback error is raised so cleanup bugs aren't silent.
+        if not errors:
+            return False
+        if exc_value is None:
+            for e in errors[1:]:
+                logger.error("on_exit() callback failed", exc_info=e)
+            raise errors[0]
+        for e in errors:
+            logger.error(
+                "on_exit() callback failed while the graph run was exiting with %r",
+                exc_value,
+                exc_info=e,
+            )
+        return False
+
+
+def _is_async_callable(callback: Any) -> bool:
+    return inspect.iscoroutinefunction(callback) or inspect.iscoroutinefunction(
+        getattr(callback, "__call__", None)
+    )
 
 
 def _no_op_stream_writer(_: Any) -> None: ...
@@ -237,6 +364,40 @@ class Runtime(Generic[ContextT]):
     graph runtime.
     """
 
+    _run_exits: _RunExits | None = field(default=None, repr=False, compare=False)
+    """Exit callbacks of the root graph run. Use `on_exit` to register one."""
+
+    def on_exit(self, callback: ExitCallback) -> None:
+        """Register cleanup to run when the current graph run ends.
+
+        The callback runs once the root invocation (the `invoke`/`stream`/
+        `ainvoke`/`astream` call the caller made) exits for any reason: it
+        completed, raised, was cancelled, paused on an interrupt, or the caller
+        closed the stream or broke out of it. Calls from subgraphs register on
+        that same root run.
+
+        Callbacks take no arguments and run in reverse registration order,
+        after every task of the run has stopped and the final checkpoint has
+        been written. In `ainvoke`/`astream` a callback may be sync or async; in
+        `invoke`/`stream` it must be sync. A failing callback never hides the
+        run's own exception: it is logged, and raised only if the run otherwise
+        ended without one.
+
+        A process that is killed does not run its callbacks, so use them to
+        free resources early, not as the only guarantee they are freed.
+
+        Args:
+            callback: A zero-argument sync or async callable.
+
+        Raises:
+            RuntimeError: When called outside a graph run, or after it exited.
+            TypeError: When given an async callback in a synchronous run.
+        """
+        if self._run_exits is None:
+            msg = "on_exit() can only be called during a graph run"
+            raise RuntimeError(msg)
+        self._run_exits.register(callback)
+
     def merge(self, other: Runtime[ContextT]) -> Runtime[ContextT]:
         """Merge two runtimes together.
 
@@ -255,6 +416,7 @@ class Runtime(Generic[ContextT]):
             execution_info=other.execution_info or self.execution_info,
             server_info=other.server_info or self.server_info,
             control=other.control or self.control,
+            _run_exits=other._run_exits or self._run_exits,
         )
 
     def override(
