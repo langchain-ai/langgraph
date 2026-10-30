@@ -817,3 +817,7 @@ def test_delta_channel_from_checkpoint_seed_none_is_distinct_from_sentinel() -> 
     ch = spec.from_checkpoint(None)
     ch.replay_writes([("t0", "x", "after")])
     assert ch.get() == "after"
+
+def test_topic_from_checkpoint_none() -> None:
+    channel = Topic(str).from_checkpoint(None)
+    assert channel.copy().values == []
