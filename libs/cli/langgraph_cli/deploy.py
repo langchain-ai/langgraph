@@ -2431,7 +2431,6 @@ def _deploy_cmd(
     validate_deploy_commands(install_command, build_command)
     agent = None
     if agent_id is not None or environment is not None:
-        em.note("Note: --agent-id and --agent-environment flags are in private beta")
         if not agent_id or not agent_id.strip() or not environment:
             raise click.UsageError(
                 "--agent-id and --agent-environment are required together."

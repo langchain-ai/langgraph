@@ -85,6 +85,8 @@ def test_agent_create(deployment_api, tmp_path, monkeypatch):
     assert "name" not in payload
     assert build.call_args.kwargs["deployment_id"] == "runtime-id"
     assert "server-name" in result.output
+    assert "'langgraph deploy' is in beta" in result.output
+    assert "private beta" not in result.output
     assert (tmp_path / ".env").read_text() == "LANGSMITH_DEPLOYMENT_NAME=legacy\n"
 
 
