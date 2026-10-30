@@ -108,6 +108,47 @@ def test_binop() -> None:
     assert channel.get() == 10
 
 
+def test_binop_empty_overwrite() -> None:
+    # Test with BinaryOperatorAggregate(int | None, operator.add) starting at MISSING
+    channel = BinaryOperatorAggregate(int | None, operator.add).from_checkpoint(MISSING)
+    with pytest.raises(EmptyChannelError):
+        channel.get()
+
+    # Update with [Overwrite(42)], verify channel.get() == 42
+    channel.update([Overwrite(42)])
+    assert channel.get() == 42
+
+    # Test with dict format {"__overwrite__": 42}
+    channel = BinaryOperatorAggregate(int | None, operator.add).from_checkpoint(MISSING)
+    channel.update([{"__overwrite__": 42}])
+    assert channel.get() == 42
+
+    # Test with dict format {"value": 42, "type": "__overwrite__"}
+    channel = BinaryOperatorAggregate(int | None, operator.add).from_checkpoint(MISSING)
+    channel.update([{"value": 42, "type": "__overwrite__"}])
+    assert channel.get() == 42
+
+    # Test that updating with multiple overwrites [Overwrite(1), Overwrite(2)] raises InvalidUpdateError
+    channel = BinaryOperatorAggregate(int | None, operator.add).from_checkpoint(MISSING)
+    with pytest.raises(InvalidUpdateError):
+        channel.update([Overwrite(1), Overwrite(2)])
+
+    # Test end-to-end StateGraph where state field is Annotated[int | None, lambda a, b: b if b is not None else a]
+    class State(TypedDict):
+        score: Annotated[int | None, lambda a, b: b if b is not None else a]
+
+    def my_node(state: State) -> dict:
+        return {"score": Overwrite(100)}
+
+    builder = StateGraph(State)
+    builder.add_node("my_node", my_node)
+    builder.add_edge(START, "my_node")
+    graph = builder.compile()
+
+    res = graph.invoke({})
+    assert res == {"score": 100}
+
+
 def test_untracked_value() -> None:
     channel = UntrackedValue(dict).from_checkpoint(MISSING)
     assert channel.ValueType is dict
