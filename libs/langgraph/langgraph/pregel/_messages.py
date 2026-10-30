@@ -23,7 +23,7 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResul
 from pydantic import BaseModel
 
 from langgraph._internal._config import filter_to_user_tags
-from langgraph._internal._constants import NS_SEP
+from langgraph._internal._constants import NS_SEP, PUSH
 from langgraph.channels.binop import _get_overwrite
 from langgraph.channels.delta import DeltaChannel
 from langgraph.constants import TAG_HIDDEN, TAG_NOSTREAM
@@ -53,6 +53,23 @@ def _state_values(obj: Any) -> Sequence[Any]:
     elif is_dataclass(obj) and not isinstance(obj, type):
         return [getattr(obj, f.name) for f in fields(obj)]
     return ()
+
+
+def graph_namespace(metadata: Mapping[str, Any]) -> tuple[str, ...]:
+    """Namespace of the graph a task runs in, from the task's run metadata.
+
+    Drops the task's own segment, plus one per enclosing `@task` call: a call
+    runs in its caller's graph but nests its segment under the caller's. A
+    call's `langgraph_path` is `(PUSH, <caller's path>, <index>, True)`, while
+    a `Send` task's ends in `False`.
+    """
+    ns = tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP))
+    path = metadata.get("langgraph_path", ())
+    drop = 1
+    while len(path) == 4 and path[0] == PUSH and path[-1] is True:
+        drop += 1
+        path = path[1]
+    return ns[:-drop]
 
 
 class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
@@ -148,9 +165,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         **kwargs: Any,
     ) -> Any:
         if metadata and (not tags or (TAG_NOSTREAM not in tags)):
-            ns = tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP))[
-                :-1
-            ]
+            ns = graph_namespace(metadata)
             if not self.subgraphs and len(ns) > 0 and ns != self.parent_ns:
                 return
             if (filtered_tags := filter_to_user_tags(tags)) is not None:
@@ -213,9 +228,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             and kwargs.get("name") == metadata.get("langgraph_node")
             and (not tags or TAG_HIDDEN not in tags)
         ):
-            ns = tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP))[
-                :-1
-            ]
+            ns = graph_namespace(metadata)
             if not self.subgraphs and len(ns) > 0 and ns != self.parent_ns:
                 return
             self.metadata[run_id] = (ns, metadata)
