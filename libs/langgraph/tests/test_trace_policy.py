@@ -326,7 +326,7 @@ async def test_trace_policy_cancel_at_node_end_still_closes_tracer_run() -> None
     seq = RunnableSeq(
         RunnableCallable(lambda x: x, trace=False),
         RunnableCallable(cancel_own_task, trace=False),
-        record_outputs=_RECORDING_POLICY.process_outputs,
+        trace_policy=_RECORDING_POLICY,
     )
     with pytest.raises(asyncio.CancelledError):
         await asyncio.create_task(seq.ainvoke({}, {"callbacks": [tracer]}))

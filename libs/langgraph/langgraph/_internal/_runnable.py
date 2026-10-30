@@ -66,7 +66,7 @@ from langgraph._internal._constants import (
 )
 from langgraph._internal._typing import MISSING
 from langgraph.errors import NodeError
-from langgraph.types import StreamWriter
+from langgraph.types import StreamWriter, TracePolicy
 
 try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
@@ -625,9 +625,7 @@ class RunnableSeq(Runnable):
         *steps: RunnableLike,
         name: str | None = None,
         trace_inputs: Callable[[Any], Any] | None = None,
-        trace_outputs: Callable[[Any], Any] | None = None,
-        record_inputs: Callable[[Any], Any] | None = None,
-        record_outputs: Callable[[Any], Any] | None = None,
+        trace_policy: TracePolicy | None = None,
     ) -> None:
         """Create a new RunnableSeq.
 
@@ -635,9 +633,7 @@ class RunnableSeq(Runnable):
             steps: The steps to include in the sequence.
             name: The name of the `Runnable`.
             trace_inputs: Transforms the input every callback handler receives.
-            trace_outputs: Transforms the output every callback handler receives.
-            record_inputs: Transforms the input once more for tracers only.
-            record_outputs: Transforms the output once more for tracers only.
+            trace_policy: Processes what tracers record, after `trace_inputs`.
 
         Raises:
             ValueError: If the sequence has less than 2 steps.
@@ -657,14 +653,12 @@ class RunnableSeq(Runnable):
         self.steps = steps_flat
         self.name = name
         self.trace_inputs = trace_inputs
-        self.trace_outputs = trace_outputs
-        self.record_inputs = record_inputs
-        self.record_outputs = record_outputs
+        self.trace_policy = trace_policy or TracePolicy()
 
     def _start(self, input: Any, config: RunnableConfig) -> CallbackManagerForChainRun:
         callback_manager = get_callback_manager_for_config(config)
         payload = _trace_payload(input, self.trace_inputs)
-        recorded = _trace_payload(payload, self.record_inputs)
+        recorded = _trace_payload(payload, self.trace_policy.process_inputs)
         name = config.get("run_name") or self.get_name()
         run_id = config.pop("run_id", None)
         if recorded is payload:
@@ -682,7 +676,7 @@ class RunnableSeq(Runnable):
     ) -> AsyncCallbackManagerForChainRun:
         callback_manager = get_async_callback_manager_for_config(config)
         payload = _trace_payload(input, self.trace_inputs)
-        recorded = _trace_payload(payload, self.record_inputs)
+        recorded = _trace_payload(payload, self.trace_policy.process_inputs)
         name = config.get("run_name") or self.get_name()
         run_id = config.pop("run_id", None)
         if recorded is payload:
@@ -699,29 +693,27 @@ class RunnableSeq(Runnable):
         return run_manager
 
     def _end(self, run_manager: CallbackManagerForChainRun, output: Any) -> None:
-        payload = _trace_payload(output, self.trace_outputs)
-        recorded = _trace_payload(payload, self.record_outputs)
-        if recorded is payload:
-            run_manager.on_chain_end(payload)
+        recorded = _trace_payload(output, self.trace_policy.process_outputs)
+        if recorded is output:
+            run_manager.on_chain_end(output)
         else:
             real, tracers = _split_handlers(run_manager)
             tracers.on_chain_end(recorded)
-            real.on_chain_end(payload)
+            real.on_chain_end(output)
 
     async def _aend(
         self, run_manager: AsyncCallbackManagerForChainRun, output: Any
     ) -> None:
-        payload = _trace_payload(output, self.trace_outputs)
-        recorded = _trace_payload(payload, self.record_outputs)
-        if recorded is payload:
-            await run_manager.on_chain_end(payload)
+        recorded = _trace_payload(output, self.trace_policy.process_outputs)
+        if recorded is output:
+            await run_manager.on_chain_end(output)
         else:
             real, tracers = _split_handlers(run_manager)
             # Tracers end first: on_chain_end is shielded once it starts, so a
             # cancellation can only skip the other handlers' end, never leave a
             # tracer run open.
             await tracers.on_chain_end(recorded)
-            await real.on_chain_end(payload)
+            await real.on_chain_end(output)
 
     def __or__(
         self,
