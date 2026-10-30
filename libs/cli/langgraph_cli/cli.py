@@ -11,6 +11,7 @@ import click.exceptions
 
 import langgraph_cli.config
 import langgraph_cli.docker
+from langgraph_cli import langsmith_auth
 from langgraph_cli.analytics import log_command
 from langgraph_cli.config import Config
 from langgraph_cli.constants import DEFAULT_CONFIG, DEFAULT_PORT
@@ -231,6 +232,13 @@ class NestedHelpGroup(click.Group):
 @click.version_option(version=__version__, prog_name="LangGraph CLI")
 def cli():
     pass
+
+
+@cli.command(help="Log in to LangSmith in the browser (no API key needed).")
+@click.option("--no-browser", is_flag=True, help="Print the URL instead of opening it.")
+def login(no_browser: bool) -> None:
+    api_url = langsmith_auth.resolve_api_url(os.environ.get("LANGSMITH_ENDPOINT"))
+    langsmith_auth.login(api_url, open_browser=not no_browser)
 
 
 # Wire the deploy group (defined in deploy.py) into the top-level CLI.
