@@ -293,23 +293,24 @@ class JsonPlusSerializer(SerializerProtocol):
                 raise exc
 
     def loads_typed(self, data: tuple[str, bytes]) -> Any:
-        type_, data_ = data
-        if type_ == "null":
-            return None
-        elif type_ == "bytes":
-            return data_
-        elif type_ == "bytearray":
-            return bytearray(data_)
-        elif type_ == "json":
-            return json.loads(data_, object_hook=self._reviver)
-        elif type_ == "msgpack":
-            return ormsgpack.unpackb(
-                data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-            )
-        elif self.pickle_fallback and type_ == "pickle":
-            return pickle.loads(data_)
-        else:
-            raise NotImplementedError(f"Unknown serialization type: {type_}")
+            type_, data_ = data
+            if type_ == "null":
+                return None
+            elif type_ == "bytes":
+                return data_
+            elif type_ == "bytearray":
+                return bytearray(data_)
+            elif type_ == "json":
+                return json.loads(data_, object_hook=self._reviver)
+            elif type_ == "msgpack":
+                result = ormsgpack.unpackb(
+                    data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                return _restore_dict_keys_from_msgpack(result)
+            elif self.pickle_fallback and type_ == "pickle":
+                return pickle.loads(data_)
+            else:
+                raise NotImplementedError(f"Unknown serialization type: {type_}")
 
 
 # --- msgpack ---
@@ -882,8 +883,159 @@ _option = (
 )
 
 
+# Types that need special handling when used as dict keys
+# These are the same types that _msgpack_default handles for values
+_KEY_SERIALIZABLE_TYPES = (
+    Enum,
+    UUID,
+    date,
+    datetime,
+)
+
+
+# Special key markers for tuple-based encoding
+_KEY_MARKER_ENUM = "__langgraph_enum__"
+_KEY_MARKER_UUID = "__langgraph_uuid__"
+_KEY_MARKER_DATETIME = "__langgraph_datetime__"
+_KEY_MARKER_DATE = "__langgraph_date__"
+_KEY_MARKER_TIME = "__langgraph_time__"
+
+
+def _prepare_dict_keys_for_msgpack(obj: Any, _seen: set[int] | None = None) -> Any:
+    """Recursively convert special dict keys to tuple representations before msgpack encoding.
+    
+    ormsgpack with OPT_NON_STR_KEYS handles dict keys natively and doesn't pass
+    them through the default hook. This function preprocesses dicts to convert
+    Enum, UUID, date, datetime keys into tuple representations that can be
+    restored during deserialization.
+    """
+    if _seen is None:
+        _seen = set()
+    
+    obj_id = id(obj)
+    if obj_id in _seen:
+        return obj
+    _seen.add(obj_id)
+    
+    try:
+        if isinstance(obj, dict):
+            new_dict = {}
+            for key, value in obj.items():
+                new_key = _encode_key_for_msgpack(key)
+                new_value = _prepare_dict_keys_for_msgpack(value, _seen)
+                new_dict[new_key] = new_value
+            return new_dict
+        elif isinstance(obj, (list, tuple, set, frozenset, deque)):
+            # Recursively process sequence elements
+            return type(obj)(_prepare_dict_keys_for_msgpack(item, _seen) for item in obj)
+        elif dataclasses.is_dataclass(obj):
+            # Process dataclass fields
+            new_fields = {}
+            for field in dataclasses.fields(obj):
+                new_fields[field.name] = _prepare_dict_keys_for_msgpack(getattr(obj, field.name), _seen)
+            return dataclasses.replace(obj, **new_fields)
+        # Skip arbitrary object attribute processing to avoid recursion issues
+        # Only handle known serializable container types
+        return obj
+    finally:
+        _seen.discard(obj_id)
+
+
+def _encode_key_for_msgpack(key: Any) -> Any:
+    """Encode a dict key for msgpack serialization using tuple representation.
+    
+    Since ormsgpack with OPT_NON_STR_KEYS doesn't support ext objects as keys,
+    we encode special types as tuples with a marker.
+    """
+    if isinstance(key, Enum):
+        return (_KEY_MARKER_ENUM, key.__class__.__module__, key.__class__.__name__, key.value)
+    elif isinstance(key, UUID):
+        return (_KEY_MARKER_UUID, key.hex)
+    elif isinstance(key, datetime):
+        return (_KEY_MARKER_DATETIME, key.isoformat())
+    elif isinstance(key, date):
+        return (_KEY_MARKER_DATE, key.year, key.month, key.day)
+    elif isinstance(key, time):
+        return (_KEY_MARKER_TIME, key.hour, key.minute, key.second, key.microsecond, key.tzinfo, key.fold)
+    return key
+
+
+def _restore_dict_keys_from_msgpack(obj: Any, _seen: set[int] | None = None) -> Any:
+    """Recursively restore special dict keys from tuple representations after msgpack decoding.
+    
+    This reverses the transformation done by _prepare_dict_keys_for_msgpack.
+    """
+    if _seen is None:
+        _seen = set()
+    
+    obj_id = id(obj)
+    if obj_id in _seen:
+        return obj
+    _seen.add(obj_id)
+    
+    try:
+        if isinstance(obj, dict):
+            new_dict = {}
+            for key, value in obj.items():
+                new_key = _decode_key_from_msgpack(key)
+                new_value = _restore_dict_keys_from_msgpack(value, _seen)
+                new_dict[new_key] = new_value
+            return new_dict
+        elif isinstance(obj, (list, tuple, set, frozenset, deque)):
+            return type(obj)(_restore_dict_keys_from_msgpack(item, _seen) for item in obj)
+        elif dataclasses.is_dataclass(obj):
+            new_fields = {}
+            for field in dataclasses.fields(obj):
+                new_fields[field.name] = _restore_dict_keys_from_msgpack(getattr(obj, field.name), _seen)
+            return dataclasses.replace(obj, **new_fields)
+        # Skip arbitrary object attribute processing to avoid recursion issues
+        return obj
+    finally:
+        _seen.discard(obj_id)
+
+
+def _decode_key_from_msgpack(key: Any) -> Any:
+    """Decode a dict key from tuple representation."""
+    if isinstance(key, tuple) and len(key) > 0:
+        marker = key[0]
+        if marker == _KEY_MARKER_ENUM and len(key) == 4:
+            _, module, name, value = key
+            try:
+                cls = getattr(importlib.import_module(module), name)
+                return cls(value)
+            except Exception:
+                return key
+        elif marker == _KEY_MARKER_UUID and len(key) == 2:
+            _, hex_str = key
+            try:
+                return UUID(hex=hex_str)
+            except Exception:
+                return key
+        elif marker == _KEY_MARKER_DATETIME and len(key) == 2:
+            _, iso_str = key
+            try:
+                return datetime.fromisoformat(iso_str)
+            except Exception:
+                return key
+        elif marker == _KEY_MARKER_DATE and len(key) == 4:
+            _, year, month, day = key
+            try:
+                return date(year, month, day)
+            except Exception:
+                return key
+        elif marker == _KEY_MARKER_TIME and len(key) == 7:
+                    _, hour, minute, second, microsecond, tzinfo, fold = key
+                    try:
+                        return time(hour, minute, second, microsecond, tzinfo, fold=fold)
+                    except Exception:
+                        return key
+    return key
+
+
 def _msgpack_enc(data: Any) -> bytes:
-    return ormsgpack.packb(data, default=_msgpack_default, option=_option)
+    """Encode data to msgpack with special key handling."""
+    prepared = _prepare_dict_keys_for_msgpack(data)
+    return ormsgpack.packb(prepared, default=_msgpack_default, option=_option)
 
 
 def _normalize_allowlist(

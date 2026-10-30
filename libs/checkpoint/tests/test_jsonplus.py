@@ -1291,3 +1291,101 @@ def test_msgpack_failed_reconstruction_returns_payload(
     )
 
     assert serde.loads_typed(("msgpack", payload)) == expected
+
+
+# Module-level test enums for key preservation tests
+class _TestColor(Enum):
+    RED = "red"
+    BLUE = "blue"
+
+
+class _TestStatus(Enum):
+    ACTIVE = "active"
+
+
+def test_dict_keys_enum_uuid_date_datetime_preserved() -> None:
+    """Test that Enum, UUID, date, datetime dict keys are preserved through serialization.
+    
+    Regression test for: https://github.com/langchain-ai/langgraph/issues/9490
+    """
+    from datetime import date, datetime
+    import uuid
+    
+    serde = JsonPlusSerializer()
+    
+    # Test Enum keys
+    enum_dict = {_TestColor.RED: 1, _TestColor.BLUE: 2, "string_key": 3, 42: 4}
+    dumped = serde.dumps_typed(enum_dict)
+    loaded = serde.loads_typed(dumped)
+    assert loaded == enum_dict, f"Enum keys not preserved: {loaded}"
+    assert isinstance(list(loaded.keys())[0], _TestColor), "Enum key type not preserved"
+    
+    # Test UUID keys
+    uuid1 = uuid.UUID(int=1)
+    uuid2 = uuid.UUID(int=2)
+    uuid_dict = {uuid1: "value1", uuid2: "value2"}
+    dumped = serde.dumps_typed(uuid_dict)
+    loaded = serde.loads_typed(dumped)
+    assert loaded == uuid_dict, f"UUID keys not preserved: {loaded}"
+    assert isinstance(list(loaded.keys())[0], uuid.UUID), "UUID key type not preserved"
+    
+    # Test date keys
+    d1 = date(2024, 1, 1)
+    d2 = date(2024, 12, 31)
+    date_dict = {d1: "start", d2: "end"}
+    dumped = serde.dumps_typed(date_dict)
+    loaded = serde.loads_typed(dumped)
+    assert loaded == date_dict, f"date keys not preserved: {loaded}"
+    assert isinstance(list(loaded.keys())[0], date), "date key type not preserved"
+    
+    # Test datetime keys
+    dt1 = datetime(2024, 1, 1, 12, 0)
+    dt2 = datetime(2024, 12, 31, 23, 59)
+    datetime_dict = {dt1: "noon", dt2: "midnight"}
+    dumped = serde.dumps_typed(datetime_dict)
+    loaded = serde.loads_typed(dumped)
+    assert loaded == datetime_dict, f"datetime keys not preserved: {loaded}"
+    assert isinstance(list(loaded.keys())[0], datetime), "datetime key type not preserved"
+    
+    # Test mixed keys
+    mixed = {
+        _TestColor.RED: "enum",
+        uuid1: "uuid",
+        d1: "date",
+        dt1: "datetime",
+        "string": "str",
+        42: "int",
+        (1, 2): "tuple",
+    }
+    dumped = serde.dumps_typed(mixed)
+    loaded = serde.loads_typed(dumped)
+    assert loaded == mixed, f"Mixed keys not preserved: {loaded}"
+
+
+def test_dict_keys_enum_uuid_date_datetime_nested() -> None:
+    """Test that special keys are preserved in nested structures."""
+    from datetime import date, datetime
+    import uuid
+    
+    serde = JsonPlusSerializer()
+    
+    # Nested dict with special keys
+    nested = {
+        "outer": {
+            _TestStatus.ACTIVE: "value",
+            uuid.uuid4(): "uuid_value",
+        },
+        "list_of_dicts": [
+            {date(2024, 1, 1): "first"},
+            {datetime(2024, 6, 15, 12, 0): "second"},
+        ],
+    }
+    dumped = serde.dumps_typed(nested)
+    loaded = serde.loads_typed(dumped)
+    assert loaded == nested, f"Nested special keys not preserved: {loaded}"
+    
+    # Verify types in nested structures
+    assert isinstance(list(loaded["outer"].keys())[0], _TestStatus)
+    assert isinstance(list(loaded["outer"].keys())[1], uuid.UUID)
+    assert isinstance(list(loaded["list_of_dicts"][0].keys())[0], date)
+    assert isinstance(list(loaded["list_of_dicts"][1].keys())[0], datetime)
