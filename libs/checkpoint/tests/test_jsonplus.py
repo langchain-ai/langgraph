@@ -912,7 +912,7 @@ def test_msgpack_allowlist_blocks_non_listed(
 ) -> None:
     """Allowlists should block unregistered types even if msgpack is enabled."""
     serde = JsonPlusSerializer(
-        allowed_msgpack_modules=[("tests.test_jsonplus", "MyPydantic"), ("tests.test_jsonplus", "InnerPydantic")]
+        allowed_msgpack_modules=[("tests.test_jsonplus", "MyPydantic")]
     )
 
     obj = AnotherPydantic(foo="nope")
