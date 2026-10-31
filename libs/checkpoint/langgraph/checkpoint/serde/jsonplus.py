@@ -303,8 +303,8 @@ class JsonPlusSerializer(SerializerProtocol):
         elif type_ == "json":
             return json.loads(data_, object_hook=self._reviver)
         elif type_ == "msgpack":
-            return ormsgpack.unpackb(
-                data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+            return _restore_dict_keys(ormsgpack.unpackb(
+                data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS)
             )
         elif self.pickle_fallback and type_ == "pickle":
             return pickle.loads(data_)
@@ -883,7 +883,7 @@ _option = (
 
 
 def _msgpack_enc(data: Any) -> bytes:
-    return ormsgpack.packb(data, default=_msgpack_default, option=_option)
+    return ormsgpack.packb(_prepare_dict_keys(data), default=_msgpack_default, option=_option)
 
 
 def _normalize_allowlist(
@@ -907,3 +907,97 @@ def _normalize_module_keys(
         else:
             normalized.add(cast(tuple[str, ...], module))
     return normalized
+
+
+# Dict keys are not passed through _msgpack_default by ormsgpack under
+# OPT_NON_STR_KEYS, so Enum, UUID, date and datetime keys would otherwise
+# be written as plain strings/values. Wrap such keys in a distinctive
+# marker tuple before packing and restore them after unpacking.
+_TYPED_KEY_MARKER = "__langgraph_typed_key__"
+
+
+def _encode_typed_dict_key(key: Any) -> Any:
+    if isinstance(key, Enum):
+        return (
+            _TYPED_KEY_MARKER,
+            "enum",
+            key.__class__.__module__,
+            key.__class__.__name__,
+            key.value,
+        )
+    if isinstance(key, UUID):
+        return (_TYPED_KEY_MARKER, "uuid", key.hex)
+    if isinstance(key, datetime):
+        return (_TYPED_KEY_MARKER, "datetime", key.isoformat())
+    if isinstance(key, date):
+        return (_TYPED_KEY_MARKER, "date", key.isoformat())
+    return key
+
+
+def _decode_typed_dict_key(key: Any) -> Any:
+    if not (
+        isinstance(key, tuple)
+        and len(key) >= 2
+        and key[0] == _TYPED_KEY_MARKER
+    ):
+        return key
+    kind = key[1]
+    try:
+        if kind == "enum" and len(key) == 5:
+            module, name, value = key[2], key[3], key[4]
+            cls = getattr(importlib.import_module(module), name)
+            # Only Enum subclasses may be reconstructed, so a crafted
+            # marker cannot invoke an arbitrary callable.
+            if isclass(cls) and issubclass(cls, Enum):
+                return cls(value)
+        elif kind == "uuid" and len(key) == 3:
+            return UUID(hex=key[2])
+        elif kind == "datetime" and len(key) == 3:
+            return datetime.fromisoformat(key[2])
+        elif kind == "date" and len(key) == 3:
+            return date.fromisoformat(key[2])
+    except Exception:
+        pass
+    return key
+
+
+def _prepare_dict_keys(obj: Any, _seen: set[int] | None = None) -> Any:
+    """Recursively wrap typed dict keys before msgpack encoding."""
+    if _seen is None:
+        _seen = set()
+    obj_id = id(obj)
+    if obj_id in _seen:
+        return obj
+    _seen.add(obj_id)
+    try:
+        if isinstance(obj, dict):
+            return {
+                _encode_typed_dict_key(k): _prepare_dict_keys(v, _seen)
+                for k, v in obj.items()
+            }
+        if isinstance(obj, (list, tuple, set, frozenset)):
+            return type(obj)(_prepare_dict_keys(item, _seen) for item in obj)
+        return obj
+    finally:
+        _seen.discard(obj_id)
+
+
+def _restore_dict_keys(obj: Any, _seen: set[int] | None = None) -> Any:
+    """Recursively restore typed dict keys after msgpack decoding."""
+    if _seen is None:
+        _seen = set()
+    obj_id = id(obj)
+    if obj_id in _seen:
+        return obj
+    _seen.add(obj_id)
+    try:
+        if isinstance(obj, dict):
+            return {
+                _decode_typed_dict_key(k): _restore_dict_keys(v, _seen)
+                for k, v in obj.items()
+            }
+        if isinstance(obj, (list, tuple, set, frozenset)):
+            return type(obj)(_restore_dict_keys(item, _seen) for item in obj)
+        return obj
+    finally:
+        _seen.discard(obj_id)
