@@ -324,6 +324,25 @@ EXT_NUMPY_ARRAY = 6
 EXT_DELTA_SNAPSHOT = 7
 
 
+def _pydantic_v2_fields(obj: Any) -> dict[str, Any]:
+    """Return one level of a pydantic v2 model's fields.
+
+    Unlike obj.model_dump(), this does not recursively convert nested
+    models to plain dicts. Nested values are left as-is so that msgpack
+    encodes them through _msgpack_default with their own type, which
+    preserves e.g. a Document in ToolMessage.artifact (typed Any)
+    and a subclass stored in a base-typed field.
+    """
+    data: dict[str, Any] = {}
+    for name in getattr(type(obj), "model_fields", {}):
+        if hasattr(obj, name):
+            data[name] = getattr(obj, name)
+    for name, value in getattr(obj, "__dict__", {}).items():
+        if not name.startswith("_"):
+            data.setdefault(name, value)
+    return data
+
+
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
     if isinstance(obj, _DeltaSnapshot):
         return ormsgpack.Ext(EXT_DELTA_SNAPSHOT, _msgpack_enc(obj.value))
@@ -334,7 +353,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
                 (
                     obj.__class__.__module__,
                     obj.__class__.__name__,
-                    obj.model_dump(),
+                    _pydantic_v2_fields(obj),
                     "model_validate_json",
                 ),
             ),
