@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import os
+import random
 import re
 from collections.abc import Mapping
 from datetime import tzinfo
@@ -192,6 +193,15 @@ def _validate_reconnect_location(base_url: httpx.URL, location: str) -> str:
             f"(origin {loc_origin}) does not match base URL origin {base_origin}"
         )
     return location
+
+
+def _reconnect_delay(attempt: int, *, base: float, cap: float) -> float:
+    """Seconds to wait before reconnect attempt `attempt` (0-based).
+
+    Exponential backoff capped at `cap`, plus up to 25% jitter.
+    """
+    delay = min(cap, base * (2**attempt))
+    return delay + random.uniform(0, delay * 0.25)
 
 
 def _provided_vals(d: Mapping[str, Any]) -> dict[str, Any]:

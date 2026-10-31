@@ -4346,6 +4346,25 @@ def test_enum_node_names():
     assert graph.invoke({"foo": "hello"}) == {"foo": "hello", "bar": "hello!"}
 
 
+@pytest.mark.parametrize("stream_mode", ["tasks", "debug"])
+def test_failing_task_result_is_streamed_before_the_error(stream_mode: str) -> None:
+    class State(TypedDict):
+        x: str
+
+    def failing(state: State) -> State:
+        raise ValueError("boom")
+
+    graph = StateGraph(State).add_node("failing", failing).add_edge(START, "failing")
+    errors = []
+    with pytest.raises(ValueError, match="boom"):
+        for chunk in graph.compile().stream({"x": ""}, stream_mode=stream_mode):
+            payload = chunk["payload"] if stream_mode == "debug" else chunk
+            if "error" in payload:
+                errors.append(payload["error"])
+
+    assert [type(error) for error in errors] == [ValueError]
+
+
 def test_debug_retry(sync_checkpointer: BaseCheckpointSaver):
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
@@ -4408,6 +4427,52 @@ def test_debug_retry(sync_checkpointer: BaseCheckpointSaver):
 
         history_parent_conf = lax_normalize_config(history.parent_config)
         assert stream_parent_conf == history_parent_conf
+
+
+def test_interrupt_after_streams_the_checkpoint_it_pauses_on(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        x: int
+
+    graph = (
+        StateGraph(State)
+        .add_node("one", lambda state: {"x": 1})
+        .add_node("two", lambda state: {"x": 2})
+        .add_edge(START, "one")
+        .add_edge("one", "two")
+        .compile(checkpointer=sync_checkpointer, interrupt_after=["one"])
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    checkpoints = list(graph.stream({"x": 0}, config, stream_mode="checkpoints"))
+
+    state = graph.get_state(config)
+    assert checkpoints[-1]["config"] == state.config
+    assert checkpoints[-1]["next"] == ["two"]
+
+
+def test_recursion_limit_streams_the_last_checkpoint_saved(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        x: int
+
+    graph = (
+        StateGraph(State)
+        .add_node("loop", lambda state: {"x": state["x"] + 1})
+        .add_edge(START, "loop")
+        .add_edge("loop", "loop")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = {"configurable": {"thread_id": "1"}, "recursion_limit": 3}
+    checkpoints = []
+
+    with pytest.raises(GraphRecursionError):
+        for chunk in graph.stream({"x": 0}, config, stream_mode="checkpoints"):
+            checkpoints.append(chunk)
+
+    assert checkpoints[-1]["config"] == graph.get_state(config).config
 
 
 def test_debug_subgraphs(
@@ -5932,9 +5997,9 @@ def test_no_redundant_put_writes_for_cached_task(
     put_writes_task_ids: list[str] = []
     orig = PregelLoop.put_writes
 
-    def spy(self, task_id, writes):
+    def spy(self, task_id, writes, **kwargs):
         put_writes_task_ids.append(task_id)
-        return orig(self, task_id, writes)
+        return orig(self, task_id, writes, **kwargs)
 
     with patch.object(PregelLoop, "put_writes", spy):
         result = workflow.invoke(Command(resume="ans"), config=config)
@@ -6880,6 +6945,22 @@ def test_named_tasks_functional() -> None:
     ]
 
 
+def test_invoke_tags_reach_a_node_three_subgraphs_deep_once() -> None:
+    class State(TypedDict):
+        copies: int
+
+    def leaf(state: State, config: RunnableConfig) -> State:
+        return {"copies": config["tags"].count("my-tag")}
+
+    graph = StateGraph(State).add_node("leaf", leaf).add_edge(START, "leaf").compile()
+    for _ in range(3):
+        graph = (
+            StateGraph(State).add_node("sub", graph).add_edge(START, "sub").compile()
+        )
+
+    assert graph.invoke({"copies": 0}, {"tags": ["my-tag"]}) == {"copies": 1}
+
+
 def test_tags_stream_mode_messages() -> None:
     model = GenericFakeChatModel(messages=iter(["foo"]), tags=["meow"])
     graph = (
@@ -7737,6 +7818,8 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
 def test_parallel_interrupts_double(sync_checkpointer: BaseCheckpointSaver) -> None:
     # --- CHILD GRAPH ---
 
+    answered: Counter[str] = Counter()
+
     class ChildState(BaseModel):
         prompt: str = Field(..., description="What is going to be asked to the user?")
         human_input: str | None = Field(None, description="What the human said")
@@ -7746,6 +7829,7 @@ def test_parallel_interrupts_double(sync_checkpointer: BaseCheckpointSaver) -> N
 
     def get_human_input(state: ChildState):
         human_input = interrupt(state.prompt)
+        answered["human"] += 1
 
         return dict(
             human_inputs=[human_input],  # update parent state
@@ -7753,6 +7837,7 @@ def test_parallel_interrupts_double(sync_checkpointer: BaseCheckpointSaver) -> N
 
     def get_dolphin_input(state: ChildState):
         human_input = interrupt(state.prompt)
+        answered["dolphin"] += 1
 
         return dict(
             human_inputs=[human_input],  # update parent state
@@ -7846,6 +7931,7 @@ def test_parallel_interrupts_double(sync_checkpointer: BaseCheckpointSaver) -> N
 
     assert invokes == 5
     assert len(events) == 5
+    assert answered == {"human": 2, "dolphin": 2}
 
 
 def test_pregel_loop_refcount():
@@ -8862,6 +8948,39 @@ def test_subgraph_streaming_sync() -> None:
 
     assert result["last_chunk"].content == "today."
     assert result["num_chunks"] == 9
+
+
+def test_subgraph_streaming_node_output_messages_sync() -> None:
+    """Messages returned by a node (not streamed by an LLM) are emitted when a
+    graph is explicitly streamed with `stream_mode="messages"` inside a node."""
+
+    def respond(state: MessagesState) -> dict:
+        return {"messages": [AIMessage("hi there", id="ai1")]}
+
+    subgraph = (
+        StateGraph(MessagesState)
+        .add_node("respond", respond)
+        .add_edge(START, "respond")
+        .compile()
+    )
+    msgs = {"messages": [("user", "hello")]}
+
+    top_level = [msg for msg, _ in subgraph.stream(msgs, stream_mode="messages")]
+
+    def parent_node(state: MessagesState, config: RunnableConfig) -> dict:
+        nonlocal in_node
+        in_node = [
+            msg for msg, _ in subgraph.stream(msgs, config, stream_mode="messages")
+        ]
+        return {}
+
+    in_node: list = []
+    StateGraph(MessagesState).add_node("parent", parent_node).add_edge(
+        START, "parent"
+    ).compile().invoke(msgs)
+
+    assert [m.content for m in top_level] == ["hi there"]
+    assert [m.content for m in in_node] == ["hi there"]
 
 
 def test_get_graph_nonterminal_last_step_source(snapshot: SnapshotAssertion) -> None:

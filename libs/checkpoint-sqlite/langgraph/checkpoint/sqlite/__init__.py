@@ -539,7 +539,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         thread_id = str(config["configurable"]["thread_id"])
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = get_checkpoint_id(config)
-        if checkpoint_id is None:
+        if not checkpoint_id:
             target = self.get_tuple(config)
             if target is None:
                 return {ch: {"writes": []} for ch in channels}

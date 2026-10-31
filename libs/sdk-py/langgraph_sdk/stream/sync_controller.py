@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import random
 import threading
 import time
 from dataclasses import dataclass, field
@@ -13,6 +12,11 @@ from typing import Any
 
 from langchain_protocol import Event, SubscribeParams
 
+from langgraph_sdk._shared.utilities import _reconnect_delay
+from langgraph_sdk.stream.errors import (
+    is_non_retryable_stream_error,
+    stream_error_frame,
+)
 from langgraph_sdk.stream.subscription import compute_union_filter, filter_covers
 from langgraph_sdk.stream.transport import (
     SyncEventStreamHandle,
@@ -167,6 +171,13 @@ class SyncStreamController:
                 return
             try:
                 for event in self._dedup_iter(shared.events):
+                    if (frame_error := stream_error_frame(event)) is not None:
+                        _logger.warning(
+                            "Thread %s event stream failed: %s",
+                            self._transport.thread_id,
+                            frame_error,
+                        )
+                        continue
                     with self._lock:
                         if self._closed:
                             break
@@ -190,7 +201,11 @@ class SyncStreamController:
                     continue  # rotation happened; pick up new stream
                 # No rotation — check if this was a transport drop
             err = shared.error()
-            if err is not None and not self._closed:
+            if (
+                err is not None
+                and not is_non_retryable_stream_error(err)
+                and not self._closed
+            ):
                 if self._reconnect_shared_stream():
                     continue
             break
@@ -198,25 +213,6 @@ class SyncStreamController:
         with self._lock:
             for sub in self._subscriptions.values():
                 sub.queue.put(None)
-
-    def _reconnect_shared_stream(self) -> bool:
-        with self._lock:
-            base_filter = self._shared_stream_filter
-        if base_filter is None:
-            return False
-        for _ in range(self._max_reconnect_attempts):
-            with self._lock:
-                if self._closed:
-                    return False
-                params = self._filter_with_since(base_filter)
-            try:
-                new_stream = self._transport.open_event_stream(params)
-            except Exception:
-                continue
-            with self._lock:
-                self._shared_stream = new_stream
-            return True
-        return False
 
     def _compute_current_union(
         self, extra: SubscribeParams | None = None
@@ -286,17 +282,20 @@ class SyncStreamController:
 
     def _reconnect_sleep(self, attempt: int) -> None:
         """Sleep with exponential backoff + jitter before a reconnect attempt."""
-        base = self._reconnect_backoff_base
-        cap = self._reconnect_backoff_cap
-        delay = min(cap, base * (2**attempt))
-        jitter = random.uniform(0, delay * 0.25)
-        time.sleep(delay + jitter)
+        time.sleep(
+            _reconnect_delay(
+                attempt,
+                base=self._reconnect_backoff_base,
+                cap=self._reconnect_backoff_cap,
+            )
+        )
 
     def _reconnect_shared_stream(self) -> bool:
         """Attempt to reopen the shared stream after a transport drop.
 
         Returns True if a new stream was successfully opened, False if all
-        reconnect attempts were exhausted or the controller was closed.
+        reconnect attempts were exhausted, the server rejected the stream with a
+        non-retryable 4xx, or the controller was closed.
         """
         base_filter = self._shared_stream_filter
         if base_filter is None:
@@ -317,6 +316,8 @@ class SyncStreamController:
                         old.close()
                 return True
             except Exception as err:
+                if is_non_retryable_stream_error(err):
+                    return False
                 _logger.debug("sync reconnect attempt %d failed: %r", attempt, err)
         return False
 

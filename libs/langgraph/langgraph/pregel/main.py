@@ -97,6 +97,7 @@ from langgraph._internal._runnable import (
     Runnable,
     RunnableLike,
     RunnableSeq,
+    _is_stream_handler,
     coerce_to_runnable,
 )
 from langgraph._internal._timeout import coerce_timeout_policy
@@ -137,6 +138,7 @@ from langgraph.pregel._checkpoint import (
     copy_checkpoint,
     create_checkpoint,
     create_checkpoint_plan_for_update_state_api,
+    delta_channels_overwritten,
     delta_channels_with_pending_writes,
     empty_checkpoint,
     get_updated_channels_from_tasks,
@@ -152,6 +154,7 @@ from langgraph.pregel._loop import (
 from langgraph.pregel._messages import (
     StreamMessagesHandler,
     StreamMessagesHandlerV2,
+    ensure_message_ids,
 )
 from langgraph.pregel._read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel._retry import RetryPolicy
@@ -200,11 +203,6 @@ from langgraph.types import (
 )
 from langgraph.typing import ContextT, InputT, OutputT, StateT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
-
-try:
-    from langchain_core.tracers._streaming import _StreamingCallbackHandler
-except ImportError:
-    _StreamingCallbackHandler = None  # type: ignore
 
 __all__ = ("NodeBuilder", "Pregel")
 
@@ -1766,6 +1764,7 @@ class Pregel(
                     get_next_version=checkpointer.get_next_version,
                     channels_to_snapshot=channels_to_snapshot,
                     stored_versions=checkpoint_previous_versions,
+                    trigger_to_nodes=self.trigger_to_nodes,
                 )
                 next_config = checkpointer.put(
                     checkpoint_config,
@@ -1788,12 +1787,31 @@ class Pregel(
                     )
 
                 if input_writes := deque(map_input(self.input_channels, values)):
+                    _store_or_fork_delta_writes(
+                        checkpointer,
+                        config,
+                        saved,
+                        checkpoint_config,
+                        self.channels,
+                        [
+                            (
+                                str(uuid5(UUID(checkpoint["id"]), INPUT)),
+                                input_writes,
+                                None,
+                            )
+                        ],
+                        fork_pending,
+                        is_first=is_first,
+                    )
                     updated_channels = apply_writes(
                         checkpoint,
                         channels,
                         [PregelTaskWrites((), INPUT, input_writes, [])],
                         checkpointer.get_next_version,
                         self.trigger_to_nodes,
+                    )
+                    fork_pending |= delta_channels_overwritten(
+                        self.channels, input_writes
                     )
 
                     # apply input write to channels
@@ -1822,6 +1840,7 @@ class Pregel(
                         get_next_version=checkpointer.get_next_version,
                         channels_to_snapshot=channels_to_snapshot,
                         stored_versions=checkpoint_previous_versions,
+                        trigger_to_nodes=self.trigger_to_nodes,
                     )
                     next_config = checkpointer.put(
                         checkpoint_config,
@@ -1831,13 +1850,6 @@ class Pregel(
                             checkpoint_previous_versions,
                             next_checkpoint["channel_versions"],
                         ),
-                    )
-
-                    # store the writes
-                    checkpointer.put_writes(
-                        next_config,
-                        input_writes,
-                        str(uuid5(UUID(checkpoint["id"]), INPUT)),
                     )
 
                     return patch_checkpoint_map(
@@ -2033,30 +2045,22 @@ class Pregel(
                     ),
                 )
             updated_channels = get_updated_channels_from_tasks(run_tasks)
-            # The base's other children replay whatever is stored on it, so an
-            # edit of an older checkpoint stores none of its writes there: the
-            # checkpoint written here carries them, its delta channels
-            # snapshotted. Later supersteps address the checkpoint just written.
-            if (
-                is_first
-                and saved is not None
-                and checkpoint_superseded(checkpointer, config, saved)
-            ):
-                fork_pending.update(
-                    ch
-                    for ch in updated_channels
-                    if isinstance(self.channels.get(ch), DeltaChannel)
-                )
-            elif saved is not None:
-                for task_id, task in zip(run_task_ids, run_tasks):
-                    channel_writes = [w for w in task.writes if w[0] != PUSH]
-                    if channel_writes:
-                        checkpointer.put_writes(
-                            checkpoint_config,
-                            channel_writes,
-                            task_id,
-                            **_task_path_kwarg(checkpointer.put_writes, task),
-                        )
+            fork_pending |= delta_channels_overwritten(
+                self.channels, (w for t in run_tasks for w in t.writes)
+            )
+            _store_or_fork_delta_writes(
+                checkpointer,
+                config,
+                saved,
+                checkpoint_config,
+                self.channels,
+                [
+                    (task_id, task.writes, task)
+                    for task_id, task in zip(run_task_ids, run_tasks)
+                ],
+                fork_pending,
+                is_first=is_first,
+            )
             apply_writes(
                 checkpoint,
                 channels,
@@ -2086,6 +2090,7 @@ class Pregel(
                 else None,
                 channels_to_snapshot=channels_to_snapshot,
                 stored_versions=checkpoint_previous_versions,
+                trigger_to_nodes=self.trigger_to_nodes,
             )
             next_config = checkpointer.put(
                 checkpoint_config,
@@ -2258,6 +2263,7 @@ class Pregel(
                     get_next_version=checkpointer.get_next_version,
                     channels_to_snapshot=channels_to_snapshot,
                     stored_versions=checkpoint_previous_versions,
+                    trigger_to_nodes=self.trigger_to_nodes,
                 )
                 next_config = await checkpointer.aput(
                     checkpoint_config,
@@ -2280,12 +2286,31 @@ class Pregel(
                     )
 
                 if input_writes := deque(map_input(self.input_channels, values)):
+                    await _astore_or_fork_delta_writes(
+                        checkpointer,
+                        config,
+                        saved,
+                        checkpoint_config,
+                        self.channels,
+                        [
+                            (
+                                str(uuid5(UUID(checkpoint["id"]), INPUT)),
+                                input_writes,
+                                None,
+                            )
+                        ],
+                        fork_pending,
+                        is_first=is_first,
+                    )
                     updated_channels = apply_writes(
                         checkpoint,
                         channels,
                         [PregelTaskWrites((), INPUT, input_writes, [])],
                         checkpointer.get_next_version,
                         self.trigger_to_nodes,
+                    )
+                    fork_pending |= delta_channels_overwritten(
+                        self.channels, input_writes
                     )
 
                     # apply input write to channels
@@ -2314,6 +2339,7 @@ class Pregel(
                         get_next_version=checkpointer.get_next_version,
                         channels_to_snapshot=channels_to_snapshot,
                         stored_versions=checkpoint_previous_versions,
+                        trigger_to_nodes=self.trigger_to_nodes,
                     )
                     next_config = await checkpointer.aput(
                         checkpoint_config,
@@ -2323,13 +2349,6 @@ class Pregel(
                             checkpoint_previous_versions,
                             next_checkpoint["channel_versions"],
                         ),
-                    )
-
-                    # store the writes
-                    await checkpointer.aput_writes(
-                        next_config,
-                        input_writes,
-                        str(uuid5(UUID(checkpoint["id"]), INPUT)),
                     )
 
                     return patch_checkpoint_map(
@@ -2524,30 +2543,22 @@ class Pregel(
                     ),
                 )
             updated_channels = get_updated_channels_from_tasks(run_tasks)
-            # The base's other children replay whatever is stored on it, so an
-            # edit of an older checkpoint stores none of its writes there: the
-            # checkpoint written here carries them, its delta channels
-            # snapshotted. Later supersteps address the checkpoint just written.
-            if (
-                is_first
-                and saved is not None
-                and await acheckpoint_superseded(checkpointer, config, saved)
-            ):
-                fork_pending.update(
-                    ch
-                    for ch in updated_channels
-                    if isinstance(self.channels.get(ch), DeltaChannel)
-                )
-            elif saved is not None:
-                for task_id, task in zip(run_task_ids, run_tasks):
-                    channel_writes = [w for w in task.writes if w[0] != PUSH]
-                    if channel_writes:
-                        await checkpointer.aput_writes(
-                            checkpoint_config,
-                            channel_writes,
-                            task_id,
-                            **_task_path_kwarg(checkpointer.aput_writes, task),
-                        )
+            fork_pending |= delta_channels_overwritten(
+                self.channels, (w for t in run_tasks for w in t.writes)
+            )
+            await _astore_or_fork_delta_writes(
+                checkpointer,
+                config,
+                saved,
+                checkpoint_config,
+                self.channels,
+                [
+                    (task_id, task.writes, task)
+                    for task_id, task in zip(run_task_ids, run_tasks)
+                ],
+                fork_pending,
+                is_first=is_first,
+            )
             apply_writes(
                 checkpoint,
                 channels,
@@ -2577,6 +2588,7 @@ class Pregel(
                 else None,
                 channels_to_snapshot=channels_to_snapshot,
                 stored_versions=checkpoint_previous_versions,
+                trigger_to_nodes=self.trigger_to_nodes,
             )
             next_config = await checkpointer.aput(
                 checkpoint_config,
@@ -2864,6 +2876,20 @@ class Pregel(
                     for h in callback_manager.inheritable_handlers
                     if not isinstance(h, StreamMessagesHandlerV2)
                 ]
+            if CONFIG_KEY_TASK_ID not in config[CONF]:
+                # Not run as a task (a child invoked with its own thread, say),
+                # this graph's namespace starts at the root, so a caller's
+                # handler would take this graph's events for its own graph's.
+                callback_manager.handlers = [
+                    h
+                    for h in callback_manager.handlers
+                    if not _is_stream_mode_handler(h)
+                ]
+                callback_manager.inheritable_handlers = [
+                    h
+                    for h in callback_manager.inheritable_handlers
+                    if not _is_stream_mode_handler(h)
+                ]
             if "ls_integration" not in callback_manager.metadata:
                 callback_manager.add_metadata({"ls_integration": "langgraph"})
             run_manager = callback_manager.on_chain_start(
@@ -2882,9 +2908,9 @@ class Pregel(
                 )
             # set up subgraph checkpointing
             config = self._own_checkpoint_config(config)
+            stream_handlers: list[StreamMessagesHandler | StreamToolCallHandler] = []
             # set up messages stream mode
             if "messages" in stream_modes:
-                ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
                 use_stream_messages_v2 = bool(
                     version == "v2" and config[CONF].get(CONFIG_KEY_STREAM_MESSAGES_V2)
                 )
@@ -2893,24 +2919,12 @@ class Pregel(
                     if use_stream_messages_v2
                     else StreamMessagesHandler
                 )
-                run_manager.inheritable_handlers.append(
-                    messages_handler_cls(
-                        stream.put,
-                        subgraphs,
-                        parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
-                    )
-                )
+                stream_handlers.append(messages_handler_cls(stream.put, subgraphs))
 
             # set up tools stream mode
             if "tools" in stream_modes:
-                ns_tools = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
-                run_manager.inheritable_handlers.append(
-                    StreamToolCallHandler(
-                        stream.put,
-                        subgraphs,
-                        parent_ns=tuple(ns_tools.split(NS_SEP)) if ns_tools else None,
-                    )
-                )
+                stream_handlers.append(StreamToolCallHandler(stream.put, subgraphs))
+            run_manager.inheritable_handlers.extend(stream_handlers)
 
             # set up custom stream mode
             if "custom" in stream_modes:
@@ -2993,6 +3007,10 @@ class Pregel(
                 cache_policy=self.cache_policy,
                 has_graph_lifecycle_callbacks=bool(graph_callback_manager.handlers),
             ) as loop:
+                # Known only now: the loop numbers the namespace of every
+                # subgraph a task runs after its first.
+                for handler in stream_handlers:
+                    handler.parent_ns = loop.checkpoint_ns
                 emit_graph_lifecycle_events(loop)
                 # create runner
                 runner = PregelRunner(
@@ -3038,7 +3056,7 @@ class Pregel(
                 # with channel updates applied only at the transition between steps.
                 while loop.tick():
                     for task in loop.match_cached_writes():
-                        loop.output_writes(task.id, task.writes, cached=True)
+                        loop.put_writes(task.id, task.writes, cached=True)
                     for _ in runner.tick(
                         [t for t in loop.tasks.values() if not t.writes],
                         timeout=self.step_timeout,
@@ -3275,6 +3293,20 @@ class Pregel(
                     for h in callback_manager.inheritable_handlers
                     if not isinstance(h, StreamMessagesHandlerV2)
                 ]
+            if CONFIG_KEY_TASK_ID not in config[CONF]:
+                # Not run as a task (a child invoked with its own thread, say),
+                # this graph's namespace starts at the root, so a caller's
+                # handler would take this graph's events for its own graph's.
+                callback_manager.handlers = [
+                    h
+                    for h in callback_manager.handlers
+                    if not _is_stream_mode_handler(h)
+                ]
+                callback_manager.inheritable_handlers = [
+                    h
+                    for h in callback_manager.inheritable_handlers
+                    if not _is_stream_mode_handler(h)
+                ]
             if "ls_integration" not in callback_manager.metadata:
                 callback_manager.add_metadata({"ls_integration": "langgraph"})
             run_manager = await callback_manager.on_chain_start(
@@ -3288,18 +3320,10 @@ class Pregel(
                 run_id=run_manager.run_id,
             )
             # if running from astream_log() run each proc with streaming
-            do_stream = (
-                next(
-                    (
-                        True
-                        for h in run_manager.handlers
-                        if isinstance(h, _StreamingCallbackHandler)
-                        and not isinstance(h, StreamMessagesHandler)
-                    ),
-                    False,
-                )
-                if _StreamingCallbackHandler is not None
-                else False
+            do_stream = any(
+                _is_stream_handler(h)
+                and not isinstance(h, (StreamMessagesHandler, StreamToolCallHandler))
+                for h in run_manager.handlers
             )
             if checkpointer is None and durability is not None:
                 warnings.warn(
@@ -3307,10 +3331,9 @@ class Pregel(
                 )
             # set up subgraph checkpointing
             config = self._own_checkpoint_config(config)
+            stream_handlers: list[StreamMessagesHandler | StreamToolCallHandler] = []
             # set up messages stream mode
             if "messages" in stream_modes:
-                # namespace can be None in a root level graph?
-                ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
                 use_stream_messages_v2 = bool(
                     version == "v2" and config[CONF].get(CONFIG_KEY_STREAM_MESSAGES_V2)
                 )
@@ -3319,24 +3342,12 @@ class Pregel(
                     if use_stream_messages_v2
                     else StreamMessagesHandler
                 )
-                run_manager.inheritable_handlers.append(
-                    messages_handler_cls(
-                        stream_put,
-                        subgraphs,
-                        parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
-                    )
-                )
+                stream_handlers.append(messages_handler_cls(stream_put, subgraphs))
 
             # set up tools stream mode
             if "tools" in stream_modes:
-                ns_tools = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
-                run_manager.inheritable_handlers.append(
-                    StreamToolCallHandler(
-                        stream_put,
-                        subgraphs,
-                        parent_ns=tuple(ns_tools.split(NS_SEP)) if ns_tools else None,
-                    )
-                )
+                stream_handlers.append(StreamToolCallHandler(stream_put, subgraphs))
+            run_manager.inheritable_handlers.extend(stream_handlers)
 
             # set up custom stream mode
             def stream_writer(c: Any) -> None:
@@ -3445,6 +3456,10 @@ class Pregel(
                 cache_policy=self.cache_policy,
                 has_graph_lifecycle_callbacks=bool(graph_callback_manager.handlers),
             ) as loop:
+                # Known only now: the loop numbers the namespace of every
+                # subgraph a task runs after its first.
+                for handler in stream_handlers:
+                    handler.parent_ns = loop.checkpoint_ns
                 await aemit_graph_lifecycle_events(loop)
                 # create runner
                 runner = PregelRunner(
@@ -3509,7 +3524,7 @@ class Pregel(
                 try:
                     while loop.tick():
                         for task in await loop.amatch_cached_writes():
-                            loop.output_writes(task.id, task.writes, cached=True)
+                            loop.put_writes(task.id, task.writes, cached=True)
                         async for _ in runner.atick(
                             [t for t in loop.tasks.values() if not t.writes],
                             timeout=self.step_timeout,
@@ -4255,6 +4270,87 @@ def _task_path_kwarg(put_writes: Callable[..., Any], task: PregelTaskWrites) -> 
     return {"task_path": task_path_str(task.path)}
 
 
+_UpdateWrites = Sequence[tuple[str, Sequence[tuple[str, Any]], PregelTaskWrites | None]]
+
+
+def _store_or_fork_delta_writes(
+    checkpointer: BaseCheckpointSaver,
+    config: RunnableConfig,
+    saved: CheckpointTuple | None,
+    checkpoint_config: RunnableConfig,
+    channels: Mapping[str, BaseChannel | ManagedValueSpec],
+    writes: _UpdateWrites,
+    fork_pending: set[str],
+    *,
+    is_first: bool,
+) -> None:
+    """Save an update's writes where its DeltaChannels will read them.
+
+    A DeltaChannel rebuilds its value from the writes saved on a checkpoint's
+    ancestors, so the writes go on the checkpoint the update builds on. If the
+    thread already moved past that checkpoint, its other children would read
+    them too, so the new checkpoint snapshots those channels instead. `writes`
+    holds `(task_id, writes, task)` per task; `task` is `None` for input. A
+    task's `PUSH` writes are left out: the update saves them on the checkpoint
+    it creates. The messages in `writes` get their ids first, in place, as the
+    loop's `put_writes` does, so pass the writes the update then applies.
+    """
+    for _, task_writes, _ in writes:
+        ensure_message_ids(channels, task_writes)
+    if saved is None:
+        return
+    if is_first and checkpoint_superseded(checkpointer, config, saved):
+        fork_pending.update(
+            ch
+            for _, task_writes, _ in writes
+            for ch, _ in task_writes
+            if isinstance(channels.get(ch), DeltaChannel)
+        )
+        return
+    for task_id, task_writes, task in writes:
+        if channel_writes := [w for w in task_writes if w[0] != PUSH]:
+            checkpointer.put_writes(
+                checkpoint_config,
+                channel_writes,
+                task_id,
+                **(_task_path_kwarg(checkpointer.put_writes, task) if task else {}),
+            )
+
+
+async def _astore_or_fork_delta_writes(
+    checkpointer: BaseCheckpointSaver,
+    config: RunnableConfig,
+    saved: CheckpointTuple | None,
+    checkpoint_config: RunnableConfig,
+    channels: Mapping[str, BaseChannel | ManagedValueSpec],
+    writes: _UpdateWrites,
+    fork_pending: set[str],
+    *,
+    is_first: bool,
+) -> None:
+    """Async `_store_or_fork_delta_writes`."""
+    for _, task_writes, _ in writes:
+        ensure_message_ids(channels, task_writes)
+    if saved is None:
+        return
+    if is_first and await acheckpoint_superseded(checkpointer, config, saved):
+        fork_pending.update(
+            ch
+            for _, task_writes, _ in writes
+            for ch, _ in task_writes
+            if isinstance(channels.get(ch), DeltaChannel)
+        )
+        return
+    for task_id, task_writes, task in writes:
+        if channel_writes := [w for w in task_writes if w[0] != PUSH]:
+            await checkpointer.aput_writes(
+                checkpoint_config,
+                channel_writes,
+                task_id,
+                **(_task_path_kwarg(checkpointer.aput_writes, task) if task else {}),
+            )
+
+
 def _update_task_id(checkpoint_id: str, i: int) -> str:
     """Task id for the `i`th update of a superstep that has no task to reuse.
 
@@ -4359,6 +4455,10 @@ def _coerce_checkpoint_values(payload: Any, mapper: Callable[[Any], Any]) -> Non
         and _START not in payload.get("next", ())
     ):
         payload["values"] = mapper(payload["values"])
+
+
+def _is_stream_mode_handler(handler: object) -> bool:
+    return isinstance(handler, (StreamMessagesHandler, StreamToolCallHandler))
 
 
 def _resolve_parent_ns(

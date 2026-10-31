@@ -228,6 +228,10 @@ def draw_graph(
             metadata["__interrupt"] = "before"
         elif name in interrupt_after_nodes:
             metadata["__interrupt"] = "after"
+        # Duck-typed so core doesn't import ToolNode from langgraph-prebuilt.
+        tools_by_name = getattr(node.bound, "tools_by_name", None)
+        if isinstance(tools_by_name, Mapping) and tools_by_name:
+            metadata["__tools"] = list(tools_by_name)
         graph.add_node(node.bound, name, metadata=metadata or None)
     # add start node
     if START not in nodes:

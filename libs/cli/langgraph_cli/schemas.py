@@ -373,6 +373,27 @@ class EncryptionConfig(TypedDict, total=False):
     """
 
 
+class PriorityConfig(TypedDict, total=False):
+    """Configuration for custom run priority logic.
+
+    Allows you to decide each thread's priority settings with a Python function
+    that the server calls at the first run on a thread with no settings, which
+    can come long after the thread was created."""
+
+    path: str
+    """Required. Path to an instance of the Priority() class that registers an assign function.
+
+    Format: "path/to/file.py:my_priority"
+
+    Example:
+        {
+            "priority": {
+                "path": "./priority.py:my_priority"
+            }
+        }
+    """
+
+
 class CorsConfig(TypedDict, total=False):
     """Specifies Cross-Origin Resource Sharing (CORS) rules for your server.
 
@@ -753,6 +774,13 @@ class Config(TypedDict, total=False):
     Allows you to implement custom encryption for sensitive data stored in the database.
     """
 
+    priority: PriorityConfig | None
+    """Optional. Custom run priority config, including the path to your Python priority logic.
+
+    Allows you to decide each thread's priority settings at the first run on a thread with no settings,
+    which can come long after the thread was created.
+    """
+
     http: HttpConfig | None
     """Optional. Configuration for the built-in HTTP server, controlling which custom routes are exposed
     and how cross-origin requests are handled.
@@ -784,6 +812,7 @@ __all__ = [
     "CheckpointerConfig",
     "AuthConfig",
     "EncryptionConfig",
+    "PriorityConfig",
     "HttpConfig",
     "MiddlewareOrders",
     "Distros",

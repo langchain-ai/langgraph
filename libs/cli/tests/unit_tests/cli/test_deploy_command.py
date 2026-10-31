@@ -52,6 +52,8 @@ ARCHIVE = ("/tmp/src.tgz", 2048, "langgraph.json")
 OBJECT_PATH = "tarballs/src.tgz"
 PLATFORM_FORMAT = "{{.Os}}/{{.Architecture}}"
 DIGESTS_FORMAT = "{{json .RepoDigests}}"
+CONTEXT_HOST_FORMAT = "{{.Endpoints.docker.Host}}"
+CONTEXT_HOST = "unix:///Users/dev/.docker/run/docker.sock"
 NOT_A_CLI_DEPLOYMENT = (
     "push token is only available for 'internal_docker' source deployments"
 )
@@ -93,6 +95,8 @@ class ControlPlaneDouble:
     timeline: list[str]
     existing_deployments: list[dict] = field(default_factory=list)
     push_token_status: int = 200
+    push_token_extra: dict = field(default_factory=dict)
+    upload_url_extra: dict = field(default_factory=dict)
     create_error: str | None = None
     listeners: list[dict] = field(default_factory=list)
     listeners_by_id: dict[str, dict] = field(default_factory=dict)
@@ -108,7 +112,11 @@ class ControlPlaneDouble:
     def _respond(self, request: httpx.Request) -> httpx.Response:
         method, path = request.method, request.url.path
         if (method, path) == ("GET", "/v2/listeners"):
-            return httpx.Response(200, json={"resources": self.listeners})
+            offset = int(request.url.params.get("offset", 0))
+            limit = int(request.url.params.get("limit", 20))
+            return httpx.Response(
+                200, json={"resources": self.listeners[offset : offset + limit]}
+            )
         if method == "GET" and path.startswith("/v2/listeners/"):
             listener_id = path.rsplit("/", 1)[-1]
             if not _looks_like_a_uuid(listener_id):
@@ -147,11 +155,21 @@ class ControlPlaneDouble:
             if self.push_token_status != 200:
                 return httpx.Response(self.push_token_status, text=NOT_A_CLI_DEPLOYMENT)
             return httpx.Response(
-                200, json={"token": PUSH_TOKEN, "registry_url": REGISTRY_URL}
+                200,
+                json={
+                    "token": PUSH_TOKEN,
+                    "registry_url": REGISTRY_URL,
+                    **self.push_token_extra,
+                },
             )
         if path.endswith("/upload-url"):
             return httpx.Response(
-                200, json={"upload_url": SIGNED_UPLOAD_URL, "object_path": OBJECT_PATH}
+                200,
+                json={
+                    "upload_url": SIGNED_UPLOAD_URL,
+                    "object_path": OBJECT_PATH,
+                    **self.upload_url_extra,
+                },
             )
         if method == "PATCH":
             return httpx.Response(200, json={"tenant_id": "tenant-1"})
@@ -186,6 +204,8 @@ class DockerCommand:
 class DockerDouble:
     timeline: list[str]
     failing_pushes: int = 0
+    context_lookup_fails: bool = False
+    context_host: str = CONTEXT_HOST
     builds: list[dict] = field(default_factory=list)
     commands: list[DockerCommand] = field(default_factory=list)
 
@@ -229,6 +249,10 @@ class DockerDouble:
         if "push" in args and self.failing_pushes > 0:
             self.failing_pushes -= 1
             raise click.exceptions.Exit(1)
+        if CONTEXT_HOST_FORMAT in args:
+            if self.context_lookup_fails:
+                raise click.exceptions.Exit(1)
+            return f"{self.context_host}\n", None
         if PLATFORM_FORMAT in args:
             return "linux/amd64\n", None
         if DIGESTS_FORMAT in args:
@@ -238,6 +262,8 @@ class DockerDouble:
 
     @staticmethod
     def _verb(args: tuple[str, ...]) -> str:
+        if CONTEXT_HOST_FORMAT in args:
+            return "inspect-context"
         if PLATFORM_FORMAT in args:
             return "inspect-platform"
         if DIGESTS_FORMAT in args:
@@ -260,7 +286,7 @@ class DeployProject:
     control_plane: ControlPlaneDouble
     docker: DockerDouble
     timeline: list[str]
-    uploads: list[tuple[str, str, int]]
+    uploads: list[tuple[str, str, int, dict[str, str] | None]]
 
     def run(self, *args: str, host_url: str = CONTROL_PLANE_URL) -> Result:
         return CliRunner().invoke(
@@ -286,22 +312,32 @@ def deploy_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DeployPro
         json.dumps({"graphs": {"agent": "agent.py:graph"}, "dependencies": ["."]})
     )
     monkeypatch.chdir(tmp_path)
-    for name in ("LANGSMITH_TENANT_ID", "LANGSMITH_ENDPOINT", "LANGGRAPH_HOST_URL"):
+    for name in (
+        "LANGSMITH_TENANT_ID",
+        "LANGSMITH_ENDPOINT",
+        "LANGGRAPH_HOST_URL",
+        "DOCKER_HOST",
+    ):
         monkeypatch.delenv(name, raising=False)
 
     timeline: list[str] = []
     control_plane = ControlPlaneDouble(timeline)
     docker = DockerDouble(timeline)
-    uploads: list[tuple[str, str, int]] = []
+    uploads: list[tuple[str, str, int, dict[str, str] | None]] = []
 
     @contextmanager
     def fake_create_archive(config_path: Path, config: dict) -> Iterator[tuple]:
         timeline.append("create_archive")
         yield ARCHIVE
 
-    def fake_upload(signed_url: str, file_path: str, file_size: int) -> None:
+    def fake_upload(
+        signed_url: str,
+        file_path: str,
+        file_size: int,
+        upload_headers: dict[str, str] | None,
+    ) -> None:
         timeline.append("upload_archive")
-        uploads.append((signed_url, file_path, file_size))
+        uploads.append((signed_url, file_path, file_size, upload_headers))
 
     monkeypatch.setattr(deploy_module, "_no_input", False)
     monkeypatch.setattr(deploy_module, "_emitter", None)
@@ -319,8 +355,46 @@ def deploy_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DeployPro
     )
     monkeypatch.setattr(deploy_module.platform, "machine", lambda: "x86_64")
     monkeypatch.setattr(archive_module, "create_archive", fake_create_archive)
-    monkeypatch.setattr(deploy_module, "_upload_to_gcs", fake_upload)
+    monkeypatch.setattr(deploy_module, "_upload_source_tarball", fake_upload)
     return DeployProject(control_plane, docker, timeline, uploads)
+
+
+@pytest.mark.parametrize("build_mode", ["--no-remote", "--remote"])
+@pytest.mark.parametrize(
+    ("detail", "expects_dev_hint"),
+    [
+        ("Scale to zero deployments are not supported in AWS environments", True),
+        ("No eligible cluster is currently available to host this deployment.", False),
+    ],
+)
+def test_create_failure_preserves_backend_error_and_only_hints_for_aws_rejection(
+    deploy_project: DeployProject, build_mode: str, detail: str, expects_dev_hint: bool
+) -> None:
+    deploy_project.control_plane.create_error = detail
+
+    result = deploy_project.run(build_mode)
+
+    assert result.exit_code == 1, result.output
+    assert detail in result.output
+    assert ("Use --deployment-type dev instead." in result.output) is expects_dev_hint
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "deployment_type": "dev_zero"
+    }
+    assert deploy_project.timeline == [LIST_DEPLOYMENTS, CREATE_DEPLOYMENT]
+
+
+@pytest.mark.parametrize("build_mode", ["--no-remote", "--remote"])
+def test_aws_serverless_creation_succeeds_when_backend_accepts_it(
+    deploy_project: DeployProject, build_mode: str
+) -> None:
+    result = deploy_project.run(
+        build_mode, host_url="https://aws.api.host.langchain.com"
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "deployment_type": "dev_zero"
+    }
 
 
 def test_first_local_deploy_creates_then_builds_pushes_and_updates_in_order(
@@ -334,6 +408,7 @@ def test_first_local_deploy_creates_then_builds_pushes_and_updates_in_order(
         CREATE_DEPLOYMENT,
         "docker build",
         _push_token(CREATED_ID),
+        "docker inspect-context",
         "docker login",
         "docker tag",
         "docker push",
@@ -343,15 +418,41 @@ def test_first_local_deploy_creates_then_builds_pushes_and_updates_in_order(
     assert "Deployment updated" in result.output
 
 
-def test_first_local_deploy_creates_an_internal_docker_deployment(
-    deploy_project: DeployProject,
+@pytest.mark.parametrize(
+    ("deployment_type", "wire_type"),
+    [
+        ("serverless", "dev_zero"),
+        ("dedicated", "prod"),
+        ("dev", "dev"),
+        ("prod", "prod"),
+    ],
+)
+@pytest.mark.parametrize("build_mode", ["--no-remote", "--remote"])
+def test_deployment_type_aliases(
+    deploy_project: DeployProject, deployment_type: str, wire_type: str, build_mode: str
 ) -> None:
-    deploy_project.run("--no-remote")
+    result = deploy_project.run(build_mode, "--deployment-type", deployment_type)
 
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "deployment_type": wire_type
+    }
+
+
+@pytest.mark.parametrize(
+    ("build_mode", "source"),
+    [("--no-remote", "internal_docker"), ("--remote", "internal_source")],
+)
+def test_first_deploy_defaults_to_serverless(
+    deploy_project: DeployProject, build_mode: str, source: str
+) -> None:
+    result = deploy_project.run(build_mode)
+
+    assert result.exit_code == 0, result.output
     assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT] == {
         "name": "my-app",
-        "source": "internal_docker",
-        "source_config": {"deployment_type": "dev"},
+        "source": source,
+        "source_config": {"deployment_type": "dev_zero"},
         "source_revision_config": {},
         "secrets": [],
     }
@@ -363,7 +464,7 @@ def test_first_local_deploy_creates_an_internal_docker_deployment(
         pytest.param(
             "arm64",
             ("docker", "buildx", "build"),
-            ("--platform", "linux/amd64", "--load", "--progress=quiet"),
+            ("--platform", "linux/amd64", "--load", "--progress=plain"),
             id="apple_silicon_cross_builds_for_linux_amd64",
         ),
         pytest.param(
@@ -400,7 +501,7 @@ def test_local_deploy_logs_in_with_the_control_plane_push_token(
 
     login = deploy_project.docker.command("login")
     assert login.args[:2] == ("docker", "--config")
-    assert login.args[3:] == (
+    assert login.args[-5:] == (
         "login",
         "-u",
         "oauth2accesstoken",
@@ -408,6 +509,95 @@ def test_local_deploy_logs_in_with_the_control_plane_push_token(
         "registry.example.com",
     )
     assert login.kwargs["input"] == f"{PUSH_TOKEN}\n"
+
+
+def test_local_deploy_logs_in_and_pushes_through_the_active_docker_context(
+    deploy_project: DeployProject,
+) -> None:
+    """The temporary config has no current context, so without the active
+    context's endpoint Docker would push through /var/run/docker.sock."""
+    result = deploy_project.run("--no-remote")
+
+    assert result.exit_code == 0, result.output
+    for verb in ("login", "push"):
+        args = deploy_project.docker.command(verb).args
+        assert args[3:5] == ("--host", CONTEXT_HOST), verb
+
+
+def test_local_deploy_leaves_an_explicit_docker_host_to_docker(
+    deploy_project: DeployProject, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DOCKER_HOST", "tcp://127.0.0.1:2375")
+
+    result = deploy_project.run("--no-remote")
+
+    assert result.exit_code == 0, result.output
+    for verb in ("login", "push"):
+        assert "--host" not in deploy_project.docker.command(verb).args, verb
+
+
+def test_local_deploy_keeps_dockers_default_when_the_context_lookup_fails(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.docker.context_lookup_fails = True
+
+    result = deploy_project.run("--no-remote")
+
+    assert result.exit_code == 0, result.output
+    assert "--host" not in deploy_project.docker.command("push").args
+
+
+def test_local_deploy_ignores_a_context_without_a_docker_endpoint(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.docker.context_host = "<no value>"
+
+    result = deploy_project.run("--no-remote")
+
+    assert result.exit_code == 0, result.output
+    assert "--host" not in deploy_project.docker.command("push").args
+
+
+def test_local_deploy_tells_the_control_plane_it_honors_registry_usernames(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.run("--no-remote")
+
+    assert deploy_project.control_plane.bodies[_push_token(CREATED_ID)] == {
+        "supports_registry_username": True
+    }
+
+
+ECR_REPOSITORY = "123456789012.dkr.ecr.us-east-2.amazonaws.com/lsd/agent-1"
+ECR_PUSH_TOKEN_FIELDS = {"username": "AWS", "repository_url": ECR_REPOSITORY}
+
+
+def test_local_deploy_logs_in_with_the_username_the_control_plane_returns(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.push_token_extra = ECR_PUSH_TOKEN_FIELDS
+
+    deploy_project.run("--no-remote")
+
+    login = deploy_project.docker.command("login")
+    assert login.args[-5:] == (
+        "login",
+        "-u",
+        "AWS",
+        "--password-stdin",
+        "123456789012.dkr.ecr.us-east-2.amazonaws.com",
+    )
+
+
+def test_local_deploy_pushes_to_exactly_the_returned_repository(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.push_token_extra = ECR_PUSH_TOKEN_FIELDS
+
+    deploy_project.run("--no-remote")
+
+    tag = deploy_project.docker.command("tag")
+    assert tag.args[-1] == f"{ECR_REPOSITORY}:latest"
 
 
 def test_local_deploy_tags_the_build_into_the_token_registry(
@@ -458,6 +648,7 @@ def test_prebuilt_image_is_validated_and_pushed_without_a_build(
     assert deploy_project.docker.builds == []
     assert deploy_project.docker.verbs() == [
         "docker inspect-platform",
+        "docker inspect-context",
         "docker login",
         "docker tag",
         "docker push",
@@ -523,6 +714,9 @@ def test_deployment_not_created_by_the_cli_gets_an_actionable_error(
 def test_remote_build_creates_an_internal_source_deployment_and_uploads_the_archive(
     deploy_project: DeployProject,
 ) -> None:
+    upload_headers = {"Content-Type": "application/gzip", "x-ms-blob-type": "BlockBlob"}
+    deploy_project.control_plane.upload_url_extra = {"upload_headers": upload_headers}
+
     result = deploy_project.run("--remote", "--install-command", "yarn install")
 
     assert result.exit_code == 0, result.output
@@ -537,7 +731,12 @@ def test_remote_build_creates_an_internal_source_deployment_and_uploads_the_arch
     assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source"] == (
         "internal_source"
     )
-    assert deploy_project.uploads == [(SIGNED_UPLOAD_URL, ARCHIVE[0], ARCHIVE[1])]
+    assert deploy_project.control_plane.bodies[_upload_url(CREATED_ID)] == {
+        "supports_upload_headers": True
+    }
+    assert deploy_project.uploads == [
+        (SIGNED_UPLOAD_URL, ARCHIVE[0], ARCHIVE[1], upload_headers)
+    ]
     assert deploy_project.control_plane.bodies[_patch(CREATED_ID)] == {
         "revision_source": "internal_source",
         "source_revision_config": {
@@ -918,6 +1117,100 @@ def test_self_hosted_control_plane_places_when_asked(
     }
 
 
+def test_image_pull_secret_is_included_in_resource_spec_on_create(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run(
+        "--push-to",
+        PUSH_REPOSITORY,
+        "--image-pull-secret",
+        "regcred",
+        "--image-pull-secret",
+        "other-secret",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {
+            "image_pull_secrets": [
+                {"name": "regcred"},
+                {"name": "other-secret"},
+            ],
+        },
+    }
+
+
+def test_image_pull_secret_works_with_image_uri_too(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run(
+        "--image-uri", EXTERNAL_DIGEST, "--image-pull-secret", "regcred"
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {"image_pull_secrets": [{"name": "regcred"}]},
+    }
+
+
+def test_image_pull_secret_without_push_to_or_image_uri_is_refused(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run("--image-pull-secret", "regcred")
+
+    assert result.exit_code != 0
+    assert "only apply when creating a deployment with --push-to" in result.output
+    assert deploy_project.timeline == []
+
+
+def test_an_invalid_image_pull_secret_name_is_rejected_before_any_docker_work(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run(
+        "--push-to", PUSH_REPOSITORY, "--image-pull-secret", "Not_Valid!"
+    )
+
+    assert result.exit_code != 0
+    assert "not a valid Kubernetes" in result.output
+    assert deploy_project.docker.verbs() == []
+    assert deploy_project.timeline == []
+
+
+def test_image_pull_secret_cannot_update_an_existing_deployment(
+    deploy_project: DeployProject,
+) -> None:
+    result = deploy_project.run(
+        "--deployment-id",
+        "dep-1",
+        "--push-to",
+        PUSH_REPOSITORY,
+        "--image-pull-secret",
+        "regcred",
+    )
+
+    assert result.exit_code != 0
+    assert "--image-pull-secret" in result.output
+    assert "dep-1" in result.output
+    assert deploy_project.timeline == []
+
+
+def test_image_pull_secret_cannot_update_a_deployment_found_by_name(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.existing_deployments = [
+        {"id": "dep-ext", "name": "my-app", "source": "external_docker"}
+    ]
+
+    result = deploy_project.run(
+        "--image-uri", EXTERNAL_DIGEST, "--image-pull-secret", "regcred"
+    )
+
+    assert result.exit_code != 0
+    assert "--image-pull-secret" in result.output
+    assert deploy_project.docker.verbs() == []
+    assert _patch("dep-ext") not in deploy_project.timeline
+
+
 def test_updating_a_deployment_never_looks_up_listeners(
     deploy_project: DeployProject,
 ) -> None:
@@ -1018,14 +1311,16 @@ def test_listener_flags_without_push_to_make_no_call_at_all(
     assert deploy_project.timeline == []
 
 
-def test_a_truncated_listener_page_says_so(deploy_project: DeployProject) -> None:
+def test_listeners_beyond_the_first_page_are_counted(
+    deploy_project: DeployProject,
+) -> None:
     deploy_project.control_plane.listeners = [
         {
             "id": str(uuid.UUID(int=index)),
             "compute_id": "cluster",
             "compute_config": {"k8s_namespaces": ["agents"]},
         }
-        for index in range(100)
+        for index in range(101)
     ]
 
     result = deploy_project.run(
@@ -1033,7 +1328,8 @@ def test_a_truncated_listener_page_says_so(deploy_project: DeployProject) -> Non
     )
 
     assert result.exit_code != 0
-    assert "first 100" in result.output
+    assert "... and 91 more" in result.output
+    assert "first 100" not in result.output
 
 
 def test_a_managed_build_in_a_listener_workspace_points_at_push_to(

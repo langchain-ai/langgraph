@@ -60,7 +60,7 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         typ: The value type (e.g. `list`, `dict`). Inferred automatically
             from the outer type when used inside `Annotated[T, DeltaChannel(...)]`.
         snapshot_frequency: Every Nth update to this channel writes a snapshot
-            blob (default `1000`). Must be a positive int.
+            blob (default `100`). Must be a positive int.
     """
 
     __slots__ = ("value", "reducer", "snapshot_frequency")
@@ -71,7 +71,7 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         reducer: Callable[[Any, Sequence[Any]], Any],
         typ: type[Value] | None = None,
         *,
-        snapshot_frequency: int = 1000,
+        snapshot_frequency: int = 100,
     ) -> None:
         if snapshot_frequency <= 0:
             raise ValueError(

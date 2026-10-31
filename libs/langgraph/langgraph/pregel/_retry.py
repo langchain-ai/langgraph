@@ -7,7 +7,7 @@ import sys
 import threading
 import time
 import weakref
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
@@ -34,6 +34,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_THREAD_ID,
     CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
     NS_SEP,
+    RETURN,
 )
 from langgraph._internal._runnable import create_task_in_config_context
 from langgraph._internal._timeout import sync_timeout_unsupported
@@ -686,8 +687,6 @@ async def arun_with_retry(
     task: PregelExecutableTask,
     retry_policy: Sequence[RetryPolicy] | None,
     stream: bool = False,
-    match_cached_writes: Callable[[], Awaitable[Sequence[PregelExecutableTask]]]
-    | None = None,
     configurable: dict[str, Any] | None = None,
 ) -> None:
     """Run a task asynchronously with retries."""
@@ -711,11 +710,6 @@ async def arun_with_retry(
                 )
             },
         )
-    if match_cached_writes is not None and task.cache_key is not None:
-        for t in await match_cached_writes():
-            if t is task:
-                # if the task is already cached, return
-                return
     while True:
         runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
         if isinstance(runtime, Runtime):
@@ -740,15 +734,14 @@ async def arun_with_retry(
                 if stream:
                     async for _ in task.proc.astream(task.input, config):
                         pass
-                    break
+                    return _return_value(task)
                 return await task.proc.ainvoke(task.input, config)
             result = await _arun_with_timeout(
                 task, config, resolved_timeout, attempt_ctx, stream=stream
             )
             _finish_timed_attempt(config, attempt_ctx)
             if stream:
-                # if successful, end
-                break
+                return _return_value(task)
             return result
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
@@ -836,6 +829,12 @@ async def arun_with_retry(
             )
             # signal subgraphs to resume (if available)
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
+
+
+def _return_value(task: PregelExecutableTask) -> Any:
+    # Streaming drains the task instead of returning its result, so a caller
+    # awaiting a `@task` needs the value the task wrote.
+    return next((value for channel, value in task.writes if channel == RETURN), None)
 
 
 def _should_retry_on(retry_policy: RetryPolicy, exc: Exception) -> bool:

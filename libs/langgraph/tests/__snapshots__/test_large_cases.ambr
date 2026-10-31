@@ -133,6 +133,11 @@
             "ToolNode"
           ],
           "name": "tools"
+        },
+        "metadata": {
+          "__tools": [
+            "search_api"
+          ]
         }
       },
       {
@@ -221,6 +226,11 @@
             "ToolNode"
           ],
           "name": "tools"
+        },
+        "metadata": {
+          "__tools": [
+            "search_api"
+          ]
         }
       },
       {

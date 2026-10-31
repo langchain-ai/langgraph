@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import time
+import weakref
 from collections.abc import Awaitable, Callable, Coroutine
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from contextvars import copy_context
@@ -35,6 +36,13 @@ class Submit(Protocol[P, T]):
         __next_tick__: bool = False,
         **kwargs: P.kwargs,
     ) -> concurrent.futures.Future[T]: ...
+
+
+# Futures whose exception a node's error handler took over; the executors
+# don't re-raise them on exit.
+SKIP_RERAISE_SET: weakref.WeakSet[concurrent.futures.Future | asyncio.Future] = (
+    weakref.WeakSet()
+)
 
 
 class BackgroundExecutor(AbstractContextManager):
@@ -111,7 +119,7 @@ class BackgroundExecutor(AbstractContextManager):
         if exc_type is None:
             # re-raise the first exception that occurred in a task
             for task, (_, reraise) in tasks.items():
-                if not reraise:
+                if not reraise or task in SKIP_RERAISE_SET:
                     continue
                 try:
                     task.result()
@@ -202,7 +210,7 @@ class AsyncBackgroundExecutor(AbstractAsyncContextManager):
         if exc_type is None:
             # re-raise the first exception that occurred in a task
             for task, (_, reraise) in tasks.items():
-                if not reraise:
+                if not reraise or task in SKIP_RERAISE_SET:
                     continue
                 try:
                     if exc := task.exception():

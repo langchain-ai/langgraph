@@ -16,6 +16,7 @@ from langgraph_cli.deploy import (
     BuildAndPush,
     ById,
     ByName,
+    CreateOnlySettings,
     CustomerRegistrySource,
     DockerBuildCommand,
     ExistingDeployment,
@@ -32,8 +33,10 @@ from langgraph_cli.deploy import (
     _Emitter,
     _env_without_deployment_name,
     _parse_env_from_config,
+    _print_deployment_result,
     _resolve_env_path,
     _resolve_pushed_image_digest,
+    _resource_spec,
     _select_source,
     _validate_prebuilt_image,
     find_deployment_by_name,
@@ -46,7 +49,9 @@ from langgraph_cli.image_reference import ImageReference
 
 class TestDockerConfigForToken:
     def test_creates_config_json(self):
-        with _docker_config_for_token("us-docker.pkg.dev", "my-token") as cfg:
+        with _docker_config_for_token(
+            "us-docker.pkg.dev", "my-token", "oauth2accesstoken"
+        ) as cfg:
             config_path = os.path.join(cfg, "config.json")
             assert os.path.isfile(config_path)
             with open(config_path) as f:
@@ -54,13 +59,26 @@ class TestDockerConfigForToken:
             expected_auth = base64.b64encode(b"oauth2accesstoken:my-token").decode()
             assert data == {"auths": {"us-docker.pkg.dev": {"auth": expected_auth}}}
 
+    def test_uses_the_given_username(self):
+        with _docker_config_for_token(
+            "123456789012.dkr.ecr.us-east-2.amazonaws.com", "ecr-password", "AWS"
+        ) as cfg:
+            with open(os.path.join(cfg, "config.json")) as f:
+                data = json.load(f)
+        expected_auth = base64.b64encode(b"AWS:ecr-password").decode()
+        assert data["auths"]["123456789012.dkr.ecr.us-east-2.amazonaws.com"] == {
+            "auth": expected_auth
+        }
+
     def test_tempdir_cleaned_up(self):
-        with _docker_config_for_token("registry.example.com", "tok") as cfg:
+        with _docker_config_for_token(
+            "registry.example.com", "tok", "oauth2accesstoken"
+        ) as cfg:
             assert os.path.isdir(cfg)
         assert not os.path.exists(cfg)
 
     def test_different_registries(self):
-        with _docker_config_for_token("gcr.io", "token123") as cfg:
+        with _docker_config_for_token("gcr.io", "token123", "oauth2accesstoken") as cfg:
             with open(os.path.join(cfg, "config.json")) as f:
                 data = json.load(f)
             assert "gcr.io" in data["auths"]
@@ -519,6 +537,39 @@ class TestEmitterTextMode:
         assert "URL: https://app.test" in lines
 
 
+@pytest.mark.parametrize(
+    ("deployment", "expected_url_lines"),
+    [
+        pytest.param(
+            {
+                "id": "dep-1",
+                "source_config": {"custom_url": "https://agent.example.com"},
+            },
+            ["URL: https://agent.example.com"],
+            id="custom_url_is_printed",
+        ),
+        pytest.param(
+            {"id": "dep-1", "source_config": {}}, [], id="no_custom_url_no_line"
+        ),
+    ],
+)
+def test_a_deployed_result_prints_the_deployment_url(
+    capsys, monkeypatch, deployment, expected_url_lines
+):
+    class FakeClient:
+        def get_deployment(self, deployment_id: str) -> dict:
+            return deployment
+
+    monkeypatch.setattr(deploy_mod, "_emitter", None)
+
+    _print_deployment_result(
+        FakeClient(), "dep-1", "DEPLOYED", dashboard_label="Deployment dashboard"
+    )
+
+    lines = [line.strip() for line in capsys.readouterr().out.splitlines()]
+    assert [line for line in lines if line.startswith("URL:")] == expected_url_lines
+
+
 # ---------------------------------------------------------------------------
 # --no-input guard on _create_host_backend_client
 # ---------------------------------------------------------------------------
@@ -593,9 +644,9 @@ class TestDockerBuildCommand:
                 False,
                 DockerBuildCommand(
                     ("docker", "buildx", "build"),
-                    ("--platform", "linux/amd64", "--load", "--progress=quiet"),
+                    ("--platform", "linux/amd64", "--load", "--progress=plain"),
                 ),
-                id="other_hosts_cross_build_quietly",
+                id="other_hosts_capture_plain_build_logs",
             ),
             pytest.param(
                 "arm64",
@@ -621,6 +672,7 @@ class TestSelectSource:
         "tag": None,
         "remote_build_flag": None,
         "placement": RequestedPlacement(),
+        "image_pull_secrets": (),
         "selector": ByName("my-app"),
     }
     REPOSITORY = "registry.example.com/app"
@@ -636,7 +688,7 @@ class TestSelectSource:
                         reference=ImageReference(REPOSITORY, "latest"),
                         prebuilt_image=None,
                     ),
-                    requested_placement=RequestedPlacement(),
+                    create_only=CreateOnlySettings(RequestedPlacement()),
                 ),
                 id="push_to_selects_the_external_source_with_the_default_tag",
             ),
@@ -648,7 +700,7 @@ class TestSelectSource:
                         reference=ImageReference(REPOSITORY, "v2"),
                         prebuilt_image=None,
                     ),
-                    requested_placement=RequestedPlacement(),
+                    create_only=CreateOnlySettings(RequestedPlacement()),
                 ),
                 id="push_to_keeps_a_tag_given_in_the_reference",
             ),
@@ -660,7 +712,7 @@ class TestSelectSource:
                         reference=ImageReference(REPOSITORY, "v3"),
                         prebuilt_image=None,
                     ),
-                    requested_placement=RequestedPlacement(),
+                    create_only=CreateOnlySettings(RequestedPlacement()),
                 ),
                 id="tag_flag_composes_with_push_to",
             ),
@@ -672,7 +724,7 @@ class TestSelectSource:
                         reference=ImageReference(REPOSITORY, "latest"),
                         prebuilt_image="app:dev",
                     ),
-                    requested_placement=RequestedPlacement(),
+                    create_only=CreateOnlySettings(RequestedPlacement()),
                 ),
                 id="prebuilt_image_is_retagged_for_push_to_without_docker_checks",
             ),
@@ -687,16 +739,35 @@ class TestSelectSource:
                         reference=ImageReference(REPOSITORY, "latest"),
                         prebuilt_image=None,
                     ),
-                    requested_placement=RequestedPlacement("listener-1", "agents"),
+                    create_only=CreateOnlySettings(
+                        RequestedPlacement("listener-1", "agents")
+                    ),
                 ),
                 id="push_to_carries_the_requested_placement",
+            ),
+            pytest.param(
+                {
+                    "push_to": REPOSITORY,
+                    "image_pull_secrets": ("regcred", "other-secret"),
+                },
+                True,
+                CustomerRegistrySource(
+                    image=BuildAndPush(
+                        reference=ImageReference(REPOSITORY, "latest"),
+                        prebuilt_image=None,
+                    ),
+                    create_only=CreateOnlySettings(
+                        RequestedPlacement(), ("regcred", "other-secret")
+                    ),
+                ),
+                id="push_to_carries_the_image_pull_secrets",
             ),
             pytest.param(
                 {"image_uri": f"{REPOSITORY}@sha256:abc123"},
                 True,
                 CustomerRegistrySource(
                     image=PublishedImage(f"{REPOSITORY}@sha256:abc123"),
-                    requested_placement=RequestedPlacement(),
+                    create_only=CreateOnlySettings(RequestedPlacement()),
                 ),
                 id="image_uri_selects_the_published_image_source_by_digest",
             ),
@@ -705,7 +776,7 @@ class TestSelectSource:
                 False,
                 CustomerRegistrySource(
                     image=PublishedImage(f"{REPOSITORY}@sha256:abc123"),
-                    requested_placement=RequestedPlacement(),
+                    create_only=CreateOnlySettings(RequestedPlacement()),
                 ),
                 id="image_uri_needs_no_local_docker_and_is_trimmed",
             ),
@@ -717,7 +788,9 @@ class TestSelectSource:
                 False,
                 CustomerRegistrySource(
                     image=PublishedImage(f"{REPOSITORY}@sha256:abc123"),
-                    requested_placement=RequestedPlacement("listener-1", "agents"),
+                    create_only=CreateOnlySettings(
+                        RequestedPlacement("listener-1", "agents")
+                    ),
                 ),
                 id="image_uri_carries_the_requested_placement",
             ),
@@ -805,6 +878,11 @@ class TestSelectSource:
                 {"placement": RequestedPlacement(k8s_namespace="agents")},
                 "only apply when creating a deployment with --push-to",
                 id="namespace_without_push_to",
+            ),
+            pytest.param(
+                {"image_pull_secrets": ("regcred",)},
+                "only apply when creating a deployment with --push-to",
+                id="image_pull_secret_without_push_to",
             ),
             pytest.param(
                 {"image_uri": REPOSITORY, "push_to": REPOSITORY},
@@ -1166,6 +1244,7 @@ def test_finding_a_deployment_by_name_narrows_the_search_for_every_server_versio
         "name": "agent",
         "name_contains": "agent",
         "limit": "100",
+        "offset": "0",
     }
     assert found == ExistingDeployment("dep-1", "github")
 
@@ -1193,20 +1272,29 @@ def test_a_server_that_ignores_the_exact_name_filter_never_matches_another_deplo
     assert find_deployment_by_name(client, "brand-new-agent") is None
 
 
-def test_a_full_page_without_a_match_refuses_to_claim_the_name_is_free():
-    page = [
-        {"id": f"dep-{index}", "name": f"other-agent-{index}"} for index in range(100)
-    ]
-    client = HostBackendClient(
-        "https://api.example.com",
-        "key",
-        transport=httpx.MockTransport(
-            lambda req: httpx.Response(200, json={"resources": page})
+def test_a_deployment_beyond_the_first_page_is_found_by_name():
+    deployments = [
+        *(
+            {"id": f"dep-{index}", "name": f"other-agent-{index}"}
+            for index in range(100)
         ),
+        {"id": "dep-target", "name": "agent", "source": "external_docker"},
+    ]
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        offset = int(req.url.params["offset"])
+        limit = int(req.url.params["limit"])
+        return httpx.Response(
+            200, json={"resources": deployments[offset : offset + limit]}
+        )
+
+    client = HostBackendClient(
+        "https://api.example.com", "key", transport=httpx.MockTransport(handler)
     )
 
-    with pytest.raises(click.ClickException, match="--deployment-id"):
-        find_deployment_by_name(client, "brand-new-agent")
+    assert find_deployment_by_name(client, "agent") == ExistingDeployment(
+        "dep-target", "external_docker"
+    )
 
 
 def test_a_partial_page_without_a_match_means_the_name_is_free():
@@ -1243,7 +1331,7 @@ def test_a_deployment_id_with_listener_flags_is_refused_without_probing_docker(
 
     monkeypatch.setattr(deploy_mod, "can_build_locally", explode)
 
-    with pytest.raises(click.UsageError, match="--deployment-id"):
+    with pytest.raises(click.UsageError, match="dep-1"):
         _select_source(
             push_to="registry.example.com/app",
             image=None,
@@ -1252,8 +1340,75 @@ def test_a_deployment_id_with_listener_flags_is_refused_without_probing_docker(
             tag=None,
             remote_build_flag=None,
             placement=RequestedPlacement(listener_id="listener-1"),
+            image_pull_secrets=(),
             selector=ById("dep-1"),
         )
+
+
+def test_a_deployment_id_with_image_pull_secrets_is_refused_without_probing_docker(
+    monkeypatch,
+):
+    def explode() -> tuple[bool, str | None]:
+        raise AssertionError("docker must not be probed for an argv-only conflict")
+
+    monkeypatch.setattr(deploy_mod, "can_build_locally", explode)
+
+    with pytest.raises(click.UsageError, match="dep-1"):
+        _select_source(
+            push_to="registry.example.com/app",
+            image=None,
+            image_uri=None,
+            image_name=None,
+            tag=None,
+            remote_build_flag=None,
+            placement=RequestedPlacement(),
+            image_pull_secrets=("regcred",),
+            selector=ById("dep-1"),
+        )
+
+
+class TestResourceSpec:
+    def test_no_secrets_keeps_the_operator_default(self):
+        assert _resource_spec(()) == {}
+
+    def test_secrets_become_local_object_references_in_order(self):
+        assert _resource_spec(("regcred", "other-secret")) == {
+            "image_pull_secrets": [
+                {"name": "regcred"},
+                {"name": "other-secret"},
+            ],
+        }
+
+
+class TestCreateOnlySettings:
+    @pytest.mark.parametrize(
+        "name",
+        [
+            pytest.param("Bad_Name", id="uppercase_and_underscore"),
+            pytest.param("", id="empty"),
+            pytest.param("-leading-hyphen", id="leading_hyphen"),
+            pytest.param("a" * 254, id="too_long"),
+        ],
+    )
+    def test_an_invalid_secret_name_is_rejected_up_front(self, name):
+        with pytest.raises(click.UsageError, match="not a valid Kubernetes"):
+            CreateOnlySettings(RequestedPlacement(), (name,))
+
+    def test_a_valid_secret_name_is_accepted(self):
+        CreateOnlySettings(RequestedPlacement(), ("regcred-1.example",))
+
+    def test_ensure_not_existing_mentions_the_api_and_ui_for_pull_secrets(self):
+        settings = CreateOnlySettings(RequestedPlacement(), ("regcred",))
+        with pytest.raises(click.UsageError, match="API or the LangSmith UI"):
+            settings.ensure_not_existing("dep-1")
+
+    def test_ensure_not_existing_keeps_the_placement_message_unchanged(self):
+        settings = CreateOnlySettings(RequestedPlacement(listener_id="listener-1"))
+        with pytest.raises(
+            click.UsageError,
+            match="Listener and namespace are fixed when a deployment is created",
+        ):
+            settings.ensure_not_existing("dep-1")
 
 
 class TestPlacementOnAKnownListener:
@@ -1303,3 +1458,59 @@ class TestPlacementOnAKnownListener:
     def test_refuses_and_names_the_namespaces(self, request_, listener, message):
         with pytest.raises(click.UsageError, match=message):
             request_.on(listener)
+
+
+DEFAULT_UPLOAD_HEADERS = {
+    "content-type": "application/gzip",
+    "content-length": "7",
+    "x-goog-content-length-range": "0,209715200",
+}
+
+
+@pytest.mark.parametrize(
+    ("upload_headers", "expected"),
+    [
+        pytest.param(None, DEFAULT_UPLOAD_HEADERS, id="missing_sends_defaults"),
+        pytest.param({}, DEFAULT_UPLOAD_HEADERS, id="empty_sends_defaults"),
+        pytest.param(
+            {
+                "content-type": "application/x-gzip",
+                "x-ms-blob-type": "BlockBlob",
+                "content-length": "1",
+            },
+            {
+                "content-type": "application/x-gzip",
+                "x-ms-blob-type": "BlockBlob",
+                "content-length": "7",
+            },
+            id="returned_headers_replace_defaults",
+        ),
+        pytest.param(
+            {"x-ms-blob-type": "BlockBlob"},
+            {
+                "content-type": "application/gzip",
+                "x-ms-blob-type": "BlockBlob",
+                "content-length": "7",
+            },
+            id="returned_headers_keep_a_content_type",
+        ),
+    ],
+)
+def test_source_upload_sends_the_headers_the_signed_url_requires(
+    tmp_path, mocker, upload_headers, expected
+):
+    archive = tmp_path / "source.tar.gz"
+    archive.write_bytes(b"tarball")
+    sent = []
+    mocker.patch(
+        "langgraph_cli.deploy._get_emitter", return_value=MagicMock(json_mode=True)
+    )
+    mocker.patch(
+        "urllib.request.urlopen", side_effect=lambda req, timeout: sent.append(req)
+    )
+
+    deploy_mod._upload_source_tarball(
+        "https://storage.example/signed", str(archive), 7, upload_headers
+    )
+
+    assert {name.lower(): value for name, value in sent[0].header_items()} == expected

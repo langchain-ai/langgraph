@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
 import warnings
 from collections.abc import Callable, Iterator, Mapping
 from typing import Any, cast
@@ -13,9 +14,14 @@ import orjson
 
 from langgraph_sdk._shared.utilities import (
     _orjson_default,
+    _reconnect_delay,
     _validate_reconnect_location,
 )
-from langgraph_sdk.errors import _raise_for_status_typed
+from langgraph_sdk.errors import (
+    InternalServerError,
+    RateLimitError,
+    _raise_for_status_typed,
+)
 from langgraph_sdk.schema import QueryParamTypes, StreamPart
 from langgraph_sdk.sse import SSEDecoder, iter_lines_raw
 
@@ -146,7 +152,8 @@ class SyncHttpClient:
         on_response: Callable[[httpx.Response], None] | None = None,
         reconnect_limit: int = 5,
     ) -> Any:
-        """Send a request that automatically reconnects to Location header."""
+        """Send a request that reconnects to its Location header if the response is
+        cut off, with backoff between attempts."""
         request_headers, content = _encode_json(json)
         if headers:
             request_headers.update(headers)
@@ -176,13 +183,27 @@ class SyncHttpClient:
                     stacklevel=2,
                 )
                 r.close()
-                return self.request_reconnect(
-                    loc,
-                    "GET",
-                    headers=request_headers,
-                    # don't pass on_response so it's only called once
-                    reconnect_limit=reconnect_limit - 1,
-                )
+                for attempt in range(reconnect_limit):
+                    time.sleep(_reconnect_delay(attempt, base=1.0, cap=5.0))
+                    # A restart or a deploy looks like a refused connection, a
+                    # dropped body, a 429 or a 5xx; other errors won't go away.
+                    try:
+                        return self.request_reconnect(
+                            loc,
+                            "GET",
+                            headers=headers,
+                            # don't pass on_response so it's only called once
+                            reconnect_limit=0,
+                        )
+                    except httpx.HTTPStatusError as err:
+                        status = err.response.status_code
+                        if attempt == reconnect_limit - 1 or (
+                            status != 429 and status < 500
+                        ):
+                            raise
+                    except httpx.TransportError:
+                        if attempt == reconnect_limit - 1:
+                            raise
 
     def stream(
         self,
@@ -220,73 +241,105 @@ class SyncHttpClient:
                 request_headers if reconnect_path is None else reconnect_headers
             )
             if last_event_id is not None:
+                current_headers = {
+                    key: value
+                    for key, value in current_headers.items()
+                    if key.lower() != "last-event-id"
+                }
+            if last_event_id:
                 current_headers["Last-Event-ID"] = last_event_id
+            if reconnect_path is not None and not any(
+                key.lower() == "last-event-id" and value
+                for key, value in current_headers.items()
+            ):
+                warnings.warn(
+                    "Reconnecting without a Last-Event-ID, so events sent while "
+                    "disconnected are not replayed. Only runs created with "
+                    "stream_resumable=True send the event IDs a reconnect resumes "
+                    "from.",
+                    stacklevel=2,
+                )
 
             current_method = method if reconnect_path is None else "GET"
             current_content = content if reconnect_path is None else None
             current_params = params if reconnect_path is None else None
 
-            retry = False
-            with self.client.stream(
-                current_method,
-                reconnect_path or path,
-                headers=current_headers,
-                content=current_content,
-                params=current_params,
-            ) as res:
-                if reconnect_path is None and on_response:
-                    on_response(res)
-                # check status
-                _raise_for_status_typed(res)
-                # check content type
-                content_type = res.headers.get("content-type", "").partition(";")[0]
-                if "text/event-stream" not in content_type:
-                    raise httpx.TransportError(
-                        "Expected response header Content-Type to contain 'text/event-stream', "
-                        f"got {content_type!r}"
-                    )
+            reconnect_cause: httpx.HTTPError | None = None
+            try:
+                with self.client.stream(
+                    current_method,
+                    reconnect_path or path,
+                    headers=current_headers,
+                    content=current_content,
+                    params=current_params,
+                ) as res:
+                    if reconnect_path is None and on_response:
+                        on_response(res)
+                    # check status
+                    _raise_for_status_typed(res)
+                    # check content type
+                    content_type = res.headers.get("content-type", "").partition(";")[0]
+                    if "text/event-stream" not in content_type:
+                        raise httpx.TransportError(
+                            "Expected response header Content-Type to contain 'text/event-stream', "
+                            f"got {content_type!r}"
+                        )
 
-                reconnect_location = res.headers.get("location")
-                if reconnect_location:
-                    _validate_reconnect_location(
-                        self.client.base_url, reconnect_location
-                    )
-                    reconnect_path = reconnect_location
+                    reconnect_location = res.headers.get("location")
+                    if reconnect_location:
+                        _validate_reconnect_location(
+                            self.client.base_url, reconnect_location
+                        )
+                        reconnect_path = reconnect_location
 
-                decoder = SSEDecoder()
-                try:
-                    for line in iter_lines_raw(res):
-                        sse = decoder.decode(cast(bytes, line).rstrip(b"\n"))
-                        if sse is not None:
+                    decoder = SSEDecoder(last_event_id=last_event_id)
+                    try:
+                        for line in iter_lines_raw(res):
+                            sse = decoder.decode(cast(bytes, line).rstrip(b"\n"))
+                            if sse is not None:
+                                if decoder.last_event_id is not None:
+                                    last_event_id = decoder.last_event_id
+                                if sse.event or decoder.has_data:
+                                    # Progress since the last drop earns a fresh
+                                    # set of reconnect attempts.
+                                    reconnect_attempts = 0
+                                    yield sse
+                    except httpx.HTTPError as err:
+                        # httpx.TransportError inherits from HTTPError, so transient
+                        # disconnects during streaming land here.
+                        if reconnect_path is None:
+                            raise
+                        reconnect_cause = err
+                    else:
+                        if sse := decoder.decode(b""):
                             if decoder.last_event_id is not None:
                                 last_event_id = decoder.last_event_id
-                            if sse.event or sse.data is not None:
+                            if sse.event or decoder.has_data:
+                                # See async stream implementation for rationale on
+                                # skipping empty flush events.
                                 yield sse
-                except httpx.HTTPError:
-                    # httpx.TransportError inherits from HTTPError, so transient
-                    # disconnects during streaming land here.
-                    if reconnect_path is None:
-                        raise
-                    retry = True
-                else:
-                    if sse := decoder.decode(b""):
-                        if decoder.last_event_id is not None:
-                            last_event_id = decoder.last_event_id
-                        if sse.event or sse.data is not None:
-                            # See async stream implementation for rationale on
-                            # skipping empty flush events.
-                            yield sse
-            if retry:
+            except (httpx.TransportError, RateLimitError, InternalServerError) as err:
+                # A reconnect that can't open (connection refused, 429, 5xx or a
+                # non-SSE body) usually means the server is restarting or
+                # mid-deploy, so retry it like a drop. Before the server sends a
+                # Location there is nothing to reconnect to, so raise.
+                if reconnect_path is None:
+                    raise
+                reconnect_cause = err
+            if reconnect_cause is not None:
                 reconnect_attempts += 1
                 if reconnect_attempts > max_reconnect_attempts:
                     raise httpx.TransportError(
                         "Exceeded maximum SSE reconnection attempts"
-                    )
+                    ) from reconnect_cause
+                time.sleep(_reconnect_delay(reconnect_attempts - 1, base=1.0, cap=5.0))
                 continue
             break
 
 
-def _encode_json(json: Any) -> tuple[dict[str, str], bytes]:
+def _encode_json(json: Any) -> tuple[dict[str, str], bytes | None]:
+    if json is None:
+        return {}, None
     body = orjson.dumps(
         json,
         _orjson_default,

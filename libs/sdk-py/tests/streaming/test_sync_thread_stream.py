@@ -35,6 +35,7 @@ from streaming._events import (
     message_text_delta_event,
     message_text_finish_event,
     tasks_start_event,
+    thread_stream_failed_frame,
     tool_finished_event,
     tool_started_event,
     updates_event,
@@ -868,3 +869,196 @@ def test_interleave_projections_data_channel_scoped_to_root_namespace():
             ]
     assert {"scope": "root"} in checkpoints
     assert {"scope": "child"} not in checkpoints
+
+
+def test_sync_lifecycle_clean_eof_fails_the_run_instead_of_blocking():
+    fake = SyncFakeServer()
+    fake.script([lifecycle_started_event(seq=0)])
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            run_done = thread._run_done
+            assert run_done is not None
+            terminal = run_done.result(timeout=2.0)
+
+    assert terminal.status == "errored"
+    assert "ended before terminal" in str(terminal.error)
+
+
+def test_sync_lifecycle_error_frame_becomes_the_run_error():
+    fake = SyncFakeServer()
+    fake.script([lifecycle_event(seq=0, phase="running"), thread_stream_failed_frame()])
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            run_done = thread._run_done
+            assert run_done is not None
+            terminal = run_done.result(timeout=2.0)
+
+    assert terminal.status == "errored"
+    assert (
+        str(terminal.error)
+        == "Protocol error [unknown_error]: Thread event stream failed."
+    )
+
+
+def test_sync_lifecycle_watcher_stops_on_a_404_without_retrying():
+    fake = SyncFakeServer()
+    fake.script_sequence([SyncStreamScript(events=[], status=404)])
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            run_done = thread._run_done
+            assert run_done is not None
+            terminal = run_done.result(timeout=2.0)
+
+    assert isinstance(terminal.error, httpx.HTTPStatusError)
+    assert terminal.error.response.status_code == 404
+    assert len(fake.stream_request_bodies) == 1
+
+
+def test_sync_minted_thread_opens_the_lifecycle_stream_after_run_start():
+    fake = SyncFakeServer()
+    fake.script([lifecycle_completed_event(seq=1)])
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(assistant_id="agent") as thread:
+            assert thread._lifecycle_watcher_thread is None
+            thread.run.start(input={})
+            run_done = thread._run_done
+            assert run_done is not None
+            terminal = run_done.result(timeout=2.0)
+
+    assert terminal.status == "completed"
+
+
+def _sync_new_thread_scripts() -> list[SyncStreamScript]:
+    return [
+        SyncStreamScript(events=[], status=404),
+        SyncStreamScript(events=[lifecycle_completed_event(seq=1)]),
+    ]
+
+
+def test_sync_run_start_restarts_a_watcher_stopped_by_a_404_for_a_new_thread():
+    fake = SyncFakeServer()
+    fake.script_sequence(_sync_new_thread_scripts())
+    fake.set_state({"ok": True})
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-new", assistant_id="agent") as thread:
+            rejected = thread._run_done
+            assert rejected is not None
+            rejected.result(timeout=2.0)
+            thread.run.start(input={})
+            output = thread.output
+
+    assert output == {"ok": True}
+    assert len(fake.stream_request_bodies) == 2
+
+
+def test_sync_lifecycle_watcher_retries_a_404_that_arrives_after_run_start():
+    fake = SyncFakeServer()
+    fake.script_sequence(_sync_new_thread_scripts())
+    fake.set_state({"ok": True})
+    stream_opened = threading.Event()
+    run_started = threading.Event()
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if (
+            request.url.path.endswith("/stream/events")
+            and not fake.stream_request_bodies
+        ):
+            stream_opened.set()
+            run_started.wait(timeout=2.0)
+        return fake._handle(request)
+
+    with httpx.Client(
+        transport=httpx.MockTransport(handle), base_url="http://test"
+    ) as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-new", assistant_id="agent") as thread:
+            assert stream_opened.wait(timeout=2.0)
+            thread.run.start(input={})
+            run_started.set()
+            output = thread.output
+
+    assert output == {"ok": True}
+    assert len(fake.stream_request_bodies) == 2
+
+
+def test_sync_lifecycle_watcher_reports_the_error_frame_when_reconnects_run_out():
+    fake = SyncFakeServer()
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        stream = threads.stream(thread_id="t-1", assistant_id="agent")
+        stream._lifecycle_max_reconnect_attempts = 1
+        fake.script_sequence(
+            [
+                SyncStreamScript(events=[thread_stream_failed_frame()], fail_after=1)
+                for _ in range(stream._lifecycle_max_reconnect_attempts + 1)
+            ]
+        )
+        with stream as thread:
+            run_done = thread._run_done
+            assert run_done is not None
+            terminal = run_done.result(timeout=2.0)
+
+    assert (
+        str(terminal.error)
+        == "Protocol error [unknown_error]: Thread event stream failed."
+    )
+
+
+def test_sync_concurrent_run_starts_start_one_lifecycle_watcher(monkeypatch):
+    real_thread = threading.Thread
+    created_watchers: list[str] = []
+
+    class _SlowToCreateThread(real_thread):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            if kwargs.get("name") == "langgraph-sdk-sync-lifecycle":
+                created_watchers.append(kwargs["name"])
+                time.sleep(0.05)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(threading, "Thread", _SlowToCreateThread)
+    fake = SyncFakeServer()
+    fake.script([lifecycle_completed_event(seq=1)])
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(assistant_id="agent") as thread:
+            barrier = threading.Barrier(2)
+
+            def start_run() -> None:
+                barrier.wait()
+                thread.run.start(input={})
+
+            runners = [real_thread(target=start_run) for _ in range(2)]
+            for runner in runners:
+                runner.start()
+            for runner in runners:
+                runner.join()
+
+    assert len(created_watchers) == 1
+
+
+def test_sync_reconnect_stops_on_a_404(monkeypatch):
+    monkeypatch.setattr(_ctrl_mod.time, "sleep", lambda _delay: None)
+    opened: list[dict[str, Any]] = []
+
+    class _NotFoundTransport(SyncProtocolSseTransport):
+        def open_event_stream(self, params: dict) -> SyncEventStreamHandle:
+            opened.append(params)
+            request = httpx.Request("POST", "http://test/threads/t-1/stream/events")
+            raise httpx.HTTPStatusError(
+                "not found",
+                request=request,
+                response=httpx.Response(404, request=request),
+            )
+
+    with httpx.Client(base_url="http://test") as raw:
+        transport = _NotFoundTransport(client=raw, thread_id="t-1")
+        controller = SyncStreamController(transport, max_reconnect_attempts=5)
+        controller._shared_stream_filter = {"channels": ["values"]}
+        assert controller._reconnect_shared_stream() is False
+
+    assert len(opened) == 1
