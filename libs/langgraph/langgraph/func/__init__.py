@@ -531,8 +531,13 @@ class entrypoint(Generic[ContextT]):
         bound = get_runnable_for_entrypoint(func)
         stream_mode: StreamMode = "updates"
 
-        # get input and output types
-        sig = inspect.signature(func)
+        # get input and output types, resolving string annotations
+        # (e.g. under `from __future__ import annotations`)
+        try:
+            sig = inspect.signature(func, eval_str=True)
+        except Exception:
+            # unresolvable annotations, e.g. imports under TYPE_CHECKING
+            sig = inspect.signature(func)
         first_parameter_name = next(iter(sig.parameters.keys()), None)
         if not first_parameter_name:
             raise ValueError("Entrypoint function must have at least one parameter")
