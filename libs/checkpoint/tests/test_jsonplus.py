@@ -1291,3 +1291,45 @@ def test_msgpack_failed_reconstruction_returns_payload(
     )
 
     assert serde.loads_typed(("msgpack", payload)) == expected
+
+
+class _DictKeyColor(Enum):
+    RED = "red"
+    BLUE = "blue"
+
+
+def test_dict_keys_preserve_enum_uuid_date_datetime_types() -> None:
+    """Enum, UUID, date and datetime dict keys round-trip through a checkpoint."""
+    serde = JsonPlusSerializer()
+    uid = uuid.UUID(int=12345)
+    day = date(2024, 1, 2)
+    moment = datetime(2024, 1, 2, 3, 4, 5)
+    original = {
+        _DictKeyColor.RED: 3,
+        uid: "uuid-value",
+        day: "date-value",
+        moment: "datetime-value",
+        "plain": 1,
+        42: 2,
+        (1, 2): 3,
+    }
+    restored = serde.loads_typed(serde.dumps_typed(original))
+    assert restored == original
+    assert isinstance(list(restored.keys())[0], _DictKeyColor)
+    assert restored[_DictKeyColor.RED] == 3
+    assert isinstance(list(restored.keys())[1], uuid.UUID)
+    assert isinstance(list(restored.keys())[2], date)
+    assert not isinstance(list(restored.keys())[2], datetime)
+    assert isinstance(list(restored.keys())[3], datetime)
+
+
+def test_dict_keys_preserve_types_in_nested_dicts() -> None:
+    serde = JsonPlusSerializer()
+    original = {
+        "outer": {_DictKeyColor.BLUE: "nested"},
+        "items": [{date(2024, 6, 15): "first"}],
+    }
+    restored = serde.loads_typed(serde.dumps_typed(original))
+    assert restored == original
+    assert isinstance(list(restored["outer"].keys())[0], _DictKeyColor)
+    assert isinstance(list(restored["items"][0].keys())[0], date)
