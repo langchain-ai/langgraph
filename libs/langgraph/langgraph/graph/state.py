@@ -1185,6 +1185,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         debug: bool = False,
         name: str | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+        insert_before: Sequence[str] | None = None,
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
@@ -1224,6 +1225,12 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 the standard `StreamTransformer` constructor shape by
                 accepting `scope` as their first argument. Appended after the
                 built-in stream transformers.
+            insert_before: Nodes before which input from `RunControl.submit_input`
+                may be applied mid-run, e.g. an agent's model node.
+
+                !!! warning "Experimental"
+
+                    This parameter may change without notice.
 
         Returns:
             CompiledStateGraph: The compiled `StateGraph`.
@@ -1256,6 +1263,13 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         # assign default values
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
+        if isinstance(insert_before, str):
+            msg = "`insert_before` takes a sequence of node names, not a string"
+            raise TypeError(msg)
+        insert_before = list(insert_before or ())
+        if unknown := [node for node in insert_before if node not in self.nodes]:
+            msg = f"`insert_before` names nodes not in the graph: {unknown}"
+            raise ValueError(msg)
 
         # validate the graph
         self.validate(
@@ -1360,6 +1374,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             checkpointer=checkpointer,
             interrupt_before_nodes=interrupt_before,
             interrupt_after_nodes=interrupt_after,
+            insert_before_nodes=insert_before,
             auto_validate=False,
             debug=debug,
             store=store,
@@ -1440,6 +1455,15 @@ class CompiledStateGraph(
             channels=self.builder.channels,
             name=self.get_name("Output"),
         )
+
+    def _inserted_input_channels(self) -> Sequence[str]:
+        """The graph's input keys: inserted input may write only these."""
+        keys = [
+            key
+            for key, value in self.builder.schemas[self.builder.input_schema].items()
+            if not is_managed_value(value)
+        ]
+        return () if keys == ["__root__"] else keys
 
     def attach_node(self, key: str, node: StateNodeSpec[Any, ContextT] | None) -> None:
         if key == START:
