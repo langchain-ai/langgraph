@@ -1,6 +1,7 @@
 """Deploy command and subcommands for the LangGraph CLI."""
 
 import base64
+import functools
 import json as json_mod
 import os
 import pathlib
@@ -19,6 +20,7 @@ import click.exceptions
 from dotenv import dotenv_values, set_key
 
 import langgraph_cli.config
+from langgraph_cli import langsmith_auth
 from langgraph_cli.analytics import log_command
 from langgraph_cli.config import Config
 from langgraph_cli.constants import DEFAULT_CONFIG
@@ -1982,17 +1984,6 @@ def _create_host_backend_client(
             if val:
                 resolved_api_key = val
                 break
-    if not resolved_api_key:
-        if effective_no_input:
-            raise click.ClickException(
-                "No LangSmith API key found. Set LANGSMITH_API_KEY in the "
-                "environment or .env file."
-            )
-        click.secho(
-            "No LangSmith API key found. Create one at Settings > API Keys in LangSmith.",
-            fg="yellow",
-        )
-        resolved_api_key = click.prompt("Enter LangSmith API key", hide_input=True)
     tenant_id = env_vars.get("LANGSMITH_TENANT_ID") or os.environ.get(
         "LANGSMITH_TENANT_ID"
     )
@@ -2000,8 +1991,31 @@ def _create_host_backend_client(
         "LANGSMITH_ENDPOINT"
     )
     endpoints = ControlPlaneEndpoints.resolve(host_url, langsmith_endpoint)
+
+    access_token: Callable[[], str] | None = None
+    if not resolved_api_key:
+        profile = langsmith_auth.load_profile()
+        api_url = langsmith_auth.resolve_api_url(langsmith_endpoint)
+        if profile.get("api_key"):
+            resolved_api_key = profile["api_key"]
+        else:
+            if not any((profile.get("oauth") or {}).values()):
+                if effective_no_input:
+                    raise click.ClickException(
+                        "No LangSmith credentials found. Set LANGSMITH_API_KEY "
+                        "in the environment or .env file (an API key), or run "
+                        "`langgraph login`."
+                    )
+                click.secho("You are not logged in to LangSmith.", fg="yellow")
+                langsmith_auth.login(api_url)
+                profile = langsmith_auth.load_profile()
+            access_token = functools.partial(langsmith_auth.get_access_token, api_url)
+        tenant_id = tenant_id or profile.get("workspace_id")
     return HostBackendClient(
-        endpoints.control_plane_url, resolved_api_key, tenant_id=tenant_id
+        endpoints.control_plane_url,
+        resolved_api_key,
+        tenant_id=tenant_id,
+        **({"access_token": access_token} if access_token else {}),
     )
 
 
