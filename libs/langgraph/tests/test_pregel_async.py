@@ -7709,6 +7709,31 @@ async def test_named_tasks_functional() -> None:
     ]
 
 
+async def test_named_tasks_sharing_a_function() -> None:
+    async def work(value: int) -> int:
+        return value + 1
+
+    class Qux:
+        async def __call__(self, value: int) -> int:
+            return value * 10
+
+    first = task(work, name="first")
+    second = task(work, name="second")
+    qux = task(Qux(), name="qux")
+
+    @entrypoint()
+    async def workflow(value: int) -> int:
+        return await qux(await second(await first(value)))
+
+    assert work.__name__ == "work"
+    assert [c async for c in workflow.astream(1, stream_mode="updates")] == [
+        {"first": 2},
+        {"second": 3},
+        {"qux": 30},
+        {"workflow": 30},
+    ]
+
+
 @NEEDS_CONTEXTVARS
 async def test_overriding_injectable_args_with_async_task(
     async_store: BaseStore,

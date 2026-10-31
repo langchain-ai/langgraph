@@ -6945,6 +6945,27 @@ def test_named_tasks_functional() -> None:
     ]
 
 
+def test_named_tasks_sharing_a_function() -> None:
+    def work(value: int) -> int:
+        return value + 1
+
+    first = task(work, name="first")
+    second = task(work, name="second")
+
+    @entrypoint()
+    def workflow(value: int) -> int:
+        return second(first(value).result()).result()
+
+    assert work.__name__ == "work"
+    assert first.__name__ == "first"
+    assert second.__name__ == "second"
+    assert list(workflow.stream(1, stream_mode="updates")) == [
+        {"first": 2},
+        {"second": 3},
+        {"workflow": 3},
+    ]
+
+
 def test_invoke_tags_reach_a_node_three_subgraphs_deep_once() -> None:
     class State(TypedDict):
         copies: int

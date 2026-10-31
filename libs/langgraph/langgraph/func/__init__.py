@@ -74,8 +74,15 @@ class _TaskFunction(Generic[P, T]):
                 instance_method = functools.partial(func.__func__, func.__self__)  # type: ignore [union-attr]
                 instance_method.__name__ = name  # type: ignore [attr-defined]
                 func = instance_method
+            elif inspect.isfunction(func) or isinstance(func, functools.partial):
+                # handle regular functions / partials
+                # NOTE: we're wrapping the function instead of renaming it in place,
+                # since the same function may be shared across multiple tasks
+                wrapper = functools.update_wrapper(functools.partial(func), func)
+                wrapper.__name__ = name  # type: ignore [attr-defined]
+                func = wrapper
             else:
-                # handle regular functions / partials / callable classes, etc.
+                # handle callable classes, etc.
                 func.__name__ = name
         self.func = func
         self.retry_policy = retry_policy
