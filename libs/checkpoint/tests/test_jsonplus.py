@@ -22,7 +22,7 @@ import ormsgpack
 import pandas as pd
 import pytest
 from langchain_core.documents.base import Document
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from pydantic import BaseModel, SecretStr
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import SecretStr as SecretStrV1
@@ -912,7 +912,7 @@ def test_msgpack_allowlist_blocks_non_listed(
 ) -> None:
     """Allowlists should block unregistered types even if msgpack is enabled."""
     serde = JsonPlusSerializer(
-        allowed_msgpack_modules=[("tests.test_jsonplus", "MyPydantic")]
+        allowed_msgpack_modules=[("tests.test_jsonplus", "MyPydantic"), ("tests.test_jsonplus", "InnerPydantic")]
     )
 
     obj = AnotherPydantic(foo="nope")
@@ -1005,6 +1005,26 @@ def test_msgpack_strict_allows_langchain_document(
     assert "unregistered" not in caplog.text.lower()
     assert isinstance(result, Document)
     assert result == doc
+
+
+def test_msgpack_toolmessage_artifact_document_round_trip(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A Document in ToolMessage.artifact survives a msgpack round trip.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/9492
+    """
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    doc = Document(page_content="hello", metadata={"k": "v"})
+    msg = ToolMessage(content="result", tool_call_id="call-1", artifact=[doc])
+    caplog.clear()
+    result = serde.loads_typed(serde.dumps_typed(msg))
+    assert "blocked" not in caplog.text.lower()
+    assert "unregistered" not in caplog.text.lower()
+    assert isinstance(result, ToolMessage)
+    assert result == msg
+    assert isinstance(result.artifact[0], Document)
+    assert result.artifact[0] == doc
 
 
 def test_msgpack_regex_safe_type(caplog: pytest.LogCaptureFixture) -> None:
@@ -1213,18 +1233,18 @@ def test_msgpack_safe_types_value_equality(caplog: pytest.LogCaptureFixture) -> 
             assert result == obj, f"Value mismatch for {type(obj)}: {result} != {obj}"
 
 
-def test_msgpack_nested_pydantic_serializes_as_dict(
+def test_msgpack_nested_pydantic_uses_ext_hook(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Nested Pydantic models are serialized via model_dump() as dicts.
+    """Nested Pydantic models go through the ext hook and are reconstructed with their own type.
 
-    This means nested models don't go through the ext hook and don't need
-    to be in the allowlist - only the outer type does.
+    Nested types therefore need to be in the allowlist to avoid being
+    blocked; a blocked nested value falls back to a dict.
     """
 
-    # Only allow outer type - inner is serialized as dict via model_dump()
+    # Allow both types - nested models now go through the ext hook
     serde = JsonPlusSerializer(
-        allowed_msgpack_modules=[("tests.test_jsonplus", "MyPydantic")]
+        allowed_msgpack_modules=[("tests.test_jsonplus", "MyPydantic"), ("tests.test_jsonplus", "InnerPydantic")]
     )
 
     obj = MyPydantic(foo="test", bar=42, inner=InnerPydantic(hello="world"))
@@ -1233,7 +1253,7 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     dumped = serde.dumps_typed(obj)
     result = serde.loads_typed(dumped)
 
-    # No blocking should occur - inner is serialized as dict, not ext
+    # No blocking should occur - both types are allowlisted
     assert "blocked" not in caplog.text.lower()
     assert result == obj
 
