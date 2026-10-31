@@ -3333,20 +3333,37 @@ def test_docker_tag_with_api_version(in_config: bool):
 
 
 @pytest.mark.parametrize("in_config", [False, True])
-@pytest.mark.parametrize("version", ["0.9.0rc1", "0.9.0.dev1"])
-def test_docker_tag_with_prerelease_api_version(version: str, in_config: bool):
+@pytest.mark.parametrize(
+    "runtime,image", [("python", "langgraph-api"), ("node", "langgraphjs-api")]
+)
+@pytest.mark.parametrize(
+    "version,expected",
+    [
+        ("0.9.0rc1", "0.9.0rc1"),
+        ("0.9.0.dev1", "0.9.0.dev1"),
+        ("0.18.0dev11", "0.18.0.dev11"),
+    ],
+)
+def test_docker_tag_with_prerelease_api_version(
+    version: str, expected: str, in_config: bool, runtime: str, image: str
+):
     """Test docker_tag with prerelease and dev api_version values."""
     config = validate_config(
         {
-            "python_version": "3.11",
+            f"{runtime}_version": "3.12" if runtime == "python" else "20",
             "dependencies": ["."],
-            "graphs": {"agent": "./agent.py:graph"},
+            "graphs": {
+                "agent": "./agent.py:graph"
+                if runtime == "python"
+                else "./agent.js:graph"
+            },
             "api_version": version if in_config else None,
         }
     )
 
     tag = docker_tag(config, api_version=version if not in_config else None)
-    assert tag == f"langchain/langgraph-api:{version}-py3.11"
+    suffix = "py3.12" if runtime == "python" else "node20"
+    assert tag == f"langchain/{image}:{expected}-{suffix}"
 
 
 def test_docker_tag_with_compatible_api_version_promotes_to_latest_patch():
@@ -3378,7 +3395,8 @@ def test_docker_tag_with_compatible_api_version_promotes_to_latest_patch():
     assert tag == "langchain/langgraph-api:0.11.1-py3.12-wolfi"
 
 
-def test_docker_tag_with_compatible_api_version_freezes_dev_until_rc():
+@pytest.mark.parametrize("dev_version", ["0.11.0.dev5", "0.11.0dev5"])
+def test_docker_tag_with_compatible_api_version_freezes_dev_until_rc(dev_version: str):
     config = validate_config(
         {
             "python_version": "3.12",
@@ -3391,7 +3409,7 @@ def test_docker_tag_with_compatible_api_version_freezes_dev_until_rc():
     with patch(
         "langgraph_cli.config._get_pypi_versions",
         return_value=[
-            "0.11.0.dev5",
+            dev_version,
             "0.11.0.dev6",
             "0.11.0.dev7",
         ],
