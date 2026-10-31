@@ -201,6 +201,61 @@ def test_resume_with_update_applies_the_update_once(
     assert sorted(graph.get_state(config).values["log"]) == sorted(result["log"])
 
 
+def test_fork_does_not_replay_a_resumed_command_update(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = (
+        StateGraph(State)
+        .add_node("a", lambda state: {"log": ["a"]})
+        .add_node("b", lambda state: {"log": ["b:" + interrupt("ok?")]})
+        .add_edge(START, "a")
+        .add_edge("a", "b")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = _config()
+
+    graph.invoke({"log": ["x"]}, config)
+    paused = graph.get_state(config).config
+    assert graph.get_state(paused).values["log"] == ["x", "a"]
+
+    graph.invoke(Command(resume="yes", update={"log": ["edit"]}), config)
+    assert graph.get_state(config).values["log"] == ["x", "a", "edit", "b:yes"]
+
+    # The update is input to the branch the resume started. A fork from the
+    # checkpoint it resumed must not replay it, while that branch keeps it.
+    graph.invoke(None, paused)
+    assert graph.get_state(config).values["log"] == ["x", "a"]
+    assert graph.invoke(Command(resume="no"), config)["log"] == ["x", "a", "b:no"]
+
+
+@NEEDS_CONTEXTVARS
+async def test_fork_does_not_replay_a_resumed_command_update_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = (
+        StateGraph(State)
+        .add_node("a", lambda state: {"log": ["a"]})
+        .add_node("b", lambda state: {"log": ["b:" + interrupt("ok?")]})
+        .add_edge(START, "a")
+        .add_edge("a", "b")
+        .compile(checkpointer=async_checkpointer)
+    )
+    config = _config()
+
+    await graph.ainvoke({"log": ["x"]}, config)
+    paused = (await graph.aget_state(config)).config
+    assert (await graph.aget_state(paused)).values["log"] == ["x", "a"]
+
+    await graph.ainvoke(Command(resume="yes", update={"log": ["edit"]}), config)
+    state = await graph.aget_state(config)
+    assert state.values["log"] == ["x", "a", "edit", "b:yes"]
+
+    await graph.ainvoke(None, paused)
+    assert (await graph.aget_state(config)).values["log"] == ["x", "a"]
+    result = await graph.ainvoke(Command(resume="no"), config)
+    assert result["log"] == ["x", "a", "b:no"]
+
+
 @pytest.mark.parametrize("checkpoint_id", ["none", "head"])
 def test_resume_at_the_latest_checkpoint_does_not_rerun_finished_task(
     sync_checkpointer: BaseCheckpointSaver, checkpoint_id: str

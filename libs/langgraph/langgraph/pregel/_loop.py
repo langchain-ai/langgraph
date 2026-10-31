@@ -978,7 +978,19 @@ class PregelLoop:
         # checkpoint the thread has moved past. A resume addressed at the
         # thread's latest checkpoint hands their writes back, as without an id.
         self.is_replaying = is_time_traveling or self._addressed_checkpoint_superseded
-        if is_time_traveling:
+        if self._addressed_checkpoint_superseded:
+            # A checkpoint's NULL_TASK_ID channel writes are the input of the
+            # branch that continued from it — a Command's `update` or `goto`.
+            # Starting another branch from it must not replay them: they
+            # produced a different child, and the resume value stored beside
+            # them is dropped too. Keep only the special writes (RESUME, ...).
+            self.checkpoint_pending_writes = [
+                w
+                for w in self.checkpoint_pending_writes
+                if w[1] != RESUME
+                and not (w[0] == NULL_TASK_ID and w[1] not in WRITES_IDX_MAP)
+            ]
+        elif is_time_traveling:
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
             ]
