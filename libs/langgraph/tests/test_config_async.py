@@ -1,3 +1,4 @@
+import warnings
 from collections.abc import Callable
 
 import pytest
@@ -146,3 +147,34 @@ def test_with_config_applies_recursion_limit_equal_to_default(
     builder.add_edge("__start__", "node")
     graph = builder.compile().with_config(recursion_limit=EXPLICIT_DEFAULT_LIMIT + 1)
     assert rebind(graph).config["recursion_limit"] == EXPLICIT_DEFAULT_LIMIT
+
+
+def _graph_with_subgraph() -> Pregel:
+    child = StateGraph(dict)
+    child.add_node("inner", lambda state: state)
+    child.add_edge("__start__", "inner")
+    parent = StateGraph(dict)
+    parent.add_node("sub", child.compile())
+    parent.add_edge("__start__", "sub")
+    return parent.compile()
+
+
+def test_recursion_limit_in_configurable_warns_once() -> None:
+    graph = _graph_with_subgraph()
+    with pytest.warns(UserWarning, match="recursion_limit") as record:
+        graph.invoke({"a": 1}, {"configurable": {"recursion_limit": 5}})
+    assert len([w for w in record if "recursion_limit" in str(w.message)]) == 1
+
+
+async def test_recursion_limit_in_configurable_warns_once_async() -> None:
+    graph = _graph_with_subgraph()
+    with pytest.warns(UserWarning, match="recursion_limit") as record:
+        await graph.ainvoke({"a": 1}, {"configurable": {"recursion_limit": 5}})
+    assert len([w for w in record if "recursion_limit" in str(w.message)]) == 1
+
+
+def test_top_level_recursion_limit_does_not_warn() -> None:
+    graph = _graph_with_subgraph()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        graph.invoke({"a": 1}, {"recursion_limit": 5})

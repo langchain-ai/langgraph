@@ -2660,6 +2660,13 @@ class Pregel(
     ]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
+        # Subgraphs inherit the parent's configurable, so only the root graph warns.
+        if "recursion_limit" in config[CONF] and CONFIG_KEY_TASK_ID not in config[CONF]:
+            warnings.warn(
+                "Ignoring 'recursion_limit' in 'configurable'. Pass it as a top-level "
+                "config key instead: {'recursion_limit': "
+                f"{config[CONF]['recursion_limit']!r}}}."
+            )
         if output_keys is None:
             output_keys = self.stream_channels_asis
         else:
