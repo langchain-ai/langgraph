@@ -3,6 +3,7 @@ import json
 from collections import UserDict
 from collections.abc import Iterable, Mapping
 from datetime import datetime
+from enum import Enum
 from types import MappingProxyType
 from typing import Any
 
@@ -73,6 +74,31 @@ async def test_async_batch_store_resilience() -> None:
     result2 = await async_store.aget(("test", "namespace"), "key")
     assert result2 is not None
     assert result2.value == doc2
+
+
+async def test_async_batch_store_coerces_key_to_str() -> None:
+    """AsyncBatchedBaseStore passes keys to abatch as str, like BaseStore."""
+    ops: list[Op] = []
+
+    class RecordingStore(MockAsyncBatchedStore):
+        async def abatch(self, batch_ops: Iterable[Op]) -> list[Result]:
+            batch_ops = list(batch_ops)
+            ops.extend(batch_ops)
+            return await super().abatch(batch_ops)
+
+    class Key(str, Enum):
+        A = "a"
+
+    store = RecordingStore()
+    await store.aput(("users",), 42, {"v": 1})  # type: ignore[arg-type]
+    await store.aget(("users",), 42)  # type: ignore[arg-type]
+    await store.adelete(("users",), 42)  # type: ignore[arg-type]
+    await store.aput(("users",), Key.A, {"v": 1})
+
+    assert [type(op) for op in ops] == [PutOp, GetOp, PutOp, PutOp]
+    assert [op.key for op in ops] == ["42", "42", "42", Key.A]  # type: ignore[union-attr]
+    # str subclasses are passed through unchanged
+    assert type(ops[-1].key) is Key  # type: ignore[union-attr]
 
 
 def test_get_text_at_path() -> None:

@@ -95,7 +95,7 @@ class AsyncBatchedBaseStore(BaseStore):
                 fut,
                 GetOp(
                     namespace,
-                    key,
+                    _str_key(key),
                     refresh_ttl=_ensure_refresh(self.ttl_config, refresh_ttl),
                 ),
             )
@@ -147,7 +147,11 @@ class AsyncBatchedBaseStore(BaseStore):
             (
                 fut,
                 PutOp(
-                    namespace, key, value, index, ttl=_ensure_ttl(self.ttl_config, ttl)
+                    namespace,
+                    _str_key(key),
+                    value,
+                    index,
+                    ttl=_ensure_ttl(self.ttl_config, ttl),
                 ),
             )
         )
@@ -161,7 +165,7 @@ class AsyncBatchedBaseStore(BaseStore):
         _validate_namespace_labels(namespace)
         self._ensure_task()
         fut = self._loop.create_future()
-        self._aqueue.put_nowait((fut, PutOp(namespace, key, None)))
+        self._aqueue.put_nowait((fut, PutOp(namespace, _str_key(key), None)))
         return await fut
 
     async def alist_namespaces(
@@ -284,6 +288,12 @@ class AsyncBatchedBaseStore(BaseStore):
             ),
             self._loop,
         ).result()
+
+
+def _str_key(key: Any) -> str:
+    # Match `BaseStore`, which stores non-str keys as `str(key)`. str subclasses
+    # (e.g. `class Key(str, Enum)`) are passed through unchanged, as before.
+    return key if isinstance(key, str) else str(key)
 
 
 def _dedupe_ops(values: list[Op]) -> tuple[list[int] | None, list[Op]]:
