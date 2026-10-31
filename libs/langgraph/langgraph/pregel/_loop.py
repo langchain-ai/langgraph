@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import binascii
 import concurrent.futures
+import threading
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import (
@@ -1697,6 +1698,14 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             has_graph_lifecycle_callbacks=has_graph_lifecycle_callbacks,
         )
         self.stack = ExitStack()
+        # A task that calls another task runs `accept_push` on its own worker
+        # thread, registering the new task in `self.tasks`; matching cached
+        # writes then iterates that same dict. Two tasks pushing at once would
+        # otherwise mutate the dict another worker iterates, so every read and
+        # write of `self.tasks` on the sync loop goes through this lock
+        # (re-entrant, because `accept_push` holds it while it calls
+        # `match_cached_writes`).
+        self._tasks_lock = threading.RLock()
         if checkpointer:
             self.checkpointer_get_next_version = checkpointer.get_next_version
             self.checkpointer_put_writes = checkpointer.put_writes
@@ -1730,24 +1739,26 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         if self.cache is None:
             return ()
         matched: list[PregelExecutableTask] = []
-        if cached := {
-            (t.cache_key.ns, t.cache_key.key): t
-            for t in self.tasks.values()
-            if t.cache_key and not t.writes
-        }:
-            for key, values in self.cache.get(tuple(cached)).items():
-                task = cached[key]
-                task.writes.extend(values)
-                matched.append(task)
+        with self._tasks_lock:
+            if cached := {
+                (t.cache_key.ns, t.cache_key.key): t
+                for t in self.tasks.values()
+                if t.cache_key and not t.writes
+            }:
+                for key, values in self.cache.get(tuple(cached)).items():
+                    task = cached[key]
+                    task.writes.extend(values)
+                    matched.append(task)
         return matched
 
     def accept_push(
         self, task: PregelExecutableTask, write_idx: int, call: Call | None = None
     ) -> PregelExecutableTask | None:
-        if pushed := super().accept_push(task, write_idx, call):
-            for task in self.match_cached_writes():
-                self.put_writes(task.id, task.writes, cached=True)
-        return pushed
+        with self._tasks_lock:
+            if pushed := super().accept_push(task, write_idx, call):
+                for task in self.match_cached_writes():
+                    self.put_writes(task.id, task.writes, cached=True)
+            return pushed
 
     def schedule_error_handler(
         self, failed_task: PregelExecutableTask, error: BaseException
@@ -1779,11 +1790,15 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         )
         if handler_task is None:
             return None
-        self.tasks[handler_task.id] = handler_task
-        if self._reapplies_pending_writes:
-            self._reapply_writes_to_succeeded_nodes({handler_task.id: handler_task})
-        for task in self.match_cached_writes():
-            self.put_writes(task.id, task.writes, cached=True)
+        # `schedule_error_handler` runs while sibling tasks may still be pushing
+        # from their worker threads, so register the handler task and match it
+        # against the cache under the same lock as `accept_push`.
+        with self._tasks_lock:
+            self.tasks[handler_task.id] = handler_task
+            if self._reapplies_pending_writes:
+                self._reapply_writes_to_succeeded_nodes({handler_task.id: handler_task})
+            for task in self.match_cached_writes():
+                self.put_writes(task.id, task.writes, cached=True)
         return handler_task
 
     def put_writes(
