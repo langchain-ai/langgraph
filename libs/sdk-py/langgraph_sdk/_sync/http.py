@@ -39,8 +39,17 @@ class SyncHttpClient:
         client (httpx.Client): Underlying HTTPX sync client.
     """
 
-    def __init__(self, client: httpx.Client) -> None:
+    def __init__(
+        self,
+        client: httpx.Client,
+        *,
+        stream_idle_timeout: float | None = None,
+    ) -> None:
         self.client = client
+        # Opt-in bound on how long a streaming response may go without a decoded
+        # event. None keeps today's behaviour: only the per-read timeout applies,
+        # and it is reset by every byte, including server heartbeat comments.
+        self.stream_idle_timeout = stream_idle_timeout
 
     def get(
         self,
@@ -293,6 +302,7 @@ class SyncHttpClient:
                         reconnect_path = reconnect_location
 
                     decoder = SSEDecoder(last_event_id=last_event_id)
+                    last_event = time.monotonic()
                     try:
                         for line in iter_lines_raw(res):
                             sse = decoder.decode(cast(bytes, line).rstrip(b"\n"))
@@ -303,7 +313,19 @@ class SyncHttpClient:
                                     # Progress since the last drop earns a fresh
                                     # set of reconnect attempts.
                                     reconnect_attempts = 0
+                                    last_event = time.monotonic()
                                     yield sse
+                            if (
+                                self.stream_idle_timeout is not None
+                                and time.monotonic() - last_event
+                                > self.stream_idle_timeout
+                            ):
+                                raise httpx.ReadTimeout(
+                                    f"No event on {path} in "
+                                    f"{self.stream_idle_timeout:g}s; SSE comment "
+                                    "lines (server heartbeats) do not count as "
+                                    "progress"
+                                )
                     except httpx.HTTPError as err:
                         # httpx.TransportError inherits from HTTPError, so transient
                         # disconnects during streaming land here.

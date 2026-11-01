@@ -32,6 +32,7 @@ def get_client(
     api_key: str | None = NOT_PROVIDED,
     headers: Mapping[str, str] | None = None,
     timeout: TimeoutTypes | None = None,
+    stream_idle_timeout: float | None = None,
 ) -> LangGraphClient:
     """Create and configure a LangGraphClient.
 
@@ -60,6 +61,12 @@ def get_client(
               - float (total seconds)
               - tuple `(connect, read, write, pool)` in seconds
             Defaults: connect=5, read=300, write=300, pool=5.
+        stream_idle_timeout:
+            Optional bound, in seconds, on how long a streaming response may go
+            without a decoded event. Server heartbeat comments (`: heartbeat`) are
+            bytes on the wire, so they reset the read timeout but are not events.
+            Default `None` leaves the current behaviour unchanged: a stream that
+            only ever receives heartbeats never ends.
 
     Returns:
         LangGraphClient:
@@ -137,7 +144,7 @@ def get_client(
         ),
         headers=_get_headers(api_key, headers),
     )
-    return LangGraphClient(client)
+    return LangGraphClient(client, stream_idle_timeout=stream_idle_timeout)
 
 
 class LangGraphClient:
@@ -151,8 +158,13 @@ class LangGraphClient:
         store: Interfaces with persistent, shared data storage.
     """
 
-    def __init__(self, client: httpx.AsyncClient) -> None:
-        self.http = HttpClient(client)
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        stream_idle_timeout: float | None = None,
+    ) -> None:
+        self.http = HttpClient(client, stream_idle_timeout=stream_idle_timeout)
         self.assistants = AssistantsClient(self.http)
         self.threads = ThreadsClient(self.http)
         self.runs = RunsClient(self.http)

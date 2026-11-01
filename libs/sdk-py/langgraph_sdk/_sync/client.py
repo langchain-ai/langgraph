@@ -23,6 +23,7 @@ def get_sync_client(
     api_key: str | None = NOT_PROVIDED,
     headers: Mapping[str, str] | None = None,
     timeout: TimeoutTypes | None = None,
+    stream_idle_timeout: float | None = None,
 ) -> SyncLangGraphClient:
     """Get a synchronous LangGraphClient instance.
 
@@ -40,6 +41,11 @@ def get_sync_client(
             Accepts an httpx.Timeout instance, a float (seconds), or a tuple of timeouts.
             Tuple format is (connect, read, write, pool)
             If not provided, defaults to connect=5s, read=300s, write=300s, and pool=5s.
+        stream_idle_timeout: Optional bound, in seconds, on how long a streaming
+            response may go without a decoded event. Server heartbeat comments
+            (`: heartbeat`) are bytes on the wire, so they reset the read timeout
+            but are not events. Default `None` leaves the current behaviour
+            unchanged: a stream that only ever receives heartbeats never ends.
     Returns:
         SyncLangGraphClient: The top-level synchronous client for accessing AssistantsClient,
         ThreadsClient, RunsClient, and CronClient.
@@ -83,7 +89,7 @@ def get_sync_client(
         ),
         headers=_get_headers(api_key, headers),
     )
-    return SyncLangGraphClient(client)
+    return SyncLangGraphClient(client, stream_idle_timeout=stream_idle_timeout)
 
 
 class SyncLangGraphClient:
@@ -100,8 +106,13 @@ class SyncLangGraphClient:
         ```
     """
 
-    def __init__(self, client: httpx.Client) -> None:
-        self.http = SyncHttpClient(client)
+    def __init__(
+        self,
+        client: httpx.Client,
+        *,
+        stream_idle_timeout: float | None = None,
+    ) -> None:
+        self.http = SyncHttpClient(client, stream_idle_timeout=stream_idle_timeout)
         self.assistants = SyncAssistantsClient(self.http)
         self.threads = SyncThreadsClient(self.http)
         self.runs = SyncRunsClient(self.http)
