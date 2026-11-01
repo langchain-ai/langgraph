@@ -136,6 +136,7 @@ class StreamController:
         self._max_reconnect_attempts = max_reconnect_attempts
         self._reconnect_backoff_base = reconnect_backoff_base
         self._reconnect_backoff_cap = reconnect_backoff_cap
+        self._empty_reconnects = 0
 
     # ------------------------------------------------------------------
     # Public API
@@ -244,10 +245,12 @@ class StreamController:
             shared = self._shared_stream
             if shared is None:
                 return
+            delivered = 0
             try:
                 async for event in self._dedup_iter(shared.events):
                     if self._closed:
                         break
+                    delivered += 1
                     for sub in list(self._subscriptions.values()):
                         if matches_subscription(event, sub.params):
                             sub.queue.put_nowait(event)
@@ -263,6 +266,9 @@ class StreamController:
                 ):
                     with contextlib.suppress(Exception):
                         await self._shared_stream.close()
+                    if not self._reconnect_after_drop(delivered):
+                        break
+                    await self._reconnect_sleep(max(self._empty_reconnects - 1, 0))
                     reconnected = await self._reconnect_shared_stream()
                     if reconnected:
                         continue
@@ -272,6 +278,27 @@ class StreamController:
         # Terminate consumers cleanly on shutdown / stream-end.
         for sub in self._subscriptions.values():
             sub.queue.put_nowait(None)
+
+    def _reconnect_after_drop(self, delivered: int) -> bool:
+        """Track drops that delivered nothing and refuse to reconnect past the budget.
+
+        A reconnect only counts as an attempt if the stream is *opened*; a peer that accepts the
+        connection and then drops it without sending a single event opens successfully every time,
+        so `_reconnect_shared_stream` would never exhaust its budget. Treat "opened and dropped
+        empty" as a failed attempt instead.
+        """
+        if delivered:
+            self._empty_reconnects = 0
+            return True
+        self._empty_reconnects += 1
+        if self._empty_reconnects > self._max_reconnect_attempts:
+            _logger.debug(
+                "giving up on thread %s after %s reconnects that delivered no events",
+                self._transport.thread_id,
+                self._empty_reconnects - 1,
+            )
+            return False
+        return True
 
     async def _reconnect_sleep(self, attempt: int) -> None:
         """Sleep with exponential backoff and jitter for reconnect attempt *attempt*."""
