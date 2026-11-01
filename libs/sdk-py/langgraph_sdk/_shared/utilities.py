@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import os
 import random
 import re
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from datetime import tzinfo
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote, urlparse
@@ -259,3 +260,98 @@ def get_asgi_transport() -> type[httpx.ASGITransport]:
     except ImportError:
         # Older versions of the server
         return httpx.ASGITransport
+
+
+_READ_TIMEOUT = "read"
+
+
+def _read_budget(request: httpx.Request) -> float | None:
+    """The read timeout httpx would apply to this request, or None if unbounded."""
+    limits = request.extensions.get("timeout") or {}
+    # A client configured without a read entry still has a connect budget, and with no socket
+    # to connect to that is the only number the caller supplied.
+    value = limits[_READ_TIMEOUT] if _READ_TIMEOUT in limits else limits.get("connect")
+    return None if value is None else float(value)
+
+
+class _ReadBoundedStream(httpx.AsyncByteStream):
+    """Give a response body the same per-read budget httpx gives a socket body.
+
+    ``handle_async_request`` returning does not mean the response is finished: the loopback
+    transport hands back a body that arrives in chunks. Without this wrapper the budget would
+    only cover the wait for response headers, and a body that stops mid-stream would wait
+    forever — the opposite of what a read timeout means on the network path.
+    """
+
+    def __init__(
+        self,
+        stream: httpx.AsyncByteStream,
+        budget: float,
+        request: httpx.Request,
+    ) -> None:
+        self._stream = stream
+        self._budget = budget
+        self._request = request
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        iterator = self._stream.__aiter__()
+        while True:
+            try:
+                chunk = await asyncio.wait_for(iterator.__anext__(), self._budget)
+            except StopAsyncIteration:
+                return
+            except asyncio.TimeoutError as exc:
+                raise httpx.ReadTimeout(
+                    f"timed out after {self._budget}s", request=self._request
+                ) from exc
+            yield chunk
+
+    async def aclose(self) -> None:
+        await self._stream.aclose()
+
+
+class TimeoutEnforcingTransport(httpx.AsyncBaseTransport):
+    """Apply httpx timeouts to a transport that dispatches in-process.
+
+    ``httpx.ASGITransport`` hands the request straight to the ASGI app: there is no socket,
+    so the transport never consults ``request.extensions["timeout"]`` and a client built
+    with ``timeout=0.1`` still waits for the graph to finish. Callers who rely on the
+    timeout to bound a hung run get no protection on the loopback path, which is exactly
+    the path ``get_client()`` takes inside a LangGraph deployment.
+
+    Both halves of the network path are reproduced: the budget covers the wait for response
+    headers, and then each individual read of the body, so a stream that keeps producing
+    output is not cut off no matter how long it runs while a stream that goes quiet is.
+
+    One caveat deserves naming: a transport that buffers the entire response before
+    returning (``httpx``'s own ``ASGITransport``, which ``get_asgi_transport()`` falls back
+    to for servers that predate ``langgraph_api.asgi_transport``) has no intermediate reads
+    to measure, so there the header budget necessarily covers the whole call.
+    """
+
+    def __init__(self, transport: httpx.AsyncBaseTransport) -> None:
+        self._transport = transport
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        budget = _read_budget(request)
+        if budget is None:
+            return await self._transport.handle_async_request(request)
+        try:
+            response = await asyncio.wait_for(
+                self._transport.handle_async_request(request), budget
+            )
+        except asyncio.TimeoutError as exc:
+            raise httpx.ReadTimeout(
+                f"timed out after {budget}s", request=request
+            ) from exc
+        return httpx.Response(
+            response.status_code,
+            headers=response.headers,
+            stream=_ReadBoundedStream(
+                cast(httpx.AsyncByteStream, response.stream), budget, request
+            ),
+            extensions=response.extensions,
+        )
+
+    async def aclose(self) -> None:
+        await self._transport.aclose()

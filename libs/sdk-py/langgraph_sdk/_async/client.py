@@ -18,6 +18,7 @@ from langgraph_sdk._async.threads import ThreadsClient
 from langgraph_sdk._shared.types import TimeoutTypes
 from langgraph_sdk._shared.utilities import (
     NOT_PROVIDED,
+    TimeoutEnforcingTransport,
     _get_headers,
     _registered_transports,
     get_asgi_transport,
@@ -107,8 +108,10 @@ def get_client(
     """
 
     transport: httpx.AsyncBaseTransport | None = None
+    loopback = False
     if url is None:
         url = "http://api"
+        loopback = True
         if os.environ.get("__LANGGRAPH_DEFER_LOOPBACK_TRANSPORT") == "true":
             transport = get_asgi_transport()(app=None, root_path="/noauth")  # ty: ignore[invalid-argument-type]
             _registered_transports.append(transport)
@@ -127,6 +130,10 @@ def get_client(
 
     if transport is None:
         transport = httpx.AsyncHTTPTransport(retries=5)
+    elif loopback:
+        # The raw transport stays in _registered_transports so configure_loopback_transports
+        # can still attach the app; only the client sees the timeout-enforcing wrapper.
+        transport = TimeoutEnforcingTransport(transport)
     client = httpx.AsyncClient(
         base_url=url,
         transport=transport,
