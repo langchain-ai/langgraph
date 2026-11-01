@@ -8,8 +8,8 @@ asynchronous operations.
 
 from __future__ import annotations
 
-import asyncio
 import functools
+import inspect
 import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any
@@ -413,9 +413,9 @@ def _is_async_callable(
         True if the function is async, False otherwise.
     """
     return (
-        asyncio.iscoroutinefunction(func)
+        inspect.iscoroutinefunction(func)
         or hasattr(func, "__call__")  # noqa: B004
-        and asyncio.iscoroutinefunction(func.__call__)
+        and inspect.iscoroutinefunction(func.__call__)
     )
 
 
