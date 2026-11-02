@@ -651,16 +651,18 @@ def _long_stream_steps(stream_cls, drops):
     return steps
 
 
-def _run_sync(steps):
+def _run_sync(steps, headers=None):
     handler, seen = _scripted(steps)
     with httpx.Client(
         transport=httpx.MockTransport(handler), base_url="https://example.com"
     ) as client:
-        parts = list(SyncHttpClient(client).stream("/stream", "POST", json={}))
+        parts = list(
+            SyncHttpClient(client).stream("/stream", "POST", json={}, headers=headers)
+        )
     return parts, seen
 
 
-async def _run_async(steps):
+async def _run_async(steps, headers=None):
     sync_handler, seen = _scripted(steps)
 
     async def handler(request):
@@ -669,7 +671,12 @@ async def _run_async(steps):
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(handler), base_url="https://example.com"
     ) as client:
-        parts = [p async for p in HttpClient(client).stream("/stream", "POST", json={})]
+        parts = [
+            p
+            async for p in HttpClient(client).stream(
+                "/stream", "POST", json={}, headers=headers
+            )
+        ]
     return parts, seen
 
 
@@ -842,6 +849,254 @@ def test_sync_reconnect_backs_off(no_sleep):
 async def test_async_reconnect_backs_off(no_sleep):
     await _run_async(_long_stream_steps(AsyncListByteStream, drops=2))
     assert len(no_sleep) == 2 and all(d > 0 for d in no_sleep)
+
+
+# --- a run stream that closes cleanly before the run ends ---
+
+RUN_STREAM = "/threads/t1/runs/r1/stream"
+RUN = "/threads/t1/runs/r1"
+END = b"event: end\ndata: null\n\n"
+
+Step = Callable[[httpx.Request], httpx.Response]
+
+
+def _run_status(status: str) -> Step:
+    return lambda request: httpx.Response(200, json={"status": status}, request=request)
+
+
+def _clean_close_steps(stream_cls: type, closes: int, check: Step) -> list[Step]:
+    steps = [_ok(stream_cls, [_event(0)], location=RUN_STREAM)]
+    for i in range(1, closes + 1):
+        steps += [check, _ok(stream_cls, [_event(i)])]
+    return [*steps, _run_status("success")]
+
+
+def _stalled_steps(stream_cls: type) -> list[Step]:
+    return [
+        _ok(stream_cls, [_event(1)], location=RUN_STREAM),
+        *[_run_status("running"), _ok(stream_cls, [])] * 5,
+        _run_status("running"),
+    ]
+
+
+def _requests(seen: list[httpx.Request]) -> list[tuple[str, str, str | None]]:
+    return [(r.method, r.url.path, r.headers.get("last-event-id")) for r in seen]
+
+
+RESUMED = [
+    ("POST", "/stream", None),
+    ("GET", RUN, None),
+    ("GET", RUN_STREAM, "0"),
+    ("GET", RUN, None),
+]
+
+
+CHECKS_THAT_RECONNECT = {
+    "pending": _run_status("pending"),
+    "running": _run_status("running"),
+    "429": _status(429),
+    "503": _status(503),
+    "connect_error": _connect_error,
+}
+
+
+@pytest.mark.parametrize(
+    "check", CHECKS_THAT_RECONNECT.values(), ids=CHECKS_THAT_RECONNECT.keys()
+)
+def test_sync_clean_close_reconnects_after_check(check: Step, no_sleep: list[float]):
+    parts, seen = _run_sync(_clean_close_steps(ListByteStream, 1, check))
+    assert [p.data for p in parts] == [0, 1]
+    assert _requests(seen) == RESUMED
+    assert len(no_sleep) == 1
+
+
+@pytest.mark.parametrize(
+    "check", CHECKS_THAT_RECONNECT.values(), ids=CHECKS_THAT_RECONNECT.keys()
+)
+async def test_async_clean_close_reconnects_after_check(
+    check: Step, no_sleep: list[float]
+):
+    parts, seen = await _run_async(_clean_close_steps(AsyncListByteStream, 1, check))
+    assert [p.data for p in parts] == [0, 1]
+    assert _requests(seen) == RESUMED
+    assert len(no_sleep) == 1
+
+
+@pytest.mark.usefixtures("no_sleep")
+def test_sync_clean_closes_with_progress_do_not_run_out_of_attempts():
+    parts, _ = _run_sync(_clean_close_steps(ListByteStream, 6, _run_status("running")))
+    assert [p.data for p in parts] == [0, 1, 2, 3, 4, 5, 6]
+
+
+@pytest.mark.usefixtures("no_sleep")
+async def test_async_clean_closes_with_progress_do_not_run_out_of_attempts():
+    parts, _ = await _run_async(
+        _clean_close_steps(AsyncListByteStream, 6, _run_status("running"))
+    )
+    assert [p.data for p in parts] == [0, 1, 2, 3, 4, 5, 6]
+
+
+CHECKS_THAT_END = {
+    "success": _run_status("success"),
+    "error": _run_status("error"),
+    "timeout": _run_status("timeout"),
+    "interrupted": _run_status("interrupted"),
+    "403": _status(403),
+    "404": _status(404),
+    "not_json": _not_sse,
+    "json_without_status": lambda request: httpx.Response(
+        200, json={}, request=request
+    ),
+}
+CHECKED = [("POST", "/stream", None), ("GET", RUN, None)]
+
+
+@pytest.mark.usefixtures("no_sleep")
+@pytest.mark.parametrize("check", CHECKS_THAT_END.values(), ids=CHECKS_THAT_END.keys())
+def test_sync_clean_close_ends_the_stream_after_check(check: Step):
+    parts, seen = _run_sync(
+        [_ok(ListByteStream, [_event(1)], location=RUN_STREAM), check]
+    )
+    assert [p.data for p in parts] == [1]
+    assert _requests(seen) == CHECKED
+
+
+@pytest.mark.usefixtures("no_sleep")
+@pytest.mark.parametrize("check", CHECKS_THAT_END.values(), ids=CHECKS_THAT_END.keys())
+async def test_async_clean_close_ends_the_stream_after_check(check: Step):
+    parts, seen = await _run_async(
+        [_ok(AsyncListByteStream, [_event(1)], location=RUN_STREAM), check]
+    )
+    assert [p.data for p in parts] == [1]
+    assert _requests(seen) == CHECKED
+
+
+NO_CHECK = {
+    "end": lambda s: [_ok(s, [_event(1), END], location=RUN_STREAM)],
+    "error": lambda s: [
+        _ok(s, [_event(1), b"event: error\ndata: {}\n\n"], location=RUN_STREAM)
+    ],
+    "unterminated_end": lambda s: [
+        _ok(s, [_event(1), b"event: end\ndata: null\n"], location=RUN_STREAM)
+    ],
+    "end_on_an_earlier_connection": lambda s: [
+        _ok(s, [_event(1), END], drop=True, location=RUN_STREAM),
+        _ok(s, []),
+    ],
+    "thread_stream": lambda s: [_ok(s, [_event(1)], location="/threads/t1/stream")],
+    "threadless_run_location": lambda s: [
+        _ok(s, [_event(1)], location="/runs/r1/stream")
+    ],
+}
+
+
+@pytest.mark.usefixtures("no_sleep")
+@pytest.mark.parametrize("steps", NO_CHECK.values(), ids=NO_CHECK.keys())
+def test_sync_stream_ends_without_a_run_check(steps: Callable[[type], list[Step]]):
+    _, seen = _run_sync(steps(ListByteStream))
+    assert [r.url.path for r in seen if not r.url.path.endswith("/stream")] == []
+
+
+@pytest.mark.usefixtures("no_sleep")
+@pytest.mark.parametrize("steps", NO_CHECK.values(), ids=NO_CHECK.keys())
+async def test_async_stream_ends_without_a_run_check(
+    steps: Callable[[type], list[Step]],
+):
+    _, seen = await _run_async(steps(AsyncListByteStream))
+    assert [r.url.path for r in seen if not r.url.path.endswith("/stream")] == []
+
+
+def test_sync_clean_closes_without_progress_give_up_after_five_attempts(
+    no_sleep: list[float],
+):
+    with pytest.raises(httpx.TransportError, match=GIVE_UP) as exc_info:
+        _run_sync(_stalled_steps(ListByteStream))
+    assert "still pending or running" in str(exc_info.value.__cause__)
+    _assert_backed_off_for_about_20s(no_sleep)
+
+
+async def test_async_clean_closes_without_progress_give_up_after_five_attempts(
+    no_sleep: list[float],
+):
+    with pytest.raises(httpx.TransportError, match=GIVE_UP) as exc_info:
+        await _run_async(_stalled_steps(AsyncListByteStream))
+    assert "still pending or running" in str(exc_info.value.__cause__)
+    _assert_backed_off_for_about_20s(no_sleep)
+
+
+CHECK_URLS = {
+    "path": ("/threads/t1/runs/r1/stream", "https://example.com/threads/t1/runs/r1"),
+    "prefix_and_query": (
+        "/api/threads/t1/runs/r1/stream?stream_mode=values",
+        "https://example.com/api/threads/t1/runs/r1",
+    ),
+    "absolute": (
+        "https://example.com/threads/t1/runs/r1/stream",
+        "https://example.com/threads/t1/runs/r1",
+    ),
+}
+
+
+@pytest.mark.usefixtures("no_sleep")
+@pytest.mark.parametrize(
+    ("location", "url"), CHECK_URLS.values(), ids=CHECK_URLS.keys()
+)
+def test_sync_run_check_gets_the_run_behind_the_stream_location(
+    location: str, url: str
+):
+    _, seen = _run_sync(
+        [_ok(ListByteStream, [_event(1)], location=location), _run_status("success")]
+    )
+    assert str(seen[-1].url) == url
+
+
+@pytest.mark.usefixtures("no_sleep")
+@pytest.mark.parametrize(
+    ("location", "url"), CHECK_URLS.values(), ids=CHECK_URLS.keys()
+)
+async def test_async_run_check_gets_the_run_behind_the_stream_location(
+    location: str, url: str
+):
+    _, seen = await _run_async(
+        [
+            _ok(AsyncListByteStream, [_event(1)], location=location),
+            _run_status("success"),
+        ]
+    )
+    assert str(seen[-1].url) == url
+
+
+CALLER_HEADERS = {"Authorization": "Bearer token", "Last-Event-ID": "0"}
+BODY_AND_CURSOR_HEADERS = {"content-type", "content-length", "last-event-id"}
+
+
+def _assert_run_check_headers(seen: list[httpx.Request]) -> None:
+    check = seen[-1]
+    assert check.url.path == RUN
+    assert check.headers["authorization"] == "Bearer token"
+    assert check.headers["accept"] == "application/json"
+    assert check.headers.keys() & BODY_AND_CURSOR_HEADERS == set()
+
+
+@pytest.mark.usefixtures("no_sleep")
+def test_sync_run_check_sends_caller_headers_and_accepts_json_without_body_or_cursor():
+    _, seen = _run_sync(
+        [_ok(ListByteStream, [_event(1)], location=RUN_STREAM), _run_status("success")],
+        headers=CALLER_HEADERS,
+    )
+    _assert_run_check_headers(seen)
+
+
+@pytest.mark.usefixtures("no_sleep")
+async def test_async_run_check_sends_caller_headers_and_accepts_json_without_body_or_cursor():
+    _, seen = await _run_async(
+        [
+            _ok(AsyncListByteStream, [_event(1)], location=RUN_STREAM),
+            _run_status("success"),
+        ],
+        headers=CALLER_HEADERS,
+    )
+    _assert_run_check_headers(seen)
 
 
 # --- _sse_to_v2_dict conversion ---
