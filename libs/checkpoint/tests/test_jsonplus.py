@@ -10,7 +10,7 @@ import tempfile
 import types
 import uuid
 from collections import deque
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
 from ipaddress import IPv4Address
@@ -339,6 +339,63 @@ def test_serde_jsonplus_bytes() -> None:
 
     assert dumped == ("bytes", some_bytes)
     assert serde.loads_typed(dumped) == some_bytes
+
+
+def test_serde_jsonplus_dict_typed_keys_roundtrip() -> None:
+    """Dict keys with non-msgpack-native types must survive a roundtrip.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/9490:
+    Enum, UUID and datetime keys were stringified by ormsgpack map encoding
+    (a node reading state back no longer found the keys it wrote), while
+    timedelta/Decimal/Path/IP keys raised MsgpackEncodeError and made the
+    checkpoint impossible to save.
+    """
+    serde = JsonPlusSerializer()
+
+    keys = {
+        "plain int": 5,
+        "float": 1.5,
+        "bool": True,
+        "none": None,
+        "bytes": b"k",
+        "tuple": (1, 2),
+        "enum": MyEnum.FOO,
+        "uuid": uuid.UUID(int=7),
+        "date": date(2026, 1, 2),
+        "datetime": datetime(2026, 1, 2, 3, 4, 5),
+        "time": time(1, 2, 3),
+        "timedelta": timedelta(days=1),
+        "decimal": Decimal("1.5"),
+        "path": pathlib.Path("a/b"),
+        "ipv4": IPv4Address("10.0.0.1"),
+    }
+    for name, key in keys.items():
+        payload = {key: name}
+        restored: dict = serde.loads_typed(serde.dumps_typed(payload))
+        assert restored == payload, name
+        restored_key = next(iter(restored))
+        assert type(restored_key) is type(key), name
+        assert restored_key == key, name
+
+
+def test_serde_jsonplus_dict_typed_keys_nested() -> None:
+    """Nested dicts and containers carrying typed keys must also roundtrip."""
+    serde = JsonPlusSerializer()
+
+    payload = {
+        "top": {MyEnum.FOO: {"inner": {uuid.UUID(int=7): [1, {date(2026, 1, 2): 2}]}}},
+        "list": [{MyEnum.FOO: 1}, [3, {MyEnum.FOO: 4}]],
+        "plain": {"a": 1},
+    }
+
+    restored: dict = serde.loads_typed(serde.dumps_typed(payload))
+    assert restored["top"][MyEnum.FOO] == {
+        "inner": {uuid.UUID(int=7): [1, {date(2026, 1, 2): 2}]}
+    }
+    assert restored["list"][0] == {MyEnum.FOO: 1}
+    assert restored["list"][1][1] == {MyEnum.FOO: 4}
+    assert restored["plain"] == {"a": 1}
+    assert type(next(iter(restored["top"]))) is MyEnum
 
 
 def test_lc2_json_safe_type_revives_without_allowlist() -> None:

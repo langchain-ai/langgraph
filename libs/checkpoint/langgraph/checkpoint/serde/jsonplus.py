@@ -23,7 +23,7 @@ from ipaddress import (
     IPv6Interface,
     IPv6Network,
 )
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, cast
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -47,6 +47,25 @@ if TYPE_CHECKING:
 LC_REVIVER = Reviver(allowed_objects="core")
 EMPTY_BYTES = b""
 logger = logging.getLogger(__name__)
+
+
+class _TypedKeysDict(NamedTuple):
+    """Internal marker wrapping a dict whose keys need the typed-key extension.
+
+    msgpack map keys must be str/int/float/bool/None/bytes/tuple, so Enum, UUID,
+    datetime and similar keys cannot reach the ``default`` hook: ormsgpack
+    stringifies them (or raises) before it would call ``_msgpack_default``.
+    Encoding such a dict as ``Ext(EXT_DICT_TYPED_KEYS, (keys, values))`` moves
+    the keys into the value position where the default hook can run, and the
+    ext hook rebuilds the dict with its original key types.
+
+    This must NOT be a dict subclass: ormsgpack encodes dict subclasses as
+    plain maps without consulting the ``default`` hook, so the marker would
+    never reach its Ext branch.
+    """
+
+    mapping: dict[Any, Any]
+
 
 # Dedup log warnings across process lifetime; cap bounds state if types are
 # dynamically generated (also acts as a circuit breaker on warning volume).
@@ -286,7 +305,7 @@ class JsonPlusSerializer(SerializerProtocol):
             return "bytearray", obj
         else:
             try:
-                return "msgpack", _msgpack_enc(obj)
+                return "msgpack", _msgpack_enc(_wrap_typed_keys(obj))
             except ormsgpack.MsgpackEncodeError as exc:
                 if self.pickle_fallback:
                     return "pickle", pickle.dumps(obj)
@@ -322,11 +341,30 @@ EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
 EXT_DELTA_SNAPSHOT = 7
+EXT_DICT_TYPED_KEYS = 8
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
     if isinstance(obj, _DeltaSnapshot):
         return ormsgpack.Ext(EXT_DELTA_SNAPSHOT, _msgpack_enc(obj.value))
+    elif isinstance(obj, _TypedKeysDict):
+        # ormsgpack map keys can only be str/int/float/bool/None/bytes; anything
+        # else is stringified (Enum, UUID, datetime...) or rejected outright
+        # (Decimal, Path, IP addresses...). Encode as (index_map, values): the
+        # index map {0: key0, 1: key1, ...} has plain int keys and moves each
+        # typed key into value position, where it goes through its normal Ext
+        # path; the ext hook rebuilds the dict from the decoded keys.
+        mapping = obj.mapping
+        keys_map = {index: key for index, key in enumerate(mapping)}
+        return ormsgpack.Ext(
+            EXT_DICT_TYPED_KEYS,
+            _msgpack_enc(
+                (
+                    keys_map,
+                    tuple(mapping.values()),
+                ),
+            ),
+        )
     elif hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
         return ormsgpack.Ext(
             EXT_PYDANTIC_V2,
@@ -659,6 +697,14 @@ def _create_msgpack_ext_hook(
                     data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
                 )
             )
+        elif code == EXT_DICT_TYPED_KEYS:
+            index_map, values = ormsgpack.unpackb(
+                data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+            )
+            keys = _restore_msgpack_map_keys(
+                [index_map[index] for index in sorted(index_map)]
+            )
+            return dict(zip(keys, values, strict=True))
         elif code == EXT_CONSTRUCTOR_SINGLE_ARG:
             tup = None
             try:
@@ -775,6 +821,16 @@ _msgpack_ext_hook = _create_msgpack_ext_hook(allowed_modules=None)
 
 
 def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
+    if code == EXT_DICT_TYPED_KEYS:
+        index_map, values = ormsgpack.unpackb(
+            data,
+            ext_hook=_msgpack_ext_hook_to_json,
+            option=ormsgpack.OPT_NON_STR_KEYS,
+        )
+        keys = _restore_msgpack_map_keys(
+            [index_map[index] for index in sorted(index_map)]
+        )
+        return dict(zip(keys, values, strict=True))
     if code == EXT_CONSTRUCTOR_SINGLE_ARG:
         try:
             tup = ormsgpack.unpackb(
@@ -884,6 +940,60 @@ _option = (
 
 def _msgpack_enc(data: Any) -> bytes:
     return ormsgpack.packb(data, default=_msgpack_default, option=_option)
+
+
+def _restore_msgpack_map_keys(value: Any) -> Any:
+    """Restore key-position tuples that ormsgpack decoded as lists.
+
+    Inside a decoded map, unhashable list keys can only be tuples that msgpack
+    encoded as arrays (msgpack has no tuple type, and a hashable dict key can
+    never contain a list). Everything else keeps its decoded form.
+    """
+    if isinstance(value, list):
+        return tuple(_restore_msgpack_map_keys(item) for item in value)
+    if isinstance(value, dict):
+        return {
+            _restore_msgpack_map_keys(key): _restore_msgpack_map_keys(val)
+            for key, val in value.items()
+        }
+    return value
+
+
+def _key_needs_typed_ext(key: Any) -> bool:
+    """Whether a dict key would be corrupted (or rejected) by msgpack map encoding."""
+    if isinstance(key, (str, bytes, bool, int, float)) or key is None:
+        # bool/int/float/None/bytes/tuple keys survive OPT_NON_STR_KEYS verbatim.
+        # int subclasses like IntEnum need the extension; plain int does not.
+        if isinstance(key, int) and not isinstance(key, bool):
+            # IntEnum subclasses int: packb would write the raw int and lose the enum.
+            return isinstance(key, Enum)
+        return not isinstance(key, Enum)
+    if isinstance(key, tuple):
+        return any(_key_needs_typed_ext(part) for part in key)
+    # Everything else (Enum, UUID, date/datetime/time/timedelta, Decimal, Path,
+    # IP addresses, arbitrary objects) is stringified or rejected as a map key.
+    return True
+
+
+def _wrap_typed_keys(value: Any) -> Any:
+    """Recursively wrap dicts with non-msgpack-safe keys for typed-key encoding."""
+    if isinstance(value, _TypedKeysDict):
+        return value
+    if isinstance(value, dict):
+        if any(_key_needs_typed_ext(key) for key in value):
+            return _TypedKeysDict(
+                {key: _wrap_typed_keys(val) for key, val in value.items()}
+            )
+        return {key: _wrap_typed_keys(val) for key, val in value.items()}
+    if isinstance(value, list):
+        return [_wrap_typed_keys(item) for item in value]
+    if isinstance(value, tuple):
+        # NamedTuple and other tuple subclasses carry their own encoding paths
+        # (e.g. _DeltaSnapshot) and must keep their exact type.
+        if hasattr(value, "_fields"):
+            return type(value)(*(_wrap_typed_keys(item) for item in value))
+        return tuple(_wrap_typed_keys(item) for item in value)
+    return value
 
 
 def _normalize_allowlist(
