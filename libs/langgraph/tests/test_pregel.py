@@ -39,6 +39,7 @@ from langchain_core.runnables.graph import Edge
 from langchain_core.tools import tool
 from langchain_core.version import VERSION as LANGCHAIN_CORE_VERSION
 from langgraph.cache.base import BaseCache
+from langgraph.cache.memory import InMemoryCache
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
@@ -5880,6 +5881,78 @@ def test_multiple_interrupts_functional_cache(
         "values": [2, "a", 2, "b", 4, "c", 4, "d", 6, "e", 6, "f"],
     }
     assert counter == 6
+
+
+def test_cache_is_not_matched_for_a_running_task() -> None:
+    """A push must not load cached writes into a task that is already running.
+
+    `SyncPregelLoop.accept_push` runs on the thread that pushes the task. If it
+    matches the whole task map there, a task that is already executing (it has a
+    cache key and no writes yet) can be selected, and its writes deque is
+    extended while its own thread uses it.
+    """
+    started = threading.Event()
+    release = threading.Event()
+    runs: list[str] = []
+
+    class _SkipNextGetCache(InMemoryCache):
+        skip_next_get = False
+
+        def get(self, keys):
+            if self.skip_next_get:
+                self.skip_next_get = False
+                return {}
+            return super().get(keys)
+
+    cache = _SkipNextGetCache()
+
+    @task(cache_policy=CachePolicy())
+    def slow(i: int) -> int:
+        runs.append("slow")
+        started.set()
+        assert release.wait(10)
+        return i
+
+    @task(cache_policy=CachePolicy())
+    def other(i: int) -> int:
+        release.set()
+        return i
+
+    @entrypoint(cache=cache)
+    def workflow(_: int) -> list[int]:
+        first = slow(0)
+        assert started.wait(10)
+        second = other(0)
+        return [first.result(), second.result()]
+
+    # Cache the writes of `slow(0)`, so its cache key exists before the run.
+    @entrypoint(cache=cache)
+    def warmup(_: int) -> list[int]:
+        release.set()
+        return [slow(0).result()]
+
+    assert warmup.invoke(1) == [0]
+    assert runs == ["slow"]
+
+    release.clear()
+    started.clear()
+    # Let the first push of `slow(0)` miss, so that it runs while `other` is pushed.
+    cache.skip_next_get = True
+
+    cached_writes: list[str] = []
+    orig_put_writes = PregelLoop.put_writes
+
+    def put_writes(self, task_id, writes, **kwargs):
+        if kwargs.get("cached"):
+            cached_writes.append(task_id)
+        return orig_put_writes(self, task_id, writes, **kwargs)
+
+    with patch.object(PregelLoop, "put_writes", put_writes):
+        assert workflow.invoke(1) == [0, 0]
+
+    # `slow` was running when `other` was pushed, so its cache entry must not be
+    # applied to it, and `other` has no cache entry of its own.
+    assert cached_writes == []
 
 
 def test_task_before_interrupt_resume(

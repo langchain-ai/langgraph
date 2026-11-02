@@ -1741,12 +1741,25 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
                 matched.append(task)
         return matched
 
+    def _match_cached_writes_for(self, task: PregelExecutableTask) -> None:
+        """Load cached writes for a task that has not written anything yet.
+
+        Only the task passed in is considered: this runs on the thread that
+        pushed the task, while other tasks may still be running with an empty
+        writes deque, so matching them here would mutate their writes under them.
+        """
+        if self.cache is None or task.cache_key is None or task.writes:
+            return
+        key = (task.cache_key.ns, task.cache_key.key)
+        for values in self.cache.get((key,)).values():
+            task.writes.extend(values)
+            self.put_writes(task.id, task.writes, cached=True)
+
     def accept_push(
         self, task: PregelExecutableTask, write_idx: int, call: Call | None = None
     ) -> PregelExecutableTask | None:
         if pushed := super().accept_push(task, write_idx, call):
-            for task in self.match_cached_writes():
-                self.put_writes(task.id, task.writes, cached=True)
+            self._match_cached_writes_for(pushed)
         return pushed
 
     def schedule_error_handler(
@@ -1782,8 +1795,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         self.tasks[handler_task.id] = handler_task
         if self._reapplies_pending_writes:
             self._reapply_writes_to_succeeded_nodes({handler_task.id: handler_task})
-        for task in self.match_cached_writes():
-            self.put_writes(task.id, task.writes, cached=True)
+        self._match_cached_writes_for(handler_task)
         return handler_task
 
     def put_writes(
