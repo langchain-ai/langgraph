@@ -2414,55 +2414,40 @@ def test_config_to_docker_uv_lock_copies_safe_root_in_one_layer():
         assert "ADD uv.lock /tmp/uv_export/project/uv.lock" in docker
 
 
-def _add_unexcluded_venv(root: pathlib.Path) -> dict:
-    (root / ".venv").mkdir()
-    return {}
-
-
-def _add_negation(root: pathlib.Path) -> dict:
-    (root / "docs").mkdir()
-    (root / "docs" / "keep.md").write_text("keep\n")
-    (root / ".dockerignore").write_text("docs\n!docs/keep.md\n")
-    return {}
-
-
-def _add_symlink(root: pathlib.Path) -> dict:
-    (root / "linked").symlink_to("src", target_is_directory=True)
-    return {}
-
-
-def _add_tar_without_extension(root: pathlib.Path) -> dict:
+def _write_tar(root: pathlib.Path) -> None:
+    # No extension, so detection must go by content.
     with tarfile.open(root / "bundle.bin", "w") as tar:
         tar.add(root / "README.md", arcname="README.md")
-    return {}
-
-
-def _add_zstd_file(root: pathlib.Path) -> dict:
-    (root / "data.zst").write_bytes(b"\x28\xb5\x2f\xfd" + b"\x00" * 16)
-    return {}
-
-
-def _add_deps_dockerfile_line(root: pathlib.Path) -> dict:
-    return {"dockerfile_lines": ["RUN mkdir -p /deps/workspace/cache"]}
 
 
 @pytest.mark.parametrize(
-    "setup",
+    ("setup", "overrides"),
     [
-        _add_unexcluded_venv,
-        _add_negation,
-        _add_symlink,
-        _add_tar_without_extension,
-        _add_zstd_file,
-        _add_deps_dockerfile_line,
+        pytest.param(lambda r: (r / ".venv").mkdir(), {}, id="unexcluded_venv"),
+        pytest.param(
+            lambda r: (r / ".dockerignore").write_text("*.log\n!keep.log\n"),
+            {},
+            id="negation",
+        ),
+        pytest.param(lambda r: (r / "linked").symlink_to("src"), {}, id="symlink"),
+        pytest.param(_write_tar, {}, id="tar"),
+        pytest.param(
+            lambda r: (r / "data.zst").write_bytes(b"\x28\xb5\x2f\xfd" + bytes(16)),
+            {},
+            id="zstd",
+        ),
+        pytest.param(
+            lambda r: None,
+            {"dockerfile_lines": ["RUN mkdir -p /deps/workspace/cache"]},
+            id="deps_dockerfile_line",
+        ),
     ],
-    ids=lambda f: f.__name__.removeprefix("_add_"),
 )
-def test_config_to_docker_uv_lock_keeps_per_entry_copies_when_unsafe(setup):
+def test_config_to_docker_uv_lock_keeps_per_entry_copies_when_unsafe(setup, overrides):
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = pathlib.Path(tmpdir) / "single"
         _write_single_uv_project(project_root)
-        overrides = setup(project_root)
+        setup(project_root)
 
         docker = _single_uv_docker(project_root / "langgraph.json", **overrides)
 

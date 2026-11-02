@@ -520,14 +520,12 @@ def _uv_lock_package_copy_items(
 
 
 def _is_local_archive(path: pathlib.Path) -> bool:
-    """Whether Docker's `ADD` might auto-extract this local file."""
-    try:
-        with path.open("rb") as f:
-            if f.read(4) == b"\x28\xb5\x2f\xfd":  # zstd, which tarfile can't detect
-                return True
-        return tarfile.is_tarfile(path)
-    except OSError:
-        return True
+    """Whether Docker's `ADD` would auto-extract this local file."""
+    with path.open("rb") as f:
+        magic = f.read(4)
+        f.seek(0)
+        # tarfile can't detect zstd, which BuildKit also extracts.
+        return magic == b"\x28\xb5\x2f\xfd" or tarfile.is_tarfile(f)
 
 
 def _root_copy_is_equivalent(
@@ -538,13 +536,8 @@ def _root_copy_is_equivalent(
 ) -> bool:
     """Whether one `ADD .` produces the same files as the per-entry ADDs."""
     root = plan.project_root
-    # The root's .dockerignore is only the effective one when it is the build context.
-    if root != config_root or not copy_items:
-        return False
-    # Workspace members under the root must be skipped or copied separately.
-    if any(root in member.parents for member in plan.all_workspace_roots):
-        return False
-    if any(len(source.parts) != 1 for source, _ in copy_items):
+    # Its .dockerignore only applies as the build context; members need the walk.
+    if root != config_root or any(root in m.parents for m in plan.all_workspace_roots):
         return False
 
     ignore_file = root / ".dockerignore"
@@ -555,19 +548,17 @@ def _root_copy_is_equivalent(
         return False
     literals = {p.lstrip("/").removeprefix("./").rstrip("/") for p in patterns}
     # Docker doesn't apply the CLI's built-in exclusions, so .dockerignore must.
-    for child in root.iterdir():
-        name = child.name
-        if (
-            name in _ALWAYS_EXCLUDE_NAMES
-            and child.is_dir()
-            and not {name, f"**/{name}"} & literals
-        ):
-            return False
+    if any(
+        c.name in _ALWAYS_EXCLUDE_NAMES
+        and c.is_dir()
+        and not {c.name, f"**/{c.name}"} & literals
+        for c in root.iterdir()
+    ):
+        return False
     # Per-entry ADD follows symlinks and extracts archives; `ADD .` does neither.
-    for source, _ in copy_items:
-        path = root / source
-        if path.is_symlink() or (path.is_file() and _is_local_archive(path)):
-            return False
+    paths = [root / source for source, _ in copy_items]
+    if any(p.is_symlink() or (p.is_file() and _is_local_archive(p)) for p in paths):
+        return False
     # Custom lines that touch /deps could make the destination merge differ.
     return not any("/deps" in line for line in config["dockerfile_lines"])
 
