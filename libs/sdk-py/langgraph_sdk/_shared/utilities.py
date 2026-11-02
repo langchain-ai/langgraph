@@ -205,6 +205,15 @@ def _run_url_from_stream_location(location: str) -> str | None:
     return None
 
 
+def _run_check_headers(reconnect_headers: Mapping[str, str]) -> dict[str, str]:
+    headers = {
+        key: value
+        for key, value in reconnect_headers.items()
+        if key.lower() not in ("accept", "last-event-id")
+    }
+    return {**headers, "Accept": "application/json"}
+
+
 def _reconnect_delay(attempt: int, *, base: float, cap: float) -> float:
     """Seconds to wait before reconnect attempt `attempt` (0-based).
 

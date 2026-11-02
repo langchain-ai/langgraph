@@ -15,6 +15,7 @@ import orjson
 from langgraph_sdk._shared.utilities import (
     _orjson_default,
     _reconnect_delay,
+    _run_check_headers,
     _run_url_from_stream_location,
     _validate_reconnect_location,
 )
@@ -333,14 +334,9 @@ class SyncHttpClient:
             # A run's stream closes cleanly both when the run ends and when a
             # proxy timeout or a server restart cuts it. Without an `end` or
             # `error` event the two look the same, so ask the run.
-            if (
-                reconnect_cause is None
-                and reconnect_path is not None
-                and not run_ended
-                and _run_is_active(self.client, reconnect_path, reconnect_headers)
-            ):
-                reconnect_cause = httpx.TransportError(
-                    "Stream closed while the run was still pending or running"
+            if reconnect_cause is None and reconnect_path is not None and not run_ended:
+                reconnect_cause = _check_run(
+                    self.client, reconnect_path, reconnect_headers
                 )
             if reconnect_cause is not None:
                 reconnect_attempts += 1
@@ -372,19 +368,26 @@ def _decode_json(r: httpx.Response) -> Any:
     return orjson.loads(body) if body else None
 
 
-def _run_is_active(
+def _check_run(
     client: httpx.Client, stream_location: str, headers: Mapping[str, str]
-) -> bool:
+) -> httpx.HTTPError | None:
     run_url = _run_url_from_stream_location(stream_location)
     if run_url is None:
-        return False
+        return None
     try:
-        r = client.get(
-            run_url,
-            headers={k: v for k, v in headers.items() if k.lower() != "last-event-id"},
-        )
+        r = client.get(run_url, headers=_run_check_headers(headers))
+        if r.status_code == 429 or r.status_code >= 500:
+            _raise_for_status_typed(r)
         status = _decode_json(r)["status"] if r.is_success else None
+    except (httpx.TransportError, RateLimitError, InternalServerError) as err:
+        # The restart that closed the stream can fail the check too, so retry
+        # it like a drop.
+        return err
     except Exception:
-        # A failed check must not turn a normal end of stream into an error.
-        return False
-    return status in ("pending", "running")
+        # Anything else must not turn a normal end of stream into an error.
+        return None
+    if status in ("pending", "running"):
+        return httpx.TransportError(
+            "Stream closed while the run was still pending or running"
+        )
+    return None
