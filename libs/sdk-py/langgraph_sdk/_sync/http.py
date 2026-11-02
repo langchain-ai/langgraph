@@ -15,6 +15,7 @@ import orjson
 from langgraph_sdk._shared.utilities import (
     _orjson_default,
     _reconnect_delay,
+    _run_url_from_stream_location,
     _validate_reconnect_location,
 )
 from langgraph_sdk.errors import (
@@ -235,6 +236,7 @@ class SyncHttpClient:
         reconnect_path: str | None = None
         reconnect_attempts = 0
         max_reconnect_attempts = 5
+        run_ended = False
 
         while True:
             current_headers = dict(
@@ -303,6 +305,7 @@ class SyncHttpClient:
                                     # Progress since the last drop earns a fresh
                                     # set of reconnect attempts.
                                     reconnect_attempts = 0
+                                    run_ended |= sse.event in ("end", "error")
                                     yield sse
                     except httpx.HTTPError as err:
                         # httpx.TransportError inherits from HTTPError, so transient
@@ -317,6 +320,7 @@ class SyncHttpClient:
                             if sse.event or decoder.has_data:
                                 # See async stream implementation for rationale on
                                 # skipping empty flush events.
+                                run_ended |= sse.event in ("end", "error")
                                 yield sse
             except (httpx.TransportError, RateLimitError, InternalServerError) as err:
                 # A reconnect that can't open (connection refused, 429, 5xx or a
@@ -326,6 +330,18 @@ class SyncHttpClient:
                 if reconnect_path is None:
                     raise
                 reconnect_cause = err
+            # A run's stream closes cleanly both when the run ends and when a
+            # proxy timeout or a server restart cuts it. Without an `end` or
+            # `error` event the two look the same, so ask the run.
+            if (
+                reconnect_cause is None
+                and reconnect_path is not None
+                and not run_ended
+                and _run_is_active(self.client, reconnect_path, reconnect_headers)
+            ):
+                reconnect_cause = httpx.TransportError(
+                    "Stream closed while the run was still pending or running"
+                )
             if reconnect_cause is not None:
                 reconnect_attempts += 1
                 if reconnect_attempts > max_reconnect_attempts:
@@ -354,3 +370,21 @@ def _encode_json(json: Any) -> tuple[dict[str, str], bytes | None]:
 def _decode_json(r: httpx.Response) -> Any:
     body = r.read()
     return orjson.loads(body) if body else None
+
+
+def _run_is_active(
+    client: httpx.Client, stream_location: str, headers: Mapping[str, str]
+) -> bool:
+    run_url = _run_url_from_stream_location(stream_location)
+    if run_url is None:
+        return False
+    try:
+        r = client.get(
+            run_url,
+            headers={k: v for k, v in headers.items() if k.lower() != "last-event-id"},
+        )
+        status = _decode_json(r)["status"] if r.is_success else None
+    except Exception:
+        # A failed check must not turn a normal end of stream into an error.
+        return False
+    return status in ("pending", "running")
