@@ -918,6 +918,7 @@ def python_config_to_docker_uv_lock(
     api_version: str | None = None,
     *,
     build_tools_to_uninstall: tuple[str, ...] | None,
+    single_root_copy: bool = False,
 ) -> tuple[str, dict[str, str]]:
     from langgraph_cli.config import (
         DEFAULT_NODE_VERSION,
@@ -1070,9 +1071,11 @@ def python_config_to_docker_uv_lock(
         package_label = package.root.relative_to(plan.project_root).as_posix() or "."
         docker_plan.add_raw(f"# -- Adding workspace package {package_label} --")
         copy_items = _uv_lock_package_copy_items(package, plan, ignore_spec)
-        # Every layer is costly on some builders, so copy the root in one when safe.
-        if package.root == plan.project_root and _root_copy_is_equivalent(
-            plan, config_root, config, copy_items
+        # Only for immediate builds: `ADD .` copies the tree as it is at build time.
+        if (
+            single_root_copy
+            and package.root == plan.project_root
+            and _root_copy_is_equivalent(plan, config_root, config, copy_items)
         ):
             copy_items = (
                 (pathlib.PurePosixPath("."), plan.container_roots[package.root]),

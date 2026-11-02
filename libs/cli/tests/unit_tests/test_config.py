@@ -2358,8 +2358,7 @@ def test_config_to_docker_uv_lock_does_not_apply_gitignore():
             base_image="langchain/langgraph-api:0.2.47",
         )
 
-        # .gitignore must not filter README.md out of the single root copy.
-        assert "ADD . /deps/workspace\n" in docker
+        assert "ADD README.md /deps/workspace/README.md" in docker
 
 
 def _write_single_uv_project(project_root: pathlib.Path) -> None:
@@ -2375,7 +2374,9 @@ def _write_single_uv_project(project_root: pathlib.Path) -> None:
     (project_root / "README.md").write_text("# hi\n")
 
 
-def _single_uv_docker(config_path: pathlib.Path, **overrides) -> str:
+def _single_uv_docker(
+    config_path: pathlib.Path, single_root_copy: bool = True, **overrides
+) -> str:
     config = validate_config(
         {
             "python_version": "3.11",
@@ -2385,7 +2386,10 @@ def _single_uv_docker(config_path: pathlib.Path, **overrides) -> str:
         }
     )
     docker, _ = config_to_docker(
-        config_path, config, base_image="langchain/langgraph-api:0.2.47"
+        config_path,
+        config,
+        base_image="langchain/langgraph-api:0.2.47",
+        single_root_copy=single_root_copy,
     )
     return docker
 
@@ -2413,6 +2417,13 @@ def test_config_to_docker_uv_lock_copies_safe_root_in_one_layer():
         assert "ADD pyproject.toml /tmp/uv_export/project/pyproject.toml" in docker
         assert "ADD uv.lock /tmp/uv_export/project/uv.lock" in docker
 
+        # A saved Dockerfile may be built after the tree changes, so keep the list.
+        saved = _single_uv_docker(
+            project_root / "langgraph.json", single_root_copy=False
+        )
+        assert "ADD . /deps/workspace" not in saved
+        assert "ADD src /deps/workspace/src" in saved
+
 
 def _write_tar(root: pathlib.Path) -> None:
     # No extension, so detection must go by content.
@@ -2420,10 +2431,20 @@ def _write_tar(root: pathlib.Path) -> None:
         tar.add(root / "README.md", arcname="README.md")
 
 
+def _add_unrelated_member(root: pathlib.Path) -> None:
+    with (root / "pyproject.toml").open("a") as f:
+        f.write('\n[tool.uv.workspace]\nmembers = ["libs/*"]\n')
+    (root / "libs" / "extra").mkdir(parents=True)
+    (root / "libs" / "extra" / "pyproject.toml").write_text(
+        '[project]\nname = "extra"\nversion = "0.1.0"\n'
+    )
+
+
 @pytest.mark.parametrize(
     ("setup", "overrides"),
     [
         pytest.param(lambda r: (r / ".venv").mkdir(), {}, id="unexcluded_venv"),
+        pytest.param(_add_unrelated_member, {}, id="workspace_member"),
         pytest.param(
             lambda r: (r / ".dockerignore").write_text("*.log\n!keep.log\n"),
             {},

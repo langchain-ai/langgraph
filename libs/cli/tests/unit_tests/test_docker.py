@@ -1,3 +1,6 @@
+import pathlib
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from langgraph_cli.docker import (
@@ -5,6 +8,7 @@ from langgraph_cli.docker import (
     DockerCapabilities,
     Version,
     _parse_version,
+    build_docker_image,
     compose,
 )
 from langgraph_cli.util import clean_empty_lines
@@ -440,3 +444,24 @@ def test_compose_combined_mode_has_no_n_jobs():
 )
 def test_parse_version_w_edge_cases(input_str, expected):
     assert _parse_version(input_str) == expected
+
+
+def test_build_docker_image_opts_into_single_root_copy():
+    # The image is built right away, so the context can't drift from the Dockerfile.
+    with (
+        patch(
+            "langgraph_cli.config.config_to_docker", return_value=("", {})
+        ) as to_docker,
+        patch("langgraph_cli.docker.subp_exec"),
+    ):
+        build_docker_image(
+            MagicMock(),
+            lambda _: None,
+            pathlib.Path("/tmp/langgraph.json"),
+            {"python_version": "3.11"},
+            base_image=None,
+            api_version=None,
+            pull=False,
+            tag="probe",
+        )
+    assert to_docker.call_args.kwargs["single_root_copy"] is True
