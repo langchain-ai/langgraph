@@ -2,6 +2,7 @@ import copy
 import json
 import os
 import pathlib
+import tarfile
 import tempfile
 import textwrap
 from unittest.mock import patch
@@ -2357,7 +2358,134 @@ def test_config_to_docker_uv_lock_does_not_apply_gitignore():
             base_image="langchain/langgraph-api:0.2.47",
         )
 
+        # .gitignore must not filter README.md out of the single root copy.
+        assert "ADD . /deps/workspace\n" in docker
+
+
+def _write_single_uv_project(project_root: pathlib.Path) -> None:
+    project_root.mkdir(parents=True)
+    (project_root / "uv.lock").write_text("# uv lock file\n")
+    (project_root / "pyproject.toml").write_text(
+        '[project]\nname = "single-app"\nversion = "0.1.0"\n'
+        'dependencies = ["httpx>=0.28"]\n'
+    )
+    (project_root / "langgraph.json").write_text("{}\n")
+    (project_root / "src").mkdir()
+    (project_root / "src" / "agent.py").write_text("graph = object()\n")
+    (project_root / "README.md").write_text("# hi\n")
+
+
+def _single_uv_docker(config_path: pathlib.Path, **overrides) -> str:
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "graphs": {"agent": "./src/agent.py:graph"},
+            "source": {"kind": "uv"},
+            **overrides,
+        }
+    )
+    docker, _ = config_to_docker(
+        config_path, config, base_image="langchain/langgraph-api:0.2.47"
+    )
+    return docker
+
+
+def test_config_to_docker_uv_lock_copies_safe_root_in_one_layer():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = pathlib.Path(tmpdir) / "single"
+        _write_single_uv_project(project_root)
+        (project_root / "docs").mkdir()
+        (project_root / "docs" / "notes.md").write_text("notes\n")
+        # Built-in exclusions are fine when Docker excludes them too.
+        (project_root / ".venv").mkdir()
+        (project_root / "__pycache__").mkdir()
+        (project_root / ".dockerignore").write_text("/.venv/\n**/__pycache__\n")
+
+        docker = _single_uv_docker(project_root / "langgraph.json")
+
+        source_copies = [
+            line
+            for line in docker.splitlines()
+            if line.startswith("ADD ") and "/deps/workspace" in line
+        ]
+        assert source_copies == ["ADD . /deps/workspace"]
+        # Dependency metadata is still copied separately ahead of uv export.
+        assert "ADD pyproject.toml /tmp/uv_export/project/pyproject.toml" in docker
+        assert "ADD uv.lock /tmp/uv_export/project/uv.lock" in docker
+
+
+def _add_unexcluded_venv(root: pathlib.Path) -> dict:
+    (root / ".venv").mkdir()
+    return {}
+
+
+def _add_negation(root: pathlib.Path) -> dict:
+    (root / "docs").mkdir()
+    (root / "docs" / "keep.md").write_text("keep\n")
+    (root / ".dockerignore").write_text("docs\n!docs/keep.md\n")
+    return {}
+
+
+def _add_symlink(root: pathlib.Path) -> dict:
+    (root / "linked").symlink_to("src", target_is_directory=True)
+    return {}
+
+
+def _add_tar_without_extension(root: pathlib.Path) -> dict:
+    with tarfile.open(root / "bundle.bin", "w") as tar:
+        tar.add(root / "README.md", arcname="README.md")
+    return {}
+
+
+def _add_zstd_file(root: pathlib.Path) -> dict:
+    (root / "data.zst").write_bytes(b"\x28\xb5\x2f\xfd" + b"\x00" * 16)
+    return {}
+
+
+def _add_deps_dockerfile_line(root: pathlib.Path) -> dict:
+    return {"dockerfile_lines": ["RUN mkdir -p /deps/workspace/cache"]}
+
+
+@pytest.mark.parametrize(
+    "setup",
+    [
+        _add_unexcluded_venv,
+        _add_negation,
+        _add_symlink,
+        _add_tar_without_extension,
+        _add_zstd_file,
+        _add_deps_dockerfile_line,
+    ],
+    ids=lambda f: f.__name__.removeprefix("_add_"),
+)
+def test_config_to_docker_uv_lock_keeps_per_entry_copies_when_unsafe(setup):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = pathlib.Path(tmpdir) / "single"
+        _write_single_uv_project(project_root)
+        overrides = setup(project_root)
+
+        docker = _single_uv_docker(project_root / "langgraph.json", **overrides)
+
+        assert "ADD . /deps/workspace" not in docker
+        assert "ADD src /deps/workspace/src" in docker
         assert "ADD README.md /deps/workspace/README.md" in docker
+
+
+def test_config_to_docker_uv_lock_keeps_per_entry_copies_outside_build_context():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = pathlib.Path(tmpdir) / "single"
+        _write_single_uv_project(project_root)
+        (project_root / "deploy").mkdir()
+        (project_root / "deploy" / "langgraph.json").write_text("{}\n")
+
+        docker = _single_uv_docker(
+            project_root / "deploy" / "langgraph.json",
+            graphs={"agent": "../src/agent.py:graph"},
+            source={"kind": "uv", "root": ".."},
+        )
+
+        assert "COPY --from=uv-workspace-root . /deps/workspace" not in docker
+        assert "COPY --from=uv-workspace-root src /deps/workspace/src" in docker
 
 
 def test_config_to_docker_uv_lock_skips_dockerignore_entries_in_workspace():

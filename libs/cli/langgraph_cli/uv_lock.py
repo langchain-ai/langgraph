@@ -2,6 +2,7 @@ import os
 import pathlib
 import re
 import shlex
+import tarfile
 from dataclasses import dataclass
 
 try:
@@ -13,6 +14,7 @@ import click
 import pathspec
 
 from langgraph_cli._ignore import (
+    _ALWAYS_EXCLUDE_NAMES,
     _build_dockerignore_negation_hints,
     _build_ignore_spec,
     _is_always_excluded,
@@ -515,6 +517,59 @@ def _uv_lock_package_copy_items(
         return tuple(entries)
 
     return iter_entries(plan.project_root)
+
+
+def _is_local_archive(path: pathlib.Path) -> bool:
+    """Whether Docker's `ADD` might auto-extract this local file."""
+    try:
+        with path.open("rb") as f:
+            if f.read(4) == b"\x28\xb5\x2f\xfd":  # zstd, which tarfile can't detect
+                return True
+        return tarfile.is_tarfile(path)
+    except OSError:
+        return True
+
+
+def _root_copy_is_equivalent(
+    plan: UvLockPlan,
+    config_root: pathlib.Path,
+    config: Config,
+    copy_items: tuple[tuple[pathlib.PurePosixPath, pathlib.PurePosixPath], ...],
+) -> bool:
+    """Whether one `ADD .` produces the same files as the per-entry ADDs."""
+    root = plan.project_root
+    # The root's .dockerignore is only the effective one when it is the build context.
+    if root != config_root or not copy_items:
+        return False
+    # Workspace members under the root must be skipped or copied separately.
+    if any(root in member.parents for member in plan.all_workspace_roots):
+        return False
+    if any(len(source.parts) != 1 for source, _ in copy_items):
+        return False
+
+    ignore_file = root / ".dockerignore"
+    text = ignore_file.read_text(encoding="utf-8") if ignore_file.is_file() else ""
+    patterns = {s for line in text.splitlines() if (s := line.strip()) and s[0] != "#"}
+    # Negations can force the walk into ignored directories.
+    if any(p.startswith("!") for p in patterns):
+        return False
+    literals = {p.lstrip("/").removeprefix("./").rstrip("/") for p in patterns}
+    # Docker doesn't apply the CLI's built-in exclusions, so .dockerignore must.
+    for child in root.iterdir():
+        name = child.name
+        if (
+            name in _ALWAYS_EXCLUDE_NAMES
+            and child.is_dir()
+            and not {name, f"**/{name}"} & literals
+        ):
+            return False
+    # Per-entry ADD follows symlinks and extracts archives; `ADD .` does neither.
+    for source, _ in copy_items:
+        path = root / source
+        if path.is_symlink() or (path.is_file() and _is_local_archive(path)):
+            return False
+    # Custom lines that touch /deps could make the destination merge differ.
+    return not any("/deps" in line for line in config["dockerfile_lines"])
 
 
 def _resolve_uv_lock_container_path(
@@ -1023,9 +1078,15 @@ def python_config_to_docker_uv_lock(
     for package in plan.install_order:
         package_label = package.root.relative_to(plan.project_root).as_posix() or "."
         docker_plan.add_raw(f"# -- Adding workspace package {package_label} --")
-        for source, destination in _uv_lock_package_copy_items(
-            package, plan, ignore_spec
+        copy_items = _uv_lock_package_copy_items(package, plan, ignore_spec)
+        # Every layer is costly on some builders, so copy the root in one when safe.
+        if package.root == plan.project_root and _root_copy_is_equivalent(
+            plan, config_root, config, copy_items
         ):
+            copy_items = (
+                (pathlib.PurePosixPath("."), plan.container_roots[package.root]),
+            )
+        for source, destination in copy_items:
             docker_plan.add_raw(copy_from_project_root(source, destination.as_posix()))
         docker_plan.add_instruction(
             "WORKDIR", plan.container_roots[package.root].as_posix()
