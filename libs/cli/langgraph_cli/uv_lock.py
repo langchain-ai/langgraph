@@ -519,13 +519,17 @@ def _uv_lock_package_copy_items(
     return iter_entries(plan.project_root)
 
 
+_COMPRESSION_MAGIC = (b"\x1f\x8b", b"BZh", b"\xfd7zXZ\x00", b"\x28\xb5\x2f\xfd")
+
+
 def _is_local_archive(path: pathlib.Path) -> bool:
     """Whether Docker's `ADD` would auto-extract this local file."""
     with path.open("rb") as f:
-        magic = f.read(4)
+        # Match gzip/bzip2/xz/zstd by magic, since tarfile skips codecs Python lacks.
+        if f.read(6).startswith(_COMPRESSION_MAGIC):
+            return True
         f.seek(0)
-        # tarfile can't detect zstd, which BuildKit also extracts.
-        return magic == b"\x28\xb5\x2f\xfd" or tarfile.is_tarfile(f)
+        return tarfile.is_tarfile(f)
 
 
 def _root_copy_is_equivalent(
@@ -536,15 +540,17 @@ def _root_copy_is_equivalent(
 ) -> bool:
     """Whether one `ADD .` produces the same files as the per-entry ADDs."""
     root = plan.project_root
-    # Its .dockerignore only applies as the build context; members need the walk.
+    # Only the build context's .dockerignore applies, and nested members need the walk.
     if root != config_root or any(root in m.parents for m in plan.all_workspace_roots):
         return False
 
     ignore_file = root / ".dockerignore"
     text = ignore_file.read_text(encoding="utf-8") if ignore_file.is_file() else ""
     patterns = {s for line in text.splitlines() if (s := line.strip()) and s[0] != "#"}
-    # Negations can force the walk into ignored directories.
-    if any(p.startswith("!") for p in patterns):
+    # Negations need the walk; Docker reads `[...]` and inner `**` differently.
+    if any(
+        p.startswith("!") or "[" in p or "**" in p.removeprefix("**/") for p in patterns
+    ):
         return False
     literals = {p.lstrip("/").removeprefix("./").rstrip("/") for p in patterns}
     # Docker doesn't apply the CLI's built-in exclusions, so .dockerignore must.

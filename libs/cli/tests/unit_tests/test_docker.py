@@ -447,7 +447,6 @@ def test_parse_version_w_edge_cases(input_str, expected):
 
 
 def test_build_docker_image_opts_into_single_root_copy():
-    # The image is built right away, so the context can't drift from the Dockerfile.
     with (
         patch(
             "langgraph_cli.config.config_to_docker", return_value=("", {})

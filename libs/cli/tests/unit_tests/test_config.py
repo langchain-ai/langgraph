@@ -9,7 +9,9 @@ from unittest.mock import patch
 
 import click
 import pytest
+from click.testing import CliRunner
 
+from langgraph_cli.cli import cli
 from langgraph_cli.config import (
     _BUILD_TOOLS,
     _get_pip_cleanup_lines,
@@ -2440,10 +2442,23 @@ def _add_unrelated_member(root: pathlib.Path) -> None:
     )
 
 
+def _venv_ignored_by(patterns: str):
+    def setup(root: pathlib.Path) -> None:
+        (root / ".venv").mkdir()
+        (root / ".dockerignore").write_text(patterns)
+
+    return setup
+
+
 @pytest.mark.parametrize(
     ("setup", "overrides"),
     [
         pytest.param(lambda r: (r / ".venv").mkdir(), {}, id="unexcluded_venv"),
+        pytest.param(
+            _venv_ignored_by(".venv-old\nsrc/.venv\n"), {}, id="near_miss_literal"
+        ),
+        pytest.param(_venv_ignored_by(".venv\n[!t]*.log\n"), {}, id="char_class"),
+        pytest.param(_venv_ignored_by(".venv\ndata/**\n"), {}, id="inner_globstar"),
         pytest.param(_add_unrelated_member, {}, id="workspace_member"),
         pytest.param(
             lambda r: (r / ".dockerignore").write_text("*.log\n!keep.log\n"),
@@ -2475,6 +2490,28 @@ def test_config_to_docker_uv_lock_keeps_per_entry_copies_when_unsafe(setup, over
         assert "ADD . /deps/workspace" not in docker
         assert "ADD src /deps/workspace/src" in docker
         assert "ADD README.md /deps/workspace/README.md" in docker
+
+
+def test_saved_and_compose_dockerfiles_keep_per_entry_copies():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = pathlib.Path(tmpdir) / "single"
+        _write_single_uv_project(project_root)
+        config_path = project_root / "langgraph.json"
+        raw = {"graphs": {"agent": "./src/agent.py:graph"}, "source": {"kind": "uv"}}
+        config_path.write_text(json.dumps({"python_version": "3.11", **raw}))
+
+        compose = config_to_compose(
+            config_path, validate_config_file(config_path), "langchain/langgraph-api"
+        )
+        saved = project_root / "Dockerfile"
+        result = CliRunner().invoke(
+            cli, ["dockerfile", str(saved), "--config", str(config_path)]
+        )
+
+        assert result.exit_code == 0, result.output
+        for dockerfile in (compose, saved.read_text()):
+            assert "ADD . /deps/workspace" not in dockerfile
+            assert "ADD src /deps/workspace/src" in dockerfile
 
 
 def test_config_to_docker_uv_lock_keeps_per_entry_copies_outside_build_context():
