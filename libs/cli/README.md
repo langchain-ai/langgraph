@@ -99,6 +99,18 @@ langgraph deploy metrics DEPLOYMENT_ID \
   --metrics cpu_usage,memory_usage,worker_count
 ```
 
+`--metrics` accepts a comma-separated list of these names (also listed in
+`langgraph deploy metrics --help`):
+
+- Resource usage: `memory_usage`, `cpu_usage`, `disk_usage`
+- Counts: `restart_count`, `replica_count`, `worker_count`, `lg_run_count`
+- HTTP traffic: `responses_per_second`, `error_responses_per_second`, `p95_latency`
+- Queue: `run_queue_wait_time`
+
+These are exact metric names, not free-text search terms. Availability depends on
+the deployment and platform; a supported metric may have no data. Use
+`lg_run_count` for deployment runs, not the UI schema's placeholder `run_count`.
+
 Omit `--metrics` to fetch all available metrics. Time bounds default to the start of
 the current hour through now, and the backend picks the resolution from the time
 range. This command never prompts; for an organization-scoped key, set

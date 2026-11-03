@@ -87,6 +87,25 @@ def test_invalid_options_do_not_send_requests(monkeypatch, args):
     assert result.exit_code == 2, result.output
 
 
+def test_metrics_help_lists_supported_filters():
+    result = CliRunner().invoke(cli, ["deploy", "metrics", "--help"])
+    assert result.exit_code == 0, result.output
+    for metric in (
+        "memory_usage",
+        "cpu_usage",
+        "disk_usage",
+        "restart_count",
+        "replica_count",
+        "worker_count",
+        "lg_run_count",
+        "responses_per_second",
+        "error_responses_per_second",
+        "p95_latency",
+        "run_queue_wait_time",
+    ):
+        assert metric in result.output
+
+
 @pytest.mark.parametrize("status", [403, 422, 429])
 def test_backend_errors(monkeypatch, status):
     def handler(request):

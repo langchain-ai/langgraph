@@ -2646,7 +2646,14 @@ def deploy_list(
 )
 @click.option("--end-time", help="ISO8601 end time. Defaults to now.")
 @click.option(
-    "--metrics", help="Comma-separated metric names. Defaults to all metrics."
+    "--metrics",
+    help=(
+        "Comma-separated metric names. Defaults to all metrics. Supported names: "
+        "memory_usage, cpu_usage, disk_usage, restart_count, replica_count, "
+        "worker_count, lg_run_count, responses_per_second, "
+        "error_responses_per_second, p95_latency, run_queue_wait_time. "
+        "Availability depends on the deployment and platform."
+    ),
 )
 @click.option(
     "--summary", is_flag=True, help="Omit points and print per-series statistics only."
