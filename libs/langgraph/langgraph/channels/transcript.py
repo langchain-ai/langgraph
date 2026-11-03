@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -14,12 +14,12 @@ from langgraph.errors import InvalidUpdateError
 
 __all__ = ("TranscriptChannel", "TranscriptEntry", "TranscriptRef")
 
-EntryKind = Literal["append", "replace", "remove", "reset"]
+EntryKind = Literal["append", "reset"]
 
 
 @dataclass(frozen=True, slots=True)
 class TranscriptEntry:
-    """One reducer output. `reset` carries the full list in `value`."""
+    """One log entry. `append` carries a message, `reset` the full list."""
 
     seq: int
     kind: EntryKind
@@ -44,72 +44,58 @@ class TranscriptRef:
     is_tip: bool = True
 
 
-def fold(entries: Sequence[TranscriptEntry]) -> list[Any]:
-    """Latest version per id, in first-appearance order, removals dropped."""
-    items: dict[str, Any] = {}
-    for e in entries:
-        if e.kind == "reset":
-            items = {_item_id(m): m for m in e.value}
-        elif e.kind == "remove":
-            items.pop(e.item_id, None)
-        else:
-            items[e.item_id] = e.value
-    return list(items.values())
+def _coerce(update: Any) -> list[Any]:
+    from langchain_core.messages import (
+        BaseMessageChunk,
+        convert_to_messages,
+        message_chunk_to_message,
+    )
 
-
-def diff(old: list[Any], new: list[Any]) -> list[tuple[EntryKind, str, Any]]:
-    """Entries that turn `old` into `new` under `fold`.
-
-    Falls back to a single `reset` when `new` reorders surviving items.
-    """
-    old_by_id = {_item_id(m): m for m in old}
-    new_ids = [_item_id(m) for m in new]
-    kept = [i for i in new_ids if i in old_by_id]
-    added = [i for i in new_ids if i not in old_by_id]
-    surviving = set(new_ids)
-    if kept + added != new_ids or kept != [i for i in old_by_id if i in surviving]:
-        return [("reset", "", list(new))]
-    out: list[tuple[EntryKind, str, Any]] = [
-        ("remove", i, None) for i in old_by_id if i not in surviving
-    ]
-    for m in new:
-        i = _item_id(m)
-        prev = old_by_id.get(i, MISSING)
-        if prev is MISSING:
-            out.append(("append", i, m))
-        elif prev is not m and prev != m:
-            out.append(("replace", i, m))
+    items = update if isinstance(update, list) else [update]
+    out = []
+    for m in convert_to_messages(items):
+        m = message_chunk_to_message(m) if isinstance(m, BaseMessageChunk) else m
+        if m.id is None:
+            m.id = str(uuid.uuid4())
+        out.append(m)
     return out
 
 
-def _item_id(item: Any) -> str:
-    item_id = item.get("id") if isinstance(item, dict) else getattr(item, "id", None)
-    if not item_id:
-        raise InvalidUpdateError("TranscriptChannel items must have an id")
-    return str(item_id)
+def _is_remove(m: Any) -> bool:
+    from langchain_core.messages import RemoveMessage
+
+    return isinstance(m, RemoveMessage)
 
 
-def _default_reducer(left: Any, right: Any) -> Any:
-    from langgraph.graph.message import add_messages
+def _remove_all_id() -> str:
+    from langgraph.graph.message import REMOVE_ALL_MESSAGES
 
-    return add_messages(left, right)
+    return REMOVE_ALL_MESSAGES
 
 
 class TranscriptChannel(BaseChannel[list, Any, TranscriptRef]):
-    """List channel persisted as an append-only log of reducer outputs.
+    """Message list persisted as an append-only log.
 
     The checkpoint stores `(transcript_id, head)`. A checkpointer that
-    supports transcripts persists `entries` atomically with the checkpoint and
-    returns them on read, so loading any checkpoint costs O(len(transcript))
-    and storage grows linearly. Loading a checkpoint that is not the
-    transcript's tip forks into a new transcript.
+    supports transcripts persists new entries atomically with the checkpoint
+    and returns them on read, so storage grows linearly and loading any
+    checkpoint costs O(len(transcript)).
 
-    Items must carry stable ids (messages get them from `add_messages`).
+    Writes contain only new or changed messages:
+
+    * a new id appends;
+    * an existing id (edit) or a `RemoveMessage` forks: a new transcript
+      shares the prefix before the edited message and replays what follows;
+    * `REMOVE_ALL_MESSAGES` or `Overwrite` writes one `reset` entry.
+
+    Loading a checkpoint that is not its transcript's tip also forks.
     """
 
     __slots__ = (
         "value",
-        "reducer",
+        "pos",
+        "anchor",
+        "resets",
         "transcript_id",
         "head",
         "base_head",
@@ -118,23 +104,26 @@ class TranscriptChannel(BaseChannel[list, Any, TranscriptRef]):
         "fork_seq",
     )
 
-    def __init__(
-        self,
-        reducer: Callable[[Any, Any], Any] = _default_reducer,
-        typ: Any = list,
-    ) -> None:
+    def __init__(self, typ: Any = list) -> None:
         super().__init__(typ)
-        self.reducer = reducer
         self.value: list[Any] = []
+        # id -> index in value
+        self.pos: dict[str, int] = {}
+        # id -> seq of the entry that introduced it (an append or a reset)
+        self.anchor: dict[str, int] = {}
+        # seqs of reset entries
+        self.resets: set[int] = set()
         self.transcript_id = str(uuid.uuid4())
         self.head = 0
+        # Highest seq known committed for this channel's lineage.
         self.base_head = 0
         self.pending: list[TranscriptEntry] = []
+        # Set only for a fork this channel created and has not seen committed.
         self.parent_transcript_id = ""
         self.fork_seq = 0
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, TranscriptChannel) and self.reducer == other.reducer
+        return isinstance(other, TranscriptChannel)
 
     @property
     def ValueType(self) -> Any:
@@ -145,13 +134,16 @@ class TranscriptChannel(BaseChannel[list, Any, TranscriptRef]):
         return Any
 
     def _new(self) -> Self:
-        new = self.__class__(self.reducer, self.typ)
+        new = self.__class__(self.typ)
         new.key = self.key
         return new
 
     def copy(self) -> Self:
         new = self._new()
         new.value = list(self.value)
+        new.pos = dict(self.pos)
+        new.anchor = dict(self.anchor)
+        new.resets = set(self.resets)
         new.transcript_id = self.transcript_id
         new.head = self.head
         new.base_head = self.base_head
@@ -166,10 +158,13 @@ class TranscriptChannel(BaseChannel[list, Any, TranscriptRef]):
             return new
         if not isinstance(checkpoint, TranscriptRef):
             # Plain list from a regular channel: start a transcript from it.
-            new.value = list(checkpoint)
-            new._append(diff([], new.value))
+            new._reset(_coerce(list(checkpoint)))
             return new
-        new.value = fold(checkpoint.entries)
+        for e in checkpoint.entries:
+            if e.kind == "reset":
+                new._load_reset(e.seq, e.value)
+            else:
+                new._load_append(e.seq, e.value)
         new.head = new.base_head = checkpoint.head
         if checkpoint.is_tip:
             new.transcript_id = checkpoint.transcript_id
@@ -187,18 +182,112 @@ class TranscriptChannel(BaseChannel[list, Any, TranscriptRef]):
     def update(self, values: Sequence[Any]) -> bool:
         if not values:
             return False
-        new = self.value
         for v in values:
             is_overwrite, overwrite = _get_overwrite(v)
-            new = list(overwrite) if is_overwrite else self.reducer(new, v)
-        self._append(diff(self.value, new))
-        self.value = new
+            if is_overwrite:
+                self._reset(_coerce(list(overwrite)))
+                continue
+            msgs = _coerce(v)
+            remove_all = [
+                i
+                for i, m in enumerate(msgs)
+                if _is_remove(m) and m.id == _remove_all_id()
+            ]
+            if remove_all:
+                self._reset(msgs[remove_all[-1] + 1 :])
+                continue
+            for m in msgs:
+                self._write(m)
         return True
 
-    def _append(self, changes: list[tuple[EntryKind, str, Any]]) -> None:
-        for kind, item_id, value in changes:
-            self.head += 1
-            self.pending.append(TranscriptEntry(self.head, kind, item_id, value))
+    def _write(self, m: Any) -> None:
+        i = self.pos.get(m.id)
+        if i is None:
+            if _is_remove(m):
+                raise InvalidUpdateError(
+                    f"Attempting to delete a message with an ID that doesn't exist ('{m.id}')"
+                )
+            self._append(m)
+            return
+        current = self.value[i]
+        if current is m or (not _is_remove(m) and current == m):
+            # Resend of a message already in the transcript.
+            return
+        replacement = [] if _is_remove(m) else [m]
+        self._fork_at(m.id, replacement)
+
+    def _fork_at(self, item_id: str, replacement: list[Any]) -> None:
+        """Fork before `item_id`, swap it for `replacement`, replay the rest."""
+        # The fork point must already be committed, so it is at most base_head.
+        fork = min(self.anchor[item_id] - 1, self.base_head)
+        prefix = [m for m in self.value if self.anchor[m.id] <= fork]
+        # Entries in (fork, head] that brought in the tail, in order. After a
+        # reset no older item survives, so a reset group is the whole list.
+        groups: list[tuple[int, list[Any]]] = []
+        for m in self.value:
+            a = self.anchor[m.id]
+            if a <= fork:
+                continue
+            if groups and groups[-1][0] == a:
+                groups[-1][1].append(m)
+            else:
+                groups.append((a, [m]))
+
+        # Items surviving the latest reset after the fork point all anchor at
+        # or after it, so replay starts with that reset, even when empty.
+        latest_reset = max((r for r in self.resets if r > fork), default=None)
+        if latest_reset is not None and (not groups or groups[0][0] != latest_reset):
+            groups.insert(0, (latest_reset, []))
+        old_resets = self.resets
+
+        if self.parent_transcript_id:
+            # Fork created this run: base_head == fork_seq, so branch off its parent.
+            parent = self.parent_transcript_id
+        elif fork == 0:
+            parent = ""
+        else:
+            parent = self.transcript_id
+        resets = {r for r in self.resets if r <= fork}
+        anchors = {m.id: self.anchor[m.id] for m in prefix}
+
+        self.transcript_id = str(uuid.uuid4())
+        self.parent_transcript_id = parent
+        self.fork_seq = self.head = self.base_head = fork
+        self.pending = []
+        self.value = prefix
+        self.pos = {m.id: i for i, m in enumerate(prefix)}
+        self.anchor = anchors
+        self.resets = resets
+        for a, group in groups:
+            swapped = [
+                n for m in group for n in (replacement if m.id == item_id else [m])
+            ]
+            if a in old_resets:
+                self._reset(swapped)
+            else:
+                for m in swapped:
+                    self._append(m)
+
+    def _append(self, m: Any) -> None:
+        self.head += 1
+        self.pending.append(TranscriptEntry(self.head, "append", m.id, m))
+        self._load_append(self.head, m)
+
+    def _reset(self, msgs: list[Any]) -> None:
+        self.head += 1
+        self.pending.append(TranscriptEntry(self.head, "reset", "", list(msgs)))
+        self._load_reset(self.head, msgs)
+
+    def _load_append(self, seq: int, m: Any) -> None:
+        self.pos[m.id] = len(self.value)
+        self.anchor[m.id] = seq
+        self.value.append(m)
+
+    def _load_reset(self, seq: int, msgs: list[Any]) -> None:
+        self.value = list(msgs)
+        self.pos = {m.id: i for i, m in enumerate(self.value)}
+        self.anchor = dict.fromkeys(self.pos, seq)
+        self.resets.add(seq)
 
     def checkpoint(self) -> TranscriptRef:
         return TranscriptRef(
