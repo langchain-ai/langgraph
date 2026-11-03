@@ -2458,6 +2458,42 @@ def test_tool_node_list_return_nested_terminator() -> None:
     )
 
 
+def test_parallel_tool_results_precede_other_command_messages() -> None:
+    """Keep all parallel results adjacent before user messages added by tools."""
+    node = ToolNode([_ReturningTool()])
+    outputs = node._combine_tool_outputs(
+        [
+            Command(
+                update={
+                    "messages": [
+                        ToolMessage(content="first", tool_call_id="call-1"),
+                        HumanMessage(content="image result"),
+                    ],
+                    "metadata": "retained",
+                }
+            ),
+            Command(
+                update={
+                    "messages": [ToolMessage(content="second", tool_call_id="call-2")]
+                }
+            ),
+        ],
+        "dict",
+    )
+
+    assert isinstance(outputs[0], dict)
+    assert [message.tool_call_id for message in outputs[0]["messages"]] == [
+        "call-1",
+        "call-2",
+    ]
+    commands = [output for output in outputs if isinstance(output, Command)]
+    assert len(commands) == 2
+    assert commands[0].update == {"messages": [], "metadata": "retained"}
+    assert commands[1].update == {"messages": []}
+    assert isinstance(outputs[-1], dict)
+    assert outputs[-1]["messages"] == [HumanMessage(content="image result")]
+
+
 def test_tool_node_list_return_parent_goto_with_terminator() -> None:
     """Valid: [Command(graph=PARENT, goto=[Send(...)]), ToolMessage(...)]."""
     outer_id = "call-1"
