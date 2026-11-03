@@ -103,6 +103,11 @@ checkpointer.get(read_config)
 list(checkpointer.list(read_config))
 ```
 
+> [!CAUTION]
+> **Memory leak risk with `InMemorySaver`:** this checkpointer stores all checkpoints in a plain Python dictionary and never evicts entries on its own.
+> In long-running applications the retained state grows monotonously — each new `thread_id` accumulates its full checkpoint history and pending writes until the process exits.
+> The caller is responsible for cleaning up stale threads via `.delete_thread()` (or by resetting the checkpointer) according to the application's retention policy.
+
 ## 📕 Releases & Versioning
 
 See our [Releases](https://docs.langchain.com/oss/python/release-policy) and [Versioning](https://docs.langchain.com/oss/python/versioning) policies.
