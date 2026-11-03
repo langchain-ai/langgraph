@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -220,27 +221,51 @@ class HostBackendClient:
         *,
         name: str | None = None,
         name_contains: str | None = None,
-        limit: int | None = None,
         agent_id: str | None = None,
         agent_environment: str | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[dict[str, object]]:
         given = (
             ("name", name),
             ("name_contains", name_contains),
-            ("limit", limit),
             ("agent_id", agent_id),
             ("agent_environment", agent_environment),
         )
-        params = {key: value for key, value in given if value is not None}
-        return _resources(self._request("GET", "/v2/deployments", params=params))
+        filters = {key: value for key, value in given if value is not None}
+        return self._every_page("/v2/deployments", filters)
+
+    def _every_page(
+        self, path: str, filters: Mapping[str, object]
+    ) -> list[dict[str, object]]:
+        resources: list[dict[str, object]] = []
+        seen_ids: set[object] = set()
+        while True:
+            page = _resources(
+                self._request(
+                    "GET",
+                    path,
+                    params={
+                        **filters,
+                        "limit": MAX_PAGE_SIZE,
+                        "offset": len(resources),
+                    },
+                )
+            )
+            page_ids = {resource.get("id") for resource in page}
+            if page_ids and page_ids <= seen_ids:
+                raise HostBackendError(
+                    f"GET {path} returned the same resources again: this control "
+                    "plane ignores 'offset', so the CLI cannot read past the first page."
+                )
+            seen_ids |= page_ids
+            resources.extend(page)
+            if len(page) < MAX_PAGE_SIZE:
+                return resources
 
     def get_listener(self, listener_id: str) -> dict[str, Any]:
         return self._request("GET", f"/v2/listeners/{listener_id}")
 
-    def list_listeners(self) -> list[dict[str, Any]]:
-        return _resources(
-            self._request("GET", "/v2/listeners", params={"limit": MAX_PAGE_SIZE})
-        )
+    def list_listeners(self) -> list[dict[str, object]]:
+        return self._every_page("/v2/listeners", {})
 
     def get_deployment(self, deployment_id: str) -> dict[str, Any]:
         return self._request("GET", f"/v2/deployments/{deployment_id}")
@@ -249,16 +274,22 @@ class HostBackendClient:
         return self._request("DELETE", f"/v2/deployments/{deployment_id}")
 
     def request_push_token(self, deployment_id: str) -> dict[str, Any]:
+        # Tells the control plane this client logs in with the returned
+        # `username` and pushes to `repository_url`. LangSmith AWS requires it.
         return self._request(
             "POST",
             f"/v2/deployments/{deployment_id}/push-token",
+            {"supports_registry_username": True},
         )
 
     def request_upload_url(self, deployment_id: str) -> dict[str, Any]:
-        """Get a signed GCS URL for uploading the source tarball."""
+        """Get a signed URL for uploading the source tarball."""
+        # Tells the control plane this client sends the returned
+        # `upload_headers` with its upload, which some storage requires.
         return self._request(
             "POST",
             f"/v2/deployments/{deployment_id}/upload-url",
+            {"supports_upload_headers": True},
         )
 
     def update_deployment(

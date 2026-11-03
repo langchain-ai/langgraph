@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, AsyncIterator
 from typing import Any, cast
 from unittest.mock import MagicMock
 
 import httpx
+from websockets.exceptions import ConnectionClosedError
+from websockets.frames import Close
 
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.threads import ThreadsClient
@@ -348,3 +350,66 @@ async def test_send_command_applied_through_seq_seeds_shared_stream_since():
     ]
     assert len(values_requests) == 1
     assert values_requests[0]["since"] == 17
+
+
+async def _drain(events: AsyncIterator[Any]) -> list[Any]:
+    return [event async for event in events]
+
+
+async def test_shared_stream_stops_reconnecting_on_a_404():
+    fake = FakeServer()
+    fake.script_sequence(
+        [
+            _StreamScript(events=[values_event(seq=1)], fail_after=1),
+            _StreamScript(events=[], status=404),
+        ]
+    )
+    async with httpx.AsyncClient(
+        transport=fake.transport, base_url="http://test"
+    ) as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(assistant_id="agent") as thread:
+            received = await asyncio.wait_for(
+                _drain(thread.subscribe(["values"])), timeout=5.0
+            )
+
+    assert [event["seq"] for event in received] == [1]
+    assert len(fake.stream_request_bodies) == 2
+
+
+async def test_shared_stream_does_not_reconnect_after_a_4404_close(
+    monkeypatch: Any,
+) -> None:
+    opened: list[dict[str, Any]] = []
+
+    def open_then_close_with_4404(
+        _self: ProtocolSseTransport, params: dict[str, Any]
+    ) -> EventStreamHandle:
+        opened.append(params)
+        loop = asyncio.get_running_loop()
+        ready: asyncio.Future[None] = loop.create_future()
+        ready.set_result(None)
+        done: asyncio.Future[BaseException | None] = loop.create_future()
+        done.set_result(ConnectionClosedError(Close(4404, "not found"), None))
+
+        async def events() -> AsyncGenerator[Any, None]:
+            await asyncio.sleep(0)
+            yield values_event(seq=1)
+
+        async def close() -> None:
+            return None
+
+        return EventStreamHandle(events=events(), ready=ready, done=done, close=close)
+
+    monkeypatch.setattr(
+        ProtocolSseTransport, "open_event_stream", open_then_close_with_4404
+    )
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(assistant_id="agent") as thread:
+            received = await asyncio.wait_for(
+                _drain(thread.subscribe(["values"])), timeout=5.0
+            )
+
+    assert [event["seq"] for event in received] == [1]
+    assert len(opened) == 1

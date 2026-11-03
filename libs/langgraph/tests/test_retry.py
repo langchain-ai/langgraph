@@ -2097,6 +2097,47 @@ def test_graph_error_handler_can_route_with_command():
     assert result["foo"] == "handled_next"
 
 
+# Each case runs the failing node on the executor path instead of the
+# single-task fast path.
+@pytest.mark.parametrize(
+    ("parallel", "stream_mode", "subgraphs"),
+    [
+        (False, "custom", False),
+        (False, "messages", False),
+        (False, "values", True),
+        (True, "values", False),
+    ],
+)
+def test_graph_error_handler_recovers_on_the_executor_path(
+    parallel: bool, stream_mode: str, subgraphs: bool
+) -> None:
+    class State(TypedDict):
+        x: str
+
+    def failing(state: State) -> State:
+        raise ValueError("boom")
+
+    def handler(state: State) -> Command:
+        return Command(update={"x": "handled"}, goto=END)
+
+    builder = (
+        StateGraph(State)
+        .add_node("failing", failing, error_handler=handler)
+        .add_edge(START, "failing")
+    )
+    if parallel:
+        builder.add_node("sibling", lambda state: {}).add_edge(START, "sibling")
+    graph = builder.compile()
+
+    chunks = list(
+        graph.stream(
+            {"x": ""}, stream_mode=[stream_mode, "values"], subgraphs=subgraphs
+        )
+    )
+
+    assert [c[-1] for c in chunks if c[-2] == "values"][-1] == {"x": "handled"}
+
+
 def test_graph_error_handler_failure_fails_run():
     class State(TypedDict):
         foo: str

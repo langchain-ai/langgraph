@@ -521,10 +521,11 @@ def test_addressed_resume_keeps_a_rerun_tasks_write_to_a_new_channel(
     graph = builder.compile(checkpointer=sync_checkpointer)
     config = {"configurable": {"thread_id": "t"}}
     graph.invoke(_both("in"), config, durability=durability)
-    head = graph.get_state(config).config
+    paused = graph.get_state(config).config
+    graph.update_state(config, None)
 
     live = graph.invoke(
-        Command(resume="yes", update={"flag": True}), head, durability=durability
+        Command(resume="yes", update={"flag": True}), paused, durability=durability
     )
 
     state = graph.get_state(config)

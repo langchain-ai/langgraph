@@ -575,7 +575,7 @@ def test_list_listeners_asks_for_a_full_page():
     )
 
     assert c.list_listeners() == [{"id": "listener-1"}]
-    assert seen["url"] == "https://api.example.com/v2/listeners?limit=100"
+    assert seen["url"] == "https://api.example.com/v2/listeners?limit=100&offset=0"
 
 
 @pytest.mark.parametrize(
@@ -602,29 +602,30 @@ def test_is_cloud_recognises_the_managed_control_plane(control_plane_url, expect
     assert endpoints.is_cloud is expected
 
 
+FIRST_PAGE = {"limit": "100", "offset": "0"}
+
+
 @pytest.mark.parametrize(
     ("call", "expected_params"),
     [
         pytest.param(
             lambda c: c.list_deployments(name="agent"),
-            {"name": "agent"},
+            {"name": "agent", **FIRST_PAGE},
             id="exact_name_filters_server_side",
         ),
         pytest.param(
             lambda c: c.list_deployments(name_contains="age"),
-            {"name_contains": "age"},
+            {"name_contains": "age", **FIRST_PAGE},
             id="substring_search_keeps_its_own_parameter",
         ),
         pytest.param(
             lambda c: c.list_deployments(),
-            {},
-            id="no_filter_sends_no_parameters",
+            FIRST_PAGE,
+            id="no_filter_sends_only_the_page",
         ),
         pytest.param(
-            lambda c: c.list_deployments(
-                name="agent", name_contains="agent", limit=100
-            ),
-            {"name": "agent", "name_contains": "agent", "limit": "100"},
+            lambda c: c.list_deployments(name="agent", name_contains="agent"),
+            {"name": "agent", "name_contains": "agent", **FIRST_PAGE},
             id="both_filters_travel_together_for_older_servers",
         ),
     ],
@@ -643,6 +644,68 @@ def test_list_deployments_sends_one_name_filter(call, expected_params):
     )
 
     assert seen == expected_params
+
+
+@pytest.mark.parametrize(
+    "list_every",
+    [
+        pytest.param(HostBackendClient.list_deployments, id="deployments"),
+        pytest.param(HostBackendClient.list_listeners, id="listeners"),
+    ],
+)
+def test_list_endpoints_read_every_page(list_every):
+    resources = [{"id": f"resource-{index}"} for index in range(101)]
+    offsets: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        offset = int(req.url.params["offset"])
+        limit = int(req.url.params["limit"])
+        offsets.append(req.url.params["offset"])
+        return httpx.Response(
+            200, json={"resources": resources[offset : offset + limit]}
+        )
+
+    c = HostBackendClient(
+        "https://api.example.com", "key", transport=httpx.MockTransport(handler)
+    )
+
+    assert list_every(c) == resources
+    assert offsets == ["0", "100"]
+
+
+FIRST_PAGE_OF_DEPLOYMENTS = [
+    {"id": f"dep-{index}", "status": "DEPLOYED"} for index in range(100)
+]
+
+
+@pytest.mark.parametrize(
+    "repeated_page",
+    [
+        pytest.param(FIRST_PAGE_OF_DEPLOYMENTS, id="same_page_again"),
+        pytest.param(
+            [
+                {"id": "dep-99", "status": "DEPLOYING"},
+                *FIRST_PAGE_OF_DEPLOYMENTS[:99],
+            ],
+            id="same_deployments_reordered_and_updated",
+        ),
+    ],
+)
+def test_list_deployments_fails_when_the_server_ignores_the_offset(repeated_page):
+    pages = iter([FIRST_PAGE_OF_DEPLOYMENTS, repeated_page])
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        page = next(pages, None)
+        if page is None:
+            return httpx.Response(500, json={"detail": "the guard let paging run on"})
+        return httpx.Response(200, json={"resources": page})
+
+    c = HostBackendClient(
+        "https://api.example.com", "key", transport=httpx.MockTransport(handler)
+    )
+
+    with pytest.raises(HostBackendError, match="ignores 'offset'"):
+        c.list_deployments()
 
 
 @pytest.mark.parametrize(

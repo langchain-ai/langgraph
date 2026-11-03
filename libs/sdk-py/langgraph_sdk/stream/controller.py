@@ -15,7 +15,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-import random
 from collections import OrderedDict
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
@@ -23,6 +22,7 @@ from typing import Any
 
 from langchain_protocol import Event, SubscribeParams
 
+from langgraph_sdk._shared.utilities import _reconnect_delay
 from langgraph_sdk.stream.transport import AsyncProtocolTransport, EventStreamHandle
 
 # ---------------------------------------------------------------------------
@@ -275,11 +275,13 @@ class StreamController:
 
     async def _reconnect_sleep(self, attempt: int) -> None:
         """Sleep with exponential backoff and jitter for reconnect attempt *attempt*."""
-        base = self._reconnect_backoff_base
-        cap = self._reconnect_backoff_cap
-        delay = min(cap, base * (2**attempt))
-        jitter = random.uniform(0, delay * 0.25)
-        await asyncio.sleep(delay + jitter)
+        await asyncio.sleep(
+            _reconnect_delay(
+                attempt,
+                base=self._reconnect_backoff_base,
+                cap=self._reconnect_backoff_cap,
+            )
+        )
 
     async def _reconnect_shared_stream(self) -> bool:
         """Attempt to reopen the shared stream after a transport drop.

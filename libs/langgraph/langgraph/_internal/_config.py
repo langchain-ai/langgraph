@@ -29,7 +29,19 @@ from langgraph._internal._constants import (
     NS_SEP,
 )
 
-DEFAULT_RECURSION_LIMIT = int(getenv("LANGGRAPH_DEFAULT_RECURSION_LIMIT", "10007"))
+
+class _DefaultRecursionLimit(int):
+    """The limit `ensure_config` fills in when none is given.
+
+    `merge_configs` skips values of this type rather than any equal value, so an
+    explicit limit that happens to equal the default still applies. It checks the
+    type, not identity, because copying or pickling a config rebuilds the value.
+    """
+
+
+DEFAULT_RECURSION_LIMIT = _DefaultRecursionLimit(
+    getenv("LANGGRAPH_DEFAULT_RECURSION_LIMIT", "10007")
+)
 DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT = int(
     getenv("LANGGRAPH_DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT", "5000")
 )
@@ -182,7 +194,7 @@ def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
                     base.get("callbacks"), cast(Callbacks, value)
                 )
             elif key == "recursion_limit":
-                if config["recursion_limit"] != DEFAULT_RECURSION_LIMIT:
+                if not isinstance(config["recursion_limit"], _DefaultRecursionLimit):
                     base["recursion_limit"] = config["recursion_limit"]
             else:
                 base[key] = config[key]  # type: ignore[literal-required]
@@ -335,6 +347,7 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
         recursion_limit=DEFAULT_RECURSION_LIMIT,
         configurable={},
     )
+    inherited_tags: set[str] = set()
     if var_config := var_child_runnable_config.get():
         empty.update(
             {
@@ -343,6 +356,7 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
                 if _is_not_empty(v)
             },
         )
+        inherited_tags.update(empty["tags"])
     # An explicit config that supplies its own checkpoint coordinate (a
     # thread_id, or any checkpoint_ns/checkpoint_id/checkpoint_map) is addressing
     # its own checkpoint lineage, so drop the inherited ambient configurable
@@ -395,12 +409,14 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
                 elif k == "tags":
                     # Concatenate tags across configs so values bound via
                     # with_config(...) are preserved when later configs
-                    # supply additional tags. Matches merge_configs.
+                    # supply additional tags. Matches merge_configs. Tags the
+                    # ambient config already has are skipped: a subgraph gets
+                    # its parent's config both explicitly and as the ambient
+                    # one, so they would double at every nesting level.
                     existing_tags: list[str] | None = empty.get("tags")
+                    new_tags = [t for t in cast(list, v) if t not in inherited_tags]
                     empty["tags"] = (
-                        [*existing_tags, *cast(list, v)]
-                        if existing_tags
-                        else list(cast(list, v))
+                        [*existing_tags, *new_tags] if existing_tags else new_tags
                     )
                 else:
                     empty[k] = v  # type: ignore[literal-required]

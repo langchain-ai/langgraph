@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 import warnings
-from collections.abc import Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from importlib.metadata import version as get_version
 from typing import Any, TypedDict, cast
 
@@ -17,6 +17,8 @@ from langgraph.checkpoint.base import (
     writes_sort_key,
 )
 from langgraph.checkpoint.serde.types import TASKS
+from psycopg import AsyncCursor, Cursor
+from psycopg.rows import DictRow
 from psycopg.types.json import Jsonb
 
 # Page size for stage-1 paged scan in `get_delta_channel_history`. Internal
@@ -158,6 +160,218 @@ INSERT_CHECKPOINT_WRITES_SQL = """
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING
 """
+
+
+PRUNE_STRATEGIES = ("keep_latest", "delete")
+
+PRUNE_DELETE_THREADS_SQL = (
+    "DELETE FROM checkpoints WHERE thread_id = ANY(%s)",
+    "DELETE FROM checkpoint_blobs WHERE thread_id = ANY(%s)",
+    "DELETE FROM checkpoint_writes WHERE thread_id = ANY(%s)",
+)
+
+# The prune statements below never join two sets of a thread's rows: a join is
+# planned from per-thread row estimates, which are worst for the few huge
+# threads worth pruning, and can go quadratic. They look rows up by primary key
+# instead (`LATERAL ... LIMIT 1`, `= ANY`).
+
+# A `DeltaChannel` leaves update counters in checkpoint metadata, or a
+# snapshot: an inline `true` marker with a blob behind it, which a plain `True`
+# value never has. LangGraph.js inlines no values, but marks the threads its
+# DeltaChannel graphs start with `delta_writes_versioned`.
+PRUNE_DELTA_THREADS_SQL = """
+SELECT thread_id FROM checkpoints
+WHERE thread_id = ANY(%s) AND (
+    metadata ? 'counters_since_delta_snapshot'
+    OR metadata ? 'delta_writes_versioned'
+)
+UNION
+SELECT c.thread_id
+FROM checkpoints c
+CROSS JOIN LATERAL jsonb_each(c.checkpoint -> 'channel_values') AS v
+CROSS JOIN LATERAL (
+    SELECT 1 FROM checkpoint_blobs b
+    WHERE b.thread_id = c.thread_id
+    AND b.checkpoint_ns = c.checkpoint_ns
+    AND b.channel = v.key
+    AND b.version = c.checkpoint -> 'channel_versions' ->> v.key
+    LIMIT 1
+) AS snapshot
+WHERE c.thread_id = ANY(%s) AND v.value = 'true'::jsonb
+"""
+
+# Per namespace: the latest checkpoint, the parent it reads its pending sends
+# from when it predates v4, and the root graph's checkpoint its subgraph call
+# started from, with whether that one is saved.
+PRUNE_HEADS_SQL = f"""
+SELECT
+    h.checkpoint_ns,
+    h.checkpoint_id AS head,
+    CASE WHEN (c.checkpoint ->> 'v')::int < 4 AND EXISTS (
+        SELECT 1 FROM checkpoint_writes w
+        WHERE w.thread_id = %s
+        AND w.checkpoint_ns = h.checkpoint_ns
+        AND w.checkpoint_id = c.parent_checkpoint_id
+        AND w.channel = '{TASKS}'
+    ) THEN c.parent_checkpoint_id END AS sends_parent,
+    c.metadata -> 'parents' ->> '' AS root,
+    EXISTS (
+        SELECT 1 FROM checkpoints r
+        WHERE r.thread_id = %s AND r.checkpoint_ns = ''
+        AND r.checkpoint_id = c.metadata -> 'parents' ->> ''
+    ) AS root_saved
+FROM (
+    SELECT DISTINCT ON (checkpoint_ns) checkpoint_ns, checkpoint_id
+    FROM checkpoints
+    WHERE thread_id = %s
+    ORDER BY checkpoint_ns DESC, checkpoint_id DESC
+) AS h
+CROSS JOIN LATERAL (
+    SELECT checkpoint, parent_checkpoint_id, metadata FROM checkpoints
+    WHERE thread_id = %s
+    AND checkpoint_ns = h.checkpoint_ns
+    AND checkpoint_id = h.checkpoint_id
+) AS c
+"""
+
+PRUNE_SNAPSHOT_SQL = "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"
+
+PRUNE_UNKEPT_SQL = """
+SELECT checkpoint_id FROM checkpoints
+WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id <> ALL(%s)
+"""
+
+# A run saves a superstep's writes in the background, where they can commit
+# before their checkpoint does, so they go by the checkpoints deleted.
+PRUNE_WRITES_SQL = """
+DELETE FROM checkpoint_writes
+WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = ANY(%s)
+"""
+
+PRUNE_CHECKPOINTS_SQL = """
+WITH deleted AS (
+    DELETE FROM checkpoints
+    WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id <> ALL(%s)
+    RETURNING checkpoint -> 'channel_versions' AS versions
+)
+SELECT DISTINCT v.key AS channel, v.value AS version
+FROM deleted
+CROSS JOIN LATERAL jsonb_each_text(deleted.versions) AS v
+"""
+
+PRUNE_PARENTS_SQL = """
+UPDATE checkpoints SET parent_checkpoint_id = NULL
+WHERE thread_id = %s AND checkpoint_ns = %s
+AND checkpoint_id = ANY(%s) AND parent_checkpoint_id <> ALL(%s)
+"""
+
+PRUNE_REFERENCED_BLOBS_SQL = """
+SELECT DISTINCT v.key AS channel, v.value AS version
+FROM checkpoints c
+CROSS JOIN LATERAL jsonb_each_text(c.checkpoint -> 'channel_versions') AS v
+WHERE c.thread_id = %s AND c.checkpoint_ns = %s
+"""
+
+PRUNE_BLOBS_SQL = """
+DELETE FROM checkpoint_blobs
+WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s AND version = ANY(%s)
+"""
+
+PRUNE_SUBGRAPH_CALLS_SQL = (
+    "DELETE FROM checkpoints WHERE thread_id = %s AND checkpoint_ns = ANY(%s)",
+    "DELETE FROM checkpoint_writes WHERE thread_id = %s AND checkpoint_ns = ANY(%s)",
+    "DELETE FROM checkpoint_blobs WHERE thread_id = %s AND checkpoint_ns = ANY(%s)",
+)
+
+
+def _garbage_blobs(
+    freed: Sequence[Mapping[str, Any]], referenced: Sequence[Mapping[str, Any]]
+) -> dict[str, list[str]]:
+    """Blobs a deleted checkpoint used and no kept one does, by channel."""
+    kept = {(r["channel"], r["version"]) for r in referenced}
+    garbage: dict[str, list[str]] = {}
+    for r in freed:
+        if (r["channel"], r["version"]) not in kept:
+            garbage.setdefault(r["channel"], []).append(r["version"])
+    return garbage
+
+
+_Statements = Generator[tuple[str, Sequence[Any], bool], list[DictRow], None]
+
+
+def _refuse_delta_threads(thread_ids: Sequence[str]) -> _Statements:
+    rows = yield PRUNE_DELTA_THREADS_SQL, (thread_ids, thread_ids), True
+    if delta := sorted(r["thread_id"] for r in rows):
+        raise NotImplementedError(
+            f"keep_latest can't prune threads that use a DeltaChannel: {', '.join(delta)}"
+        )
+
+
+def _keep_latest(thread_id: str) -> _Statements:
+    """The statements of one thread's keep_latest transaction, for `_execute`
+    and `_aexecute` to run. Each comes with whether its rows are sent back.
+
+    They all read one snapshot, so what a run saves meanwhile is neither seen
+    nor deleted, whatever its checkpoint ID.
+    """
+    yield PRUNE_SNAPSHOT_SQL, (), False
+    heads = yield PRUNE_HEADS_SQL, (thread_id,) * 4, True
+    # Catches a thread that started using a DeltaChannel after the batch check.
+    yield from _refuse_delta_threads([thread_id])
+    kept = {
+        h["checkpoint_ns"]: [i for i in (h["head"], h["sends_parent"]) if i]
+        for h in heads
+    }
+    # A subgraph call's namespace has its task ID after a ":", unlike a
+    # `checkpointer=True` subgraph's, whose state outlives each call. A call
+    # goes with the root checkpoint it started from, but only once that one is
+    # saved: runs save in the background, so a call can commit first.
+    calls = {
+        h["checkpoint_ns"]
+        for h in heads
+        if ":" in h["checkpoint_ns"]
+        and h["root_saved"]
+        and h["root"] not in kept.get("", ())
+    }
+    if calls:
+        for sql in PRUNE_SUBGRAPH_CALLS_SQL:
+            yield sql, (thread_id, list(calls)), False
+    for ns, ids in kept.items():
+        if ns in calls:
+            continue
+        unkept = yield PRUNE_UNKEPT_SQL, (thread_id, ns, ids), True
+        if unkept:
+            deleted = [r["checkpoint_id"] for r in unkept]
+            yield PRUNE_WRITES_SQL, (thread_id, ns, deleted), False
+        freed = yield PRUNE_CHECKPOINTS_SQL, (thread_id, ns, ids), True
+        yield PRUNE_PARENTS_SQL, (thread_id, ns, ids, ids), False
+        if freed:
+            referenced = yield PRUNE_REFERENCED_BLOBS_SQL, (thread_id, ns), True
+            for channel, versions in _garbage_blobs(freed, referenced).items():
+                yield PRUNE_BLOBS_SQL, (thread_id, ns, channel, versions), False
+
+
+# Unprepared, so Postgres plans each statement knowing its arrays: a cached
+# generic plan checks a row against an `= ANY(...)` array one element at a time.
+def _execute(cur: Cursor[DictRow], statements: _Statements) -> None:
+    try:
+        sql, params, fetch = next(statements)
+        while True:
+            cur.execute(sql, params, prepare=False)
+            sql, params, fetch = statements.send(cur.fetchall() if fetch else [])
+    except StopIteration:
+        pass
+
+
+async def _aexecute(cur: AsyncCursor[DictRow], statements: _Statements) -> None:
+    try:
+        sql, params, fetch = next(statements)
+        while True:
+            await cur.execute(sql, params, prepare=False)
+            rows = await cur.fetchall() if fetch else []
+            sql, params, fetch = statements.send(rows)
+    except StopIteration:
+        pass
 
 
 class _DeltaStage2Row(TypedDict, total=False):

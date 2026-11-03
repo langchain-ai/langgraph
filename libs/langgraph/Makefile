@@ -43,14 +43,31 @@ start-services:
 stop-services:
 	docker compose -f tests/compose-postgres.yml -f tests/compose-redis.yml down -v
 
+DEV_SERVER_PYTHON ?= 3.12
+DEV_SERVER_ENV = $(CURDIR)/.venvs/dev-server
+
 start-dev-server:
-	LOG_LEVEL=warning uv run langgraph dev --config tests/example_app/langgraph.json --no-browser & echo "$$!" > .devserver.pid
-	@echo "Dev server started."
+	uv sync --frozen --group test --no-dev
+	UV_PROJECT_ENVIRONMENT=$(DEV_SERVER_ENV) uv sync --frozen --group test --no-dev --python $(DEV_SERVER_PYTHON)
+	@LOG_LEVEL=warning UV_PROJECT_ENVIRONMENT=$(DEV_SERVER_ENV) uv run --no-sync --python $(DEV_SERVER_PYTHON) langgraph dev --config tests/example_app/langgraph.json --no-browser --no-reload & \
+	PID=$$!; echo "$$PID" > .devserver.pid; \
+	for ATTEMPT in $$(seq 1 60); do \
+		if ! kill -0 $$PID 2>/dev/null; then break; fi; \
+		if curl --fail --silent --max-time 1 http://localhost:2024/ok >/dev/null; then \
+			echo "Dev server ready."; exit 0; \
+		fi; \
+		sleep 1; \
+	done; \
+	echo "Dev server failed to become ready." >&2; \
+	kill $$PID 2>/dev/null || true; \
+	wait $$PID 2>/dev/null || true; \
+	rm -f .devserver.pid; exit 1
 
 stop-dev-server:
 	@if [ -f .devserver.pid ]; then \
-		kill `cat .devserver.pid` && rm .devserver.pid; \
-		 echo "Dev server stopped."; \
+		kill $$(cat .devserver.pid) 2>/dev/null || true; \
+		rm -f .devserver.pid; \
+		echo "Dev server stopped."; \
 	else \
 		echo "No dev server PID file found."; \
 	fi
@@ -60,13 +77,12 @@ NO_DOCKER ?= $(sh command -v docker >/dev/null 2>&1 && echo "false" || echo "tru
 
 test:
 	if [ "$(NO_DOCKER)" = "false" ]; then \
-		make start-services &&\
-		make start-dev-server &&\
-		uv run pytest $(TEST); \
-		EXIT_CODE=$$?; \
-		make stop-services; \
-		make stop-dev-server; \
-		exit $$EXIT_CODE; \
+		trap '$(MAKE) stop-dev-server; $(MAKE) stop-services' EXIT; \
+		trap 'exit 130' INT; trap 'exit 143' TERM; \
+		$(MAKE) start-services &&\
+		$(MAKE) start-dev-server &&\
+		uv run --no-sync pytest $(TEST); \
+		exit $$?; \
 	else \
 		NO_DOCKER=true uv run pytest $(TEST) ; \
 		EXIT_CODE=$$?; \
@@ -74,13 +90,12 @@ test:
 	fi
 
 test_parallel:
-	make start-services &&\
-	make start-dev-server &&\
-	uv run pytest -n auto --dist worksteal $(TEST) -vv --lf; \
-	EXIT_CODE=$$?; \
-	make stop-services; \
-	make stop-dev-server; \
-	exit $$EXIT_CODE
+	trap '$(MAKE) stop-dev-server; $(MAKE) stop-services' EXIT; \
+	trap 'exit 130' INT; trap 'exit 143' TERM; \
+	$(MAKE) start-services &&\
+	$(MAKE) start-dev-server &&\
+	uv run --no-sync pytest -n auto --dist worksteal $(TEST) -vv --lf; \
+	exit $$?
 
 integration_tests:
 	uv run pytest integration_tests

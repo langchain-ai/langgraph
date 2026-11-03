@@ -1364,6 +1364,17 @@ def test_search_empty_prefix_is_unconstrained(store: SqliteStore) -> None:
     }
 
 
+@pytest.mark.parametrize("batched", [False, True])
+def test_search_rejects_nul_namespace_prefix(store: SqliteStore, batched: bool) -> None:
+    store.put(("a",), "key", {"v": 1})
+
+    with pytest.raises(InvalidNamespaceError, match="NUL"):
+        if batched:
+            store.batch([SearchOp(("a\x00",))])
+        else:
+            store.search(("a\x00",))
+
+
 def test_namespace_labels_with_trailing_newline(store: SqliteStore) -> None:
     """Labels may contain newlines, and must not match a differently-named label.
 

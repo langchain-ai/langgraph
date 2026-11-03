@@ -1,4 +1,6 @@
+import copy
 import functools
+import pickle
 import sys
 import uuid
 from collections.abc import Callable
@@ -25,6 +27,7 @@ from pydantic import BaseModel, Field
 from typing_extensions import NotRequired, Required, TypedDict
 
 from langgraph._internal._config import (
+    DEFAULT_RECURSION_LIMIT,
     _is_not_empty,
     _merge_callbacks,
     ensure_config,
@@ -620,6 +623,30 @@ def test_merge_configs_merges_metadata_lc_versions() -> None:
     assert merged["metadata"]["lc_agent_name"] == "agent"
 
 
+@pytest.mark.parametrize(
+    "rebuild",
+    [
+        lambda config: config,
+        copy.deepcopy,
+        lambda config: pickle.loads(pickle.dumps(config)),
+    ],
+    ids=["as_is", "deepcopy", "pickle"],
+)
+def test_merge_configs_skips_the_injected_default_recursion_limit(
+    rebuild: Callable[[RunnableConfig], RunnableConfig],
+) -> None:
+    merged = merge_configs({"recursion_limit": 50}, rebuild(ensure_config()))
+    assert merged["recursion_limit"] == 50
+
+
+def test_merge_configs_applies_an_explicit_recursion_limit_equal_to_default() -> None:
+    explicit_default = int(DEFAULT_RECURSION_LIMIT)
+    merged = merge_configs(
+        {"recursion_limit": 50}, {"recursion_limit": explicit_default}
+    )
+    assert merged["recursion_limit"] == explicit_default
+
+
 def test_ensure_config_merges_metadata_lc_versions() -> None:
     a = {
         "metadata": {
@@ -770,6 +797,15 @@ def test_ensure_config_tags_concat_preserves_order_and_duplicates() -> None:
     b = {"tags": ["shared", "beta"]}
     merged = ensure_config(a, b)
     assert merged["tags"] == ["shared", "alpha", "shared", "beta"]
+
+
+def test_ensure_config_skips_tags_inherited_from_ambient() -> None:
+    token = var_child_runnable_config.set({"tags": ["inherited"]})
+    try:
+        merged = ensure_config({"tags": ["inherited", "own"]})
+    finally:
+        var_child_runnable_config.reset(token)
+    assert merged["tags"] == ["inherited", "own"]
 
 
 def test_ensure_config_merges_callbacks_across_configs() -> None:

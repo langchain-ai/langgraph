@@ -99,6 +99,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
         version: Literal["v1"] = "v1",
     ) -> AsyncIterator[StreamPart]: ...
 
@@ -131,6 +132,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
         version: Literal["v2"],
     ) -> AsyncIterator[StreamPartV2]: ...
 
@@ -147,6 +149,7 @@ class RunsClient:
         stream_resumable: bool = False,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint_during: bool | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -160,6 +163,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
         version: Literal["v1"] = "v1",
     ) -> AsyncIterator[StreamPart]: ...
 
@@ -176,6 +180,7 @@ class RunsClient:
         stream_resumable: bool = False,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint_during: bool | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -189,6 +194,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
         version: Literal["v2"],
     ) -> AsyncIterator[StreamPartV2]: ...
 
@@ -385,6 +391,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> Run: ...
 
     @overload
@@ -414,6 +421,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> Run: ...
 
     async def create(
@@ -647,6 +655,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> builtins.list[dict] | dict[str, Any]: ...
 
     @overload
@@ -673,6 +682,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> builtins.list[dict] | dict[str, Any]: ...
 
     async def wait(

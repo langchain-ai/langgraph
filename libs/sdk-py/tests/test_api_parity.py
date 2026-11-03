@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ast
 import inspect
 import re
+from pathlib import Path
 
 import pytest
 
@@ -128,3 +130,45 @@ def test_sync_api_matches_async(async_cls, sync_cls):
             f"Return annotation mismatch for {async_cls.__name__}.{name}: "
             f"async={a_ret}, sync={s_ret}"
         )
+
+
+# Stateless overloads (`thread_id: None`) leave out the thread-only parameters,
+# and stateful ones (`thread_id: str`) leave out `on_completion`, which only
+# applies to stateless runs.
+_RUN_OVERLOAD_OMISSIONS = {
+    "None": {"checkpoint", "checkpoint_id", "multitask_strategy"},
+    "str": {"on_completion"},
+}
+
+
+@pytest.mark.parametrize("client_cls", [RunsClient, SyncRunsClient])
+def test_run_overloads_accept_implementation_params(client_cls) -> None:
+    tree = ast.parse(Path(inspect.getfile(client_cls)).read_text())
+    cls = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == client_cls.__name__
+    )
+    defs = [
+        node
+        for node in cls.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name in {"stream", "create", "wait"}
+    ]
+    impl_params = {
+        node.name: {arg.arg for arg in node.args.kwonlyargs}
+        for node in defs
+        if not node.decorator_list
+    }
+    gaps = []
+    for stub in defs:
+        if not stub.decorator_list:
+            continue
+        thread_id = next(arg for arg in stub.args.args if arg.arg == "thread_id")
+        assert thread_id.annotation is not None
+        kind = ast.unparse(thread_id.annotation)
+        expected = impl_params[stub.name] - _RUN_OVERLOAD_OMISSIONS[kind]
+        if missing := expected - {arg.arg for arg in stub.args.kwonlyargs}:
+            gaps.append(f"{stub.name}(thread_id: {kind}) line {stub.lineno}: {missing}")
+
+    assert not gaps, gaps

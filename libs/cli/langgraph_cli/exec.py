@@ -44,11 +44,8 @@ async def subp_exec(
     on_stdout: Callable[[str], bool | None] | None = None,
 ) -> tuple[str | None, str | None]:
     if verbose:
-        cmd_str = f"+ {cmd} {' '.join(map(str, args))}"
-        if input:
-            print(cmd_str, " <\n", "\n".join(filter(None, input.splitlines())), sep="")
-        else:
-            print(cmd_str)
+        # Never echo stdin: it can carry secrets (docker login --password-stdin).
+        print(f"+ {cmd} {' '.join(map(str, args))}")
     if wait:
         await asyncio.sleep(wait)
 

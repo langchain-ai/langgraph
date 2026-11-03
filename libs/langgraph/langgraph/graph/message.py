@@ -22,7 +22,7 @@ from langchain_core.messages import (
 )
 from typing_extensions import TypedDict, deprecated
 
-from langgraph._internal._constants import CONF, CONFIG_KEY_SEND, NS_SEP
+from langgraph._internal._constants import CONF, CONFIG_KEY_SEND
 from langgraph.graph.state import StateGraph
 from langgraph.pregel._messages import (
     _messages_delta_reducer as _messages_delta_reducer,
@@ -343,7 +343,7 @@ def push_message(
     )
 
     from langgraph.config import get_config
-    from langgraph.pregel._messages import StreamMessagesHandler
+    from langgraph.pregel._messages import StreamMessagesHandler, graph_namespace
 
     config = get_config()
     message = next(x for x in convert_to_messages([message]))
@@ -359,15 +359,12 @@ def push_message(
     ):
         handlers = config["callbacks"]
 
-    if stream_handler := next(
-        (x for x in handlers if isinstance(x, StreamMessagesHandler)), None
-    ):
-        metadata = config["metadata"]
-        message_meta = (
-            tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP)),
-            metadata,
-        )
-        stream_handler._emit(message_meta, message, dedupe=False)
+    metadata = config["metadata"]
+    for handler in handlers:
+        if isinstance(handler, StreamMessagesHandler):
+            ns = graph_namespace(metadata)
+            if handler.subgraphs or not ns or ns == handler.parent_ns:
+                handler._emit((ns, metadata), message, dedupe=False)
 
     if state_key:
         config[CONF][CONFIG_KEY_SEND]([(state_key, message)])

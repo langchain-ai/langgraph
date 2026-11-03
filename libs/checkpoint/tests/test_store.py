@@ -532,7 +532,7 @@ async def test_cannot_put_empty_namespace() -> None:
     assert (await async_store.aget(("valid", "namespace"), "key")) is None
 
 
-INVALID_NAMESPACES = [("foo.bar",), ("foo", ""), (123,)]
+INVALID_NAMESPACES = [("foo.bar",), ("foo\x00",), ("foo", ""), (123,)]
 NAMESPACE_METHODS = ["get", "delete", "search", "prefix", "suffix"]
 
 

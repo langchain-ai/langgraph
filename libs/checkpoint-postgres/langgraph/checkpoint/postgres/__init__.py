@@ -27,10 +27,15 @@ from psycopg_pool import ConnectionPool
 from langgraph.checkpoint.postgres import _internal
 from langgraph.checkpoint.postgres.base import (
     _DELTA_PAGE_SIZE,
+    PRUNE_DELETE_THREADS_SQL,
+    PRUNE_STRATEGIES,
     BasePostgresSaver,
     _build_delta_stage1_sql,
     _build_delta_stage2_sql,
     _DeltaStage2Row,
+    _execute,
+    _keep_latest,
+    _refuse_delta_threads,
 )
 from langgraph.checkpoint.postgres.shallow import ShallowPostgresSaver
 
@@ -400,6 +405,73 @@ class PostgresSaver(BasePostgresSaver):
                 "DELETE FROM checkpoint_writes WHERE thread_id = %s",
                 (str(thread_id),),
             )
+
+    def prune(
+        self,
+        thread_ids: Sequence[str],
+        *,
+        strategy: str = "keep_latest",
+    ) -> None:
+        """Prune checkpoints for the given threads.
+
+        `"delete"` removes every checkpoint, write and blob of the threads, in
+        one transaction.
+
+        `"keep_latest"` keeps the latest checkpoint of each namespace (the one
+        `get_tuple` loads, plus its parent when it predates v4 and has pending
+        sends), with its pending writes and the blobs it references, and
+        deletes the rest. A kept checkpoint whose parent it deletes is left with
+        no parent. A subgraph call's namespace is deleted with the root
+        checkpoint the call started from, except a `checkpointer=True`
+        subgraph's, which keeps its latest checkpoint. Each thread is pruned in
+        its own transaction, on one snapshot of it, so a run appending to the
+        thread meanwhile is safe; forking or replaying from a checkpoint being
+        deleted is not. A thread that fails because another transaction changed
+        it leaves the threads before it pruned, and retrying is safe.
+
+        `"keep_latest"` refuses threads that use a `DeltaChannel`, since it
+        rebuilds the latest value from older checkpoints: if any requested
+        thread does, nothing is pruned. A thread that starts using one before
+        its turn in the batch is refused then, after the threads before it.
+
+        Args:
+            thread_ids: The thread IDs to prune.
+            strategy: `"keep_latest"` or `"delete"`.
+
+        Raises:
+            TypeError: If `thread_ids` is a single string.
+            ValueError: If `strategy` is unknown.
+            NotImplementedError: If `strategy` is `"keep_latest"` and a thread
+                uses a `DeltaChannel`.
+            psycopg.errors.SerializationFailure: If another transaction, such
+                as a second prune, changes a thread's rows while `"keep_latest"`
+                prunes it.
+            psycopg.errors.DeadlockDetected: If a second prune of a thread runs
+                at the same time.
+        """
+        if isinstance(thread_ids, str):
+            raise TypeError("thread_ids must be a sequence of thread IDs, not a str")
+        if strategy not in PRUNE_STRATEGIES:
+            raise ValueError(f"Unknown prune strategy: {strategy!r}")
+        thread_ids = [str(t) for t in thread_ids]
+        if not thread_ids:
+            return
+        if strategy == "delete":
+            with self._cursor() as cur, cur.connection.transaction():
+                for sql in PRUNE_DELETE_THREADS_SQL:
+                    cur.execute(sql, (thread_ids,))
+            return
+        with self._cursor() as cur:
+            _execute(cur, _refuse_delta_threads(thread_ids))
+        for thread_id in thread_ids:
+            with self._cursor() as cur:
+                if self.pipe:
+                    # The transaction has to start with its isolation level, and
+                    # in pipeline mode it would take in what ran since the last
+                    # sync.
+                    self.pipe.sync()
+                with cur.connection.transaction():
+                    _execute(cur, _keep_latest(thread_id))
 
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:

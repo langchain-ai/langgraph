@@ -847,6 +847,11 @@ class RemoteGraph(PregelProtocol):
             # filter for what was actually requested
             if mode not in requested:
                 continue
+            # subgraph events may have been requested only for the parent stream.
+            # messages are exempt: the server dedupes them across namespaces, so
+            # dropping them here would also drop the root-level message
+            if not subgraphs and NS_SEP in chunk.event and mode != "messages":
+                continue
 
             if chunk.event.startswith("messages"):
                 chunk = chunk._replace(data=tuple(chunk.data))
@@ -861,11 +866,6 @@ class RemoteGraph(PregelProtocol):
                     )
                 yield {"type": mode, "ns": ns, "data": chunk.data, "interrupts": ints}
             elif subgraphs:
-                if NS_SEP in chunk.event:
-                    mode, ns_ = chunk.event.split(NS_SEP, 1)
-                    ns = tuple(ns_.split(NS_SEP))
-                else:
-                    mode, ns = chunk.event, ()
                 if req_single:
                     yield ns, chunk.data
                 else:
@@ -1002,6 +1002,11 @@ class RemoteGraph(PregelProtocol):
             # filter for what was actually requested
             if mode not in requested:
                 continue
+            # subgraph events may have been requested only for the parent stream.
+            # messages are exempt: the server dedupes them across namespaces, so
+            # dropping them here would also drop the root-level message
+            if not subgraphs and NS_SEP in chunk.event and mode != "messages":
+                continue
 
             if chunk.event.startswith("messages"):
                 chunk = chunk._replace(data=tuple(chunk.data))
@@ -1016,11 +1021,6 @@ class RemoteGraph(PregelProtocol):
                     )
                 yield {"type": mode, "ns": ns, "data": chunk.data, "interrupts": ints}
             elif subgraphs:
-                if NS_SEP in chunk.event:
-                    mode, ns_ = chunk.event.split(NS_SEP, 1)
-                    ns = tuple(ns_.split(NS_SEP))
-                else:
-                    mode, ns = chunk.event, ()
                 if req_single:
                     yield ns, chunk.data
                 else:

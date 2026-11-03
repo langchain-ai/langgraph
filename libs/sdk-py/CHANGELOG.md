@@ -1,6 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.4.12
+
+### Removed
+
+- **`PrioritySettings.fairness_weight`** — removed. The server stores only
+  `priority` and `fairness_group` on the thread; it ignores a
+  `fairness_weight` and logs a warning. Remove it from your callback.
+
+### Changed
+
+- **`PrioritySettings.priority`** — now says -5 runs first and 5 runs last,
+  matching how the server orders runs. 0.4.9 to 0.4.11 said the reverse, and
+  their example gave premium users 3, which runs them after everyone at the
+  default 0. Check any callback written from those docs.
+
+## 0.4.11 and earlier
 
 ### Added
 
@@ -33,6 +48,14 @@
 
 - **`thread.output`** — awaitable that resolves to the terminal thread state
   `values` dict after the run lifecycle completes.
+
+- **`Priority` (beta)** — register an async function with `@priority.assign`
+  and name the object in the `priority` section of `langgraph.json`. The
+  server calls the function with a `PriorityContext` at the first run on a
+  thread with no settings and stores the `PrioritySettings` it returns
+  (`priority`, `fairness_group`) on the thread. Requires
+  `langgraph-api` 0.18.0 or later and a `langgraph-cli` that supports the
+  section; older versions of either ignore it.
 
 ### Changed
 

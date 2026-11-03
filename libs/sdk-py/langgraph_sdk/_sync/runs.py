@@ -80,6 +80,7 @@ class SyncRunsClient:
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
+        stream_resumable: bool = False,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
@@ -98,6 +99,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
         version: Literal["v1"] = "v1",
     ) -> Iterator[StreamPart]: ...
 
@@ -111,6 +113,7 @@ class SyncRunsClient:
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
+        stream_resumable: bool = False,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
@@ -129,6 +132,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
         version: Literal["v2"],
     ) -> Iterator[StreamPartV2]: ...
 
@@ -159,6 +163,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
         version: Literal["v1"] = "v1",
     ) -> Iterator[StreamPart]: ...
 
@@ -189,6 +194,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
         version: Literal["v2"],
     ) -> Iterator[StreamPartV2]: ...
 
@@ -380,6 +386,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> Run: ...
 
     @overload
@@ -409,6 +416,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> Run: ...
 
     def create(
@@ -642,6 +650,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> builtins.list[dict] | dict[str, Any]: ...
 
     @overload
@@ -668,6 +677,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> builtins.list[dict] | dict[str, Any]: ...
 
     def wait(
@@ -815,7 +825,6 @@ class SyncRunsClient:
             "checkpoint_during": checkpoint_during,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
-            "raise_error": raise_error,
             "durability": durability,
             "langsmith_tracer": langsmith_tracing,
         }
@@ -830,7 +839,7 @@ class SyncRunsClient:
             if thread_id is not None
             else "/runs/wait"
         )
-        return self.http.request_reconnect(
+        response = self.http.request_reconnect(
             endpoint,
             "POST",
             json={k: v for k, v in payload.items() if v is not None},
@@ -838,6 +847,16 @@ class SyncRunsClient:
             headers=headers,
             on_response=on_response if on_run_created else None,
         )
+        if (
+            raise_error
+            and isinstance(response, dict)
+            and "__error__" in response
+            and isinstance(response["__error__"], dict)
+        ):
+            raise Exception(
+                f"{response['__error__'].get('error')}: {response['__error__'].get('message')}"
+            )
+        return response
 
     def list(
         self,
