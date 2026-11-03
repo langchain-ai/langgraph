@@ -2676,69 +2676,6 @@ def deploy_metrics(
     click.echo(json_mod.dumps(result))
 
 
-@OPT_HOST_API_KEY
-@OPT_HOST_URL
-@click.argument("deployment_id", type=click.UUID)
-@click.option(
-    "--compute-tier",
-    type=click.Choice(
-        [
-            "SERVERLESS_S",
-            "SERVERLESS_M",
-            "SERVERLESS_L",
-            "DEDICATED_S",
-            "DEDICATED_M",
-            "DEDICATED_L",
-        ]
-    ),
-    help="Compute resource tier. Omit to leave compute unchanged.",
-)
-@click.option(
-    "--database-tier",
-    type=click.Choice(["DEDICATED_S", "DEDICATED_M", "DEDICATED_L"]),
-    help="Postgres resource tier for dedicated deployments. Omit to leave unchanged.",
-)
-@click.option(
-    "--yes", is_flag=True, help="Confirm the scaling change without prompting."
-)
-@deploy.command(
-    "scale",
-    help="[Beta] Change compute or Postgres tiers. Creates a revision and may change billing.",
-)
-def deploy_scale(
-    api_key: str | None,
-    host_url: str | None,
-    deployment_id: UUID,
-    compute_tier: str | None,
-    database_tier: str | None,
-    yes: bool,
-) -> None:
-    payload = {
-        key: value
-        for key, value in {
-            "compute_tier": compute_tier,
-            "database_tier": database_tier,
-        }.items()
-        if value is not None
-    }
-    if not payload:
-        raise click.UsageError("Specify --compute-tier or --database-tier.")
-    if not yes:
-        changes = ", ".join(f"{key}={value}" for key, value in payload.items())
-        click.confirm(
-            f"Scale deployment {deployment_id} ({changes})? "
-            "This creates a revision and may change billing or interrupt service.",
-            abort=True,
-        )
-    client = _create_host_backend_client(host_url, api_key, no_input=yes)
-    _call_host_backend_with_optional_tenant(
-        client,
-        lambda c: c.scale_deployment(str(deployment_id), payload),
-        no_input=yes,
-    )
-    click.echo(f"Scaling requested for deployment {deployment_id}.")
-
-
 @deploy.group(
     "listeners",
     cls=NestedHelpGroup,
