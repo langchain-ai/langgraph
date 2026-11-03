@@ -50,18 +50,20 @@ class PrioritySettings(typing.TypedDict, total=False):
 
     Every key is optional: a missing key or a key set to `None` takes its
     default, and returning `None` instead of a dict gives every key its default.
-    A value outside its range, or an empty `fairness_group`, is an error.
+    A `priority` outside -5 to 5, or a `fairness_group` longer than 256
+    characters, is an error.
     """
 
     priority: int | None
-    """An integer from -5 to 5, where 5 runs first and -5 runs last. Defaults to 0."""
+    """An integer from -5 to 5, where -5 runs first and 5 runs last. Defaults to 0."""
 
     fairness_group: str | None
-    """The thread's fairness group, a non-empty string. Defaults to `"default"`.
+    """Currently disabled.
+    The thread's fairness group, a string of at most 256 characters.
+
+    Defaults to `"default"`, as does an empty string. It has no effect on run
+    order for now.
 
     The server stores it unencrypted, even when the deployment uses custom
     encryption, so use an opaque ID rather than personal data.
     """
-
-    fairness_weight: int | None
-    """The weight of the thread's fairness group, an integer from 1 to 100. Defaults to 1."""
