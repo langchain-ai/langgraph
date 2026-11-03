@@ -101,6 +101,18 @@ def _reconstruction_fallback(tup: Any, exc: Exception) -> Any:
     return payload
 
 
+def _tuplify(obj: Any) -> Any:
+    """Recursively convert lists to tuples.
+
+    msgpack has no tuple type, so a tuple serialized inside a set or frozenset
+    decodes as a list. A list can never be an element of a set (it is
+    unhashable), so every list found here must have been a tuple.
+    """
+    if isinstance(obj, list):
+        return tuple(_tuplify(item) for item in obj)
+    return obj
+
+
 class JsonPlusSerializer(SerializerProtocol):
     """Serializer that uses ormsgpack, with optional fallbacks.
 
@@ -670,8 +682,15 @@ def _create_msgpack_ext_hook(
                     # is using this in the context of a pydantic state, etc., then
                     # it would be validated upon construction.
                     return tup[2]
+                arg = tup[2]
+                if (
+                    tup[0] == "builtins"
+                    and tup[1] in ("set", "frozenset")
+                    and isinstance(arg, list)
+                ):
+                    arg = [_tuplify(item) for item in arg]
                 # module, name, arg
-                return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
+                return getattr(importlib.import_module(tup[0]), tup[1])(arg)
             except Exception as exc:
                 return _reconstruction_fallback(tup, exc)
         elif code == EXT_CONSTRUCTOR_POS_ARGS:
