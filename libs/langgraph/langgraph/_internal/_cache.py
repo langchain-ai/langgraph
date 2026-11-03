@@ -10,7 +10,20 @@ def _freeze(obj: Any, depth: int = 10) -> Hashable:
         return obj
     elif isinstance(obj, Mapping):
         # sort keys so {"a":1,"b":2} == {"b":2,"a":1}
-        return tuple(sorted((k, _freeze(v, depth - 1)) for k, v in obj.items()))
+        items = [(k, _freeze(v, depth - 1)) for k, v in obj.items()]
+        try:
+            items.sort()
+        except TypeError:
+            # Hashable keys are not necessarily orderable (Enum members, mixed key
+            # types), and a cache key must not raise for a valid call. Fall back to
+            # a stable serialization of the key; mappings whose keys are comparable
+            # keep the cache keys they have today (issue #9566).
+            import pickle
+
+            items.sort(
+                key=lambda item: pickle.dumps(item[0], protocol=5, fix_imports=False)
+            )
+        return tuple(items)
     elif isinstance(obj, Sequence):
         return tuple(_freeze(x, depth - 1) for x in obj)
     # numpy / pandas etc. can provide their own .tobytes()
