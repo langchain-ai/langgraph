@@ -24,6 +24,7 @@ from langgraph_cli.analytics import log_command
 from langgraph_cli.config import Config
 from langgraph_cli.constants import DEFAULT_CONFIG
 from langgraph_cli.dependency_tracking import find_tracked_packages
+from langgraph_cli.deployment_metrics import compact_deployment_metrics
 from langgraph_cli.docker import build_docker_image, can_build_locally
 from langgraph_cli.exec import CommandRunner, Runner, subp_exec
 from langgraph_cli.host_backend import (
@@ -2647,8 +2648,14 @@ def deploy_list(
 @click.option(
     "--metrics", help="Comma-separated metric names. Defaults to all metrics."
 )
+@click.option(
+    "--summary", is_flag=True, help="Omit points and print per-series statistics only."
+)
+@click.option(
+    "--raw", is_flag=True, help="Print the original host-backend chart schema."
+)
 @deploy.command(
-    "metrics", help="[Beta] Fetch deployment monitoring time series as JSON."
+    "metrics", help="[Beta] Fetch deployment monitoring time series as compact JSON."
 )
 def deploy_metrics(
     api_key: str | None,
@@ -2657,7 +2664,11 @@ def deploy_metrics(
     start_time: str | None,
     end_time: str | None,
     metrics: str | None,
+    summary: bool,
+    raw: bool,
 ) -> None:
+    if summary and raw:
+        raise click.UsageError("--summary and --raw are mutually exclusive.")
     params = {
         key: value
         for key, value in {
@@ -2673,7 +2684,15 @@ def deploy_metrics(
         lambda c: c.get_deployment_metrics(str(deployment_id), params),
         no_input=True,
     )
-    click.echo(json_mod.dumps(result))
+    if not raw:
+        result = compact_deployment_metrics(
+            result,
+            str(deployment_id),
+            start_time=start_time,
+            end_time=end_time,
+            summary=summary,
+        )
+    click.echo(json_mod.dumps(result, separators=(",", ":")))
 
 
 @deploy.group(

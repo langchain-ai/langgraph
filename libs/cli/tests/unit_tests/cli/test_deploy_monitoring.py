@@ -6,6 +6,7 @@ from click.testing import CliRunner
 
 import langgraph_cli.deploy as deploy_module
 from langgraph_cli.cli import cli
+from langgraph_cli.deployment_metrics import compact_deployment_metrics
 from langgraph_cli.host_backend import HostBackendClient
 
 DEPLOYMENT_ID = "019a0000-0000-7000-8000-000000000001"
@@ -27,8 +28,9 @@ def invoke(monkeypatch, args, handler, input=None):
 
 
 @pytest.mark.parametrize("filtered", [False, True])
-def test_metrics(monkeypatch, filtered):
-    charts = {"id": "metrics", "charts": [], "sub_sections": []}
+@pytest.mark.parametrize("mode", [None, "--summary", "--raw"])
+def test_metrics(monkeypatch, filtered, mode, deployment_metrics_response):
+    charts = deployment_metrics_response
     params = (
         {
             "start_time": "2026-10-28T00:00:00Z",
@@ -50,9 +52,23 @@ def test_metrics(monkeypatch, filtered):
     args = ["metrics", DEPLOYMENT_ID]
     for key, value in params.items():
         args.extend([f"--{key.replace('_', '-')}", value])
+    if mode:
+        args.append(mode)
     result = invoke(monkeypatch, args, handler)
     assert result.exit_code == 0, result.output
-    assert json.loads(result.output) == charts
+    expected = (
+        charts
+        if mode == "--raw"
+        else compact_deployment_metrics(
+            charts,
+            DEPLOYMENT_ID,
+            start_time=params.get("start_time"),
+            end_time=params.get("end_time"),
+            summary=mode == "--summary",
+        )
+    )
+    assert json.loads(result.output) == expected
+    assert result.output.strip() == json.dumps(expected, separators=(",", ":"))
 
 
 @pytest.mark.parametrize(
@@ -60,6 +76,7 @@ def test_metrics(monkeypatch, filtered):
     [
         ["metrics", DEPLOYMENT_ID, "--step-seconds", "60"],
         ["metrics", "invalid-id"],
+        ["metrics", DEPLOYMENT_ID, "--summary", "--raw"],
     ],
 )
 def test_invalid_options_do_not_send_requests(monkeypatch, args):

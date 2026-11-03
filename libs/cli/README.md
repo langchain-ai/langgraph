@@ -101,9 +101,38 @@ langgraph deploy metrics DEPLOYMENT_ID \
 
 Omit `--metrics` to fetch all available metrics. Time bounds default to the start of
 the current hour through now, and the backend picks the resolution from the time
-range. Output contains
-charts and their time-series data, not traces. This command never prompts; for an
-organization-scoped key, set `LANGSMITH_TENANT_ID` to the workspace ID.
+range. This command never prompts; for an organization-scoped key, set
+`LANGSMITH_TENANT_ID` to the workspace ID.
+
+Default output is compact JSON grouped by section title, chart title, and series
+name. Each series contains its real `project_metric` as `metric`, inferred `unit`
+(`percent`, `count`, or `null`), `latest`, `min`, `max`, `avg`, and
+`points: [[iso_timestamp, value], ...]`. Values are rounded to three decimals;
+statistics use unrounded finite values and ignore missing samples. `latest` is
+the latest non-missing value. Missing samples remain `null` gaps, and series with
+no values have null statistics. Empty sections are marked `{"_empty":true}`.
+
+The top level includes `deployment_id`, `start_time`, `end_time`, and `step`.
+Bounds echo the requested range, or use the observed point bounds when omitted
+(`null` if no points). `step` is the spacing in seconds only when consistent
+within all series; otherwise it is `null`. UI metadata and repeated series IDs
+are omitted. The host-backend response itself is unchanged.
+
+```bash
+langgraph deploy metrics DEPLOYMENT_ID --summary
+langgraph deploy metrics DEPLOYMENT_ID --raw
+```
+
+`--summary` returns the same shape without `points`. `--raw` returns the original
+UI chart schema without reshaping or rounding. These flags are mutually exclusive.
+Neither mode returns traces.
+
+Size comparison using the realistic synthetic unit-test fixture (compact JSON
+serialization for all modes; not a live deployment benchmark):
+
+| Before: raw UI schema | After: default | After: summary |
+| --- | --- | --- |
+| 4,302 bytes | 1,220 bytes (72% smaller) | 800 bytes (81% smaller) |
 
 ## Configuration
 
