@@ -301,7 +301,11 @@ class BaseSqliteStore:
         for namespace, items in namespace_groups.items():
             _, keys = zip(*items, strict=False)
             this_refresh_ttls = refresh_ttls[namespace]
-            refresh_ttl_any = any(this_refresh_ttls)
+            refresh_keys = [
+                key
+                for (_, key), refresh in zip(items, this_refresh_ttls, strict=False)
+                if refresh
+            ]
 
             # Always add the main query to get the data
             select_query = f"""
@@ -316,11 +320,11 @@ class BaseSqliteStore:
 
             # Add a TTL refresh query if needed
             if (
-                refresh_ttl_any
+                refresh_keys
                 and self.ttl_config
                 and self.ttl_config.get("refresh_on_read", False)
             ):
-                placeholders = ",".join(["?"] * len(keys))
+                placeholders = ",".join(["?"] * len(refresh_keys))
                 update_query = f"""
                     UPDATE store
                     SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
@@ -328,7 +332,7 @@ class BaseSqliteStore:
                     AND key IN ({placeholders})
                     AND ttl_minutes IS NOT NULL
                 """
-                update_params = (_namespace_to_text(namespace), *keys)
+                update_params = (_namespace_to_text(namespace), *refresh_keys)
                 results.append(
                     PreparedGetQuery(
                         update_query, update_params, namespace, items, "refresh"
@@ -901,7 +905,11 @@ class SqliteStore(BaseSqliteStore, BaseStore):
         for namespace, items in namespace_groups.items():
             _, keys = zip(*items, strict=False)
             this_refresh_ttls = refresh_ttls[namespace]
-            refresh_ttl_any = any(this_refresh_ttls)
+            refresh_keys = [
+                key
+                for (_, key), refresh in zip(items, this_refresh_ttls, strict=False)
+                if refresh
+            ]
 
             # Always add the main query to get the data
             select_query = f"""
@@ -916,11 +924,11 @@ class SqliteStore(BaseSqliteStore, BaseStore):
 
             # Add a TTL refresh query if needed
             if (
-                refresh_ttl_any
+                refresh_keys
                 and self.ttl_config
                 and self.ttl_config.get("refresh_on_read", False)
             ):
-                placeholders = ",".join(["?"] * len(keys))
+                placeholders = ",".join(["?"] * len(refresh_keys))
                 update_query = f"""
                     UPDATE store
                     SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
@@ -928,7 +936,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                     AND key IN ({placeholders})
                     AND ttl_minutes IS NOT NULL
                 """
-                update_params = (_namespace_to_text(namespace), *keys)
+                update_params = (_namespace_to_text(namespace), *refresh_keys)
                 results.append(
                     PreparedGetQuery(
                         update_query, update_params, namespace, items, "refresh"
