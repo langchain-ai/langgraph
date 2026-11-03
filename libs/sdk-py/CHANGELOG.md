@@ -14,9 +14,6 @@
   matching how the server orders runs. 0.4.9 to 0.4.11 said the reverse, and
   their example gave premium users 3, which runs them after everyone at the
   default 0. Check any callback written from those docs.
-- **`PrioritySettings.fairness_group`** — currently disabled: it has no effect
-  on run order for now. An empty string takes the default, like a missing key;
-  earlier docstrings called it an error.
 
 ## 0.4.11 and earlier
 
