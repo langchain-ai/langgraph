@@ -151,6 +151,28 @@ serialization for all modes; not a live deployment benchmark):
 | --- | --- | --- |
 | 4,302 bytes | 1,226 bytes (72% smaller) | 806 bytes (81% smaller) |
 
+### `langgraph deploy scale`
+
+Change a deployment's compute tier, dedicated Postgres tier, or both. Omitted
+settings remain unchanged. The backend enforces deployment permissions, supported
+tiers, and platform restrictions.
+
+```bash
+langgraph deploy scale DEPLOYMENT_ID \
+  --compute-tier DEDICATED_M --database-tier DEDICATED_L
+```
+
+Compute tiers are `SERVERLESS_S`, `SERVERLESS_M`, `SERVERLESS_L`, `DEDICATED_S`,
+`DEDICATED_M`, and `DEDICATED_L`. Database tiers are available only for dedicated
+deployments: `DEDICATED_S`, `DEDICATED_M`, and `DEDICATED_L`. Availability depends
+on the deployment's platform and enabled features.
+
+Scaling prompts for confirmation because it creates a revision, may interrupt
+service, and may change billing. Pass `--yes` to confirm without prompting, with
+credentials and workspace configured for non-interactive use. The command reports
+that scaling was requested; it does not wait for the revision to become healthy.
+Arbitrary worker replica overrides are not supported by this command.
+
 ## Configuration
 
 The CLI uses a `langgraph.json` configuration file with these key settings:

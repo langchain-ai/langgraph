@@ -369,6 +369,11 @@ class HostBackendClient:
             "GET", f"/v2/deployments/{deployment_id}/metrics", params=params
         )
 
+    def scale_deployment(self, deployment_id: str, payload: dict[str, str]) -> None:
+        self._request(
+            "PATCH", f"/v2/deployments/{deployment_id}/resource-tiers", payload
+        )
+
     def get_build_logs(
         self, project_id: str, revision_id: str, payload: dict[str, Any]
     ) -> Any:
