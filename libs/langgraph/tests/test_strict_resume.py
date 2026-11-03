@@ -1,0 +1,255 @@
+import operator
+import uuid
+from typing import Annotated
+
+import pytest
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from typing_extensions import TypedDict
+
+from langgraph._internal._constants import CONFIG_KEY_STRICT_RESUME
+from langgraph.errors import UnknownInterruptError
+from langgraph.graph import START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import Command, Durability, interrupt
+
+pytestmark = pytest.mark.anyio
+
+UNKNOWN_ID = "0" * 32
+
+
+class State(TypedDict, total=False):
+    log: Annotated[list[str], operator.add]
+
+
+def _config(*, strict: bool = True) -> RunnableConfig:
+    return {
+        "configurable": {
+            "thread_id": str(uuid.uuid4()),
+            CONFIG_KEY_STRICT_RESUME: strict,
+        }
+    }
+
+
+def _parallel(checkpointer: BaseCheckpointSaver) -> CompiledStateGraph:
+    def a(state: State):
+        return {"log": [f"a:{interrupt('a?')}"]}
+
+    def b(state: State):
+        return {"log": [f"b:{interrupt('b?')}"]}
+
+    return (
+        StateGraph(State)
+        .add_node("a", a)
+        .add_node("b", b)
+        .add_edge(START, "a")
+        .add_edge(START, "b")
+        .compile(checkpointer=checkpointer)
+    )
+
+
+def _pending_ids(graph: CompiledStateGraph, config: RunnableConfig) -> dict[str, str]:
+    return {i.value: i.id for i in graph.get_state(config).interrupts}
+
+
+def test_unknown_id_is_refused_before_anything_is_written(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    graph = _parallel(sync_checkpointer)
+    config = _config()
+    graph.invoke({"log": []}, config, durability=durability)
+    before = graph.get_state(config)
+    checkpoints = len(list(sync_checkpointer.list(config)))
+
+    with pytest.raises(
+        UnknownInterruptError,
+        match=f"Unknown or already-consumed interrupt: {UNKNOWN_ID}",
+    ):
+        graph.invoke(Command(resume={UNKNOWN_ID: "x"}), config, durability=durability)
+
+    after = graph.get_state(config)
+    assert len(list(sync_checkpointer.list(config))) == checkpoints
+    assert (after.values, after.next, after.interrupts) == (
+        before.values,
+        before.next,
+        before.interrupts,
+    )
+    ids = _pending_ids(graph, config)
+    result = graph.invoke(
+        Command(resume={ids["a?"]: "yes", ids["b?"]: "no"}),
+        config,
+        durability=durability,
+    )
+    assert sorted(result["log"]) == ["a:yes", "b:no"]
+
+
+def test_an_answered_id_is_refused(sync_checkpointer: BaseCheckpointSaver) -> None:
+    graph = _parallel(sync_checkpointer)
+    config = _config()
+    graph.invoke({"log": []}, config)
+    ids = _pending_ids(graph, config)
+    graph.invoke(Command(resume={ids["a?"]: "yes"}), config)
+
+    with pytest.raises(UnknownInterruptError, match=ids["a?"]):
+        graph.invoke(Command(resume={ids["a?"]: "again"}), config)
+
+    result = graph.invoke(Command(resume={ids["b?"]: "no"}), config)
+    assert sorted(result["log"]) == ["a:yes", "b:no"]
+
+
+def test_an_empty_map_is_refused(sync_checkpointer: BaseCheckpointSaver) -> None:
+    graph = _parallel(sync_checkpointer)
+    config = _config()
+    graph.invoke({"log": []}, config)
+
+    with pytest.raises(UnknownInterruptError, match="names no interrupt"):
+        graph.invoke(Command(resume={}), config)
+
+
+def test_one_value_is_refused_while_several_are_pending(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = _parallel(sync_checkpointer)
+    config = _config()
+    graph.invoke({"log": []}, config)
+
+    with pytest.raises(UnknownInterruptError, match="multiple pending interrupts"):
+        graph.invoke(Command(resume="yes"), config)
+
+    ids = _pending_ids(graph, config)
+    graph.invoke(Command(resume={ids["a?"]: "yes"}), config)
+    result = graph.invoke(Command(resume="no"), config)
+    assert sorted(result["log"]) == ["a:yes", "b:no"]
+
+
+def test_without_strict_mode_nothing_changes(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = _parallel(sync_checkpointer)
+    config = _config(strict=False)
+    graph.invoke({"log": []}, config)
+
+    graph.invoke(Command(resume={UNKNOWN_ID: "x"}), config)
+    assert set(_pending_ids(graph, config)) == {"a?", "b?"}
+    with pytest.raises(RuntimeError, match="multiple pending interrupts"):
+        graph.invoke(Command(resume="yes"), config)
+
+
+def test_a_subgraph_interrupt_is_answered_by_its_id(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    def ask(state: State):
+        return {"log": [f"asked:{interrupt('sub?')}"]}
+
+    subgraph = StateGraph(State).add_node("ask", ask).add_edge(START, "ask").compile()
+    graph = (
+        StateGraph(State)
+        .add_node("sub", subgraph)
+        .add_edge(START, "sub")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = _config()
+    graph.invoke({"log": []}, config)
+
+    result = graph.invoke(
+        Command(resume={_pending_ids(graph, config)["sub?"]: "yes"}), config
+    )
+    assert result["log"] == ["asked:yes"]
+
+
+def test_a_second_interrupt_in_one_node_is_answered_by_the_same_id(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    def ask_twice(state: State):
+        first = interrupt("first?")
+        second = interrupt("second?")
+        return {"log": [f"{first},{second}"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("ask", ask_twice)
+        .add_edge(START, "ask")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = _config()
+    graph.invoke({"log": []}, config)
+    (card,) = graph.get_state(config).interrupts
+    graph.invoke(Command(resume={card.id: "1"}), config)
+    (second,) = graph.get_state(config).interrupts
+    assert second.id == card.id
+
+    result = graph.invoke(Command(resume={second.id: "2"}), config)
+    assert result["log"] == ["1,2"]
+
+
+def test_a_card_whose_resumed_task_raised_is_not_refused(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    failures = ["once"]
+
+    def ask_then_fail_once(state: State):
+        answer = interrupt("approve?")
+        if failures:
+            failures.pop()
+            raise ValueError("failed after the answer")
+        return {"log": [f"answered:{answer}"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("ask", ask_then_fail_once)
+        .add_edge(START, "ask")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = _config()
+    graph.invoke({"log": []}, config)
+    (card,) = graph.get_state(config).interrupts
+    with pytest.raises(ValueError, match="failed after the answer"):
+        graph.invoke(Command(resume={card.id: "first"}), config)
+
+    graph.invoke(Command(resume={card.id: "second"}), config)
+    assert graph.get_state(config).next == ()
+
+
+def test_a_pinned_head_checkpoint_is_checked(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = _parallel(sync_checkpointer)
+    config = _config()
+    graph.invoke({"log": []}, config)
+    head = graph.get_state(config).config
+    pinned = {"configurable": {**config["configurable"], **head["configurable"]}}
+
+    with pytest.raises(UnknownInterruptError):
+        graph.invoke(Command(resume={UNKNOWN_ID: "x"}), pinned)
+
+    ids = _pending_ids(graph, config)
+    result = graph.invoke(Command(resume={ids["a?"]: "yes", ids["b?"]: "no"}), pinned)
+    assert sorted(result["log"]) == ["a:yes", "b:no"]
+
+
+def test_a_superseded_checkpoint_is_not_checked(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = _parallel(sync_checkpointer)
+    config = _config()
+    graph.invoke({"log": []}, config)
+    paused = graph.get_state(config).config
+    ids = _pending_ids(graph, config)
+    graph.invoke(Command(resume={ids["a?"]: "yes", ids["b?"]: "no"}), config)
+
+    pinned = {"configurable": {**config["configurable"], **paused["configurable"]}}
+    graph.invoke(Command(resume={ids["a?"]: "again", ids["b?"]: "again"}), pinned)
+
+
+async def test_unknown_id_is_refused_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = _parallel(async_checkpointer)
+    config = _config()
+    await graph.ainvoke({"log": []}, config)
+
+    with pytest.raises(UnknownInterruptError, match=UNKNOWN_ID):
+        await graph.ainvoke(Command(resume={UNKNOWN_ID: "x"}), config)
+
+    state = await graph.aget_state(config)
+    assert {i.value for i in state.interrupts} == {"a?", "b?"}

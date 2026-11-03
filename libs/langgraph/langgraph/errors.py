@@ -28,6 +28,7 @@ __all__ = (
     "ParentCommand",
     "EmptyInputError",
     "TaskNotFound",
+    "UnknownInterruptError",
     "is_invalid_resume",
 )
 
@@ -142,6 +143,17 @@ class EmptyInputError(Exception):
 
 class TaskNotFound(Exception):
     """Raised when the executor is unable to find a task (for distributed mode)."""
+
+    pass
+
+
+class UnknownInterruptError(Exception):
+    """Raised in strict resume mode when a resume doesn't match the pending interrupts.
+
+    The resume names an interrupt that isn't pending, is an empty map, or is a
+    single value while several interrupts are pending. It is raised before
+    anything is written, so the pending interrupts can still be answered.
+    """
 
     pass
 

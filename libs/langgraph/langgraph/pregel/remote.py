@@ -50,6 +50,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_STREAM,
+    CONFIG_KEY_STRICT_RESUME,
     CONFIG_KEY_TASK_ID,
     INTERRUPT,
     NS_SEP,
@@ -81,6 +82,8 @@ _CONF_DROPLIST = frozenset(
         CONFIG_KEY_CHECKPOINT_ID,
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_TASK_ID,
+        # The remote server decides strictness for its own runs.
+        CONFIG_KEY_STRICT_RESUME,
     ),
 )
 
