@@ -1058,7 +1058,7 @@ class PregelLoop:
                     if len(pending := self._pending_interrupts()) > 1:
                         message = (
                             "When there are multiple pending interrupts, you must specify the interrupt id when resuming. "
-                            "Docs: https://docs.langchain.com/oss/python/langgraph/add-human-in-the-loop#resume-multiple-interrupts-with-one-invocation."
+                            "Docs: https://docs.langchain.com/oss/python/langgraph/interrupts#handling-multiple-interrupts."
                         )
                         if strict:
                             raise UnknownInterruptError(
