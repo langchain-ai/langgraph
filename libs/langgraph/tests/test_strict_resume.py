@@ -5,6 +5,7 @@ from typing import Annotated
 
 import pytest
 from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables.config import get_executor_for_config
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from typing_extensions import TypedDict
 from xxhash import xxh3_128_hexdigest
@@ -255,6 +256,34 @@ def test_a_retried_answer_in_one_node_is_refused(
     ) == ("not_pending", (card.id,), (second.id,))
     result = graph.invoke(Command(resume={second.id: "no"}), config)
     assert result["log"] == ["yes,no"]
+
+
+def test_parallel_interrupts_in_one_node_each_take_an_answer(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    def ask(name: str) -> str:
+        return interrupt(f"{name}?")
+
+    def ask_in_parallel(state: State, config: RunnableConfig):
+        with get_executor_for_config(config) as pool:
+            b = pool.submit(ask, "b")
+            b.exception()
+            a = pool.submit(ask, "a")
+            return {"log": [f"{a.result()},{b.result()}"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("ask", ask_in_parallel)
+        .add_edge(START, "ask")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = _config()
+    graph.invoke({"log": []}, config)
+    for answer in ("1", "2"):
+        (card,) = graph.get_state(config).interrupts
+        graph.invoke(Command(resume={card.id: answer}), config)
+
+    assert graph.get_state(config).next == ()
 
 
 def test_a_later_interrupt_saved_with_the_first_id_is_still_answered(

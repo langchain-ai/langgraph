@@ -580,11 +580,13 @@ def omit_payload(_value: Any) -> dict[str, Any]:
 _DEFAULT_INTERRUPT_ID = "placeholder-id"
 
 
-def _interrupt_id(ns: str, index: int) -> str:
-    # Older versions gave every interrupt in a task the bare namespace hash, so
-    # the first one keeps it and saved ids still match. The suffix can't form
-    # another task's namespace, whose segments all contain ":".
-    return xxh3_128_hexdigest((f"{ns}{NS_SEP}{index}" if index else ns).encode())
+def _interrupt_id(ns: str, answered: int) -> str:
+    # Keyed by how many answers the task already has, the slot this interrupt's
+    # answer fills; call order isn't stable across parallel calls in one task.
+    # With none it's the bare namespace hash older versions gave every
+    # interrupt, so saved ids still match. The suffix can't form another task's
+    # namespace, whose segments all contain ":".
+    return xxh3_128_hexdigest((f"{ns}{NS_SEP}{answered}" if answered else ns).encode())
 
 
 @final
@@ -1047,7 +1049,9 @@ def interrupt(
         (
             Interrupt(
                 value=value,
-                id=_interrupt_id(conf[CONFIG_KEY_CHECKPOINT_NS], idx),
+                id=_interrupt_id(
+                    conf[CONFIG_KEY_CHECKPOINT_NS], len(scratchpad.resume)
+                ),
                 response_schema=adapter.json_schema() if adapter else response_schema,
             ),
         )
