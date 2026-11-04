@@ -552,6 +552,57 @@ async def test_node_cancellation_on_external_cancel() -> None:
     assert inner_task_cancelled
 
 
+@pytest.mark.parametrize("parallel", [False, True])
+@pytest.mark.parametrize("mode", ["astream", "astream_events_v2", "astream_events_v3"])
+async def test_node_cancellation_preserves_cancel_message(
+    mode: str, parallel: bool
+) -> None:
+    marker = object()
+    started = asyncio.Event()
+    child_args: list[tuple[Any, ...]] = []
+
+    async def awhile(input: Any) -> dict:
+        started.set()
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError as exc:
+            child_args.append(exc.args)
+            raise
+        return {"hello": ["done"]}
+
+    class State(TypedDict):
+        hello: Annotated[list[str], operator.add]
+
+    builder = StateGraph(State)
+    builder.add_node("one", awhile)
+    builder.add_edge(START, "one")
+    if parallel:
+        builder.add_node("two", awhile)
+        builder.add_edge(START, "two")
+    graph = builder.compile()
+
+    async def consume() -> None:
+        if mode == "astream":
+            async for _ in graph.astream({"hello": []}):
+                pass
+        elif mode == "astream_events_v2":
+            async for _ in graph.astream_events({"hello": []}, version="v2"):
+                pass
+        else:
+            run = await graph.astream_events({"hello": []}, version="v3")
+            async for _ in run:
+                pass
+
+    task = asyncio.create_task(consume())
+    await started.wait()
+    await asyncio.sleep(0.05)
+    task.cancel(msg=marker)
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert child_args == [(marker,)] * (2 if parallel else 1)
+
+
 async def test_node_cancellation_on_other_node_exception() -> None:
     inner_task_cancelled = False
 

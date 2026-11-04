@@ -199,10 +199,15 @@ class AsyncBackgroundExecutor(AbstractAsyncContextManager):
     ) -> None:
         # copy the tasks as done() callback may modify the dict
         tasks = self.tasks.copy()
+        msg = (
+            exc_value.args[0]
+            if isinstance(exc_value, asyncio.CancelledError) and exc_value.args
+            else self.sentinel
+        )
         # cancel all tasks that should be cancelled
         for task, (cancel, _) in tasks.items():
             if cancel:
-                task.cancel(self.sentinel)
+                task.cancel(msg)
         # wait for all tasks to finish
         if tasks:
             await asyncio.wait(tasks)
