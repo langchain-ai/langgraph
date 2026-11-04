@@ -1030,11 +1030,27 @@ class PregelLoop:
                 ):
                     self.config[CONF][CONFIG_KEY_RESUME_MAP] = resume
                 else:
-                    if len(self._pending_interrupts()) > 1:
+                    pending = self._pending_interrupts()
+                    if len(pending) > 1:
                         raise RuntimeError(
                             "When there are multiple pending interrupts, you must specify the interrupt id when resuming. "
                             "Docs: https://docs.langchain.com/oss/python/langgraph/add-human-in-the-loop#resume-multiple-interrupts-with-one-invocation."
                         )
+                    # Bind the answer to the interrupt the client saw, so a
+                    # re-run that asks something else is asked again instead
+                    # of receiving it. Not when `goto` replaces the paused
+                    # tasks, or when resuming a checkpoint the thread has
+                    # moved past: there the answer is meant for a new task.
+                    if (
+                        pending
+                        and not cast(Command, self.input).goto
+                        and not self._addressed_checkpoint_superseded
+                        and is_xxh3_128_hexdigest(interrupt_id := pending.pop())
+                    ):
+                        resume_is_map = True
+                        self.config[CONF][CONFIG_KEY_RESUME_MAP] = {
+                            interrupt_id: resume
+                        }
 
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
             # group writes by task ID

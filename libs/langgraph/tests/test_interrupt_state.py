@@ -7,6 +7,7 @@ reads, which are rebuilt from the checkpointer, report only the interrupts that
 still need an answer.
 """
 
+import itertools
 import operator
 import sys
 import uuid
@@ -403,6 +404,161 @@ def test_resume_without_id_rejected_when_subgraph_has_parallel_interrupts(
         config,
     )
     assert sorted(result["log"]) == ["a:x", "b:y"]
+
+
+# --- A resume without an id answers the one interrupt that is pending ---
+
+
+def _diverging_node(*, same_task: bool = False) -> Any:
+    """Build a node that asks through a `@task` and asks something else on re-run.
+
+    A node whose questions depend on state outside the checkpoint (the clock, a
+    counter, code it runs) can take another branch when it re-runs on resume.
+    """
+    runs = itertools.count()
+
+    @task
+    def ask(question: str) -> str:
+        return interrupt(question)
+
+    @task
+    def ask_other(question: str) -> str:
+        return interrupt(question)
+
+    def node(state: State) -> State:
+        if next(runs) == 0:
+            question = ask("read file")
+        elif same_task:
+            question = ask("delete file")
+        else:
+            question = ask_other("delete file")
+        return {"log": [question.result()]}
+
+    return node
+
+
+def _build_diverging(checkpointer: BaseCheckpointSaver, **kwargs: Any):
+    builder = StateGraph(State)
+    builder.add_node("node", _diverging_node(**kwargs))
+    builder.add_edge(START, "node")
+    return builder.compile(checkpointer=checkpointer)
+
+
+def test_resume_without_id_is_not_given_to_another_interrupt(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    graph = _build_diverging(sync_checkpointer)
+    config = _config()
+
+    first = graph.invoke({"log": []}, config, durability=durability)
+    assert [i.value for i in first["__interrupt__"]] == ["read file"]
+
+    # The re-run asks another question, so the answer meant for the first one
+    # is not used for it.
+    second = graph.invoke(Command(resume="yes"), config, durability=durability)
+    (asked,) = second["__interrupt__"]
+    assert asked.value == "delete file"
+    assert second["log"] == []
+
+    result = graph.invoke(
+        Command(resume={asked.id: "no"}), config, durability=durability
+    )
+    assert result["log"] == ["no"]
+
+
+def test_resume_without_id_is_not_given_to_another_interrupt_in_subgraph(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    child = StateGraph(State)
+    child.add_node("node", _diverging_node())
+    child.add_edge(START, "node")
+    builder = StateGraph(State)
+    builder.add_node("child", child.compile())
+    builder.add_edge(START, "child")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = _config()
+
+    graph.invoke({"log": []}, config)
+    second = graph.invoke(Command(resume="yes"), config)
+    # The parent reports the child's question once for each task that raised it.
+    (asked,) = {i.id: i for i in second["__interrupt__"]}.values()
+    assert asked.value == "delete file"
+
+    result = graph.invoke(Command(resume={asked.id: "no"}), config)
+    assert result["log"] == ["no"]
+
+
+def test_resume_without_id_is_not_given_to_another_interrupt_in_entrypoint(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    node = _diverging_node()
+
+    @entrypoint(checkpointer=sync_checkpointer)
+    def workflow(state: State) -> State:
+        return node(state)
+
+    config = _config()
+
+    workflow.invoke({"log": []}, config)
+    (asked,) = workflow.invoke(Command(resume="yes"), config)["__interrupt__"]
+    assert asked.value == "delete file"
+
+    assert workflow.invoke(Command(resume={asked.id: "no"}), config) == {"log": ["no"]}
+
+
+def test_resume_without_id_answers_the_pending_interrupt_in_subgraph(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    child = StateGraph(State)
+    child.add_node("node", lambda s: {"log": [interrupt("Q")]})
+    child.add_edge(START, "node")
+    builder = StateGraph(State)
+    builder.add_node("child", child.compile())
+    builder.add_edge(START, "child")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = _config()
+
+    graph.invoke({"log": []}, config)
+
+    assert graph.invoke(Command(resume="yes"), config) == {"log": ["yes"]}
+
+
+def test_resume_without_id_keeps_a_dict_value(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    # A dict whose keys are not interrupt ids is a value, not a map of answers.
+    decisions = {"decisions": [{"type": "approve"}]}
+    builder = StateGraph(State)
+    builder.add_node(
+        "node", lambda s: {"log": [interrupt("Q")["decisions"][0]["type"]]}
+    )
+    builder.add_edge(START, "node")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = _config()
+
+    graph.invoke({"log": []}, config)
+
+    assert graph.invoke(Command(resume=decisions), config) == {"log": ["approve"]}
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="An interrupt id names the task by name and call position, not its "
+    "args, so the same task asking with other args at the same position gets "
+    "the same id. Telling them apart needs a hash of the interrupt value.",
+)
+@pytest.mark.parametrize("keyed", [False, True], ids=["bare", "keyed"])
+def test_resume_is_not_given_to_the_same_task_asking_with_other_args(
+    sync_checkpointer: BaseCheckpointSaver, keyed: bool
+) -> None:
+    graph = _build_diverging(sync_checkpointer, same_task=True)
+    config = _config()
+
+    (shown,) = graph.invoke({"log": []}, config)["__interrupt__"]
+    resume = {shown.id: "yes"} if keyed else "yes"
+    second = graph.invoke(Command(resume=resume), config)
+
+    assert [i.value for i in second["__interrupt__"]] == ["delete file"]
 
 
 # --- Task A finished with an empty or falsy result ---
