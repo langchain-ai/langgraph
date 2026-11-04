@@ -14,7 +14,7 @@ from langgraph._internal._constants import CONFIG_KEY_STRICT_RESUME, INTERRUPT
 from langgraph.errors import UnknownInterruptError
 from langgraph.graph import START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.types import Command, Durability, Interrupt, interrupt
+from langgraph.types import Command, Durability, Interrupt, RetryPolicy, interrupt
 
 pytestmark = pytest.mark.anyio
 NEEDS_CONTEXTVARS = pytest.mark.skipif(
@@ -64,6 +64,25 @@ def _ask_twice(checkpointer: BaseCheckpointSaver) -> CompiledStateGraph:
     return (
         StateGraph(State)
         .add_node("ask", ask_twice)
+        .add_edge(START, "ask")
+        .compile(checkpointer=checkpointer)
+    )
+
+
+def _ask_then_fail_once(checkpointer: BaseCheckpointSaver) -> CompiledStateGraph:
+    failures = [ConnectionError("flaky api")]
+
+    def ask(state: State):
+        answer = interrupt("delete a.txt?")
+        if failures:
+            raise failures.pop()
+        return {"log": [answer]}
+
+    return (
+        StateGraph(State)
+        .add_node(
+            "ask", ask, retry_policy=RetryPolicy(initial_interval=0, jitter=False)
+        )
         .add_edge(START, "ask")
         .compile(checkpointer=checkpointer)
     )
@@ -305,6 +324,18 @@ def test_a_later_interrupt_saved_with_the_first_id_is_still_answered(
     assert result["log"] == ["1,2"]
 
 
+def test_a_retried_node_reuses_its_answer(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = _ask_then_fail_once(sync_checkpointer)
+    config = _config()
+    graph.invoke({"log": []}, config)
+    (card,) = graph.get_state(config).interrupts
+
+    result = graph.invoke(Command(resume={card.id: "yes"}), config)
+    assert result["log"] == ["yes"]
+
+
 def test_a_card_whose_resumed_task_raised_is_not_refused(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -377,3 +408,16 @@ async def test_unknown_id_is_refused_async(
 
     state = await graph.aget_state(config)
     assert {i.value for i in state.interrupts} == {"a?", "b?"}
+
+
+@NEEDS_CONTEXTVARS
+async def test_a_retried_node_reuses_its_answer_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = _ask_then_fail_once(async_checkpointer)
+    config = _config()
+    await graph.ainvoke({"log": []}, config)
+    (card,) = (await graph.aget_state(config)).interrupts
+
+    result = await graph.ainvoke(Command(resume={card.id: "yes"}), config)
+    assert result["log"] == ["yes"]
