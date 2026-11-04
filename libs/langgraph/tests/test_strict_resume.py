@@ -1,4 +1,5 @@
 import operator
+import sys
 import uuid
 from typing import Annotated
 
@@ -14,6 +15,10 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command, Durability, interrupt
 
 pytestmark = pytest.mark.anyio
+NEEDS_CONTEXTVARS = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 
 UNKNOWN_ID = "0" * 32
 
@@ -120,6 +125,24 @@ def test_one_value_is_refused_while_several_are_pending(
     graph.invoke(Command(resume={ids["a?"]: "yes"}), config)
     result = graph.invoke(Command(resume="no"), config)
     assert sorted(result["log"]) == ["a:yes", "b:no"]
+
+
+def test_one_value_resumes_a_static_breakpoint(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = (
+        StateGraph(State)
+        .add_node("a", lambda state: {"log": ["a"]})
+        .add_edge(START, "a")
+        .compile(checkpointer=sync_checkpointer, interrupt_before=["a"])
+    )
+    config = _config()
+    graph.invoke({"log": []}, config)
+
+    with pytest.raises(UnknownInterruptError, match=UNKNOWN_ID):
+        graph.invoke(Command(resume={UNKNOWN_ID: "x"}), config)
+
+    assert graph.invoke(Command(resume="go"), config) == {"log": ["a"]}
 
 
 def test_without_strict_mode_nothing_changes(
@@ -241,6 +264,7 @@ def test_a_superseded_checkpoint_is_not_checked(
     graph.invoke(Command(resume={ids["a?"]: "again", ids["b?"]: "again"}), pinned)
 
 
+@NEEDS_CONTEXTVARS
 async def test_unknown_id_is_refused_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:

@@ -153,6 +153,9 @@ class UnknownInterruptError(Exception):
     The resume names an interrupt that isn't pending, is an empty map, or is a
     single value while several interrupts are pending. It is raised before
     anything is written, so the pending interrupts can still be answered.
+
+    A single value with no interrupt pending is accepted, because it resumes a
+    graph paused at a static breakpoint (`interrupt_before` or `interrupt_after`).
     """
 
     pass
