@@ -23,7 +23,7 @@ from uuid import UUID, uuid5
 
 from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables import RunnableConfig
-from langgraph.cache.base import BaseCache
+from langgraph.cache.base import BaseCache, FullKey
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
@@ -825,6 +825,14 @@ class PregelLoop:
         raise NotImplementedError
 
     # private
+
+    def _tasks_by_cache_key(self) -> dict[FullKey, list[PregelExecutableTask]]:
+        # Several tasks can share a cache key, e.g. Sends with identical input.
+        cached: defaultdict[FullKey, list[PregelExecutableTask]] = defaultdict(list)
+        for t in self.tasks.values():
+            if t.cache_key and not t.writes:
+                cached[(t.cache_key.ns, t.cache_key.key)].append(t)
+        return cached
 
     @property
     def _reapplies_pending_writes(self) -> bool:
@@ -1760,15 +1768,11 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         if self.cache is None:
             return ()
         matched: list[PregelExecutableTask] = []
-        if cached := {
-            (t.cache_key.ns, t.cache_key.key): t
-            for t in self.tasks.values()
-            if t.cache_key and not t.writes
-        }:
+        if cached := self._tasks_by_cache_key():
             for key, values in self.cache.get(tuple(cached)).items():
-                task = cached[key]
-                task.writes.extend(values)
-                matched.append(task)
+                for task in cached[key]:
+                    task.writes.extend(values)
+                    matched.append(task)
         return matched
 
     def accept_push(
@@ -2016,15 +2020,11 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         if self.cache is None:
             return []
         matched: list[PregelExecutableTask] = []
-        if cached := {
-            (t.cache_key.ns, t.cache_key.key): t
-            for t in self.tasks.values()
-            if t.cache_key and not t.writes
-        }:
+        if cached := self._tasks_by_cache_key():
             for key, values in (await self.cache.aget(tuple(cached))).items():
-                task = cached[key]
-                task.writes.extend(values)
-                matched.append(task)
+                for task in cached[key]:
+                    task.writes.extend(values)
+                    matched.append(task)
         return matched
 
     async def aaccept_push(

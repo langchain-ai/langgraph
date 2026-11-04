@@ -6014,6 +6014,33 @@ def test_no_redundant_put_writes_for_cached_task(
     )
 
 
+def test_cached_node_serves_duplicate_sends(cache: BaseCache) -> None:
+    """Sends with identical input to a cached node must all hit the cache."""
+
+    class State(TypedDict):
+        out: Annotated[list, operator.add]
+
+    calls: list[int] = []
+
+    def worker(state: dict) -> dict:
+        calls.append(state["q"])
+        return {"out": [state["q"]]}
+
+    builder = StateGraph(State)
+    builder.add_node("worker", worker, cache_policy=CachePolicy())
+    builder.add_conditional_edges(
+        START, lambda _: [Send("worker", {"q": q}) for q in (1, 1, 2)], ["worker"]
+    )
+    graph = builder.compile(cache=cache)
+
+    assert graph.invoke({"out": []}) == {"out": [1, 1, 2]}
+    assert calls == [1, 1, 2]
+
+    calls.clear()
+    assert graph.invoke({"out": []}) == {"out": [1, 1, 2]}
+    assert calls == []
+
+
 def test_node_before_interrupt_resume_graph_api(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
