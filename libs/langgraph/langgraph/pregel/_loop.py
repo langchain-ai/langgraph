@@ -1333,13 +1333,17 @@ class PregelLoop:
             self.checkpoint["channel_values"][TASKS] = sanitized_tasks
         # bail if no checkpointer
 
-        if do_checkpoint and self._checkpointer_put_after_previous is not None:
+        if self._checkpointer_put_after_previous is not None:
+            # The parent of this checkpoint is the last one the saver stored.
+            # Exit mode stores only the final checkpoint, but streams every
+            # step's, so the parent moves here too.
             self.prev_checkpoint_config = (
                 self.checkpoint_config
                 if CONFIG_KEY_CHECKPOINT_ID in self.checkpoint_config[CONF]
                 and self.checkpoint_config[CONF][CONFIG_KEY_CHECKPOINT_ID]
                 else None
             )
+        if do_checkpoint and self._checkpointer_put_after_previous is not None:
             self.checkpoint_config = {
                 **self.checkpoint_config,
                 CONF: {

@@ -4429,6 +4429,52 @@ def test_debug_retry(sync_checkpointer: BaseCheckpointSaver):
         assert stream_parent_conf == history_parent_conf
 
 
+def test_streamed_checkpoint_parent_matches_saved_parent(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    class State(TypedDict):
+        messages: Annotated[list[str], operator.add]
+
+    def ask(state: State) -> State:
+        return {"messages": [interrupt("ok?")]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("one", lambda state: {"messages": ["one"]})
+        .add_node("ask", ask)
+        .add_edge(START, "one")
+        .add_edge("one", "ask")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    for run_input in ({"messages": []}, Command(resume="yes")):
+        streamed = [
+            *graph.stream(
+                run_input, config, stream_mode="checkpoints", durability=durability
+            )
+        ]
+        saved = {
+            c.config["configurable"]["checkpoint_id"]: c
+            for c in graph.get_state_history(config)
+        }
+        for checkpoint in streamed:
+            checkpoint_id = checkpoint["config"]["configurable"]["checkpoint_id"]
+            if checkpoint_id not in saved:
+                # exit mode streams checkpoints it never stores
+                continue
+            history_parent = saved[checkpoint_id].parent_config
+            assert (
+                checkpoint["parent_config"]["configurable"]["checkpoint_id"]
+                if checkpoint["parent_config"]
+                else None
+            ) == (
+                history_parent["configurable"]["checkpoint_id"]
+                if history_parent
+                else None
+            )
+
+
 def test_interrupt_after_streams_the_checkpoint_it_pauses_on(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -5660,6 +5706,9 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
             "type": "task_result",
         },
     ]
+    first_run_checkpoint_id = graph.get_state(configurable).config["configurable"][
+        "checkpoint_id"
+    ]
     assert [
         c
         for c in graph.stream(
@@ -5763,7 +5812,14 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                     "step": 0,
                 },
                 "next": [],
-                "parent_config": None,
+                # the checkpoint the first run saved, as the saver records it
+                "parent_config": {
+                    "configurable": {
+                        "checkpoint_id": first_run_checkpoint_id,
+                        "checkpoint_ns": "",
+                        "thread_id": AnyStr(),
+                    },
+                },
                 "tasks": [],
                 "values": None,
             },
