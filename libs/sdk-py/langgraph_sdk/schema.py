@@ -480,6 +480,21 @@ ThreadSelectField = Literal[
     "interrupts",
 ]
 
+ThreadStateSelectField = (
+    Literal[
+        "values",
+        "next",
+        "tasks",
+        "checkpoint",
+        "metadata",
+        "created_at",
+        "parent_checkpoint",
+        "interrupts",
+    ]
+    | str
+)
+"""Also accepts `values.<key>` for a single state key, e.g. `values.messages`."""
+
 RunSelectField = Literal[
     "run_id",
     "thread_id",
