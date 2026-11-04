@@ -4,7 +4,7 @@ import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime, timezone
 from inspect import signature
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -16,7 +16,7 @@ from langgraph.checkpoint.base import (
     PendingWrite,
 )
 from langgraph.checkpoint.base.id import uuid6
-from langgraph.checkpoint.serde.types import _DeltaSnapshot
+from langgraph.checkpoint.serde.types import LogStep, _DeltaSnapshot
 
 from langgraph._internal._config import (
     DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT,
@@ -35,6 +35,7 @@ from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate, _get_overwrite
 from langgraph.channels.delta import DeltaChannel
+from langgraph.channels.log import Log
 from langgraph.managed.base import ManagedValueMapping, ManagedValueSpec
 
 LATEST_VERSION = 4
@@ -325,6 +326,10 @@ def create_checkpoint(
                     bumped[k] = (old, channel_versions[k])
                 values[k] = _DeltaSnapshot(ch.get())
             else:
+                if isinstance(ch, Log):
+                    if (log_step := ch.commit()) is not None:
+                        values[k] = log_step
+                    continue
                 v = ch.checkpoint()
                 if v is not MISSING:
                     values[k] = v
@@ -455,12 +460,39 @@ def _require_saver_for_history(
         )
 
 
+def _log_specs(
+    specs: Mapping[str, BaseChannel], checkpoint: Checkpoint, load_logs: bool
+) -> list[str]:
+    """Log channels whose entries must be read from the saver."""
+    if not load_logs:
+        return []
+    return [
+        k
+        for k, spec in specs.items()
+        if isinstance(spec, Log)
+        and isinstance(checkpoint["channel_values"].get(k), LogStep)
+    ]
+
+
+def _require_saver_for_log(
+    log_channels: list[str],
+    saver: BaseCheckpointSaver | None,
+    config: RunnableConfig | None,
+) -> None:
+    if log_channels and (saver is None or config is None):
+        raise ValueError(
+            f"Log channels {log_channels} have entries to read but no "
+            "checkpointer or config was passed to read them"
+        )
+
+
 def channels_from_checkpoint(
     specs: Mapping[str, BaseChannel | ManagedValueSpec],
     checkpoint: Checkpoint,
     *,
     saver: BaseCheckpointSaver | None = None,
     config: RunnableConfig | None = None,
+    load_logs: bool = True,
 ) -> tuple[Mapping[str, BaseChannel], ManagedValueMapping]:
     """Hydrate channels from a checkpoint.
 
@@ -487,12 +519,20 @@ def channels_from_checkpoint(
         histories = saver.get_delta_channel_history(
             config=config, channels=delta_channels
         )
+    log_channels = _log_specs(channel_specs, checkpoint, load_logs)
+    _require_saver_for_log(log_channels, saver, config)
+    logs: dict[str, list[Any]] = {}
+    if log_channels and saver is not None and config is not None:
+        for k in log_channels:
+            logs[k] = [e for _, e in saver.read_log(config, k).entries]
 
     channels: dict[str, BaseChannel] = {}
     for k, spec in channel_specs.items():
         ch: BaseChannel
         if k in histories:
             ch = _replay(spec, histories[k])
+        elif k in logs:
+            ch = cast(Log, spec).from_log(checkpoint["channel_values"][k], logs[k])
         else:
             ch = spec.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))
         channels[k] = ch
@@ -505,6 +545,7 @@ async def achannels_from_checkpoint(
     *,
     saver: BaseCheckpointSaver | None = None,
     config: RunnableConfig | None = None,
+    load_logs: bool = True,
 ) -> tuple[Mapping[str, BaseChannel], ManagedValueMapping]:
     """Async version of `channels_from_checkpoint`. See docstring there."""
     channel_specs: dict[str, BaseChannel] = {}
@@ -522,12 +563,20 @@ async def achannels_from_checkpoint(
         histories = await saver.aget_delta_channel_history(
             config=config, channels=delta_channels
         )
+    log_channels = _log_specs(channel_specs, checkpoint, load_logs)
+    _require_saver_for_log(log_channels, saver, config)
+    logs: dict[str, list[Any]] = {}
+    if log_channels and saver is not None and config is not None:
+        for k in log_channels:
+            logs[k] = [e for _, e in (await saver.aread_log(config, k)).entries]
 
     channels: dict[str, BaseChannel] = {}
     for k, spec in channel_specs.items():
         ch: BaseChannel
         if k in histories:
             ch = _replay(spec, histories[k])
+        elif k in logs:
+            ch = cast(Log, spec).from_log(checkpoint["channel_values"][k], logs[k])
         else:
             ch = spec.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))
         channels[k] = ch

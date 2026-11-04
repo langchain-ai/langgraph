@@ -34,6 +34,8 @@ from langgraph.checkpoint.serde import _msgpack as _lg_msgpack
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.event_hooks import emit_serde_event
 from langgraph.checkpoint.serde.types import (
+    LogAppend,
+    LogStep,
     SendProtocol,
     _DeltaSnapshot,
 )
@@ -322,11 +324,29 @@ EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
 EXT_DELTA_SNAPSHOT = 7
+EXT_LOG_APPEND = 8
+EXT_LOG_STEP = 9
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
     if isinstance(obj, _DeltaSnapshot):
         return ormsgpack.Ext(EXT_DELTA_SNAPSHOT, _msgpack_enc(obj.value))
+    elif isinstance(obj, LogAppend):
+        return ormsgpack.Ext(
+            EXT_LOG_APPEND, _msgpack_enc([obj.start, list(obj.entries), obj.exec])
+        )
+    elif isinstance(obj, LogStep):
+        return ormsgpack.Ext(
+            EXT_LOG_STEP,
+            _msgpack_enc(
+                [
+                    obj.start,
+                    obj.count,
+                    obj.exec,
+                    None if obj.entries is None else list(obj.entries),
+                ]
+            ),
+        )
     elif hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
         return ormsgpack.Ext(
             EXT_PYDANTIC_V2,
@@ -658,6 +678,14 @@ def _create_msgpack_ext_hook(
                 ormsgpack.unpackb(
                     data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
                 )
+            )
+        elif code == EXT_LOG_APPEND:
+            start, entries, exec_ = ormsgpack.unpackb(data)
+            return LogAppend(start, tuple(entries), exec_)
+        elif code == EXT_LOG_STEP:
+            start, count, exec_, entries = ormsgpack.unpackb(data)
+            return LogStep(
+                start, count, exec_, None if entries is None else tuple(entries)
             )
         elif code == EXT_CONSTRUCTOR_SINGLE_ARG:
             tup = None

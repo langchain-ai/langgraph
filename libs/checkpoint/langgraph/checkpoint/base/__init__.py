@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import logging
 from collections.abc import AsyncIterator, Collection, Iterator, Mapping, Sequence
 from typing import (
@@ -26,6 +27,8 @@ from langgraph.checkpoint.serde.types import (
     RESUME,
     SCHEDULED,
     ChannelProtocol,
+    LogAppend,
+    LogStep,
 )
 
 V = TypeVar("V", int, float, str)
@@ -182,6 +185,93 @@ class DeltaChannelHistory(TypedDict):
     seed: NotRequired[Any]
 
 
+class LogPage(NamedTuple):
+    """A page of a log channel, as returned by `BaseCheckpointSaver.read_log`.
+
+    !!! warning "Prototype"
+
+        Part of the transcript log prototype. Shape and semantics may change.
+    """
+
+    entries: list[tuple[int, Any]]
+    """`(position, entry)` pairs in path order. Entries are JSON values."""
+    length: int
+    """Number of committed entries on the path to the checkpoint's leaf."""
+    pending: list[Any]
+    """Entries written by finished tasks of the step in progress at the head,
+    not committed yet. Empty unless the checkpoint read is the thread's latest."""
+
+
+def log_range(
+    length: int, after: int | None, before: int | None, limit: int | None
+) -> tuple[int, int]:
+    """The position range `[lo, hi)` a `read_log` call asks for.
+
+    `after=p` starts after position `p`; `before=p` stops before it. With a
+    `limit`, a read with only `after` takes the first `limit` entries of the
+    range; any other read takes the last `limit` (chat UIs page from the end).
+    """
+    lo = 0 if after is None else max(after + 1, 0)
+    hi = length if before is None else min(before, length)
+    if limit is not None:
+        if after is not None and before is None:
+            hi = min(hi, lo + limit)
+        else:
+            lo = max(lo, hi - limit)
+    return lo, max(lo, hi)
+
+
+def _without_checkpoint_id(config: RunnableConfig) -> RunnableConfig:
+    conf = {k: v for k, v in config["configurable"].items() if k != "checkpoint_id"}
+    return {**config, "configurable": conf}
+
+
+def _pending_log_entries(tup: CheckpointTuple, channel: str) -> list[Any]:
+    return [
+        json.loads(text)
+        for _, ch, value in tup.pending_writes or ()
+        if ch == channel and isinstance(value, LogAppend)
+        for text in value.entries
+    ]
+
+
+def _step_entries(
+    step: LogStep, parent: CheckpointTuple | None, channel: str
+) -> list[str]:
+    """The JSON texts of one step: inline, or the `LogAppend` writes stored on
+    the checkpoint the step started from."""
+    if step.entries is not None:
+        texts = list(step.entries)
+    else:
+        texts = [
+            text
+            for _, ch, value in (parent.pending_writes or () if parent else ())
+            if ch == channel
+            and isinstance(value, LogAppend)
+            and value.start == step.start
+            for text in value.entries
+        ]
+    if len(texts) != step.count:
+        raise ValueError(
+            f"log channel {channel!r}: the step at position {step.start} "
+            f"committed {step.count} entries, found {len(texts)}"
+        )
+    return texts
+
+
+def _page_entries(
+    steps: Sequence[tuple[int, Sequence[str]]], lo: int, hi: int
+) -> list[tuple[int, Any]]:
+    """Positions `[lo, hi)` from steps given as `(start, texts)`, any order."""
+    out: list[tuple[int, Any]] = []
+    for start, texts in sorted(steps, key=lambda s: s[0]):
+        for i, text in enumerate(texts):
+            pos = start + i
+            if lo <= pos < hi:
+                out.append((pos, json.loads(text)))
+    return out
+
+
 def writes_sort_key(
     task_path: str, task_id: str = "", idx: int = 0
 ) -> tuple[str, str, int]:
@@ -230,6 +320,14 @@ class BaseCheckpointSaver(Generic[V]):
     """
 
     serde: SerializerProtocol = JsonPlusSerializer()
+
+    supports_log: bool = False
+    """Whether this saver stores log channels natively (prototype).
+
+    A saver without native support still works: it stores `LogAppend` writes
+    and `LogStep` values like any other, and the default `read_log` walks the
+    parent chain to read them back.
+    """
 
     def __init__(
         self,
@@ -603,6 +701,106 @@ class BaseCheckpointSaver(Generic[V]):
             ancestor, or delta channels will silently reconstruct as empty.
         """
         raise NotImplementedError
+
+    def read_log(
+        self,
+        config: RunnableConfig,
+        channel: str,
+        *,
+        after: int | None = None,
+        before: int | None = None,
+        limit: int | None = None,
+    ) -> LogPage:
+        """Read a log channel as of the checkpoint `config` names (or the latest).
+
+        !!! warning "Prototype"
+
+            Part of the transcript log prototype. Shape and semantics may change.
+
+        The log as of a checkpoint is the path from the root to the leaf its
+        channel version points at. See `log_range` for `after`, `before` and
+        `limit`.
+
+        The default implementation walks the parent chain through `get_tuple`:
+        a step's entries are inline in its `LogStep`, or are the `LogAppend`
+        writes stored on the checkpoint the step started from. It is correct
+        and costs one `get_tuple` per checkpoint walked. Savers with direct
+        storage access override it with range reads.
+        """
+        tup = self.get_tuple(config)
+        if tup is None:
+            return LogPage([], 0, [])
+        latest = self.get_tuple(_without_checkpoint_id(tup.config))
+        is_head = latest is not None and latest.checkpoint["id"] == tup.checkpoint["id"]
+        pending = _pending_log_entries(tup, channel) if is_head else []
+        marker = tup.checkpoint["channel_values"].get(channel)
+        if not isinstance(marker, LogStep):
+            return LogPage([], 0, pending)
+        lo, hi = log_range(marker.end, after, before, limit)
+        steps: list[tuple[int, list[str]]] = []
+        cur: CheckpointTuple | None = tup
+        while cur is not None:
+            version = cur.checkpoint["channel_versions"].get(channel)
+            step = cur.checkpoint["channel_values"].get(channel)
+            if version is None or not isinstance(step, LogStep) or step.end <= lo:
+                break
+            # climb to the checkpoint that committed this version
+            parent = self.get_tuple(cur.parent_config) if cur.parent_config else None
+            while (
+                parent is not None
+                and parent.checkpoint["channel_versions"].get(channel) == version
+            ):
+                parent = (
+                    self.get_tuple(parent.parent_config)
+                    if parent.parent_config
+                    else None
+                )
+            steps.append((step.start, _step_entries(step, parent, channel)))
+            cur = parent
+        return LogPage(_page_entries(steps, lo, hi), marker.end, pending)
+
+    async def aread_log(
+        self,
+        config: RunnableConfig,
+        channel: str,
+        *,
+        after: int | None = None,
+        before: int | None = None,
+        limit: int | None = None,
+    ) -> LogPage:
+        """Async version of `read_log`."""
+        tup = await self.aget_tuple(config)
+        if tup is None:
+            return LogPage([], 0, [])
+        latest = await self.aget_tuple(_without_checkpoint_id(tup.config))
+        is_head = latest is not None and latest.checkpoint["id"] == tup.checkpoint["id"]
+        pending = _pending_log_entries(tup, channel) if is_head else []
+        marker = tup.checkpoint["channel_values"].get(channel)
+        if not isinstance(marker, LogStep):
+            return LogPage([], 0, pending)
+        lo, hi = log_range(marker.end, after, before, limit)
+        steps: list[tuple[int, list[str]]] = []
+        cur: CheckpointTuple | None = tup
+        while cur is not None:
+            version = cur.checkpoint["channel_versions"].get(channel)
+            step = cur.checkpoint["channel_values"].get(channel)
+            if version is None or not isinstance(step, LogStep) or step.end <= lo:
+                break
+            parent = (
+                await self.aget_tuple(cur.parent_config) if cur.parent_config else None
+            )
+            while (
+                parent is not None
+                and parent.checkpoint["channel_versions"].get(channel) == version
+            ):
+                parent = (
+                    await self.aget_tuple(parent.parent_config)
+                    if parent.parent_config
+                    else None
+                )
+            steps.append((step.start, _step_entries(step, parent, channel)))
+            cur = parent
+        return LogPage(_page_entries(steps, lo, hi), marker.end, pending)
 
     def get_delta_channel_history(
         self, *, config: RunnableConfig, channels: Sequence[str]

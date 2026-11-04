@@ -49,6 +49,7 @@ from langgraph.checkpoint.base import (
     ChannelVersions,
     Checkpoint,
     CheckpointTuple,
+    LogPage,
 )
 from langgraph.store.base import BaseStore
 from pydantic import BaseModel, TypeAdapter
@@ -110,6 +111,7 @@ from langgraph.callbacks import (
 )
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.delta import DeltaChannel
+from langgraph.channels.log import Log
 from langgraph.channels.topic import Topic
 from langgraph.config import get_config
 from langgraph.constants import END
@@ -1245,6 +1247,7 @@ class Pregel(
             saved.checkpoint,
             saver=saver,
             config=saved.config,
+            load_logs=False,
         )
         # tasks for this checkpoint
         next_tasks = prepare_next_tasks(
@@ -1370,6 +1373,7 @@ class Pregel(
             saved.checkpoint,
             saver=saver,
             config=saved.config,
+            load_logs=False,
         )
         # tasks for this checkpoint
         next_tasks = prepare_next_tasks(
@@ -1480,6 +1484,66 @@ class Pregel(
             saver=checkpointer,
             recurse=subgraphs,
             live=CONFIG_KEY_CHECKPOINT_ID not in config[CONF],
+        )
+
+    def read_log(
+        self,
+        config: RunnableConfig,
+        channel: str,
+        *,
+        after: int | None = None,
+        before: int | None = None,
+        limit: int | None = None,
+    ) -> LogPage:
+        """Read a log channel as of a checkpoint (prototype).
+
+        The same operation as `BaseCheckpointSaver.read_log`, with entries
+        decoded by the channel (messages for a `MessagesLog`).
+        """
+        checkpointer = self._state_checkpointer(config)
+        if subgraph := self._subgraph_for_namespace(config, checkpointer):
+            pregel, subgraph_config = subgraph
+            return pregel.read_log(  # type: ignore[attr-defined]
+                subgraph_config, channel, after=after, before=before, limit=limit
+            )
+        config = merge_configs(self.config, config) if self.config else config
+        config = self._own_checkpoint_config(config)
+        page = checkpointer.read_log(
+            config, channel, after=after, before=before, limit=limit
+        )
+        return self._decode_log_page(channel, page)
+
+    async def aread_log(
+        self,
+        config: RunnableConfig,
+        channel: str,
+        *,
+        after: int | None = None,
+        before: int | None = None,
+        limit: int | None = None,
+    ) -> LogPage:
+        """Async version of `read_log`."""
+        checkpointer = self._state_checkpointer(config)
+        if subgraph := self._subgraph_for_namespace(config, checkpointer):
+            pregel, subgraph_config = subgraph
+            return await pregel.aread_log(  # type: ignore[attr-defined]
+                subgraph_config, channel, after=after, before=before, limit=limit
+            )
+        config = merge_configs(self.config, config) if self.config else config
+        config = self._own_checkpoint_config(config)
+        page = await checkpointer.aread_log(
+            config, channel, after=after, before=before, limit=limit
+        )
+        return self._decode_log_page(channel, page)
+
+    def _decode_log_page(self, channel: str, page: LogPage) -> LogPage:
+        spec = self.channels.get(channel)
+        if not isinstance(spec, Log):
+            raise ValueError(f"Channel {channel!r} is not a log channel")
+        return LogPage(
+            [(pos, spec.decode(e)) for pos, e in page.entries],
+            page.length,
+            [spec.decode(e) for e in page.pending],
         )
 
     async def aget_state(

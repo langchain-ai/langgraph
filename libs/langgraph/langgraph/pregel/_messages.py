@@ -26,6 +26,7 @@ from langgraph._internal._config import filter_to_user_tags
 from langgraph._internal._constants import NS_SEP, PUSH
 from langgraph.channels.binop import _get_overwrite
 from langgraph.channels.delta import DeltaChannel
+from langgraph.channels.log import MessagesLog
 from langgraph.constants import TAG_HIDDEN, TAG_NOSTREAM
 from langgraph.pregel.protocol import StreamChunk
 from langgraph.types import Command, Overwrite
@@ -537,6 +538,13 @@ def ensure_message_ids(
     """
     for i, (ch, value) in enumerate(writes):
         spec = channels.get(ch)
+        if isinstance(spec, MessagesLog):
+            # ids must be set before the write is saved, so the saved
+            # entries and the run's in-memory messages agree
+            new_value = _with_message_ids(value)
+            if new_value is not value:
+                cast(MutableSequence[tuple[str, Any]], writes)[i] = (ch, new_value)
+            continue
         if not isinstance(spec, DeltaChannel):
             continue
         if spec.reducer is _messages_delta_reducer:

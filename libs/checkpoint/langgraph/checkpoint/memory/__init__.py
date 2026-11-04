@@ -21,12 +21,15 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
     DeltaChannelHistory,
+    LogPage,
     PendingWrite,
     SerializerProtocol,
     get_checkpoint_id,
     get_checkpoint_metadata,
     writes_sort_key,
 )
+from langgraph.checkpoint.memory._log import InMemoryLog
+from langgraph.checkpoint.serde.types import LogAppend, LogStep
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +69,8 @@ class InMemorySaver(
         ```
     """
 
+    supports_log = True
+
     # thread ID ->  checkpoint NS -> checkpoint ID -> checkpoint mapping
     storage: defaultdict[
         str,
@@ -93,6 +98,7 @@ class InMemorySaver(
         self.storage = factory(lambda: defaultdict(dict))
         self.writes = factory(dict)
         self.blobs = factory()
+        self.log = InMemoryLog()
         self.stack = ExitStack()
         if factory is not defaultdict:
             self.stack.enter_context(self.storage)  # type: ignore[arg-type]
@@ -131,6 +137,11 @@ class InMemorySaver(
     ) -> dict[str, Any]:
         result: dict[str, Any] = {}
         for k, ver in versions.items():
+            if (
+                marker := self.log.marker(thread_id, checkpoint_ns, k, ver)
+            ) is not None:
+                result[k] = marker
+                continue
             kk = (thread_id, checkpoint_ns, k, ver)
             if kk not in self.blobs:
                 continue
@@ -148,6 +159,83 @@ class InMemorySaver(
             stored[k]
             for k in sorted(stored, key=lambda k: writes_sort_key(stored[k][3], *k))
         ]
+
+    def _pending_writes(
+        self, thread_id: str, checkpoint_ns: str, checkpoint_id: str
+    ) -> list[PendingWrite]:
+        """A checkpoint's writes, including its uncommitted log writes, in
+        `writes_sort_key` order."""
+        stored = self.writes.get((thread_id, checkpoint_ns, checkpoint_id), {})
+        rows: list[tuple[tuple[str, str, int], PendingWrite]] = [
+            (
+                writes_sort_key(v[3], *k),
+                (v[0], v[1], self.serde.loads_typed(v[2])),
+            )
+            for k, v in stored.items()
+        ]
+        for task_path, task_id, channel, idx, value in self.log.pending_writes(
+            thread_id, checkpoint_ns, checkpoint_id
+        ):
+            rows.append(
+                (writes_sort_key(task_path, task_id, idx), (task_id, channel, value))
+            )
+        rows.sort(key=lambda r: r[0])
+        return [w for _, w in rows]
+
+    def _version(
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        checkpoint_id: str | None,
+        channel: str,
+    ) -> Any:
+        if checkpoint_id is None:
+            return None
+        saved = (
+            self.storage.get(thread_id, {}).get(checkpoint_ns, {}).get(checkpoint_id)
+        )
+        if saved is None:
+            return None
+        return self.serde.loads_typed(saved[0])["channel_versions"].get(channel)
+
+    def read_log(
+        self,
+        config: RunnableConfig,
+        channel: str,
+        *,
+        after: int | None = None,
+        before: int | None = None,
+        limit: int | None = None,
+    ) -> LogPage:
+        """Read a log channel with range reads over its segment chain."""
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        ns_storage = self.storage.get(thread_id, {}).get(checkpoint_ns, {})
+        latest = max(ns_storage, default=None)
+        checkpoint_id = get_checkpoint_id(config) or latest
+        if checkpoint_id is None or checkpoint_id not in ns_storage:
+            return LogPage([], 0, [])
+        return self.log.read(
+            thread_id,
+            checkpoint_ns,
+            channel,
+            self._version(thread_id, checkpoint_ns, checkpoint_id, channel),
+            checkpoint_id if checkpoint_id == latest else None,
+            after=after,
+            before=before,
+            limit=limit,
+        )
+
+    async def aread_log(
+        self,
+        config: RunnableConfig,
+        channel: str,
+        *,
+        after: int | None = None,
+        before: int | None = None,
+        limit: int | None = None,
+    ) -> LogPage:
+        return self.read_log(config, channel, after=after, before=before, limit=limit)
 
     def get_delta_channel_history(
         self, *, config: RunnableConfig, channels: Sequence[str]
@@ -255,7 +343,6 @@ class InMemorySaver(
         if checkpoint_id := get_checkpoint_id(config):
             if saved := self.storage[thread_id][checkpoint_ns].get(checkpoint_id):
                 checkpoint, metadata, parent_checkpoint_id = saved
-                writes = self._ordered_writes(thread_id, checkpoint_ns, checkpoint_id)
                 checkpoint_: Checkpoint = self.serde.loads_typed(checkpoint)
                 return CheckpointTuple(
                     config=config,
@@ -266,9 +353,9 @@ class InMemorySaver(
                         ),
                     },
                     metadata=self.serde.loads_typed(metadata),
-                    pending_writes=[
-                        (id, c, self.serde.loads_typed(v)) for id, c, v, _ in writes
-                    ],
+                    pending_writes=self._pending_writes(
+                        thread_id, checkpoint_ns, checkpoint_id
+                    ),
                     parent_config=(
                         {
                             "configurable": {
@@ -285,7 +372,6 @@ class InMemorySaver(
             if checkpoints := self.storage[thread_id][checkpoint_ns]:
                 checkpoint_id = max(checkpoints.keys())
                 checkpoint, metadata, parent_checkpoint_id = checkpoints[checkpoint_id]
-                writes = self._ordered_writes(thread_id, checkpoint_ns, checkpoint_id)
                 checkpoint_ = self.serde.loads_typed(checkpoint)
                 return CheckpointTuple(
                     config={
@@ -302,9 +388,9 @@ class InMemorySaver(
                         ),
                     },
                     metadata=self.serde.loads_typed(metadata),
-                    pending_writes=[
-                        (id, c, self.serde.loads_typed(v)) for id, c, v, _ in writes
-                    ],
+                    pending_writes=self._pending_writes(
+                        thread_id, checkpoint_ns, checkpoint_id
+                    ),
                     parent_config=(
                         {
                             "configurable": {
@@ -388,10 +474,6 @@ class InMemorySaver(
                     elif limit is not None:
                         limit -= 1
 
-                    writes = self._ordered_writes(
-                        thread_id, checkpoint_ns, checkpoint_id
-                    )
-
                     checkpoint_: Checkpoint = self.serde.loads_typed(checkpoint)
 
                     yield CheckpointTuple(
@@ -422,9 +504,9 @@ class InMemorySaver(
                             if parent_checkpoint_id
                             else None
                         ),
-                        pending_writes=[
-                            (id, c, self.serde.loads_typed(v)) for id, c, v, _ in writes
-                        ],
+                        pending_writes=self._pending_writes(
+                            thread_id, checkpoint_ns, checkpoint_id
+                        ),
                     )
 
     def put(
@@ -451,8 +533,22 @@ class InMemorySaver(
         c = checkpoint.copy()
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
+        parent_id = config["configurable"].get("checkpoint_id")
         values: dict[str, Any] = c.pop("channel_values")  # type: ignore[misc]
         for k, v in new_versions.items():
+            if isinstance(values.get(k), LogStep):
+                # a log channel: the step row is its "blob" at this version
+                self.log.put_step(
+                    thread_id,
+                    checkpoint_ns,
+                    k,
+                    self._version(thread_id, checkpoint_ns, parent_id, k),
+                    parent_id,
+                    checkpoint["id"],
+                    v,
+                    values[k],
+                )
+                continue
             self.blobs[(thread_id, checkpoint_ns, k, v)] = (
                 self.serde.dumps_typed(values[k]) if k in values else ("empty", b"")
             )
@@ -500,6 +596,19 @@ class InMemorySaver(
         outer_key = (thread_id, checkpoint_ns, checkpoint_id)
         outer_writes_ = self.writes.get(outer_key)
         for idx, (c, v) in enumerate(writes):
+            if isinstance(v, LogAppend):
+                self.log.put_append(
+                    thread_id,
+                    checkpoint_ns,
+                    c,
+                    self._version(thread_id, checkpoint_ns, checkpoint_id, c),
+                    checkpoint_id,
+                    task_id,
+                    task_path,
+                    idx,
+                    v,
+                )
+                continue
             inner_key = (task_id, WRITES_IDX_MAP.get(c, idx))
             if inner_key[1] >= 0 and outer_writes_ and inner_key in outer_writes_:
                 continue
@@ -528,6 +637,72 @@ class InMemorySaver(
         for k in list(self.blobs.keys()):
             if k[0] == thread_id:
                 del self.blobs[k]
+        self.log.delete_thread(thread_id)
+
+    def copy_thread(self, source_thread_id: str, target_thread_id: str) -> None:
+        """Copy all checkpoints, writes, blobs and log rows to another thread."""
+        for ns, checkpoints in self.storage.get(source_thread_id, {}).items():
+            self.storage[target_thread_id][ns] = dict(checkpoints)
+        for (t, ns, cid), rows in list(self.writes.items()):
+            if t == source_thread_id:
+                self.writes[(target_thread_id, ns, cid)] = dict(rows)
+        for (t, ns, ch, ver), blob in list(self.blobs.items()):
+            if t == source_thread_id:
+                self.blobs[(target_thread_id, ns, ch, ver)] = blob
+        self.log.copy_thread(source_thread_id, target_thread_id)
+
+    def prune(
+        self, thread_ids: Sequence[str], *, strategy: str = "keep_latest"
+    ) -> None:
+        """Prune checkpoints; the log keeps what remaining checkpoints reach.
+
+        `"keep_latest"` keeps the latest checkpoint per namespace, `"delete"`
+        deletes every checkpoint. Writes and blobs no remaining checkpoint
+        uses are deleted with them.
+        """
+        if strategy not in ("keep_latest", "delete"):
+            raise ValueError(f"Unknown prune strategy: {strategy}")
+        for thread_id in thread_ids:
+            keep = {
+                ns: ({max(cps)} if strategy == "keep_latest" and cps else set())
+                for ns, cps in self.storage.get(thread_id, {}).items()
+            }
+            self._retain(thread_id, keep)
+
+    def delete_for_runs(self, run_ids: Sequence[str]) -> None:
+        """Delete the checkpoints the given runs created; the log keeps what
+        the remaining checkpoints reach."""
+        runs = set(run_ids)
+        for thread_id, namespaces in list(self.storage.items()):
+            keep = {
+                ns: {
+                    cid
+                    for cid, saved in cps.items()
+                    if self.serde.loads_typed(saved[1]).get("run_id") not in runs
+                }
+                for ns, cps in namespaces.items()
+            }
+            self._retain(thread_id, keep)
+
+    def _retain(self, thread_id: str, keep: dict[str, set[str]]) -> None:
+        namespaces = self.storage.get(thread_id, {})
+        for ns, cps in list(namespaces.items()):
+            for cid in [c for c in cps if c not in keep.get(ns, set())]:
+                del cps[cid]
+                self.writes.pop((thread_id, ns, cid), None)
+        used = {
+            (thread_id, ns, ch, ver)
+            for ns, cps in namespaces.items()
+            for saved in cps.values()
+            for ch, ver in self.serde.loads_typed(saved[0])["channel_versions"].items()
+        }
+        for k in [k for k in self.blobs if k[0] == thread_id and k not in used]:
+            del self.blobs[k]
+        self.log.collect(
+            thread_id,
+            {ns: dict.fromkeys(cps) for ns, cps in namespaces.items()},
+            lambda ns, cid, ch: self._version(thread_id, ns, cid, ch),
+        )
 
     async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Asynchronous version of `get_tuple`.
@@ -618,6 +793,17 @@ class InMemorySaver(
             None
         """
         return self.delete_thread(thread_id)
+
+    async def acopy_thread(self, source_thread_id: str, target_thread_id: str) -> None:
+        return self.copy_thread(source_thread_id, target_thread_id)
+
+    async def aprune(
+        self, thread_ids: Sequence[str], *, strategy: str = "keep_latest"
+    ) -> None:
+        return self.prune(thread_ids, strategy=strategy)
+
+    async def adelete_for_runs(self, run_ids: Sequence[str]) -> None:
+        return self.delete_for_runs(run_ids)
 
     def get_next_version(self, current: str | None, channel: None) -> str:
         if current is None:

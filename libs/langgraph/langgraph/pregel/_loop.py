@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import binascii
 import concurrent.futures
+import json
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import (
@@ -12,6 +13,7 @@ from contextlib import (
     ExitStack,
 )
 from datetime import datetime, timezone
+from functools import partial
 from types import TracebackType
 from typing import (
     Any,
@@ -19,7 +21,7 @@ from typing import (
     TypeVar,
     cast,
 )
-from uuid import UUID, uuid5
+from uuid import UUID, uuid4, uuid5
 
 from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables import RunnableConfig
@@ -33,6 +35,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     PendingWrite,
 )
+from langgraph.checkpoint.serde.types import LogAppend, LogStep
 from langgraph.store.base import BaseStore
 from typing_extensions import ParamSpec, Self
 
@@ -72,6 +75,7 @@ from langgraph.callbacks import (
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import _get_overwrite
 from langgraph.channels.delta import DeltaChannel
+from langgraph.channels.log import Log
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import (
@@ -356,6 +360,9 @@ class PregelLoop:
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.durability = durability
+        # identifies this execution's log writes (transcript log prototype)
+        self._log_exec = str(uuid4())
+        self._log_inline_first_step = False
         self._has_graph_lifecycle_callbacks = has_graph_lifecycle_callbacks
         self._graph_lifecycle_events = deque()
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
@@ -513,6 +520,7 @@ class PregelLoop:
         # save writes
         self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
         if self.durability != "exit" and self.checkpointer_put_writes is not None:
+            writes_to_save = self._log_writes_for_saver(writes_to_save)
             config = patch_configurable(
                 self.checkpoint_config,
                 {
@@ -522,13 +530,21 @@ class PregelLoop:
                     CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
                 },
             )
+            # A log write is placed relative to the log of the checkpoint it is
+            # stored on, so that checkpoint must be saved first.
+            put_writes_fn = self.checkpointer_put_writes
+            if any(isinstance(self.specs.get(c), Log) for c, _ in writes_to_save):
+                put_writes_fn = partial(
+                    self._put_writes_after_checkpoint,
+                    getattr(self, "_put_checkpoint_fut", None),
+                )
             if self.checkpointer_put_writes_accepts_task_path:
                 if hasattr(self, "tasks"):
                     task = self.tasks.get(task_id)
                 else:
                     task = None
                 fut = self.submit(
-                    self.checkpointer_put_writes,
+                    put_writes_fn,
                     config,
                     writes_to_save,
                     task_id,
@@ -536,13 +552,16 @@ class PregelLoop:
                 )
             else:
                 fut = self.submit(
-                    self.checkpointer_put_writes,
+                    put_writes_fn,
                     config,
                     writes_to_save,
                     task_id,
                 )
+            # the checkpoint that commits these writes must not be saved before
+            # them: a delta replay or a log step reads them
             if self._delta_write_futs is not None and any(
-                isinstance(self.specs.get(c), DeltaChannel) for c, _ in writes_to_save
+                isinstance(self.specs.get(c), (DeltaChannel, Log))
+                for c, _ in writes_to_save
             ):
                 self._delta_write_futs.append(fut)
             # ERROR_SOURCE_NODE is only appended by commit() when the task
@@ -555,6 +574,24 @@ class PregelLoop:
         # output writes
         if hasattr(self, "tasks"):
             self.output_writes(task_id, writes, cached=cached)
+
+    def _log_write_from_saver(self, channel: str, value: Any) -> Any:
+        """A saved `LogAppend` as the write it was: a list of entries."""
+        spec = self.specs.get(channel)
+        if isinstance(value, LogAppend) and isinstance(spec, Log):
+            return [spec.decode(json.loads(t)) for t in value.entries]
+        return value
+
+    def _log_writes_for_saver(self, writes: WritesT) -> WritesT:
+        """Writes to log channels as the `LogAppend`s handed to the saver."""
+        if not any(isinstance(self.channels.get(c), Log) for c, _ in writes):
+            return writes
+        return [
+            (c, ch.append_value(v, self._log_exec))
+            if isinstance(ch := self.channels.get(c), Log)
+            else (c, v)
+            for c, v in writes
+        ]
 
     def _put_pending_writes(self) -> None:
         if self.checkpointer_put_writes is None:
@@ -579,6 +616,7 @@ class PregelLoop:
                 by_task[task_id].append((channel, value))
         # submit writes to checkpointer
         for task_id, writes in by_task.items():
+            writes = self._log_writes_for_saver(writes)
             if self.checkpointer_put_writes_accepts_task_path and hasattr(
                 self, "tasks"
             ):
@@ -1311,6 +1349,8 @@ class PregelLoop:
             stored_versions=self.checkpoint_previous_versions,
             trigger_to_nodes=self.trigger_to_nodes,
         )
+        if do_checkpoint:
+            self._finish_log_steps(metadata)
         for k in channels_to_snapshot:
             new_counters[k] = (0, 0)
         if do_checkpoint:
@@ -1382,6 +1422,39 @@ class PregelLoop:
         if not exiting:
             # increment step
             self.step += 1
+
+    def _finish_log_steps(self, metadata: CheckpointMetadata) -> None:
+        """Stamp the log steps of the checkpoint about to be saved.
+
+        A step's entries reached the saver through `put_writes` when the
+        checkpoint comes from the loop and writes are saved as they happen;
+        then the step carries no entries. Otherwise (graph input, a fork,
+        `durability="exit"`) it carries them inline.
+
+        A resume at a checkpoint the thread moved past re-runs finished tasks
+        on that same checkpoint, and a saver without native log support keeps
+        the first run's writes under the same keys. So the first step of such
+        a resume carries its entries inline too.
+        """
+        inline = (
+            metadata.get("source") != "loop"
+            or self.durability == "exit"
+            or self._log_inline_first_step
+        )
+        if metadata.get("source") == "loop":
+            self._log_inline_first_step = False
+        values = self.checkpoint["channel_values"]
+        for k, ch in self.channels.items():
+            if not isinstance(ch, Log):
+                continue
+            step = values.get(k)
+            if isinstance(step, LogStep) and step.entries is not None:
+                values[k] = LogStep(
+                    step.start,
+                    step.count,
+                    self._log_exec,
+                    step.entries if inline else None,
+                )
 
     def _put_exit_delta_writes(self) -> None:
         """Stage stub + accumulated delta writes so final_checkpoint's put
@@ -1709,6 +1782,13 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             self.checkpointer_put_writes = None
             self.checkpointer_put_writes_accepts_task_path = False
 
+    def _put_writes_after_checkpoint(
+        self, prev: concurrent.futures.Future | None, *args: Any
+    ) -> None:
+        if prev is not None:
+            prev.result()
+        cast(Callable[..., None], self.checkpointer_put_writes)(*args)
+
     def _checkpointer_put_after_previous(
         self,
         prev: concurrent.futures.Future | None,
@@ -1821,6 +1901,10 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
                 self._addressed_checkpoint_superseded = checkpoint_superseded(
                     self.checkpointer, self.checkpoint_config, saved
                 )
+                self._log_inline_first_step = (
+                    self._addressed_checkpoint_superseded
+                    and not self.checkpointer.supports_log
+                )
         elif replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE):
             # Subgraph replay: the parent is replaying and passed us a
             # replay_state with its checkpoint_id. Look up our checkpoint
@@ -1865,7 +1949,10 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         self.checkpoint = saved.checkpoint
         self.checkpoint_metadata = saved.metadata
         self.checkpoint_pending_writes = (
-            [(str(tid), k, v) for tid, k, v in saved.pending_writes]
+            [
+                (str(tid), k, self._log_write_from_saver(k, v))
+                for tid, k, v in saved.pending_writes
+            ]
             if saved.pending_writes is not None
             else []
         )
@@ -1964,6 +2051,13 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             self._checkpointer_put_after_previous = None  # type: ignore[assignment]
             self.checkpointer_put_writes = None
             self.checkpointer_put_writes_accepts_task_path = False
+
+    async def _put_writes_after_checkpoint(
+        self, prev: asyncio.Task | None, *args: Any
+    ) -> None:
+        if prev is not None:
+            await prev
+        await cast(Callable[..., Any], self.checkpointer_put_writes)(*args)
 
     async def _checkpointer_put_after_previous(
         self,
@@ -2077,6 +2171,10 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
                 self._addressed_checkpoint_superseded = await acheckpoint_superseded(
                     self.checkpointer, self.checkpoint_config, saved
                 )
+                self._log_inline_first_step = (
+                    self._addressed_checkpoint_superseded
+                    and not self.checkpointer.supports_log
+                )
         elif replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE):
             # Subgraph replay: the parent is replaying and passed us a
             # replay_state with its checkpoint_id. Look up our checkpoint
@@ -2121,7 +2219,10 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         self.checkpoint = saved.checkpoint
         self.checkpoint_metadata = saved.metadata
         self.checkpoint_pending_writes = (
-            [(str(tid), k, v) for tid, k, v in saved.pending_writes]
+            [
+                (str(tid), k, self._log_write_from_saver(k, v))
+                for tid, k, v in saved.pending_writes
+            ]
             if saved.pending_writes is not None
             else []
         )
