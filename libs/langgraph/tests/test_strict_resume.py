@@ -7,12 +7,13 @@ import pytest
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from typing_extensions import TypedDict
+from xxhash import xxh3_128_hexdigest
 
-from langgraph._internal._constants import CONFIG_KEY_STRICT_RESUME
+from langgraph._internal._constants import CONFIG_KEY_STRICT_RESUME, INTERRUPT
 from langgraph.errors import UnknownInterruptError
 from langgraph.graph import START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.types import Command, Durability, interrupt
+from langgraph.types import Command, Durability, Interrupt, interrupt
 
 pytestmark = pytest.mark.anyio
 NEEDS_CONTEXTVARS = pytest.mark.skipif(
@@ -217,22 +218,24 @@ def test_a_subgraph_interrupt_is_answered_by_its_id(
     assert result["log"] == ["asked:yes"]
 
 
-def test_a_second_interrupt_in_one_node_is_answered_by_the_same_id(
+def test_a_second_interrupt_in_one_node_gets_its_own_id(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
     graph = _ask_twice(sync_checkpointer)
     config = _config()
     graph.invoke({"log": []}, config)
-    (card,) = graph.get_state(config).interrupts
+    state = graph.get_state(config)
+    (card,) = state.interrupts
+    assert card.id == xxh3_128_hexdigest(f"ask:{state.tasks[0].id}".encode())
     graph.invoke(Command(resume={card.id: "1"}), config)
     (second,) = graph.get_state(config).interrupts
-    assert second.id == card.id
+    assert second.id != card.id
 
     result = graph.invoke(Command(resume={second.id: "2"}), config)
     assert result["log"] == ["1,2"]
 
 
-def test_a_retried_answer_in_one_node_answers_its_next_interrupt(
+def test_a_retried_answer_in_one_node_is_refused(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
     graph = _ask_twice(sync_checkpointer)
@@ -240,9 +243,37 @@ def test_a_retried_answer_in_one_node_answers_its_next_interrupt(
     graph.invoke({"log": []}, config)
     (card,) = graph.get_state(config).interrupts
     graph.invoke(Command(resume={card.id: "yes"}), config)
+    (second,) = graph.get_state(config).interrupts
 
-    result = graph.invoke(Command(resume={card.id: "yes"}), config)
-    assert result["log"] == ["yes,yes"]
+    with pytest.raises(UnknownInterruptError) as refused:
+        graph.invoke(Command(resume={card.id: "yes"}), config)
+
+    assert (
+        refused.value.reason,
+        refused.value.interrupt_ids,
+        refused.value.pending_ids,
+    ) == ("not_pending", (card.id,), (second.id,))
+    result = graph.invoke(Command(resume={second.id: "no"}), config)
+    assert result["log"] == ["yes,no"]
+
+
+def test_a_later_interrupt_saved_with_the_first_id_is_still_answered(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = _ask_twice(sync_checkpointer)
+    config = _config()
+    graph.invoke({"log": []}, config)
+    (card,) = graph.get_state(config).interrupts
+    graph.invoke(Command(resume={card.id: "1"}), config)
+    state = graph.get_state(config)
+    sync_checkpointer.put_writes(
+        state.config,
+        [(INTERRUPT, (Interrupt(value="second?", id=card.id),))],
+        state.tasks[0].id,
+    )
+
+    result = graph.invoke(Command(resume={card.id: "2"}), config)
+    assert result["log"] == ["1,2"]
 
 
 def test_a_card_whose_resumed_task_raised_is_not_refused(
