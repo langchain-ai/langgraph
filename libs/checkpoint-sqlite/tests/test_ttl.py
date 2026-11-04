@@ -7,7 +7,7 @@ import time
 from collections.abc import Generator
 
 import pytest
-from langgraph.store.base import TTLConfig
+from langgraph.store.base import GetOp, TTLConfig
 
 from langgraph.store.sqlite import SqliteStore
 from langgraph.store.sqlite.aio import AsyncSqliteStore
@@ -427,3 +427,62 @@ async def test_async_asearch_refresh_ttl(temp_db_file: str) -> None:
         assert item1_final_check is None, (
             "Item1 should be gone after its refreshed TTL expired"
         )
+
+
+def test_batch_get_refreshes_only_requested_keys(temp_db_file: str) -> None:
+    """refresh_ttl=False must survive a batch that refreshes a sibling key."""
+    with SqliteStore.from_conn_string(
+        temp_db_file, ttl={"default_ttl": 1, "refresh_on_read": True}
+    ) as store:
+        store.setup()
+        store.put(("test",), "refreshed", {"value": 1})
+        store.put(("test",), "kept", {"value": 2})
+
+        def expiries() -> dict[str, str]:
+            rows = store.conn.execute("SELECT key, expires_at FROM store").fetchall()
+            return dict(rows)
+
+        before = expiries()
+        time.sleep(1.1)  # CURRENT_TIMESTAMP has second resolution
+
+        store.batch(
+            [
+                GetOp(("test",), "refreshed", refresh_ttl=True),
+                GetOp(("test",), "kept", refresh_ttl=False),
+            ]
+        )
+
+        after = expiries()
+        assert after["refreshed"] > before["refreshed"]
+        assert after["kept"] == before["kept"]
+
+
+async def test_async_batch_get_refreshes_only_requested_keys(
+    temp_db_file: str,
+) -> None:
+    """The async store applies the same per-op rule."""
+    async with AsyncSqliteStore.from_conn_string(
+        temp_db_file, ttl={"default_ttl": 1, "refresh_on_read": True}
+    ) as store:
+        await store.setup()
+        await store.aput(("test",), "refreshed", {"value": 1})
+        await store.aput(("test",), "kept", {"value": 2})
+
+        async def expiries() -> dict[str, str]:
+            cursor = await store.conn.execute("SELECT key, expires_at FROM store")
+            rows = await cursor.fetchall()
+            return dict(rows)
+
+        before = await expiries()
+        await asyncio.sleep(1.1)
+
+        await store.abatch(
+            [
+                GetOp(("test",), "refreshed", refresh_ttl=True),
+                GetOp(("test",), "kept", refresh_ttl=False),
+            ]
+        )
+
+        after = await expiries()
+        assert after["refreshed"] > before["refreshed"]
+        assert after["kept"] == before["kept"]
