@@ -18,7 +18,7 @@ uv add langgraph-sdk
 
 This library provides the Python SDK for interacting with the LangGraph API. Use it to connect to a running LangGraph API server, manage assistants and threads, and stream runs from Python applications.
 
-You will need a running LangGraph API server. If you're running a server locally using `langgraph-cli`, the SDK will automatically point at `http://localhost:8123`; otherwise, specify the server URL when creating a client.
+You will need a running LangGraph API server. Pass its URL when creating a client; for example, `get_client(url="http://localhost:2024")` for a server started with `langgraph dev` on its default port. Omitting `url` selects an in-process connection and is only supported inside an Agent Server.
 
 ## 📖 Documentation
 
@@ -29,8 +29,8 @@ For full documentation, see the [API reference](https://reference.langchain.com/
 ```python
 from langgraph_sdk import get_client
 
-# If you're using a remote server, initialize the client with `get_client(url=REMOTE_URL)`
-client = get_client()
+# Use the URL printed by your server, or your remote deployment URL.
+client = get_client(url="http://localhost:2024")
 
 # List all assistants
 assistants = await client.assistants.search()
@@ -64,7 +64,7 @@ async for chunk in client.runs.stream(
 from langgraph_sdk import get_client
 import asyncio
 
-client = get_client()
+client = get_client(url="http://localhost:2024")
 
 async with client.threads.stream(
     thread_id="my-thread",
