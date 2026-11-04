@@ -289,6 +289,30 @@ class TestInterleaveArrivalOrder:
         assert ("alpha", "a1") in collected
         assert ("beta", "b1") in collected
 
+    def test_final_pump_pushes_item_without_close(self) -> None:
+        """A pump that pushes an item and then returns False without
+        closing the channel (the finalize() pattern) must not drop the
+        item. See https://github.com/langchain-ai/langgraph/issues/9461.
+        """
+        mux = StreamMux(
+            factories=[ValuesTransformer, _TwoChannelTransformer],
+            is_async=False,
+        )
+        alpha = mux.extensions["alpha"]
+        run = GraphRunStream(None, mux, wire_pump=False)
+
+        def fake_pump() -> bool:
+            # Push an item on the final call, then report exhaustion
+            # without closing the channel — mirroring a transformer's
+            # finalize() pushing into its StreamChannel as the run ends.
+            alpha.push("final-item")
+            return False
+
+        mux.bind_pump(fake_pump)
+
+        result = list(run.interleave("alpha"))
+        assert result == [("alpha", "final-item")]
+
 
 # ---------------------------------------------------------------------------
 # Integration test: interleave with stream_events(version="v3")
@@ -304,6 +328,38 @@ class TestInterleaveIntegration:
         names = [name for name, _ in tagged]
         assert set(names).issubset({"values", "messages"})
         assert names.count("values") >= 1
+
+    def test_interleave_yields_item_pushed_from_finalize(self) -> None:
+        """Regression for #9461: an item pushed from a transformer's
+        finalize() is received by direct iteration but was dropped by
+        interleave().
+        """
+
+        class FinalSummary(StreamTransformer):
+            def init(self) -> dict[str, Any]:
+                self.summary: StreamChannel[str] = StreamChannel()
+                return {"summary": self.summary}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                return True
+
+            def finalize(self) -> None:
+                self.summary.push("final-summary")
+
+        class _State(TypedDict):
+            x: int
+
+        builder = StateGraph(_State)
+        builder.add_node("step", lambda state: {"x": state["x"] + 1})
+        builder.add_edge(START, "step")
+        graph = builder.compile(transformers=[FinalSummary])
+
+        direct = graph.stream_events({"x": 0}, version="v3")
+        assert list(direct.extensions["summary"]) == ["final-summary"]
+
+        interleaved = graph.stream_events({"x": 0}, version="v3")
+        assert list(interleaved.interleave("summary")) == [("summary", "final-summary")]
+        assert list(interleaved.extensions["summary"]) == []
 
     def test_interleave_rejects_already_subscribed(self) -> None:
         mux = StreamMux(

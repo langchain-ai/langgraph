@@ -317,6 +317,7 @@ class GraphRunStream:
                 channels[name] = ch
 
             done: set[str] = set()
+            exhausted = False
 
             while len(done) < len(channels):
                 best: tuple[int, str] | None = None
@@ -337,8 +338,11 @@ class GraphRunStream:
                     _stamp, item = channels[best[1]]._items.popleft()
                     yield (best[1], item)
                 else:
-                    pump = self._mux._pump_fn
-                    if pump is None or not pump():
+                    if not exhausted:
+                        pump = self._mux._pump_fn
+                        if pump is None or not pump():
+                            exhausted = True
+                    if exhausted:
                         before = len(done)
                         for name, ch in channels.items():
                             if name not in done and not ch._items:
@@ -347,6 +351,12 @@ class GraphRunStream:
                                         raise ch._error
                                     done.add(name)
                         if len(done) == before:
+                            # The pump that reported exhaustion can still
+                            # have pushed items (e.g. from a transformer's
+                            # finalize()) without closing the channel.
+                            # Drain them before stopping.
+                            if any(ch._items for ch in channels.values()):
+                                continue
                             break
         finally:
             for ch in channels.values():
