@@ -7,6 +7,7 @@ __all__ = (
     "LangGraphDeprecatedSinceV05",
     "LangGraphDeprecatedSinceV10",
     "LangGraphDeprecatedSinceV11",
+    "LangGraphDeprecatedSinceV13",
 )
 
 
@@ -67,3 +68,10 @@ class LangGraphDeprecatedSinceV11(LangGraphDeprecationWarning):
 
     def __init__(self, message: str, *args: object) -> None:
         super().__init__(message, *args, since=(1, 1), expected_removal=(3, 0))
+
+
+class LangGraphDeprecatedSinceV13(LangGraphDeprecationWarning):
+    """A specific `LangGraphDeprecationWarning` subclass defining functionality deprecated since LangGraph v1.3.0"""
+
+    def __init__(self, message: str, *args: object) -> None:
+        super().__init__(message, *args, since=(1, 3), expected_removal=(2, 0))

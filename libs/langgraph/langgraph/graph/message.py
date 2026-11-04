@@ -27,7 +27,7 @@ from langgraph.graph.state import StateGraph
 from langgraph.pregel._messages import (
     _messages_delta_reducer as _messages_delta_reducer,
 )
-from langgraph.warnings import LangGraphDeprecatedSinceV10
+from langgraph.warnings import LangGraphDeprecatedSinceV10, LangGraphDeprecatedSinceV13
 
 __all__ = (
     "add_messages",
@@ -41,7 +41,27 @@ Messages = list[MessageLikeRepresentation] | MessageLikeRepresentation
 REMOVE_ALL_MESSAGES = "__remove_all__"
 
 
+_EDIT_DEPRECATION = (
+    "{what} through `add_messages` is deprecated: stored history will be "
+    "append-only. Build the messages the model sees when calling it instead "
+    "(for example from a summary kept in state), and use the `MessagesLog` "
+    "channel, which stores messages once instead of in every checkpoint."
+)
+
+
+def _warn_edit(what: str) -> None:
+    warnings.warn(
+        _EDIT_DEPRECATION.format(what=what),
+        category=LangGraphDeprecatedSinceV13,
+        stacklevel=3,
+    )
+
+
 def _add_messages_wrapper(func: Callable) -> Callable[[Messages, Messages], Messages]:
+    # lets `BinaryOperatorAggregate` recognize the reducer, alone or with
+    # `format=`, without importing this module
+    func._is_add_messages = True  # type: ignore[attr-defined]
+
     def _add_messages(
         left: Messages | None = None, right: Messages | None = None, **kwargs: Any
     ) -> Messages | Callable[[Messages, Messages], Messages]:
@@ -57,6 +77,7 @@ def _add_messages_wrapper(func: Callable) -> Callable[[Messages, Messages], Mess
             return partial(func, **kwargs)
 
     _add_messages.__doc__ = func.__doc__
+    _add_messages._is_add_messages = True  # type: ignore[attr-defined]
     return cast(Callable[[Messages, Messages], Messages], _add_messages)
 
 
@@ -213,9 +234,11 @@ def add_messages(
             remove_all_idx = idx
 
     if remove_all_idx is not None:
+        _warn_edit("Removing all messages with `REMOVE_ALL_MESSAGES`")
         return right[remove_all_idx + 1 :]
 
     # merge
+    left_ids = {m.id for m in left}
     merged = left.copy()
     merged_by_id = {m.id: i for i, m in enumerate(merged)}
     ids_to_remove = set()
@@ -235,6 +258,10 @@ def add_messages(
             merged_by_id[m.id] = len(merged)
             merged.append(m)
     merged = [m for m in merged if m.id not in ids_to_remove]
+    if any(isinstance(m, RemoveMessage) for m in right):
+        _warn_edit("Removing messages with `RemoveMessage`")
+    elif any(m.id in left_ids for m in right):
+        _warn_edit("Replacing a message by id")
 
     if format == "langchain-openai":
         merged = _format_messages(merged)

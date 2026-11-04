@@ -26,6 +26,7 @@ from langgraph._internal._config import filter_to_user_tags
 from langgraph._internal._constants import NS_SEP, PUSH
 from langgraph.channels.binop import _get_overwrite
 from langgraph.channels.delta import DeltaChannel
+from langgraph.channels.log import MessagesLog
 from langgraph.constants import TAG_HIDDEN, TAG_NOSTREAM
 from langgraph.pregel.protocol import StreamChunk
 from langgraph.types import Command, Overwrite
@@ -539,7 +540,7 @@ def ensure_message_ids(
         spec = channels.get(ch)
         if not isinstance(spec, DeltaChannel):
             continue
-        if spec.reducer is _messages_delta_reducer:
+        if spec.reducer is _messages_delta_reducer or isinstance(spec, MessagesLog):
             new_value = _with_message_ids(value)
         else:
             new_value = _with_base_message_ids(value)

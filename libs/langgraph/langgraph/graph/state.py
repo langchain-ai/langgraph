@@ -1888,11 +1888,7 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
                         NotRequired,
                     ):
                         origin = origin.__args__[0]
-                    item = item.__class__(
-                        item.reducer,
-                        origin,
-                        snapshot_frequency=item.snapshot_frequency,
-                    )
+                    item = item._new(origin)
                 return item
             elif isclass(item) and issubclass(item, BaseChannel):
                 # ex, Annotated[int, EphemeralValue, SomeOtherAnnotation]

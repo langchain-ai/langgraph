@@ -107,10 +107,17 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
     def UpdateType(self) -> Any:
         return self.typ
 
-    def copy(self) -> Self:
-        new = self.__class__(
-            self.reducer, self.typ, snapshot_frequency=self.snapshot_frequency
+    def _new(self, typ: Any) -> Self:
+        """An empty channel configured like this one, holding `typ`.
+
+        Subclasses with a different constructor override this.
+        """
+        return self.__class__(
+            self.reducer, typ, snapshot_frequency=self.snapshot_frequency
         )
+
+    def copy(self) -> Self:
+        new = self._new(self.typ)
         new.key = self.key
         new.value = self.value if self.value is MISSING else _copy.copy(self.value)
         return new
@@ -124,9 +131,7 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
           * plain value (migration from old `BinaryOperatorAggregate` blobs):
             use directly.
         """
-        new = self.__class__(
-            self.reducer, self.typ, snapshot_frequency=self.snapshot_frequency
-        )
+        new = self._new(self.typ)
         new.key = self.key
         if checkpoint is MISSING:
             new.value = self.typ()

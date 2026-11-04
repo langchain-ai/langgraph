@@ -35,6 +35,7 @@ from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate, _get_overwrite
 from langgraph.channels.delta import DeltaChannel
+from langgraph.channels.log import MessagesLog
 from langgraph.managed.base import ManagedValueMapping, ManagedValueSpec
 
 LATEST_VERSION = 4
@@ -97,13 +98,15 @@ def delta_channels_to_snapshot(
     A channel snapshots when EITHER its accumulated update count reaches
     `snapshot_frequency` OR the total supersteps since its last snapshot
     reaches `DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT`. A channel without a version
-    was never written on this branch, so it has nothing to snapshot. This is a
-    pure predicate — no mutation.
+    was never written on this branch, so it has nothing to snapshot. A
+    `MessagesLog` never snapshots on a schedule: its writes are its storage.
+    This is a pure predicate — no mutation.
     """
     result: set[str] = set()
     for name, ch in channels.items():
         if (
             not isinstance(ch, DeltaChannel)
+            or isinstance(ch, MessagesLog)
             or not ch.is_available()
             or name not in channel_versions
         ):
