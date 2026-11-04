@@ -163,6 +163,9 @@ class UnknownInterruptError(Exception):
 
     A single value with no interrupt pending is accepted, because it resumes a
     graph paused at a static breakpoint (`interrupt_before` or `interrupt_after`).
+
+    The interrupts one task raises share an id, so an answer retried after the
+    task asked its next question answers that question.
     """
 
     reason: Literal["not_pending", "empty_map", "ambiguous"]

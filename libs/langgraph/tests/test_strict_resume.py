@@ -53,6 +53,20 @@ def _parallel(checkpointer: BaseCheckpointSaver) -> CompiledStateGraph:
     )
 
 
+def _ask_twice(checkpointer: BaseCheckpointSaver) -> CompiledStateGraph:
+    def ask_twice(state: State):
+        first = interrupt("first?")
+        second = interrupt("second?")
+        return {"log": [f"{first},{second}"]}
+
+    return (
+        StateGraph(State)
+        .add_node("ask", ask_twice)
+        .add_edge(START, "ask")
+        .compile(checkpointer=checkpointer)
+    )
+
+
 def _pending_ids(graph: CompiledStateGraph, config: RunnableConfig) -> dict[str, str]:
     return {i.value: i.id for i in graph.get_state(config).interrupts}
 
@@ -206,17 +220,7 @@ def test_a_subgraph_interrupt_is_answered_by_its_id(
 def test_a_second_interrupt_in_one_node_is_answered_by_the_same_id(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    def ask_twice(state: State):
-        first = interrupt("first?")
-        second = interrupt("second?")
-        return {"log": [f"{first},{second}"]}
-
-    graph = (
-        StateGraph(State)
-        .add_node("ask", ask_twice)
-        .add_edge(START, "ask")
-        .compile(checkpointer=sync_checkpointer)
-    )
+    graph = _ask_twice(sync_checkpointer)
     config = _config()
     graph.invoke({"log": []}, config)
     (card,) = graph.get_state(config).interrupts
@@ -226,6 +230,19 @@ def test_a_second_interrupt_in_one_node_is_answered_by_the_same_id(
 
     result = graph.invoke(Command(resume={second.id: "2"}), config)
     assert result["log"] == ["1,2"]
+
+
+def test_a_retried_answer_in_one_node_answers_its_next_interrupt(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = _ask_twice(sync_checkpointer)
+    config = _config()
+    graph.invoke({"log": []}, config)
+    (card,) = graph.get_state(config).interrupts
+    graph.invoke(Command(resume={card.id: "yes"}), config)
+
+    result = graph.invoke(Command(resume={card.id: "yes"}), config)
+    assert result["log"] == ["yes,yes"]
 
 
 def test_a_card_whose_resumed_task_raised_is_not_refused(
