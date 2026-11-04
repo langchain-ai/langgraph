@@ -159,7 +159,9 @@ def test_ttl_override_default(temp_db_file: str) -> None:
     """Test overriding default TTL at the item level."""
     with SqliteStore.from_conn_string(
         temp_db_file,
-        ttl={"default_ttl": 5 / 60},  # 5 seconds default
+        # This test is about per-item TTL overrides, not refresh-on-read, and it
+        # asserts expiry across reads: keep the reads from extending them.
+        ttl={"default_ttl": 5 / 60, "refresh_on_read": False},  # 5 seconds default
     ) as store:
         store.setup()
 
@@ -427,3 +429,54 @@ async def test_async_asearch_refresh_ttl(temp_db_file: str) -> None:
         assert item1_final_check is None, (
             "Item1 should be gone after its refreshed TTL expired"
         )
+
+
+def test_ttl_refresh_on_read_defaults_to_true(temp_db_file: str) -> None:
+    """`ttl={"default_ttl": ...}` alone must refresh on read."""
+    ttl_seconds = 2
+    ttl_minutes = ttl_seconds / 60
+
+    with SqliteStore.from_conn_string(
+        temp_db_file, ttl={"default_ttl": ttl_minutes}
+    ) as store:
+        store.setup()
+        store.put(("test",), "item1", {"value": "test"})
+
+        time.sleep(ttl_seconds - 0.5)
+        assert store.sweep_ttl() == 0
+
+        # No explicit refresh_ttl: refresh_on_read defaults to True, so the read
+        # below has to push the expiry out by another full TTL.
+        item = store.get(("test",), "item1")
+        assert item is not None
+
+        time.sleep(ttl_seconds - 0.5)
+        assert store.sweep_ttl() == 0
+
+        item = store.get(("test",), "item1")
+        assert item is not None
+        assert item.value["value"] == "test"
+
+
+async def test_async_ttl_refresh_on_read_defaults_to_true(temp_db_file: str) -> None:
+    """The async store resolves the same default."""
+    ttl_seconds = 2
+    ttl_minutes = ttl_seconds / 60
+
+    async with AsyncSqliteStore.from_conn_string(
+        temp_db_file, ttl={"default_ttl": ttl_minutes}
+    ) as store:
+        await store.setup()
+        await store.aput(("test",), "item1", {"value": "test"})
+
+        await asyncio.sleep(ttl_seconds - 0.5)
+        assert await store.sweep_ttl() == 0
+
+        item = await store.aget(("test",), "item1")
+        assert item is not None
+
+        await asyncio.sleep(ttl_seconds - 0.5)
+        assert await store.sweep_ttl() == 0
+
+        item = await store.aget(("test",), "item1")
+        assert item is not None

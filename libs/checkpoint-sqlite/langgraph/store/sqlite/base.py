@@ -318,7 +318,7 @@ class BaseSqliteStore:
             if (
                 refresh_ttl_any
                 and self.ttl_config
-                and self.ttl_config.get("refresh_on_read", False)
+                and self.ttl_config.get("refresh_on_read", True)
             ):
                 placeholders = ",".join(["?"] * len(keys))
                 update_query = f"""
@@ -596,7 +596,7 @@ class BaseSqliteStore:
             needs_ttl_refresh = bool(
                 op.refresh_ttl
                 and self.ttl_config
-                and self.ttl_config.get("refresh_on_read", False)
+                and self.ttl_config.get("refresh_on_read", True)
             )
 
             # The base_query is now the final_sql, and we pass the refresh flag
@@ -918,7 +918,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
             if (
                 refresh_ttl_any
                 and self.ttl_config
-                and self.ttl_config.get("refresh_on_read", False)
+                and self.ttl_config.get("refresh_on_read", True)
             ):
                 placeholders = ",".join(["?"] * len(keys))
                 update_query = f"""
