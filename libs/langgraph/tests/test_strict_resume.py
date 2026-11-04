@@ -65,13 +65,19 @@ def test_unknown_id_is_refused_before_anything_is_written(
     graph.invoke({"log": []}, config, durability=durability)
     before = graph.get_state(config)
     checkpoints = len(list(sync_checkpointer.list(config)))
+    ids = _pending_ids(graph, config)
 
     with pytest.raises(
         UnknownInterruptError,
         match=f"Unknown or already-consumed interrupt: {UNKNOWN_ID}",
-    ):
+    ) as refused:
         graph.invoke(Command(resume={UNKNOWN_ID: "x"}), config, durability=durability)
 
+    assert (
+        refused.value.reason,
+        refused.value.interrupt_ids,
+        refused.value.pending_ids,
+    ) == ("not_pending", (UNKNOWN_ID,), tuple(sorted(ids.values())))
     after = graph.get_state(config)
     assert len(list(sync_checkpointer.list(config))) == checkpoints
     assert (after.values, after.next, after.interrupts) == (
@@ -79,7 +85,6 @@ def test_unknown_id_is_refused_before_anything_is_written(
         before.next,
         before.interrupts,
     )
-    ids = _pending_ids(graph, config)
     result = graph.invoke(
         Command(resume={ids["a?"]: "yes", ids["b?"]: "no"}),
         config,
@@ -95,8 +100,14 @@ def test_an_answered_id_is_refused(sync_checkpointer: BaseCheckpointSaver) -> No
     ids = _pending_ids(graph, config)
     graph.invoke(Command(resume={ids["a?"]: "yes"}), config)
 
-    with pytest.raises(UnknownInterruptError, match=ids["a?"]):
+    with pytest.raises(UnknownInterruptError, match=ids["a?"]) as refused:
         graph.invoke(Command(resume={ids["a?"]: "again"}), config)
+
+    assert (
+        refused.value.reason,
+        refused.value.interrupt_ids,
+        refused.value.pending_ids,
+    ) == ("not_pending", (ids["a?"],), (ids["b?"],))
 
     result = graph.invoke(Command(resume={ids["b?"]: "no"}), config)
     assert sorted(result["log"]) == ["a:yes", "b:no"]
@@ -107,8 +118,14 @@ def test_an_empty_map_is_refused(sync_checkpointer: BaseCheckpointSaver) -> None
     config = _config()
     graph.invoke({"log": []}, config)
 
-    with pytest.raises(UnknownInterruptError, match="names no interrupt"):
+    with pytest.raises(UnknownInterruptError, match="names no interrupt") as refused:
         graph.invoke(Command(resume={}), config)
+
+    assert (
+        refused.value.reason,
+        refused.value.interrupt_ids,
+        refused.value.pending_ids,
+    ) == ("empty_map", (), tuple(sorted(_pending_ids(graph, config).values())))
 
 
 def test_one_value_is_refused_while_several_are_pending(
@@ -118,10 +135,16 @@ def test_one_value_is_refused_while_several_are_pending(
     config = _config()
     graph.invoke({"log": []}, config)
 
-    with pytest.raises(UnknownInterruptError, match="multiple pending interrupts"):
+    with pytest.raises(
+        UnknownInterruptError, match="multiple pending interrupts"
+    ) as refused:
         graph.invoke(Command(resume="yes"), config)
 
     ids = _pending_ids(graph, config)
+    assert (refused.value.reason, refused.value.pending_ids) == (
+        "ambiguous",
+        tuple(sorted(ids.values())),
+    )
     graph.invoke(Command(resume={ids["a?"]: "yes"}), config)
     result = graph.invoke(Command(resume="no"), config)
     assert sorted(result["log"]) == ["a:yes", "b:no"]

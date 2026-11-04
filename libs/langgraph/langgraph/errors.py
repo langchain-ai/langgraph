@@ -150,15 +150,37 @@ class TaskNotFound(Exception):
 class UnknownInterruptError(Exception):
     """Raised in strict resume mode when a resume doesn't match the pending interrupts.
 
-    The resume names an interrupt that isn't pending, is an empty map, or is a
-    single value while several interrupts are pending. It is raised before
-    anything is written, so the pending interrupts can still be answered.
+    `reason` says how it doesn't match:
+
+    - `"not_pending"`: the resume names interrupts that aren't pending, listed in
+      `interrupt_ids`.
+    - `"empty_map"`: the resume is an empty map.
+    - `"ambiguous"`: the resume is a single value while several interrupts are
+      pending.
+
+    `pending_ids` lists the interrupts still waiting for an answer. The error is
+    raised before anything is written, so they can still be answered.
 
     A single value with no interrupt pending is accepted, because it resumes a
     graph paused at a static breakpoint (`interrupt_before` or `interrupt_after`).
     """
 
-    pass
+    reason: Literal["not_pending", "empty_map", "ambiguous"]
+    interrupt_ids: tuple[str, ...]
+    pending_ids: tuple[str, ...]
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: Literal["not_pending", "empty_map", "ambiguous"],
+        interrupt_ids: Sequence[str] = (),
+        pending_ids: Sequence[str] = (),
+    ) -> None:
+        super().__init__(message)
+        self.reason = reason
+        self.interrupt_ids = tuple(interrupt_ids)
+        self.pending_ids = tuple(pending_ids)
 
 
 @dataclass(frozen=True, slots=True)

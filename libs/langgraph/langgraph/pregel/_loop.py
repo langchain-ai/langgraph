@@ -1039,24 +1039,32 @@ class PregelLoop:
                     and all(is_xxh3_128_hexdigest(k) for k in resume)
                 ):
                     if strict:
+                        pending = self._pending_interrupts()
                         if not resume:
                             raise UnknownInterruptError(
-                                "The resume map names no interrupt"
+                                "The resume map names no interrupt",
+                                reason="empty_map",
+                                pending_ids=sorted(pending),
                             )
-                        if unknown := sorted(
-                            resume.keys() - self._pending_interrupts()
-                        ):
+                        if unknown := sorted(resume.keys() - pending):
                             raise UnknownInterruptError(
-                                f"Unknown or already-consumed interrupt: {unknown[0]}"
+                                f"Unknown or already-consumed interrupt: {unknown[0]}",
+                                reason="not_pending",
+                                interrupt_ids=unknown,
+                                pending_ids=sorted(pending),
                             )
                     self.config[CONF][CONFIG_KEY_RESUME_MAP] = resume
                 else:
-                    if len(self._pending_interrupts()) > 1:
-                        error = UnknownInterruptError if strict else RuntimeError
-                        raise error(
+                    if len(pending := self._pending_interrupts()) > 1:
+                        message = (
                             "When there are multiple pending interrupts, you must specify the interrupt id when resuming. "
                             "Docs: https://docs.langchain.com/oss/python/langgraph/add-human-in-the-loop#resume-multiple-interrupts-with-one-invocation."
                         )
+                        if strict:
+                            raise UnknownInterruptError(
+                                message, reason="ambiguous", pending_ids=sorted(pending)
+                            )
+                        raise RuntimeError(message)
 
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
             # group writes by task ID
