@@ -499,14 +499,14 @@ class AsyncGraphRunStream:
                 self._anext_task = asyncio.ensure_future(self._graph_aiter.__anext__())
                 try:
                     part = await self._anext_task
-                except asyncio.CancelledError as exc:
+                except asyncio.CancelledError:
                     if self._aborting:
                         # Abort-initiated cancel: stop gracefully.
                         self._exhausted = True
                         return False
                     # Genuine external cancel of this task: also stop the
                     # in-flight pull, then propagate.
-                    self._anext_task.cancel(exc.args[0] if exc.args else None)
+                    self._anext_task.cancel()
                     raise
                 finally:
                     self._anext_task = None

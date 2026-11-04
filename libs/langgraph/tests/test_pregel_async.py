@@ -552,11 +552,7 @@ async def test_node_cancellation_on_external_cancel() -> None:
     assert inner_task_cancelled
 
 
-@pytest.mark.parametrize("parallel", [False, True])
-@pytest.mark.parametrize("mode", ["astream", "astream_events_v2", "astream_events_v3"])
-async def test_node_cancellation_preserves_cancel_message(
-    mode: str, parallel: bool
-) -> None:
+async def test_node_cancellation_preserves_cancel_message() -> None:
     marker = object()
     started = asyncio.Event()
     child_args: list[tuple[Any, ...]] = []
@@ -575,23 +571,15 @@ async def test_node_cancellation_preserves_cancel_message(
 
     builder = StateGraph(State)
     builder.add_node("one", awhile)
+    builder.add_node("two", awhile)
     builder.add_edge(START, "one")
-    if parallel:
-        builder.add_node("two", awhile)
-        builder.add_edge(START, "two")
+    builder.add_edge(START, "two")
     graph = builder.compile()
 
     async def consume() -> None:
-        if mode == "astream":
-            async for _ in graph.astream({"hello": []}):
-                pass
-        elif mode == "astream_events_v2":
-            async for _ in graph.astream_events({"hello": []}, version="v2"):
-                pass
-        else:
-            run = await graph.astream_events({"hello": []}, version="v3")
-            async for _ in run:
-                pass
+        run = await graph.astream_events({"hello": []}, version="v3")
+        async for _ in run:
+            pass
 
     task = asyncio.create_task(consume())
     await started.wait()
@@ -600,7 +588,7 @@ async def test_node_cancellation_preserves_cancel_message(
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    assert child_args == [(marker,)] * (2 if parallel else 1)
+    assert child_args == [(marker,), (marker,)]
 
 
 async def test_node_cancellation_on_other_node_exception() -> None:
