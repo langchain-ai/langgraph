@@ -1435,6 +1435,11 @@ class PregelLoop:
         on that same checkpoint, and a saver without native log support keeps
         the first run's writes under the same keys. So the first step of such
         a resume carries its entries inline too.
+
+        So does a step that commits a seed (the list a field stored before it
+        became a log channel), which never went through `put_writes`. The
+        channel's version is bumped if the step didn't change it, so that the
+        saver stores the step and the checkpoint points at the log.
         """
         inline = (
             metadata.get("source") != "loop"
@@ -1448,12 +1453,19 @@ class PregelLoop:
             if not isinstance(ch, Log):
                 continue
             step = values.get(k)
+            seeding, ch.seeding = ch.seeding, False
+            if seeding:
+                versions = self.checkpoint["channel_versions"]
+                if versions.get(k) == self.checkpoint_previous_versions.get(k):
+                    versions[k] = self.checkpointer_get_next_version(
+                        versions.get(k), None
+                    )
             if isinstance(step, LogStep) and step.entries is not None:
                 values[k] = LogStep(
                     step.start,
                     step.count,
                     self._log_exec,
-                    step.entries if inline else None,
+                    step.entries if inline or seeding else None,
                 )
 
     def _put_exit_delta_writes(self) -> None:

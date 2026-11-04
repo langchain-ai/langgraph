@@ -1,4 +1,5 @@
 import collections.abc
+import warnings
 from collections.abc import Callable, Sequence
 from typing import Any, Generic
 
@@ -27,6 +28,26 @@ def _strip_extras(t):  # type: ignore[no-untyped-def]
             return _strip_extras(t.__args__[0])
         return _strip_extras(t.__origin__)
     return t
+
+
+def _is_add_messages(operator: Callable) -> bool:
+    """Whether `operator` is `add_messages`, alone or with `format=`."""
+    return getattr(operator, "_is_add_messages", False) or getattr(
+        getattr(operator, "func", None), "_is_add_messages", False
+    )
+
+
+def _warn_overwrite_messages() -> None:
+    from langgraph.warnings import LangGraphDeprecatedSinceV13
+
+    warnings.warn(
+        "Replacing all messages with `Overwrite` in an `add_messages` channel "
+        "is deprecated: stored history will be append-only. Build the messages "
+        "the model sees when calling it instead, and use the `MessagesLog` "
+        "channel, which stores messages once instead of in every checkpoint.",
+        category=LangGraphDeprecatedSinceV13,
+        stacklevel=4,
+    )
 
 
 def _get_overwrite(value: Any) -> tuple[bool, Any]:
@@ -140,6 +161,8 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
                         error_code=ErrorCode.INVALID_CONCURRENT_GRAPH_UPDATE,
                     )
                     raise InvalidUpdateError(msg)
+                if _is_add_messages(self.operator):
+                    _warn_overwrite_messages()
                 self.value = overwrite_value
                 seen_overwrite = True
                 continue

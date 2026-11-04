@@ -196,7 +196,11 @@ class InMemorySaver(
         )
         if saved is None:
             return None
-        return self.serde.loads_typed(saved[0])["channel_versions"].get(channel)
+        version = self.serde.loads_typed(saved[0])["channel_versions"].get(channel)
+        if (thread_id, checkpoint_ns, channel, version) in self.blobs:
+            # stored before the field became a log channel: its log is empty
+            return None
+        return version
 
     def read_log(
         self,

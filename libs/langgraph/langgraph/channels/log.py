@@ -16,6 +16,12 @@ Two channel types share that storage:
 - `MessagesLog` holds LangChain messages, stored as canonical JSON. Edit ops
   (`RemoveMessage`, `Overwrite`, re-adding an existing id) are rejected; a
   graph that needs a different model context builds it as a projection.
+
+A thread whose field held a plain list before it became a log channel (for
+example `Annotated[list, add_messages]` changed to `MessagesLog()`) keeps
+working: the stored list becomes the log's first entries, the "seed". The
+seed is committed with the first checkpoint saved after the change, and
+checkpoints from before the change still read as the list they stored.
 """
 
 from __future__ import annotations
@@ -77,7 +83,7 @@ class Log(BaseChannel[list, list, LogStep]):
     list. State reads return a `LogRef` instead of the entries.
     """
 
-    __slots__ = ("entries", "base", "marker", "loaded", "extra")
+    __slots__ = ("entries", "base", "marker", "loaded", "extra", "seed", "seeding")
 
     def __init__(self, typ: Any = list) -> None:
         super().__init__(typ)
@@ -89,6 +95,12 @@ class Log(BaseChannel[list, list, LogStep]):
         self.loaded = True
         # entries appended to a channel that was not loaded
         self.extra = 0
+        # True while the entries hold a plain list stored before the field
+        # became a log channel, not committed to the log yet
+        self.seed = False
+        # True from the commit that includes the seed until the loop has
+        # stamped that checkpoint's step
+        self.seeding = False
 
     def __eq__(self, other: object) -> bool:
         return type(self) is type(other)
@@ -137,6 +149,8 @@ class Log(BaseChannel[list, list, LogStep]):
         new.marker = None
         new.loaded = True
         new.extra = 0
+        new.seed = False
+        new.seeding = False
         return new
 
     def copy(self) -> Self:
@@ -146,6 +160,8 @@ class Log(BaseChannel[list, list, LogStep]):
         new.marker = self.marker
         new.loaded = self.loaded
         new.extra = self.extra
+        new.seed = self.seed
+        new.seeding = self.seeding
         return new
 
     def from_checkpoint(self, checkpoint: Any) -> Self:
@@ -153,17 +169,28 @@ class Log(BaseChannel[list, list, LogStep]):
 
         State reads build channels this way; `get` then returns a `LogRef`.
         The loop builds log channels with `from_log` instead.
+
+        A plain list is what the field stored before it became a log channel.
+        The channel then holds it as its seed: uncommitted entries that the
+        next commit writes to the log, ahead of anything appended after.
         """
         new = self._new()
         if isinstance(checkpoint, LogStep):
             new.marker = checkpoint.stripped()
             new.base = checkpoint.end
             new.loaded = False
+        elif isinstance(checkpoint, list):
+            new.entries = self._seed_entries(checkpoint)
+            new.seed = bool(new.entries)
         elif checkpoint is not MISSING and checkpoint is not None:
             raise InvalidUpdateError(
                 f"Log channel {self.key!r} can't start from {type(checkpoint).__name__}"
             )
         return new
+
+    def _seed_entries(self, stored: list[Any]) -> list[Any]:
+        """The entries a stored plain list becomes."""
+        return list(stored)
 
     def from_log(self, marker: Any, entries: Sequence[Any]) -> Self:
         """A loaded channel: the marker, and the entries read from the log."""
@@ -236,6 +263,7 @@ class Log(BaseChannel[list, list, LogStep]):
             step = LogStep(self.base, len(self.entries) - self.base, "", texts)
             self.base = len(self.entries)
             self.marker = step.stripped()
+            self.seeding, self.seed = self.seed, False
             return step
         return self.marker
 
@@ -256,7 +284,8 @@ class MessagesLog(Log):
         if isinstance(entry, RemoveMessage):
             raise InvalidUpdateError(
                 f"MessagesLog {self.key!r} is append-only: RemoveMessage is not "
-                "supported"
+                "supported. To give the model a different set of messages, build "
+                "them when calling the model instead of changing stored history."
             )
         if not isinstance(entry, BaseMessage):
             raise InvalidUpdateError(
@@ -270,6 +299,11 @@ class MessagesLog(Log):
         from langchain_core.messages import messages_from_dict
 
         return messages_from_dict([data])[0]
+
+    def _seed_entries(self, stored: list[Any]) -> list[Any]:
+        # the list `add_messages` stored: already merged, so ids are unique
+        # and there are no `RemoveMessage`s
+        return self.coerce(stored)
 
     def coerce(self, value: Any) -> list[Any]:
         from langchain_core.messages import convert_to_messages
@@ -288,6 +322,7 @@ class MessagesLog(Log):
                 raise InvalidUpdateError(
                     f"MessagesLog {self.key!r} already has a message with id "
                     f"{m.id!r}: the log is append-only, so a message can't be "
-                    "replaced"
+                    "replaced. Return only new messages from a node, not the "
+                    "whole list."
                 )
             seen.add(m.id)

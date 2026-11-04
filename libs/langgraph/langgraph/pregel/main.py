@@ -50,6 +50,7 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointTuple,
     LogPage,
+    log_range,
 )
 from langgraph.store.base import BaseStore
 from pydantic import BaseModel, TypeAdapter
@@ -1511,6 +1512,11 @@ class Pregel(
         page = checkpointer.read_log(
             config, channel, after=after, before=before, limit=limit
         )
+        if page.length == 0 and (tup := checkpointer.get_tuple(config)) is not None:
+            if (
+                pre := self._pre_log_page(channel, tup, after, before, limit)
+            ) is not None:
+                return pre
         return self._decode_log_page(channel, page)
 
     async def aread_log(
@@ -1534,7 +1540,33 @@ class Pregel(
         page = await checkpointer.aread_log(
             config, channel, after=after, before=before, limit=limit
         )
+        if (
+            page.length == 0
+            and (tup := await checkpointer.aget_tuple(config)) is not None
+        ):
+            if (
+                pre := self._pre_log_page(channel, tup, after, before, limit)
+            ) is not None:
+                return pre
         return self._decode_log_page(channel, page)
+
+    def _pre_log_page(
+        self,
+        channel: str,
+        tup: CheckpointTuple,
+        after: int | None,
+        before: int | None,
+        limit: int | None,
+    ) -> LogPage | None:
+        """A page of the list a checkpoint stored before the field became a
+        log channel, or `None` if it stored none."""
+        spec = self.channels.get(channel)
+        stored = tup.checkpoint["channel_values"].get(channel)
+        if not isinstance(spec, Log) or not isinstance(stored, list):
+            return None
+        entries = spec.from_checkpoint(stored).entries
+        lo, hi = log_range(len(entries), after, before, limit)
+        return LogPage([(i, entries[i]) for i in range(lo, hi)], len(entries), [])
 
     def _decode_log_page(self, channel: str, page: LogPage) -> LogPage:
         spec = self.channels.get(channel)

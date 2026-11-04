@@ -7,6 +7,7 @@ step rows, range reads) and `SqliteSaver` (no native support: the default
 
 import operator
 import sqlite3
+import warnings
 from collections.abc import Iterator
 from typing import Annotated, Any
 
@@ -23,7 +24,9 @@ from typing_extensions import TypedDict
 from langgraph.channels import Log, LogRef, MessagesLog
 from langgraph.errors import InvalidUpdateError
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import REMOVE_ALL_MESSAGES, add_messages
 from langgraph.types import Command, Overwrite, Send, interrupt
+from langgraph.warnings import LangGraphDeprecatedSinceV13
 
 pytestmark = pytest.mark.anyio
 
@@ -552,3 +555,164 @@ def test_tool_calling_agent_runs_on_a_messages_log(
     page = graph.read_log(config, "messages")
     assert [m.id for _, m in page.entries] == [m.id for m in out["messages"]]
     assert page.entries[-1][1].content == "the answer is 5"
+
+
+def test_input_after_update_state_reads_the_inline_step(
+    saver: BaseCheckpointSaver,
+) -> None:
+    """`update_state` commits its entries inline; the input checkpoint after
+    it keeps the version with a stripped marker, and reads must still find
+    the entries on the checkpoint that committed them."""
+    graph = chat_graph(saver)
+    config = {"configurable": {"thread_id": "1"}}
+    graph.invoke({"messages": [HumanMessage("a")]}, config)
+    graph.update_state(config, {"messages": [HumanMessage("note")]})
+    graph.invoke({"messages": [HumanMessage("b")]}, config)
+    assert contents(graph.read_log(config, "messages")) == [
+        "a",
+        "reply to a",
+        "note",
+        "b",
+        "reply to b",
+    ]
+
+
+# -- existing `add_messages` threads ------------------------------------------
+
+
+class OldChatState(TypedDict):
+    messages: Annotated[list, add_messages]
+
+
+def _reply(state: dict) -> dict:
+    return {"messages": [AIMessage(f"reply to {state['messages'][-1].content}")]}
+
+
+def _chat(schema: type, saver: BaseCheckpointSaver, **nodes: Any):
+    builder = StateGraph(schema)
+    builder.add_node("model", nodes.get("model", _reply))
+    builder.add_edge(START, "model")
+    if "review" in nodes:
+        builder.add_node("review", nodes["review"])
+        builder.add_edge("model", "review")
+        builder.add_edge("review", END)
+    else:
+        builder.add_edge("model", END)
+    return builder.compile(checkpointer=saver)
+
+
+def test_add_messages_thread_switches_to_messages_log(
+    saver: BaseCheckpointSaver,
+) -> None:
+    """A thread written with `add_messages` keeps working on `MessagesLog`:
+    the stored list is the log's first entries."""
+    config = {"configurable": {"thread_id": "1"}}
+    old = _chat(OldChatState, saver)
+    old.invoke({"messages": [HumanMessage("a", id="h1")]}, config)
+    old.invoke({"messages": [HumanMessage("b", id="h2")]}, config)
+    before_switch = old.get_state(config).config
+
+    new = _chat(ChatState, saver)
+    out = new.invoke({"messages": [HumanMessage("c", id="h3")]}, config)
+    assert [m.content for m in out["messages"]] == [
+        "a",
+        "reply to a",
+        "b",
+        "reply to b",
+        "c",
+        "reply to c",
+    ]
+    assert new.get_state(config).values == {"messages": LogRef(6)}
+    page = new.read_log(config, "messages")
+    assert [p for p, _ in page.entries] == list(range(6))
+    assert contents(page) == [m.content for m in out["messages"]]
+    assert [m.id for _, m in page.entries][:1] == ["h1"]
+    # checkpoints from before the switch still read as the list they stored
+    assert contents(new.read_log(before_switch, "messages")) == [
+        "a",
+        "reply to a",
+        "b",
+        "reply to b",
+    ]
+    assert len(new.get_state(before_switch).values["messages"]) == 4
+    # the next turn appends after the seed
+    new.invoke({"messages": [HumanMessage("d")]}, config)
+    assert new.read_log(config, "messages").length == 8
+    if isinstance(saver, InMemorySaver):
+        log = saver.log.logs[("1", "", "messages")]
+        assert sum(len(rows) for rows in log.entries.values()) == 8
+
+
+def test_switch_with_an_interrupted_add_messages_run(
+    saver: BaseCheckpointSaver,
+) -> None:
+    """The first checkpoint after the switch can come from the loop (a
+    resume), not graph input; the seed is committed with it."""
+
+    def review(state: dict) -> dict:
+        answer = interrupt("approve?")
+        return {"messages": [AIMessage(f"review: {answer}")]}
+
+    config = {"configurable": {"thread_id": "1"}}
+    old = _chat(OldChatState, saver, review=review)
+    old.invoke({"messages": [HumanMessage("a")]}, config)
+    assert old.get_state(config).next == ("review",)
+
+    new = _chat(ChatState, saver, review=review)
+    out = new.invoke(Command(resume="ok"), config)
+    assert [m.content for m in out["messages"]] == ["a", "reply to a", "review: ok"]
+    assert contents(new.read_log(config, "messages")) == [
+        "a",
+        "reply to a",
+        "review: ok",
+    ]
+
+
+def test_switch_then_update_state(saver: BaseCheckpointSaver) -> None:
+    config = {"configurable": {"thread_id": "1"}}
+    old = _chat(OldChatState, saver)
+    old.invoke({"messages": [HumanMessage("a")]}, config)
+    new = _chat(ChatState, saver)
+    new.update_state(config, {"messages": [HumanMessage("note")]})
+    assert contents(new.read_log(config, "messages")) == ["a", "reply to a", "note"]
+    out = new.invoke({"messages": [HumanMessage("b")]}, config)
+    assert [m.content for m in out["messages"]][-2:] == ["b", "reply to b"]
+    assert new.read_log(config, "messages").length == 5
+
+
+# -- deprecation of message edit ops on `add_messages` -------------------------
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        pytest.param(lambda s: [RemoveMessage(id=s["messages"][0].id)], id="remove"),
+        pytest.param(
+            lambda s: [RemoveMessage(id=REMOVE_ALL_MESSAGES), AIMessage("x")],
+            id="remove-all",
+        ),
+        pytest.param(
+            lambda s: [HumanMessage("edited", id=s["messages"][0].id)],
+            id="replace-by-id",
+        ),
+        pytest.param(lambda s: Overwrite([AIMessage("x")]), id="overwrite"),
+    ],
+)
+def test_add_messages_edit_ops_are_deprecated(edit: Any) -> None:
+    def node(state: dict) -> dict:
+        return {"messages": edit(state)}
+
+    graph = _chat(OldChatState, InMemorySaver(), model=node)
+    with pytest.warns(LangGraphDeprecatedSinceV13, match="MessagesLog"):
+        graph.invoke(
+            {"messages": [HumanMessage("a")]}, {"configurable": {"thread_id": "1"}}
+        )
+
+
+def test_add_messages_appends_are_not_deprecated() -> None:
+    graph = _chat(OldChatState, InMemorySaver())
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", LangGraphDeprecatedSinceV13)
+        graph.invoke(
+            {"messages": [HumanMessage("a")]}, {"configurable": {"thread_id": "1"}}
+        )

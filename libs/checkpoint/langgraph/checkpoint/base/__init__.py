@@ -744,12 +744,14 @@ class BaseCheckpointSaver(Generic[V]):
             step = cur.checkpoint["channel_values"].get(channel)
             if version is None or not isinstance(step, LogStep) or step.end <= lo:
                 break
-            # climb to the checkpoint that committed this version
+            # climb to the checkpoint that committed this version: later ones
+            # carry its marker without inline entries
             parent = self.get_tuple(cur.parent_config) if cur.parent_config else None
             while (
                 parent is not None
                 and parent.checkpoint["channel_versions"].get(channel) == version
             ):
+                step = parent.checkpoint["channel_values"].get(channel, step)
                 parent = (
                     self.get_tuple(parent.parent_config)
                     if parent.parent_config
@@ -793,6 +795,7 @@ class BaseCheckpointSaver(Generic[V]):
                 parent is not None
                 and parent.checkpoint["channel_versions"].get(channel) == version
             ):
+                step = parent.checkpoint["channel_values"].get(channel, step)
                 parent = (
                     await self.aget_tuple(parent.parent_config)
                     if parent.parent_config
