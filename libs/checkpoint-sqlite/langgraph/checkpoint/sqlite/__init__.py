@@ -170,6 +170,9 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         )
         # sqlite has no ADD COLUMN IF NOT EXISTS; this migrates databases
         # created before `task_path` existed and is a no-op on the rest.
+        # Pre-check avoids the ALTER TABLE in the common case, but a race can
+        # still leave a duplicate-column error from a concurrent connection.
+        # Treat that as success: the column already exists.
         columns = [row[1] for row in self.conn.execute("PRAGMA table_info(writes)")]
         if "task_path" not in columns:
             try:
@@ -181,7 +184,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 # its rows would all read back as '' anyway.
                 if "readonly database" in str(e):
                     self._has_task_path = False
-                else:
+                elif "duplicate column name" not in str(e):
                     raise
 
         self.is_setup = True
