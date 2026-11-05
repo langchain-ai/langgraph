@@ -2,6 +2,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
+from typing import Any
 
 import aiosqlite
 import pytest
@@ -126,6 +127,71 @@ def _legacy_database_with_history(db: Path) -> dict:
         saver.conn.execute("ALTER TABLE writes DROP COLUMN task_path")
         saver.conn.commit()
     return child
+
+
+class DriverOperationalError(Exception):
+    """An OperationalError raised by a non-stdlib sqlite driver."""
+
+
+class _AlterRejectingConnection:
+    """Connection proxy that fails an ALTER with a non-stdlib OperationalError."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+        self.alter_attempts = 0
+
+    def executescript(self, script: str) -> sqlite3.Cursor:
+        return self._conn.executescript(script)
+
+    def execute(self, sql: str, parameters: tuple = ()) -> sqlite3.Cursor:
+        if sql.lstrip().upper().startswith("ALTER TABLE WRITES"):
+            self.alter_attempts += 1
+            raise DriverOperationalError("duplicate column name: task_path")
+        return self._conn.execute(sql, parameters)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._conn, name)
+
+
+def test_setup_skips_the_alter_when_task_path_exists(tmp_path: Path) -> None:
+    conn = _AlterRejectingConnection(sqlite3.connect(tmp_path / "fresh.sqlite"))
+    saver = SqliteSaver(conn)  # type: ignore[arg-type]
+    saver.setup()
+
+    assert conn.alter_attempts == 0
+    assert saver._has_task_path
+
+
+class _AsyncAlterRejectingConnection:
+    """Async connection proxy that fails an ALTER with a non-stdlib OperationalError."""
+
+    def __init__(self, conn: aiosqlite.Connection) -> None:
+        self._conn = conn
+        self.alter_attempts = 0
+
+    def executescript(self, script: str) -> Any:
+        return self._conn.executescript(script)
+
+    async def execute(self, sql: str, parameters: tuple = ()) -> Any:
+        if sql.lstrip().upper().startswith("ALTER TABLE WRITES"):
+            self.alter_attempts += 1
+            raise DriverOperationalError("duplicate column name: task_path")
+        return await self._conn.execute(sql, parameters)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._conn, name)
+
+
+async def test_async_setup_skips_the_alter_when_task_path_exists(
+    tmp_path: Path,
+) -> None:
+    async with aiosqlite.connect(tmp_path / "fresh.sqlite") as conn:
+        proxy = _AsyncAlterRejectingConnection(conn)
+        saver = AsyncSqliteSaver(proxy)  # type: ignore[arg-type]
+        await saver.setup()
+
+        assert proxy.alter_attempts == 0
+        assert saver._has_task_path
 
 
 def test_read_only_legacy_database_still_reads_delta_history(tmp_path: Path) -> None:

@@ -349,18 +349,25 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
 
             # sqlite has no ADD COLUMN IF NOT EXISTS; this migrates databases
             # created before `task_path` existed and is a no-op on the rest.
-            try:
-                await self.conn.execute(
-                    "ALTER TABLE writes ADD COLUMN task_path TEXT NOT NULL DEFAULT ''"
-                )
-                await self.conn.commit()
-            except aiosqlite.OperationalError as e:
-                # A read-only database from before the column can still be read;
-                # its rows would all read back as '' anyway.
-                if "readonly database" in str(e):
-                    self._has_task_path = False
-                elif "duplicate column name" not in str(e):
-                    raise
+            # Check the column first so fresh databases skip the ALTER entirely:
+            # drivers such as sqlcipher raise their own OperationalError for the
+            # duplicate column, which is not a subclass of aiosqlite.OperationalError.
+            async with self.conn.cursor() as cur:
+                await cur.execute("PRAGMA table_info(writes)")
+                columns = await cur.fetchall()
+            if not any(column[1] == "task_path" for column in columns):
+                try:
+                    await self.conn.execute(
+                        "ALTER TABLE writes ADD COLUMN task_path TEXT NOT NULL DEFAULT ''"
+                    )
+                    await self.conn.commit()
+                except Exception as e:
+                    # A read-only database from before the column can still be read;
+                    # its rows would all read back as '' anyway.
+                    if "readonly database" in str(e):
+                        self._has_task_path = False
+                    elif "duplicate column name" not in str(e):
+                        raise
 
             self.is_setup = True
 
