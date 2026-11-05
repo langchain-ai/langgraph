@@ -77,6 +77,31 @@ class _Subscription:
     queue: asyncio.Queue = field(default_factory=asyncio.Queue)
     # Why: asyncio.Queue[Event | None] as a subscript in the field annotation
     # causes a type error with ty; bare asyncio.Queue is accepted.
+    ended: bool = False
+    """The shared stream is over for this subscription, its sentinel may still be owed."""
+
+    def offer(self, event: Event) -> bool:
+        """Add an event without ever blocking the shared fan-out.
+
+        `False` means the queue is full, i.e. this subscriber is more than `max_queue_size`
+        events behind and the event is dropped for it alone. Waiting for room here would
+        stall every other subscriber, and letting `QueueFull` out would take down the
+        fan-out, whose caller reads any exception as a dropped transport.
+        """
+        try:
+            self.queue.put_nowait(event)
+        except asyncio.QueueFull:
+            return False
+        return True
+
+    def finish(self) -> None:
+        """Mark the stream over and queue the sentinel, if the queue has room for it."""
+        self.ended = True
+        self._offer_sentinel()
+
+    def _offer_sentinel(self) -> None:
+        with contextlib.suppress(asyncio.QueueFull):
+            self.queue.put_nowait(None)
 
 
 # All public protocol channels used by the raw `events`/`subscribe` surface.
@@ -377,7 +402,7 @@ class _ValuesProjection:
             state = await self._thread._fetch_state()
             yield state["values"]
             while True:
-                item = await sub.queue.get()
+                item = await self._thread._pull(sub)
                 if item is None:
                     return
                 for out in decoder.feed(item):
@@ -427,7 +452,7 @@ class _MessagesProjection:
             await self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
             while True:
-                item = await sub.queue.get()
+                item = await self._thread._pull(sub)
                 if item is None:
                     return
                 for stream in decoder.feed(item):
@@ -946,7 +971,7 @@ class _SubgraphsProjection:
             await self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
             while True:
-                item = await sub.queue.get()
+                item = await self._thread._pull(sub)
                 if item is None:
                     return
                 params_field = item.get("params") or {}
@@ -1077,7 +1102,7 @@ class _ToolCallsProjection:
             await self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
             while True:
-                item = await sub.queue.get()
+                item = await self._thread._pull(sub)
                 if item is None:
                     return
                 for handle in decoder.feed(item):
@@ -1157,7 +1182,7 @@ class _ExtensionProjection:
             await self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
             while True:
-                item = await sub.queue.get()
+                item = await self._thread._pull(sub)
                 if item is None:
                     return
                 for out in decoder.feed(item):
@@ -1391,16 +1416,34 @@ class AsyncThreadStream:
         sentinel. Signaling root_inbox here would race the redirection
         and could drop messages.
         """
-        # On a saturated queue the consumer is already behind; the iterator
-        # will still terminate when it drains to this point.
-        for sub in list(self._subscriptions.values()):
-            with contextlib.suppress(asyncio.QueueFull):
-                sub.queue.put_nowait(None)
+        # A full queue cannot take the sentinel yet; `_end_subscriptions` leaves it owed
+        # and `_pull` hands it over once the consumer makes room.
+        self._end_subscriptions()
 
     def observe_applied_through_seq(self, seq: Any) -> None:
         """Advance the reconnect cursor from a command response meta sequence."""
         if isinstance(seq, int) and (self._cursor is None or seq > self._cursor):
             self._cursor = seq
+
+    def _end_subscriptions(self) -> None:
+        """Mark every subscription as ended and give it the sentinel if its queue has room."""
+        for sub in list(self._subscriptions.values()):
+            sub.finish()
+
+    async def _pull(self, sub: _Subscription) -> Event | None:
+        """Pull the next item for a subscriber, `None` once the stream is over.
+
+        A sentinel that did not fit when the stream ended is queued now that this pull
+        freed a slot, so the iterator always terminates.
+        """
+        item = await sub.queue.get()
+        if item is not None:
+            if sub.ended:
+                sub._offer_sentinel()
+            return item
+        if sub.ended and not sub.queue.empty():
+            return sub.queue.get_nowait()
+        return None
 
     def _observe_event(self, event: Event) -> None:
         seq = event.get("seq")
@@ -1607,7 +1650,7 @@ class AsyncThreadStream:
             await self._reconcile_stream(params)
             self._ensure_fanout_running()
             while True:
-                item = await sub.queue.get()
+                item = await self._pull(sub)
                 if item is None:
                     return
                 yield item
@@ -1652,7 +1695,14 @@ class AsyncThreadStream:
                     self._observe_event(event)
                     for sub in list(self._subscriptions.values()):
                         if matches_subscription(event, sub.params):
-                            sub.queue.put_nowait(event)
+                            if not sub.offer(event):
+                                logger.warning(
+                                    "Thread %s subscriber %d is more than max_queue_size=%d events "
+                                    "behind, dropping events until it catches up",
+                                    self.thread_id,
+                                    sub.id,
+                                    sub.queue.maxsize,
+                                )
                     # On root-terminal lifecycle, push the `None` sentinel
                     # into all subscription queues so projection iterators
                     # exit when the run ends naturally. Runs on the shared
@@ -1685,8 +1735,7 @@ class AsyncThreadStream:
             # Rotation: loop again to pick up the new _shared_stream.
 
         # Terminate consumers cleanly on shutdown / stream-end.
-        for sub in self._subscriptions.values():
-            sub.queue.put_nowait(None)
+        self._end_subscriptions()
 
     async def _reconnect_sleep(self, attempt: int) -> None:
         """Sleep with exponential backoff and jitter for reconnect attempt `attempt`."""

@@ -70,6 +70,31 @@ class _Subscription:
     queue: asyncio.Queue = field(default_factory=asyncio.Queue)
     # Why: asyncio.Queue[Event | None] as a subscript in the field annotation
     # causes a type error with ty; bare asyncio.Queue is accepted.
+    ended: bool = False
+    """The shared stream is over for this subscription, its sentinel may still be owed."""
+
+    def offer(self, event: Event) -> bool:
+        """Add an event without ever blocking the shared fan-out.
+
+        `False` means the queue is full, i.e. this subscriber is more than `max_queue_size`
+        events behind and the event is dropped for it alone. Waiting for room here would
+        stall every other subscriber, and letting `QueueFull` out would take down the
+        fan-out, whose caller reads any exception as a dropped transport.
+        """
+        try:
+            self.queue.put_nowait(event)
+        except asyncio.QueueFull:
+            return False
+        return True
+
+    def finish(self) -> None:
+        """Mark the stream over and queue the sentinel, if the queue has room for it."""
+        self.ended = True
+        self._offer_sentinel()
+
+    def _offer_sentinel(self) -> None:
+        with contextlib.suppress(asyncio.QueueFull):
+            self.queue.put_nowait(None)
 
 
 # ---------------------------------------------------------------------------
@@ -219,6 +244,26 @@ class StreamController:
     # Fan-out
     # ------------------------------------------------------------------
 
+    def _end_subscriptions(self) -> None:
+        """Mark every subscription as ended and give it the sentinel if its queue has room."""
+        for sub in list(self._subscriptions.values()):
+            sub.finish()
+
+    async def pull(self, sub: _Subscription) -> Event | None:
+        """Pull the next item for a subscriber, `None` once the stream is over.
+
+        A sentinel that did not fit when the stream ended is queued now that this pull
+        freed a slot, so the iterator always terminates.
+        """
+        item = await sub.queue.get()
+        if item is not None:
+            if sub.ended:
+                sub._offer_sentinel()
+            return item
+        if sub.ended and not sub.queue.empty():
+            return sub.queue.get_nowait()
+        return None
+
     def _ensure_fanout_running(self) -> None:
         if self._fanout_task is None or self._fanout_task.done():
             self._fanout_task = asyncio.create_task(self._fanout())
@@ -250,7 +295,13 @@ class StreamController:
                         break
                     for sub in list(self._subscriptions.values()):
                         if matches_subscription(event, sub.params):
-                            sub.queue.put_nowait(event)
+                            if not sub.offer(event):
+                                _logger.warning(
+                                    "Subscriber %d is more than max_queue_size=%d events behind, "
+                                    "dropping events until it catches up",
+                                    sub.id,
+                                    sub.queue.maxsize,
+                                )
             except Exception as drop_err:
                 _logger.debug("transport drop in fanout: %r", drop_err)
 
@@ -270,8 +321,7 @@ class StreamController:
             # Rotation: loop again to pick up the new _shared_stream.
 
         # Terminate consumers cleanly on shutdown / stream-end.
-        for sub in self._subscriptions.values():
-            sub.queue.put_nowait(None)
+        self._end_subscriptions()
 
     async def _reconnect_sleep(self, attempt: int) -> None:
         """Sleep with exponential backoff and jitter for reconnect attempt *attempt*."""

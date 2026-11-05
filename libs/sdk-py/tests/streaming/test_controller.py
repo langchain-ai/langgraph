@@ -6,7 +6,7 @@ import asyncio
 import asyncio as _asyncio
 import logging
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import httpx
@@ -17,7 +17,8 @@ from langgraph_sdk.stream.controller import (
     _close_after,
     _SeenEventIds,
 )
-from langgraph_sdk.stream.transport.http import EventStreamHandle, ProtocolSseTransport
+from langgraph_sdk.stream.transport.base import EventStreamHandle
+from langgraph_sdk.stream.transport.http import ProtocolSseTransport
 
 # ---------------------------------------------------------------------------
 # Task 3.1: bounded subscription queues
@@ -187,7 +188,7 @@ def _always_error_transport(error_type: type[Exception] = RuntimeError) -> Any:
     """Return a fake transport whose open_event_stream always raises."""
 
     class _Transport:
-        def open_event_stream(self, _params: dict[str, Any]) -> EventStreamHandle:
+        def open_event_stream(self, _params: dict[str, Any]) -> EventStreamHandle:  # type: ignore[override]
             raise error_type("scripted transport error")
 
     return _Transport()
@@ -345,3 +346,98 @@ async def test_reconnect_closes_old_handle_before_opening_new(monkeypatch):
     await controller._fanout()
 
     assert "old_closed" in close_calls
+
+
+# ---------------------------------------------------------------------------
+# A subscription queue that fills up
+# ---------------------------------------------------------------------------
+
+
+class _ScriptedStream:
+    """Transport whose single event stream is fed by hand, one event per `send`."""
+
+    thread_id = "t-1"
+
+    def __init__(self) -> None:
+        self._queue: asyncio.Queue[Any] = asyncio.Queue()
+        self._handle: EventStreamHandle | None = None
+        self.end_seen = asyncio.Event()
+
+    async def send_command(self, _command: dict[str, Any]) -> dict[str, Any] | None:
+        return None
+
+    async def close(self) -> None:
+        self.end()
+
+    def open_event_stream(self, _params: dict[str, Any]) -> EventStreamHandle:
+        loop = asyncio.get_running_loop()
+        ready: asyncio.Future[None] = loop.create_future()
+        ready.set_result(None)
+        done: asyncio.Future[BaseException | None] = loop.create_future()
+
+        async def _events() -> AsyncIterator[Any]:
+            while True:
+                item = await self._queue.get()
+                if item is None:
+                    return
+                yield item
+
+        self._handle = EventStreamHandle(
+            events=_events(), ready=ready, done=done, close=AsyncMock()
+        )
+        return self._handle
+
+    def send(self, *events: dict[str, Any]) -> None:
+        for event in events:
+            self._queue.put_nowait(event)
+
+    def end(self) -> None:
+        self._queue.put_nowait(None)
+        if self._handle is not None and not self._handle.done.done():
+            self._handle.done.set_result(None)
+
+
+@pytest.mark.anyio
+async def test_event_for_a_full_subscription_queue_does_not_end_the_fanout():
+    """One subscriber at its queue limit must not cost the others the rest of the stream.
+
+    `put_nowait` raised `QueueFull` there, and `_fanout` catches everything coming out of the shared
+    stream as a transport drop: the fan-out then stopped for good, so the other subscribers never
+    saw another event and nobody was told the stream had ended.
+    """
+    transport = _ScriptedStream()
+    controller = StreamController(transport=cast(Any, transport), max_queue_size=2)
+    full = controller._register_subscription({"channels": ["values"]})
+    healthy = controller._register_subscription({"channels": ["values"]})
+    healthy.queue = asyncio.Queue()
+
+    await controller._reconcile_stream({"channels": ["values"]})
+    fanout = asyncio.create_task(controller._fanout())
+
+    transport.send(
+        {"event_id": "evt-0", "seq": 0, "method": "values", "params": {"namespace": []}}
+    )
+    await asyncio.sleep(0)
+    # `full` is now at max_queue_size: for the next event it is one behind its limit.
+    for seq in range(1, 4):
+        transport.send(
+            {
+                "event_id": f"evt-{seq}",
+                "seq": seq,
+                "method": "values",
+                "params": {"namespace": []},
+            }
+        )
+        await asyncio.sleep(0)
+
+    assert healthy.queue.qsize() == 4
+    assert not fanout.done()
+
+    transport.end()
+    await asyncio.wait_for(fanout, timeout=2)
+
+    assert [healthy.queue.get_nowait()["seq"] for _ in range(4)] == [0, 1, 2, 3]
+    # The subscriber that was full got what fitted, and still gets the end of the stream.
+    left = [await controller.pull(full) for _ in range(full.queue.qsize() + 1)]
+    assert [event["seq"] for event in left[:-1] if event is not None] == [0, 1]
+    assert left[-1] is None
