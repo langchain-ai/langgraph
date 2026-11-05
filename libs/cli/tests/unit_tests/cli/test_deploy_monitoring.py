@@ -92,8 +92,54 @@ def test_metrics(monkeypatch, bounds, mode, deployment_metrics_response):
 
 
 @pytest.mark.parametrize(
+    "tiers",
+    [
+        {"compute_tier": "SERVERLESS_M"},
+        {"database_tier": "DEDICATED_L"},
+        {"compute_tier": "DEDICATED_M", "database_tier": "DEDICATED_L"},
+    ],
+)
+def test_scale(monkeypatch, tiers):
+    def handler(request):
+        assert request.method == "PATCH"
+        assert request.url.path == f"/v2/deployments/{DEPLOYMENT_ID}/resource-tiers"
+        assert request.headers["x-tenant-id"] == "workspace-id"
+        assert json.loads(request.content) == tiers
+        return httpx.Response(200, json={"secrets": [{"value": "secret-value"}]})
+
+    args = ["scale", DEPLOYMENT_ID, "--yes"]
+    for key, value in tiers.items():
+        args.extend([f"--{key.replace('_', '-')}", value])
+    result = invoke(monkeypatch, args, handler)
+    assert result.exit_code == 0, result.output
+    assert "Scaling requested" in result.output
+    assert "secret-value" not in result.output
+
+
+@pytest.mark.parametrize("answer,expected_code", [("y\n", 0), ("n\n", 1)])
+def test_scale_confirmation(monkeypatch, answer, expected_code):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={})
+
+    result = invoke(
+        monkeypatch,
+        ["scale", DEPLOYMENT_ID, "--compute-tier", "DEDICATED_S"],
+        handler,
+        input=answer,
+    )
+    assert result.exit_code == expected_code, result.output
+    assert len(requests) == (1 if expected_code == 0 else 0)
+    assert "may change billing or interrupt service" in result.output
+
+
+@pytest.mark.parametrize(
     "args",
     [
+        ["scale", DEPLOYMENT_ID, "--yes"],
+        ["scale", DEPLOYMENT_ID, "--database-tier", "SERVERLESS_M", "--yes"],
         ["metrics", DEPLOYMENT_ID, "--step-seconds", "60"],
         ["metrics", "invalid-id"],
         ["metrics", DEPLOYMENT_ID, "--summary", "--raw"],
@@ -155,12 +201,15 @@ def test_metrics_help_lists_supported_filters():
         assert metric in result.output
 
 
+@pytest.mark.parametrize("command", ["metrics", "scale"])
 @pytest.mark.parametrize("status", [403, 422, 429])
-def test_backend_errors(monkeypatch, status):
+def test_backend_errors(monkeypatch, command, status):
     def handler(request):
         return httpx.Response(status, json={"detail": "Operation rejected"})
 
-    args = ["metrics", DEPLOYMENT_ID]
+    args = [command, DEPLOYMENT_ID]
+    if command == "scale":
+        args.extend(["--compute-tier", "DEDICATED_M", "--yes"])
     result = invoke(monkeypatch, args, handler)
     assert result.exit_code == 1
     assert "Operation rejected" in result.output
