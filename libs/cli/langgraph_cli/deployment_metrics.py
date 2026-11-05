@@ -1,7 +1,7 @@
 """Compact deployment chart responses for command-line consumers."""
 
 import math
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from statistics import fmean
 from typing import Any
@@ -36,14 +36,13 @@ def compact_deployment_metrics(
     response: dict[str, Any],
     deployment_id: str,
     *,
-    start_time: str | None = None,
-    end_time: str | None = None,
+    start_time: str,
+    end_time: str,
     summary: bool = False,
 ) -> dict[str, Any]:
     """Reshape UI charts without mutating the response; step is in seconds."""
     sections = {}
-    timestamps: list[datetime] = []
-    spacings: set[float] = set()
+    spacings: Counter[float] = Counter()
     source_sections = list(response.get("sub_sections") or [])
     if response.get("charts"):
         source_sections.insert(0, response)
@@ -61,7 +60,6 @@ def compact_deployment_metrics(
             for series in chart.get("series") or []:
                 points = sorted(by_series[series["id"]], key=lambda point: point[0])
                 times = sorted({timestamp for timestamp, _ in points})
-                timestamps.extend(times)
                 spacings.update(
                     (b - a).total_seconds()
                     for a, b in zip(times, times[1:], strict=False)
@@ -87,10 +85,11 @@ def compact_deployment_metrics(
                 series_output[series["name"]] = stats
             charts[chart["title"]] = series_output or {"_empty": True}
         sections[section["title"]] = charts or {"_empty": True}
+    step = min(spacings, key=lambda gap: (-spacings[gap], gap)) if spacings else None
     return {
         "deployment_id": deployment_id,
-        "start_time": start_time or (_iso(min(timestamps)) if timestamps else None),
-        "end_time": end_time or (_iso(max(timestamps)) if timestamps else None),
-        "step": spacings.pop() if len(spacings) == 1 else None,
+        "start_time": start_time,
+        "end_time": end_time,
+        "step_seconds": int(step) if step is not None and step.is_integer() else step,
         "sections": sections or {"_empty": True},
     }

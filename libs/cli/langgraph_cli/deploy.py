@@ -2676,6 +2676,11 @@ def deploy_metrics(
 ) -> None:
     if summary and raw:
         raise click.UsageError("--summary and --raw are mutually exclusive.")
+    now = datetime.now(timezone.utc)
+    start_time = (
+        start_time or now.replace(minute=0, second=0, microsecond=0).isoformat()
+    )
+    end_time = end_time or now.isoformat()
     params = {
         key: value
         for key, value in {

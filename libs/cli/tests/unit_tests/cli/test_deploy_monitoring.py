@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 
 import httpx
 import pytest
@@ -27,19 +28,31 @@ def invoke(monkeypatch, args, handler, input=None):
     )
 
 
-@pytest.mark.parametrize("filtered", [False, True])
+@pytest.mark.parametrize(
+    "bounds", [[], ["start_time"], ["end_time"], ["start_time", "end_time"]]
+)
 @pytest.mark.parametrize("mode", [None, "--summary", "--raw"])
-def test_metrics(monkeypatch, filtered, mode, deployment_metrics_response):
+def test_metrics(monkeypatch, bounds, mode, deployment_metrics_response):
     charts = deployment_metrics_response
-    params = (
-        {
-            "start_time": "2026-10-28T00:00:00Z",
-            "end_time": "2026-10-28T01:00:00Z",
-            "metrics": "cpu_usage,memory_usage",
-        }
-        if filtered
-        else {}
-    )
+
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 28, 22, 32, 33, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(deploy_module, "datetime", FrozenDatetime)
+    explicit = {
+        "start_time": "2026-10-27T22:32:33Z",
+        "end_time": "2026-10-28T21:32:33Z",
+    }
+    options = {key: explicit[key] for key in bounds}
+    if bounds:
+        options["metrics"] = "cpu_usage,memory_usage"
+    params = {
+        "start_time": "2026-10-28T22:00:00+00:00",
+        "end_time": "2026-10-28T22:32:33+00:00",
+        **options,
+    }
 
     def handler(request):
         assert request.method == "GET"
@@ -50,7 +63,7 @@ def test_metrics(monkeypatch, filtered, mode, deployment_metrics_response):
         return httpx.Response(200, json=charts)
 
     args = ["metrics", DEPLOYMENT_ID]
-    for key, value in params.items():
+    for key, value in options.items():
         args.extend([f"--{key.replace('_', '-')}", value])
     if mode:
         args.append(mode)
@@ -68,6 +81,9 @@ def test_metrics(monkeypatch, filtered, mode, deployment_metrics_response):
         )
     )
     assert json.loads(result.output) == expected
+    if mode != "--raw":
+        assert expected["start_time"] == params["start_time"]
+        assert expected["end_time"] == params["end_time"]
     assert result.output.strip() == json.dumps(expected, separators=(",", ":"))
 
 

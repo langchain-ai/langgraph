@@ -124,11 +124,15 @@ statistics use unrounded finite values and ignore missing samples. `latest` is
 the latest non-missing value. Missing samples remain `null` gaps, and series with
 no values have null statistics. Empty sections are marked `{"_empty":true}`.
 
-The top level includes `deployment_id`, `start_time`, `end_time`, and `step`.
-Bounds echo the requested range, or use the observed point bounds when omitted
-(`null` if no points). `step` is the spacing in seconds only when consistent
-within all series; otherwise it is `null`. UI metadata and repeated series IDs
-are omitted. The host-backend response itself is unchanged.
+The top level includes `deployment_id`, `start_time`, `end_time`, and
+`step_seconds`. Bounds always describe the requested window, not the observed
+point bounds. The CLI resolves omitted bounds once (start: top of the current UTC
+hour; end: now) and sends the same values to the backend and output, even when
+there are no points. `step_seconds` is the most common gap between consecutive
+timestamps within series, with ties broken by the smallest gap. Whole seconds
+are integers; fractional seconds are preserved. It is `null` only when every
+series has fewer than two timestamps. UI metadata and repeated series IDs are
+omitted. The host-backend response itself is unchanged.
 
 ```bash
 langgraph deploy metrics DEPLOYMENT_ID --summary
@@ -144,7 +148,7 @@ serialization for all modes; not a live deployment benchmark):
 
 | Before: raw UI schema | After: default | After: summary |
 | --- | --- | --- |
-| 4,302 bytes | 1,220 bytes (72% smaller) | 800 bytes (81% smaller) |
+| 4,302 bytes | 1,226 bytes (72% smaller) | 806 bytes (81% smaller) |
 
 ## Configuration
 
