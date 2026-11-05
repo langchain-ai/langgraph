@@ -216,25 +216,31 @@ def add_messages(
         return right[remove_all_idx + 1 :]
 
     # merge
-    merged = left.copy()
-    merged_by_id = {m.id: i for i, m in enumerate(merged)}
-    ids_to_remove = set()
+    # A message removed and then re-added in the same update moves to the end,
+    # matching `_messages_delta_reducer`. This lets a node insert mid-history by
+    # removing and re-sending only the messages after the insertion point.
+    merged: list[BaseMessage | None] = list(left)
+    merged_by_id = {m.id: i for i, m in enumerate(left)}
+    removed_ids = set()
     for m in right:
         if (existing_idx := merged_by_id.get(m.id)) is not None:
             if isinstance(m, RemoveMessage):
-                ids_to_remove.add(m.id)
+                merged[existing_idx] = None
+                del merged_by_id[m.id]
+                removed_ids.add(m.id)
             else:
-                ids_to_remove.discard(m.id)
                 merged[existing_idx] = m
         else:
             if isinstance(m, RemoveMessage):
+                if m.id in removed_ids:
+                    continue
                 raise ValueError(
                     f"Attempting to delete a message with an ID that doesn't exist ('{m.id}')"
                 )
 
             merged_by_id[m.id] = len(merged)
             merged.append(m)
-    merged = [m for m in merged if m.id not in ids_to_remove]
+    merged = [m for m in merged if m is not None]
 
     if format == "langchain-openai":
         merged = _format_messages(merged)
