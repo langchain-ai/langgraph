@@ -58,6 +58,8 @@ StreamMode = Literal[
     "debug",
     "custom",
     "messages-tuple",
+    "tools",
+    "lifecycle",
 ]
 """
 Defines the mode of streaming:
@@ -69,6 +71,8 @@ Defines the mode of streaming:
 - "tasks": Stream task start and finish events.
 - "debug": Stream detailed debug information.
 - "custom": Stream custom events.
+- "tools": Stream tool events: `on_tool_start`, `on_tool_event`, `on_tool_end` and `on_tool_error`.
+- "lifecycle": Stream an event when each subgraph starts and ends, with the id of the tool call that started it.
 """
 
 DisconnectMode = Literal["cancel", "continue"]
