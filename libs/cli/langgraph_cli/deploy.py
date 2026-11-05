@@ -11,7 +11,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Generic, Protocol, TypeVar
 from uuid import UUID
 
@@ -2642,7 +2642,7 @@ def deploy_list(
 @click.argument("deployment_id", type=click.UUID)
 @click.option(
     "--start-time",
-    help="ISO8601 start time. Defaults to the start of the current hour.",
+    help="ISO8601 start time. Defaults to 15 minutes before --end-time.",
 )
 @click.option("--end-time", help="ISO8601 end time. Defaults to now.")
 @click.option(
@@ -2676,11 +2676,16 @@ def deploy_metrics(
 ) -> None:
     if summary and raw:
         raise click.UsageError("--summary and --raw are mutually exclusive.")
-    now = datetime.now(timezone.utc)
-    start_time = (
-        start_time or now.replace(minute=0, second=0, microsecond=0).isoformat()
-    )
-    end_time = end_time or now.isoformat()
+    end_time = end_time or datetime.now(timezone.utc).isoformat()
+    if start_time is None:
+        try:
+            end = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise click.BadParameter(
+                "Expected an ISO8601 timestamp.", param_hint="--end-time"
+            ) from exc
+        end = end.replace(tzinfo=end.tzinfo or timezone.utc).astimezone(timezone.utc)
+        start_time = (end - timedelta(minutes=15)).isoformat()
     params = {
         key: value
         for key, value in {

@@ -38,7 +38,7 @@ def test_metrics(monkeypatch, bounds, mode, deployment_metrics_response):
     class FrozenDatetime(datetime):
         @classmethod
         def now(cls, tz=None):
-            return cls(2026, 10, 28, 22, 32, 33, tzinfo=timezone.utc)
+            return cls(2026, 10, 28, 23, 2, 33, tzinfo=timezone.utc)
 
     monkeypatch.setattr(deploy_module, "datetime", FrozenDatetime)
     explicit = {
@@ -49,8 +49,12 @@ def test_metrics(monkeypatch, bounds, mode, deployment_metrics_response):
     if bounds:
         options["metrics"] = "cpu_usage,memory_usage"
     params = {
-        "start_time": "2026-10-28T22:00:00+00:00",
-        "end_time": "2026-10-28T22:32:33+00:00",
+        "start_time": (
+            "2026-10-28T21:17:33+00:00"
+            if "end_time" in bounds
+            else "2026-10-28T22:47:33+00:00"
+        ),
+        "end_time": "2026-10-28T23:02:33+00:00",
         **options,
     }
 
@@ -101,6 +105,35 @@ def test_invalid_options_do_not_send_requests(monkeypatch, args):
 
     result = invoke(monkeypatch, args, handler)
     assert result.exit_code == 2, result.output
+
+
+def test_end_only_with_timezone_offset(monkeypatch):
+    def handler(request):
+        assert request.url.params["end_time"] == "2026-10-28T01:05:00+02:00"
+        assert request.url.params["start_time"] == "2026-10-27T22:50:00+00:00"
+        return httpx.Response(200, json={"charts": [], "sub_sections": []})
+
+    result = invoke(
+        monkeypatch,
+        ["metrics", DEPLOYMENT_ID, "--end-time", "2026-10-28T01:05:00+02:00"],
+        handler,
+    )
+    assert result.exit_code == 0, result.output
+    output = json.loads(result.output)
+    assert output["start_time"] == "2026-10-27T22:50:00+00:00"
+    assert output["end_time"] == "2026-10-28T01:05:00+02:00"
+
+
+def test_invalid_end_only_does_not_send_request(monkeypatch):
+    def handler(request):
+        pytest.fail("Invalid end time must not send a request")
+
+    result = invoke(
+        monkeypatch, ["metrics", DEPLOYMENT_ID, "--end-time", "not-a-date"], handler
+    )
+    assert result.exit_code == 2, result.output
+    assert "--end-time" in result.output
+    assert "ISO8601" in result.output
 
 
 def test_metrics_help_lists_supported_filters():

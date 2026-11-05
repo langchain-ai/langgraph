@@ -111,8 +111,8 @@ These are exact metric names, not free-text search terms. Availability depends o
 the deployment and platform; a supported metric may have no data. Use
 `lg_run_count` for deployment runs, not the UI schema's placeholder `run_count`.
 
-Omit `--metrics` to fetch all available metrics. Time bounds default to the start of
-the current hour through now, and the backend picks the resolution from the time
+Omit `--metrics` to fetch all available metrics. Time bounds default to the last
+15 minutes, and the backend picks the resolution from the time
 range. This command never prompts; for an organization-scoped key, set
 `LANGSMITH_TENANT_ID` to the workspace ID.
 
@@ -126,9 +126,10 @@ no values have null statistics. Empty sections are marked `{"_empty":true}`.
 
 The top level includes `deployment_id`, `start_time`, `end_time`, and
 `step_seconds`. Bounds always describe the requested window, not the observed
-point bounds. The CLI resolves omitted bounds once (start: top of the current UTC
-hour; end: now) and sends the same values to the backend and output, even when
-there are no points. `step_seconds` is the most common gap between consecutive
+point bounds. The CLI resolves omitted bounds once: end defaults to now (UTC),
+and start defaults to 15 minutes before the resolved end. With only `--end-time`,
+start is 15 minutes before that value; with only `--start-time`, end is now. Both
+values are sent explicitly to the backend and output, even when there are no points. `step_seconds` is the most common gap between consecutive
 timestamps within series, with ties broken by the smallest gap. Whole seconds
 are integers; fractional seconds are preserved. It is `null` only when every
 series has fewer than two timestamps. UI metadata and repeated series IDs are
