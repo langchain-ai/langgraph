@@ -595,24 +595,31 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
             if all(w[0] in WRITES_IDX_MAP for w in writes)
             else "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, task_path, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
+        rows = [
+            (
+                str(config["configurable"]["thread_id"]),
+                str(config["configurable"]["checkpoint_ns"]),
+                str(config["configurable"]["checkpoint_id"]),
+                task_id,
+                task_path,
+                WRITES_IDX_MAP.get(channel, idx),
+                channel,
+                *self.serde.dumps_typed(value),
+            )
+            for idx, (channel, value) in enumerate(writes)
+        ]
         await self.setup()
         async with self.lock, self.conn.cursor() as cur:
-            await cur.executemany(
-                query,
-                [
-                    (
-                        str(config["configurable"]["thread_id"]),
-                        str(config["configurable"]["checkpoint_ns"]),
-                        str(config["configurable"]["checkpoint_id"]),
-                        task_id,
-                        task_path,
-                        WRITES_IDX_MAP.get(channel, idx),
-                        channel,
-                        *self.serde.dumps_typed(value),
-                    )
-                    for idx, (channel, value) in enumerate(writes)
-                ],
-            )
+            # The batch must be all-or-nothing: the connection commits later,
+            # so a failing insert must not leave its predecessors behind.
+            await cur.execute("SAVEPOINT put_writes")
+            try:
+                await cur.executemany(query, rows)
+            except Exception:
+                await cur.execute("ROLLBACK TO SAVEPOINT put_writes")
+                await cur.execute("RELEASE SAVEPOINT put_writes")
+                raise
+            await cur.execute("RELEASE SAVEPOINT put_writes")
             await self.conn.commit()
 
     async def adelete_thread(self, thread_id: str) -> None:

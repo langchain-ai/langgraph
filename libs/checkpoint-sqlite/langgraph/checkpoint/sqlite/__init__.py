@@ -477,23 +477,31 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             if all(w[0] in WRITES_IDX_MAP for w in writes)
             else "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, task_path, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
-        with self.cursor() as cur:
-            cur.executemany(
-                query,
-                [
-                    (
-                        str(config["configurable"]["thread_id"]),
-                        str(config["configurable"]["checkpoint_ns"]),
-                        str(config["configurable"]["checkpoint_id"]),
-                        task_id,
-                        task_path,
-                        WRITES_IDX_MAP.get(channel, idx),
-                        channel,
-                        *self.serde.dumps_typed(value),
-                    )
-                    for idx, (channel, value) in enumerate(writes)
-                ],
+        rows = [
+            (
+                str(config["configurable"]["thread_id"]),
+                str(config["configurable"]["checkpoint_ns"]),
+                str(config["configurable"]["checkpoint_id"]),
+                task_id,
+                task_path,
+                WRITES_IDX_MAP.get(channel, idx),
+                channel,
+                *self.serde.dumps_typed(value),
             )
+            for idx, (channel, value) in enumerate(writes)
+        ]
+        with self.cursor() as cur:
+            # The batch must be all-or-nothing: a failing insert must not
+            # leave the writes before it behind, since the cursor commits
+            # when it closes.
+            cur.execute("SAVEPOINT put_writes")
+            try:
+                cur.executemany(query, rows)
+            except Exception:
+                cur.execute("ROLLBACK TO SAVEPOINT put_writes")
+                cur.execute("RELEASE SAVEPOINT put_writes")
+                raise
+            cur.execute("RELEASE SAVEPOINT put_writes")
 
     def delete_thread(self, thread_id: str) -> None:
         """Delete all checkpoints and writes associated with a thread ID.
