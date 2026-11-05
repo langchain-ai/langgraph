@@ -1,7 +1,14 @@
+import json
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+
+@pytest.fixture
+def deployment_metrics_response():
+    return json.loads(Path(__file__).with_name("deployment_metrics.json").read_text())
 
 
 @pytest.fixture(autouse=True)
