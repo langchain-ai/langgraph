@@ -148,6 +148,7 @@ services:
             dockerfile_inline: |
                 # syntax=docker/dockerfile:1.4
                 FROM langchain/langgraph-api:3.11
+                ARG USER_ENV_VARS_HASH
                 # -- Adding local package . --
                 ADD . /deps/cli
                 # -- End of local package . --

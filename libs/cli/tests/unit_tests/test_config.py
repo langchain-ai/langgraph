@@ -910,6 +910,7 @@ def test_config_to_docker_simple():
     expected_docker_stdin = f"""\
 # syntax=docker/dockerfile:1.4
 FROM langchain/langgraph-api:3.11
+ARG USER_ENV_VARS_HASH
 # -- Installing local requirements --
 COPY --from=outer-requirements.txt requirements.txt /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
 RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
@@ -974,6 +975,7 @@ def test_config_to_docker_outside_path():
         """\
 # syntax=docker/dockerfile:1.4
 FROM langchain/langgraph-api:3.11
+ARG USER_ENV_VARS_HASH
 # -- Adding non-package dependency unit_tests --
 ADD . /deps/outer-unit_tests/unit_tests
 RUN set -ex && \\
@@ -1034,6 +1036,7 @@ def test_config_to_docker_pipconfig():
     expected_docker_stdin = (
         """\
 FROM langchain/langgraph-api:3.11
+ARG USER_ENV_VARS_HASH
 ADD pipconfig.txt /pipconfig.txt
 # -- Adding non-package dependency unit_tests --
 ADD . /deps/outer-unit_tests/unit_tests
@@ -1097,6 +1100,7 @@ def test_config_to_docker_local_deps():
     )
     expected_docker_stdin = f"""\
 FROM langchain/langgraph-api-custom:3.11
+ARG USER_ENV_VARS_HASH
 # -- Adding non-package dependency graphs --
 ADD ./graphs /deps/outer-graphs/src
 RUN set -ex && \\
@@ -1144,6 +1148,7 @@ dependencies = ["langchain"]"""
     os.remove(pyproject_path)
     expected_docker_stdin = (
         """FROM langchain/langgraph-api:3.11
+ARG USER_ENV_VARS_HASH
 # -- Adding local package . --
 ADD . /deps/unit_tests
 # -- End of local package . --
@@ -1177,6 +1182,7 @@ def test_config_to_docker_end_to_end():
         base_image="langchain/langgraph-api",
     )
     expected_docker_stdin = f"""FROM langchain/langgraph-api:3.12
+ARG USER_ENV_VARS_HASH
 ARG meow
 ARG foo
 ADD pipconfig.txt /pipconfig.txt
@@ -1222,6 +1228,7 @@ def test_config_to_docker_nodejs():
         base_image="langchain/langgraphjs-api",
     )
     expected_docker_stdin = """FROM langchain/langgraphjs-api:20
+ARG USER_ENV_VARS_HASH
 ARG meow
 ARG foo
 ADD . /deps/unit_tests
@@ -1413,6 +1420,7 @@ def test_config_to_docker_nodejs_internal_docker_tag():
         base_image="langchain/langgraphjs-api",
     )
     expected_docker_stdin = """FROM langchain/langgraphjs-api:my-tag
+ARG USER_ENV_VARS_HASH
 ARG meow
 ARG foo
 ADD . /deps/unit_tests
@@ -1524,6 +1532,7 @@ def test_config_to_docker_gen_ui_python():
     )
 
     expected_docker_stdin = f"""FROM langchain/langgraph-api:3.11
+ARG USER_ENV_VARS_HASH
 RUN /storage/install-node.sh
 # -- Adding non-package dependency unit_tests --
 ADD . /deps/outer-unit_tests/unit_tests
@@ -1571,6 +1580,7 @@ def test_config_to_docker_multiplatform():
     )
 
     expected_docker_stdin = f"""FROM langchain/langgraph-api:3.11
+ARG USER_ENV_VARS_HASH
 RUN /storage/install-node.sh
 # -- Adding non-package dependency unit_tests --
 ADD . /deps/outer-unit_tests/unit_tests
@@ -2843,6 +2853,7 @@ def test_config_to_compose_simple_config():
             context: .
             dockerfile_inline: |
                 FROM langchain/langgraph-api:3.11
+                ARG USER_ENV_VARS_HASH
                 # -- Adding non-package dependency unit_tests --
                 ADD . /deps/outer-unit_tests/unit_tests
                 RUN set -ex && \\
@@ -2884,6 +2895,7 @@ def test_config_to_compose_env_vars():
             context: .
             dockerfile_inline: |
                 FROM langchain/langgraph-api-custom:3.11
+                ARG USER_ENV_VARS_HASH
                 # -- Adding non-package dependency unit_tests --
                 ADD . /deps/outer-unit_tests/unit_tests
                 RUN set -ex && \\
@@ -2929,6 +2941,7 @@ def test_config_to_compose_env_file():
             context: .
             dockerfile_inline: |
                 FROM langchain/langgraph-api:3.11
+                ARG USER_ENV_VARS_HASH
                 # -- Adding non-package dependency unit_tests --
                 ADD . /deps/outer-unit_tests/unit_tests
                 RUN set -ex && \\
@@ -2967,6 +2980,7 @@ def test_config_to_compose_watch():
             context: .
             dockerfile_inline: |
                 FROM langchain/langgraph-api:3.11
+                ARG USER_ENV_VARS_HASH
                 # -- Adding non-package dependency unit_tests --
                 ADD . /deps/outer-unit_tests/unit_tests
                 RUN set -ex && \\
@@ -3014,6 +3028,7 @@ def test_config_to_compose_end_to_end():
             context: .
             dockerfile_inline: |
                 FROM langchain/langgraph-api:3.11
+                ARG USER_ENV_VARS_HASH
                 # -- Adding non-package dependency unit_tests --
                 ADD . /deps/outer-unit_tests/unit_tests
                 RUN set -ex && \\
