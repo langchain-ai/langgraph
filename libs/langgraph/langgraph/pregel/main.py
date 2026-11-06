@@ -1157,7 +1157,9 @@ class Pregel(
         """Get the subgraphs of the graph.
 
         Args:
-            namespace: The namespace to filter the subgraphs by.
+            namespace: Yield only the subgraph at this exact namespace, such
+                as `parent|child` (without task IDs). A nested namespace needs
+                `recurse=True`.
             recurse: Whether to recurse into the subgraphs.
                 If `False`, only the immediate subgraphs will be returned.
 
@@ -1181,15 +1183,13 @@ class Pregel(
                 if namespace is None:
                     yield name, graph
                 if recurse and isinstance(graph, Pregel):
+                    child_namespace = (
+                        None if namespace is None else namespace[len(name) + 1 :]
+                    )
                     yield from (
                         (f"{name}{NS_SEP}{n}", s)
                         for n, s in graph.get_subgraphs(
-                            namespace=(
-                                None
-                                if namespace is None
-                                else namespace[len(name) + 1 :]
-                            ),
-                            recurse=recurse,
+                            namespace=child_namespace, recurse=recurse
                         )
                     )
 
@@ -1199,7 +1199,9 @@ class Pregel(
         """Get the subgraphs of the graph.
 
         Args:
-            namespace: The namespace to filter the subgraphs by.
+            namespace: Yield only the subgraph at this exact namespace, such
+                as `parent|child` (without task IDs). A nested namespace needs
+                `recurse=True`.
             recurse: Whether to recurse into the subgraphs.
                 If `False`, only the immediate subgraphs will be returned.
 
