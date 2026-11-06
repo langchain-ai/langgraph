@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 from typing import Any
 
 import pytest
@@ -11,6 +12,7 @@ import pytest
 from .conftest import ASSISTANT_ID, EXPECTED_TERMINAL_ITEMS
 
 pytestmark = pytest.mark.integration
+_INTERRUPT_TIMEOUT = 10.0
 
 
 async def _drive_one_async(threads: Any) -> dict[str, Any]:
@@ -20,8 +22,11 @@ async def _drive_one_async(threads: Any) -> dict[str, Any]:
         async for _ in thread.values:
             if thread.interrupted:
                 break
-        if thread.interrupted:
-            await thread.run.respond("yes")
+        deadline = time.monotonic() + _INTERRUPT_TIMEOUT
+        while not thread.interrupted:
+            assert time.monotonic() < deadline, "expected an interrupt before output"
+            await asyncio.sleep(0.01)
+        await thread.run.respond("yes")
 
         final = await thread.output
         return {"thread_id": thread.thread_id, "items": final.get("items")}
@@ -46,8 +51,11 @@ def _drive_one_sync(
         for _ in thread.values:
             if thread.interrupted:
                 break
-        if thread.interrupted:
-            thread.run.respond("yes")
+        deadline = time.monotonic() + _INTERRUPT_TIMEOUT
+        while not thread.interrupted:
+            assert time.monotonic() < deadline, "expected an interrupt before output"
+            time.sleep(0.01)
+        thread.run.respond("yes")
 
         final = thread.output
         results[label] = {"thread_id": thread.thread_id, "items": final.get("items")}
