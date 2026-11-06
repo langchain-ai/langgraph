@@ -995,3 +995,34 @@ async def test_get_subgraphs_matches_whole_namespace_segments_async(
     assert [
         s async for s in parent.aget_subgraphs(namespace=namespace, recurse=True)
     ] == [(namespace, graphs[namespace])]
+
+
+async def test_nested_namespace_update_raises_despite_top_level_namesake_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """`research|review` names a `review` inside `research`'s subgraph, which
+    declares no subgraph there. An update to it raises rather than writing
+    through the parent's own `review`."""
+    research = (
+        StateGraph(NotesState)
+        .add_node("review", lambda state: {})
+        .add_edge(START, "review")
+        .compile()
+    )
+    parent = (
+        StateGraph(NotesState)
+        .add_node("research", research)
+        .add_node("review", _notes_graph("review"))
+        .add_edge(START, "research")
+        .add_edge("research", "review")
+        .compile(checkpointer=async_checkpointer)
+    )
+    config: RunnableConfig = {
+        "configurable": {
+            "thread_id": str(uuid4()),
+            "checkpoint_ns": "research:a|review:b",
+        }
+    }
+
+    with pytest.raises(ValueError, match=r"Subgraph research\|review not found"):
+        await parent.aupdate_state(config, {"notes": "edit"})
