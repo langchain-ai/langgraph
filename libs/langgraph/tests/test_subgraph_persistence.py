@@ -6,16 +6,23 @@ Covers three checkpointer settings for subgraph state:
   interrupt support, but state resets each invocation. This is the common case
   when an agent is invoked from inside a tool used by another agent.
 - checkpointer=True: "stateful" — state accumulates across invocations on the same thread id
+
+Also covers reading a subgraph's namespace from the parent graph, including
+one where no subgraph is declared, such as a subagent a tool invokes.
 """
 
+from typing import Annotated, Any
 from uuid import uuid4
 
-from langchain_core.messages import AIMessage, HumanMessage
+import pytest
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from typing_extensions import TypedDict
 
+from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import START, StateGraph
-from langgraph.graph.message import MessagesState
+from langgraph.graph.message import MessagesState, _messages_delta_reducer
 from langgraph.types import Command, Interrupt, interrupt
 from tests.any_str import AnyStr
 
@@ -685,3 +692,227 @@ def test_child_with_own_thread_id_keeps_namespace(
     parent.invoke({"result": ""}, config=parent_config)
     state2 = child.get_state(child_config)
     assert state2.values.get("count") == 2
+
+
+# -- reading a subgraph's namespace from the parent graph --
+
+
+class NotesState(MessagesState):
+    notes: str  # a key only the subgraphs have
+
+
+class DeltaMessagesState(TypedDict):
+    # Stores `messages` as deltas between snapshots, as deepagents' parent does.
+    messages: Annotated[list[AnyMessage], DeltaChannel(_messages_delta_reducer)]
+
+
+class DeltaNotesState(DeltaMessagesState):
+    notes: str
+
+
+def _notes_graph(label: str, state_schema: type = NotesState) -> Any:
+    # Typed `dict` so it fits either schema (see `_run_tool_subgraph`).
+    def work(state: dict) -> dict:
+        return {"messages": [AIMessage(content=f"{label} done")], "notes": label}
+
+    return (
+        StateGraph(state_schema)
+        .add_node("work", work)
+        .add_edge(START, "work")
+        .compile()
+    )
+
+
+def _namespace_configs(parent: Any) -> dict[str, RunnableConfig]:
+    """Run `parent` on a new thread. Returns a config for each subgraph
+    namespace it wrote, keyed by the node the namespace starts with."""
+    thread_id = str(uuid4())
+    return {
+        ns[0].split(":")[0]: {
+            "configurable": {"thread_id": thread_id, "checkpoint_ns": ns[0]}
+        }
+        for ns, _ in parent.stream(
+            {"messages": [HumanMessage(content="go")]},
+            {"configurable": {"thread_id": thread_id}},
+            subgraphs=True,
+        )
+        if ns
+    }
+
+
+def _run_tool_subgraph(
+    checkpointer: BaseCheckpointSaver,
+    *,
+    parent_schema: type = MessagesState,
+    subagent_schema: type = NotesState,
+) -> tuple[Any, RunnableConfig]:
+    """Run a parent whose `tools` node invokes a subgraph it doesn't declare,
+    as deepagents runs subagents. Returns the parent and a config for the
+    subgraph's `tools:<task_id>` namespace."""
+    # Subgraph detection doesn't follow a subscript, so `tools` declares none.
+    subagents = {"researcher": _notes_graph("researcher", subagent_schema)}
+
+    # Typed `dict`: a schema here would add its `messages` channel to the
+    # parent's, and a plain one clashes with a `DeltaChannel` one.
+    def tools(state: dict) -> dict:
+        subagents["researcher"].invoke(
+            {"messages": [HumanMessage(content="research apples")]}
+        )
+        return {"messages": [AIMessage(content="tool done")]}
+
+    parent = (
+        StateGraph(parent_schema)
+        .add_node("tools", tools)
+        .add_edge(START, "tools")
+        .compile(checkpointer=checkpointer)
+    )
+    return parent, _namespace_configs(parent)["tools"]
+
+
+def test_undeclared_subgraph_get_state(sync_checkpointer: BaseCheckpointSaver) -> None:
+    """A namespace with no declared subgraph is read with the parent graph."""
+    parent, ns_config = _run_tool_subgraph(sync_checkpointer)
+
+    state = parent.get_state(ns_config)
+
+    assert [m.text for m in state.values["messages"]] == [
+        "research apples",
+        "researcher done",
+    ]
+    assert state.config["configurable"]["checkpoint_ns"] == AnyStr("tools:")
+
+
+def test_undeclared_subgraph_get_state_history(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """History of a namespace with no declared subgraph is read with the parent
+    graph, and only holds that namespace's checkpoints."""
+    parent, ns_config = _run_tool_subgraph(sync_checkpointer)
+
+    history = list(parent.get_state_history(ns_config))
+
+    assert [[m.text for m in s.values.get("messages", [])] for s in history] == [
+        ["research apples", "researcher done"],
+        ["research apples"],
+        [],
+    ]
+    assert {s.config["configurable"]["checkpoint_ns"] for s in history} == {
+        ns_config["configurable"]["checkpoint_ns"]
+    }
+
+
+def test_undeclared_subgraph_update_state_raises(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Unlike a read, an update can't fall back to the parent graph: its nodes
+    and channels would write the wrong state into the subgraph's namespace."""
+    parent, ns_config = _run_tool_subgraph(sync_checkpointer)
+
+    with pytest.raises(ValueError, match="Subgraph tools not found"):
+        parent.update_state(ns_config, {"messages": [AIMessage(content="edit")]})
+
+    assert len(list(parent.get_state_history(ns_config))) == 3
+
+
+@pytest.mark.parametrize(
+    ("parent_schema", "subagent_schema"),
+    [(DeltaMessagesState, NotesState), (MessagesState, DeltaNotesState)],
+    ids=["delta_parent", "delta_subagent"],
+)
+def test_undeclared_subgraph_read_across_messages_channel_types(
+    sync_checkpointer: BaseCheckpointSaver,
+    parent_schema: type,
+    subagent_schema: type,
+) -> None:
+    """deepagents' parent stores `messages` in a `DeltaChannel`, and its
+    subagents in a plain `add_messages` channel. Reading a subagent's namespace
+    with the parent's channel restores its messages, either way round."""
+    parent, ns_config = _run_tool_subgraph(
+        sync_checkpointer,
+        parent_schema=parent_schema,
+        subagent_schema=subagent_schema,
+    )
+
+    state = parent.get_state(ns_config)
+    history = list(parent.get_state_history(ns_config))
+
+    assert [m.text for m in state.values["messages"]] == [
+        "research apples",
+        "researcher done",
+    ]
+    assert [[m.text for m in s.values.get("messages", [])] for s in history] == [
+        ["research apples", "researcher done"],
+        ["research apples"],
+        [],
+    ]
+
+
+@pytest.mark.parametrize("review_declared", [False, True])
+def test_prefix_named_namespaces_resolve_to_their_own_graph(
+    sync_checkpointer: BaseCheckpointSaver, review_declared: bool
+) -> None:
+    """`research_review` starts with `research`, whose subgraph has a `review`
+    node with its own subgraph. Each namespace still reads with its own graph:
+    a declared subgraph's channels, or the parent's when none is declared."""
+    research = (
+        StateGraph(NotesState)
+        .add_node("review", _notes_graph("research"))
+        .add_edge(START, "review")
+        .compile()
+    )
+
+    class ReviewState(NotesState):
+        verdict: str  # a key `research|review`'s graph doesn't have
+
+    def review(state: ReviewState) -> dict:
+        return {
+            "messages": [AIMessage(content="review done")],
+            "notes": "review",
+            "verdict": "approved",
+        }
+
+    # Subgraph detection doesn't follow a subscript, so `call_review` declares
+    # none.
+    subgraphs = {
+        "review": StateGraph(ReviewState)
+        .add_node("work", review)
+        .add_edge(START, "work")
+        .compile()
+    }
+
+    def call_review(state: MessagesState) -> dict:
+        subgraphs["review"].invoke({"messages": [HumanMessage(content="check it")]})
+        return {}
+
+    parent = (
+        StateGraph(MessagesState)
+        .add_node("research", research)
+        .add_node(
+            "research_review",
+            subgraphs["review"] if review_declared else call_review,
+        )
+        .add_edge(START, "research")
+        .add_edge("research", "research_review")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    configs = _namespace_configs(parent)
+
+    def values(name: str) -> dict:
+        return {
+            k: [m.text for m in v] if k == "messages" else v
+            for k, v in parent.get_state(configs[name]).values.items()
+        }
+
+    assert values("research") == {
+        "messages": ["go", "research done"],
+        "notes": "research",
+    }
+    if review_declared:
+        assert values("research_review") == {
+            "messages": ["go", "research done", "review done"],
+            "notes": "review",
+            "verdict": "approved",
+        }
+    else:
+        # The parent's channels have no `notes` or `verdict`.
+        assert values("research_review") == {"messages": ["check it", "review done"]}
