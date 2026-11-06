@@ -4,6 +4,7 @@ import asyncio
 import concurrent
 import concurrent.futures
 import contextlib
+import logging
 import queue
 import warnings
 import weakref
@@ -19,7 +20,7 @@ from collections.abc import (
 from dataclasses import is_dataclass, replace
 from datetime import timedelta
 from functools import partial
-from inspect import isclass
+from inspect import isawaitable, isclass
 from typing import (
     Any,
     Generic,
@@ -118,6 +119,7 @@ from langgraph.errors import (
     GraphDrained,
     GraphRecursionError,
     InvalidUpdateError,
+    RunCancelled,
     create_error_message,
 )
 from langgraph.managed.base import ManagedValueSpec
@@ -205,6 +207,8 @@ from langgraph.typing import ContextT, InputT, OutputT, StateT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 __all__ = ("NodeBuilder", "Pregel")
+
+logger = logging.getLogger(__name__)
 
 _WriteValue = Callable[[Input], Output] | Any
 
@@ -761,6 +765,15 @@ class Pregel(
     trigger_to_nodes: Mapping[str, Sequence[str]]
     node_error_handler_map: Mapping[str, str]
 
+    cancel_handler: Callable[[Any, Runtime], Any] | None = None
+    """Called with the latest state and the run's `Runtime` when a top-level async
+    run with a checkpointer is cancelled with a `RunCancelled` message. A non-`None`
+    return is saved as a state update before the cancellation propagates."""
+
+    cancel_timeout: float = 5.0
+    """Seconds the cancel handler may take, including the wait for the cancelled
+    run to finish saving. A handler that runs over or raises is logged and skipped."""
+
     def __init__(
         self,
         *,
@@ -785,6 +798,8 @@ class Pregel(
         config: RunnableConfig | None = None,
         trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
         node_error_handler_map: Mapping[str, str] | None = None,
+        cancel_handler: Callable[[Any, Runtime], Any] | None = None,
+        cancel_timeout: float = 5.0,
         name: str = "LangGraph",
         stream_transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
@@ -833,6 +848,8 @@ class Pregel(
         self.config = config
         self.trigger_to_nodes = trigger_to_nodes or {}
         self.node_error_handler_map = node_error_handler_map or {}
+        self.cancel_handler = cancel_handler
+        self.cancel_timeout = cancel_timeout
         self.name = name
         self.stream_transformers: tuple[Callable[[tuple[str, ...]], Any], ...] = tuple(
             stream_transformers or ()
@@ -3278,6 +3295,7 @@ class Pregel(
 
         config = ensure_config(self.config, config)
         run_manager = None
+        checkpointer = None
         try:
             # assign defaults
             (
@@ -3610,7 +3628,67 @@ class Pregel(
         except BaseException as e:
             if run_manager is not None:
                 await asyncio.shield(run_manager.on_chain_error(e))
+            if isinstance(e, asyncio.CancelledError):
+                await self._arun_cancel_handler(e, config, checkpointer)
             raise
+
+    async def _arun_cancel_handler(
+        self,
+        exc: asyncio.CancelledError,
+        config: RunnableConfig,
+        checkpointer: BaseCheckpointSaver | None,
+    ) -> None:
+        """Give the graph one bounded state update after its run is cancelled."""
+        handler = self.cancel_handler
+        reason = exc.args[0] if exc.args else None
+        # A nested graph's parent owns the cancel; without a checkpointer nothing was saved.
+        if (
+            handler is None
+            or checkpointer is None
+            or CONFIG_KEY_TASK_ID in config[CONF]
+            or not isinstance(reason, RunCancelled)
+            or not reason.run_cancel_handler
+        ):
+            return
+        runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+        latest = {
+            **config,
+            CONF: {
+                k: v for k, v in config[CONF].items() if k != CONFIG_KEY_CHECKPOINT_ID
+            },
+        }
+
+        async def run() -> None:
+            # The cancel can cut short the loop's exit, which saves the last checkpoint.
+            for arg in exc.args:
+                if isinstance(arg, asyncio.Task):
+                    with contextlib.suppress(BaseException):
+                        await arg
+            state = await self.aget_state(latest)
+            update = handler(state.values, runtime)
+            if isawaitable(update):
+                update = await update
+            if update is not None:
+                # Save the update as the cancelled task's result.
+                unfinished = [t for t in state.tasks if t.result is None]
+                if len({t.name for t in unfinished}) == 1:
+                    await self.aupdate_state(
+                        state.config, update, unfinished[0].name, unfinished[0].id
+                    )
+                else:
+                    await self.aupdate_state(state.config, update)
+
+        task = asyncio.create_task(run())
+        try:
+            done, _ = await asyncio.wait({task}, timeout=self.cancel_timeout)
+        except asyncio.CancelledError:
+            task.cancel()
+            raise
+        if not done:
+            task.cancel()
+            logger.warning("Cancel handler timed out after %ss", self.cancel_timeout)
+        elif (err := task.exception()) is not None:
+            logger.error("Cancel handler failed", exc_info=err)
 
     @beta(message="The v3 streaming protocol on Pregel is experimental.")
     def _pregel_stream_v3(
