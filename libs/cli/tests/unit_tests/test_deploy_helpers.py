@@ -578,12 +578,13 @@ def test_a_deployed_result_prints_the_deployment_url(
 class TestCreateHostBackendClientNoInput:
     def test_raises_when_no_api_key_and_no_input(self, monkeypatch, tmp_path):
 
+        monkeypatch.setenv("LANGSMITH_CONFIG_FILE", str(tmp_path / "missing.json"))
         monkeypatch.setattr(deploy_mod, "_no_input", True)
         monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
         monkeypatch.delenv("LANGCHAIN_API_KEY", raising=False)
         monkeypatch.delenv("LANGGRAPH_HOST_API_KEY", raising=False)
 
-        with pytest.raises(click.ClickException, match="API key"):
+        with pytest.raises(click.ClickException, match="credentials"):
             _create_host_backend_client(
                 host_url="https://api.example.com",
                 api_key=None,
