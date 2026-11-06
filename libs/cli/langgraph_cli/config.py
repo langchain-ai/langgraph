@@ -398,6 +398,17 @@ def validate_config(
         "python_version", DEFAULT_PYTHON_VERSION if some_python else None
     )
 
+    if node_version is not None and not isinstance(node_version, str):
+        raise click.UsageError(
+            "Invalid node_version type: expected a string. "
+            'Use `"node_version": "20"` in langgraph.json.'
+        )
+    if python_version is not None and not isinstance(python_version, str):
+        raise click.UsageError(
+            "Invalid python_version type: expected a string. "
+            'Use `"python_version": "3.12"` in langgraph.json.'
+        )
+
     image_distro = config.get("image_distro", DEFAULT_IMAGE_DISTRO)
     internal_docker_tag = config.get("_INTERNAL_docker_tag")
     api_version = config.get("api_version")
