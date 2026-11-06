@@ -216,6 +216,43 @@ def _parse_node_version(version_str: str) -> int:
         ) from None
 
 
+def _require_string_version(value: object, field: str) -> str:
+    """Reject an unquoted version before a parser trips over its type.
+
+    ``Config`` declares ``python_version`` and ``node_version`` as strings
+    and the JSON schema says the same, but a hand-written ``langgraph.json``
+    can leave the quotes off. JSON then yields an ``int`` or a ``float``,
+    and the parsers below fail on the type rather than on the version,
+    printing a raw ``AttributeError`` or ``TypeError`` traceback.
+
+    Coercing with ``str()`` is deliberately not done: JSON has already
+    dropped the text, so ``3.10`` arrives as the float ``3.1`` — a
+    different version than the one that was written.
+
+    Args:
+        value: The raw value read from the config file.
+        field: The key being validated, used in the message.
+
+    Returns:
+        The value, unchanged, once it is known to be a string.
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, float):
+        # No copy-paste hint here: JSON has already rounded the text, so
+        # echoing the float back would suggest a version nobody wrote.
+        raise click.UsageError(
+            f"{field} must be a string, but the config file has the float "
+            f"{value!r}.\n\nQuote it: JSON turns an unquoted version into a "
+            "number, which drops a trailing zero — 3.10 is read as 3.1."
+        )
+    raise click.UsageError(
+        f"{field} must be a string, but the config file has the "
+        f"{type(value).__name__} {value!r}.\n\n"
+        f'  "{field}": "{value}"'
+    )
+
+
 def _parse_api_version_parts(version_str: str) -> tuple[int, ...]:
     """Parse an API version into numeric components.
 
@@ -457,7 +494,7 @@ def validate_config(
         config["api_version"] = api_version
 
     if config.get("node_version"):
-        node_version = config["node_version"]
+        node_version = _require_string_version(config["node_version"], "node_version")
         try:
             major = _parse_node_version(node_version)
             min_major = _parse_node_version(MIN_NODE_VERSION)
@@ -502,7 +539,7 @@ def validate_config(
         )
 
     if config.get("python_version"):
-        pyversion = config["python_version"]
+        pyversion = _require_string_version(config["python_version"], "python_version")
         if not pyversion.count(".") == 1 or not all(
             part.isdigit() for part in pyversion.split("-")[0].split(".")
         ):

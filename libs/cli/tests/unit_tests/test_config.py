@@ -259,6 +259,73 @@ def test_validate_config():
 
 
 @pytest.mark.parametrize(
+    "raw_config, field",
+    [
+        ({"python_version": 3.12}, "python_version"),
+        ({"python_version": 3.1}, "python_version"),
+        ({"node_version": 20}, "node_version"),
+    ],
+)
+def test_validate_config_rejects_unquoted_versions(raw_config, field: str):
+    """An unquoted version is a UsageError, not a raw traceback.
+
+    ``Config`` declares both fields as strings, so an unquoted value in
+    langgraph.json used to reach the parsers as an int or a float and fail
+    with ``AttributeError: 'float' object has no attribute 'count'`` or
+    ``TypeError: argument of type 'int' is not iterable``. Neither points
+    at the quoting mistake.
+    """
+    config = {
+        "dependencies": ["."],
+        "graphs": {"agent": "./agent.py:graph"},
+        **raw_config,
+    }
+
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config(config)
+
+    message = str(exc_info.value)
+    assert f"{field} must be a string" in message
+    assert type(raw_config[field]).__name__ in message
+
+
+def test_validate_config_does_not_guess_a_quoted_float():
+    """A float version is never echoed back as a suggestion.
+
+    JSON has already dropped the text, so ``3.10`` arrives as ``3.1`` and
+    quoting that is not what the author wrote. The message must warn about
+    the trailing zero instead of handing back a broken hint.
+    """
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config(
+            {
+                "python_version": 3.1,
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+            }
+        )
+
+    message = str(exc_info.value)
+    assert '"python_version": "3.1"' not in message
+    assert "3.10 is read as 3.1" in message
+
+
+def test_validate_config_accepts_quoted_versions():
+    """The happy path is unchanged: quoted versions still validate."""
+    config = validate_config(
+        {
+            "python_version": "3.12",
+            "node_version": "20",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+        }
+    )
+
+    assert config["python_version"] == "3.12"
+    assert config["node_version"] == "20"
+
+
+@pytest.mark.parametrize(
     "dependency",
     [
         "git+https://user:secret-token@github.com/org/private.git@main",
