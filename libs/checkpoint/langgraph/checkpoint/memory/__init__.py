@@ -258,7 +258,21 @@ class InMemorySaver(
                 writes = self._ordered_writes(thread_id, checkpoint_ns, checkpoint_id)
                 checkpoint_: Checkpoint = self.serde.loads_typed(checkpoint)
                 return CheckpointTuple(
-                    config=config,
+                    # A lookup addressed by `checkpoint_id` may omit
+                    # `checkpoint_ns`; the saved checkpoint's own namespace is
+                    # known here, so return it instead of echoing the caller's
+                    # config. Callers reuse this config to address the
+                    # checkpoint again (e.g. `update_state` -> `put`), which
+                    # needs the namespace.
+                    config={
+                        **config,
+                        "configurable": {
+                            **config["configurable"],
+                            "thread_id": thread_id,
+                            "checkpoint_ns": checkpoint_ns,
+                            "checkpoint_id": checkpoint_id,
+                        },
+                    },
                     checkpoint={
                         **checkpoint_,
                         "channel_values": self._load_blobs(

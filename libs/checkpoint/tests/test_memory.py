@@ -97,6 +97,71 @@ class TestMemorySaver:
             "run_id": "my_run_id",
         }
 
+    def test_get_tuple_by_checkpoint_id_returns_resolved_namespace(self) -> None:
+        """A lookup by `checkpoint_id` returns a config that addresses it again.
+
+        Callers reuse the returned config (`update_state` passes it to `put`),
+        and `put` requires `checkpoint_ns`. Omitting it from the lookup must not
+        make the returned config unusable, and extra configurable fields the
+        caller supplied are kept.
+        """
+        self.memory_saver.put(
+            self.config_1,
+            self.chkpnt_1,
+            self.metadata_1,
+            self.chkpnt_1["channel_versions"],
+        )
+        addressed: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-1",
+                "checkpoint_id": self.chkpnt_1["id"],
+                "extra_key": "kept",
+            }
+        }
+
+        result = self.memory_saver.get_tuple(addressed)
+
+        assert result is not None
+        # The returned config can be used as-is to save the next checkpoint,
+        # which is what `update_state` does when it forks this checkpoint.
+        saved = self.memory_saver.put(
+            result.config,
+            create_checkpoint(self.chkpnt_1, {}, 1),
+            self.metadata_1,
+            {},
+        )
+        assert saved["configurable"]["checkpoint_ns"] == ""
+        assert result.config["configurable"] == {
+            "thread_id": "thread-1",
+            "checkpoint_id": self.chkpnt_1["id"],
+            "extra_key": "kept",
+            "checkpoint_ns": "",
+        }
+
+    def test_get_tuple_by_checkpoint_id_keeps_named_namespace(self) -> None:
+        """The namespace a checkpoint was saved under is the one returned."""
+        self.memory_saver.put(
+            self.config_3,
+            self.chkpnt_3,
+            self.metadata_3,
+            self.chkpnt_3["channel_versions"],
+        )
+        addressed: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-2",
+                "checkpoint_id": self.chkpnt_3["id"],
+            }
+        }
+
+        # The lookup resolves the namespace from the caller's config, so ask
+        # for the named namespace explicitly and check it is preserved.
+        addressed["configurable"]["checkpoint_ns"] = "inner"
+        result = self.memory_saver.get_tuple(addressed)
+
+        assert result is not None
+        assert result.config["configurable"]["checkpoint_ns"] == "inner"
+        assert result.config["configurable"]["checkpoint_id"] == self.chkpnt_3["id"]
+
     async def test_search(self) -> None:
         # set up test
         # save checkpoints
