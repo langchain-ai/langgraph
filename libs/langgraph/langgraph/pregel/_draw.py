@@ -114,6 +114,11 @@ def draw_graph(
         updated_channels=updated_channels,
     )
     start_tasks = tasks
+    # Nodes deferred via LastValueAfterFinish, discovered as the loop runs. A
+    # graph whose first step has no tasks (e.g. input_channels is a list) never
+    # enters the loop, so this must be initialized outside of it.
+    deferred_nodes: set[str] = set()
+    edges_to_deferred_nodes: set[Edge] = set()
     # run the pregel loop
     for step in range(step, limit):
         if not tasks:
@@ -190,8 +195,8 @@ def draw_graph(
             updated_channels=updated_channels,
         )
         # collect deferred nodes
-        deferred_nodes: set[str] = set()
-        edges_to_deferred_nodes: set[Edge] = set()
+        deferred_nodes = set()
+        edges_to_deferred_nodes = set()
         for channel, item in channels.items():
             if isinstance(item, LastValueAfterFinish):
                 deferred_node = channel.split(":", 2)[-1]

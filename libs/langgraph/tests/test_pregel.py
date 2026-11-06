@@ -291,6 +291,26 @@ def test_context_json_schema() -> None:
     }
 
 
+def test_get_graph_with_list_input_channels() -> None:
+    """get_graph() must not crash when the first step has no tasks.
+
+    With input_channels given as a list, the drawing loop maps an empty input
+    and the first step has no tasks, so the pregel loop never runs. Reading
+    deferred_nodes after that loop used to raise UnboundLocalError (#9591).
+    """
+    chain = NodeBuilder().subscribe_only("inp").do(lambda x: x).write_to("out")
+
+    app = Pregel(
+        nodes={"a": chain},
+        channels={"inp": LastValue(str), "out": LastValue(str)},
+        input_channels=["inp"],
+        output_channels=["out"],
+    )
+
+    graph = app.get_graph()
+    assert "a" in graph.nodes
+
+
 def test_node_schemas_custom_output() -> None:
     class State(TypedDict):
         hello: str
