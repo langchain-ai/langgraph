@@ -8,7 +8,8 @@ Covers three checkpointer settings for subgraph state:
 - checkpointer=True: "stateful" — state accumulates across invocations on the same thread id
 
 Also covers reading a subgraph's namespace from the parent graph, including
-one where no subgraph is declared, such as a subagent a tool invokes.
+one where no subgraph is declared, such as a subagent a tool invokes, and
+finding the subgraph a namespace names.
 """
 
 from typing import Annotated, Any
@@ -916,3 +917,77 @@ def test_prefix_named_namespaces_resolve_to_their_own_graph(
     else:
         # The parent's channels have no `notes` or `verdict`.
         assert values("research_review") == {"messages": ["check it", "review done"]}
+
+
+def _prefix_named_subgraphs() -> tuple[Any, dict[str, Any]]:
+    """A parent whose subgraph namespaces start with one another's names:
+    `research` has a `review` subgraph, and the parent declares
+    `research_review` and `review` too. Returns the parent and each subgraph,
+    keyed by its namespace."""
+    graphs = {
+        "research|review": _notes_graph("research's review"),
+        "research_review": _notes_graph("research_review"),
+        "review": _notes_graph("review"),
+    }
+    graphs["research"] = (
+        StateGraph(NotesState)
+        .add_node("review", graphs["research|review"])
+        .add_edge(START, "review")
+        .compile()
+    )
+    parent = (
+        StateGraph(NotesState)
+        .add_node("research", graphs["research"])
+        .add_node("research_review", graphs["research_review"])
+        .add_node("review", graphs["review"])
+        .add_edge(START, "research")
+        .add_edge("research", "research_review")
+        .add_edge("research_review", "review")
+        .compile()
+    )
+    return parent, graphs
+
+
+@pytest.mark.parametrize(
+    "namespace", ["research", "research|review", "research_review", "review"]
+)
+def test_get_subgraphs_matches_whole_namespace_segments(namespace: str) -> None:
+    """`get_subgraphs(namespace=...)` yields only the subgraph at that
+    namespace. `research_review` isn't `research` then `review`, and
+    `research|review` doesn't also find the parent's own `review`."""
+    parent, graphs = _prefix_named_subgraphs()
+
+    assert list(parent.get_subgraphs(namespace=namespace, recurse=True)) == [
+        (namespace, graphs[namespace])
+    ]
+
+
+def test_nested_namespace_update_raises_despite_top_level_namesake(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """`research|review` names a `review` inside `research`'s subgraph, which
+    declares no subgraph there. An update to it raises rather than writing
+    through the parent's own `review`."""
+    research = (
+        StateGraph(NotesState)
+        .add_node("review", lambda state: {})
+        .add_edge(START, "review")
+        .compile()
+    )
+    parent = (
+        StateGraph(NotesState)
+        .add_node("research", research)
+        .add_node("review", _notes_graph("review"))
+        .add_edge(START, "research")
+        .add_edge("research", "review")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config: RunnableConfig = {
+        "configurable": {
+            "thread_id": str(uuid4()),
+            "checkpoint_ns": "research:a|review:b",
+        }
+    }
+
+    with pytest.raises(ValueError, match=r"Subgraph research\|review not found"):
+        parent.update_state(config, {"notes": "edit"})

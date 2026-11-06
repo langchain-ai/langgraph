@@ -905,14 +905,10 @@ class Pregel(
         if not checkpoint_ns or CONFIG_KEY_CHECKPOINTER in config[CONF]:
             return None
         recast = recast_checkpoint_ns(checkpoint_ns)
-        # Walk every subgraph rather than filter by `namespace=`: that filter
-        # matches by prefix, so for `research_review` it can yield
-        # `research|review` and skip a declared `research_review`.
-        for name, pregel in self.get_subgraphs(recurse=True):
-            if name == recast:
-                return pregel, patch_configurable(
-                    config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
-                )
+        for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
+            return pregel, patch_configurable(
+                config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
+            )
         if for_update:
             raise ValueError(f"Subgraph {recast} not found")
         return None
@@ -1161,7 +1157,9 @@ class Pregel(
         """Get the subgraphs of the graph.
 
         Args:
-            namespace: The namespace to filter the subgraphs by.
+            namespace: Yield only the subgraph at this exact namespace, such
+                as `parent|child` (without task IDs). A nested namespace needs
+                `recurse=True`.
             recurse: Whether to recurse into the subgraphs.
                 If `False`, only the immediate subgraphs will be returned.
 
@@ -1169,9 +1167,9 @@ class Pregel(
             An iterator of the `(namespace, subgraph)` pairs.
         """
         for name, node in self.nodes.items():
-            # filter by prefix
+            # filter by the namespace's first segment, matched whole
             if namespace is not None:
-                if not namespace.startswith(name):
+                if namespace != name and not namespace.startswith(name + NS_SEP):
                     continue
 
             # find the subgraph, if any
@@ -1185,12 +1183,13 @@ class Pregel(
                 if namespace is None:
                     yield name, graph
                 if recurse and isinstance(graph, Pregel):
-                    if namespace is not None:
-                        namespace = namespace[len(name) + 1 :]
+                    child_namespace = (
+                        None if namespace is None else namespace[len(name) + 1 :]
+                    )
                     yield from (
                         (f"{name}{NS_SEP}{n}", s)
                         for n, s in graph.get_subgraphs(
-                            namespace=namespace, recurse=recurse
+                            namespace=child_namespace, recurse=recurse
                         )
                     )
 
@@ -1200,7 +1199,9 @@ class Pregel(
         """Get the subgraphs of the graph.
 
         Args:
-            namespace: The namespace to filter the subgraphs by.
+            namespace: Yield only the subgraph at this exact namespace, such
+                as `parent|child` (without task IDs). A nested namespace needs
+                `recurse=True`.
             recurse: Whether to recurse into the subgraphs.
                 If `False`, only the immediate subgraphs will be returned.
 
