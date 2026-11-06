@@ -6,6 +6,9 @@ Covers three checkpointer settings for subgraph state:
   interrupt support, but state resets each invocation. This is the common case
   when an agent is invoked from inside a tool used by another agent.
 - checkpointer=True: "stateful" — state accumulates across invocations on the same thread id
+
+Also covers reading a subgraph's namespace from the parent graph, including
+one where no subgraph is declared, such as a subagent a tool invokes.
 """
 
 import sys
@@ -711,7 +714,7 @@ async def test_child_with_own_thread_id_keeps_namespace_async(
     assert state2.values.get("count") == 2
 
 
-# -- reading a namespace with no declared subgraph --
+# -- reading a subgraph's namespace from the parent graph --
 
 
 class NotesState(MessagesState):
@@ -727,6 +730,23 @@ def _notes_graph(label: str) -> Any:
     )
 
 
+async def _namespace_configs(parent: Any) -> dict[str, RunnableConfig]:
+    """Run `parent` on a new thread. Returns a config for each subgraph
+    namespace it wrote, keyed by the node the namespace starts with."""
+    thread_id = str(uuid4())
+    return {
+        ns[0].split(":")[0]: {
+            "configurable": {"thread_id": thread_id, "checkpoint_ns": ns[0]}
+        }
+        async for ns, _ in parent.astream(
+            {"messages": [HumanMessage(content="go")]},
+            {"configurable": {"thread_id": thread_id}},
+            subgraphs=True,
+        )
+        if ns
+    }
+
+
 async def _run_tool_subgraph(
     checkpointer: BaseCheckpointSaver,
 ) -> tuple[Any, RunnableConfig]:
@@ -734,12 +754,7 @@ async def _run_tool_subgraph(
     as deepagents runs subagents. Returns the parent and a config for the
     subgraph's `tools:<task_id>` namespace."""
     # Subgraph detection doesn't follow a subscript, so `tools` declares none.
-    subagents = {
-        "researcher": StateGraph(MessagesState)
-        .add_node("work", lambda state: {"messages": [AIMessage(content="done")]})
-        .add_edge(START, "work")
-        .compile()
-    }
+    subagents = {"researcher": _notes_graph("researcher")}
 
     async def tools(state: MessagesState) -> dict:
         await subagents["researcher"].ainvoke(
@@ -753,24 +768,11 @@ async def _run_tool_subgraph(
         .add_edge(START, "tools")
         .compile(checkpointer=checkpointer)
     )
-    thread_id = str(uuid4())
-    namespaces = {
-        ns[0]
-        async for ns, _ in parent.astream(
-            {"messages": [HumanMessage(content="go")]},
-            {"configurable": {"thread_id": thread_id}},
-            subgraphs=True,
-        )
-        if ns
-    }
-    assert len(namespaces) == 1
-    return parent, {
-        "configurable": {"thread_id": thread_id, "checkpoint_ns": namespaces.pop()}
-    }
+    return parent, (await _namespace_configs(parent))["tools"]
 
 
 @NEEDS_CONTEXTVARS
-async def test_undeclared_subgraph_aget_state(
+async def test_undeclared_subgraph_get_state_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """A namespace with no declared subgraph is read with the parent graph."""
@@ -778,12 +780,15 @@ async def test_undeclared_subgraph_aget_state(
 
     state = await parent.aget_state(ns_config)
 
-    assert [m.text for m in state.values["messages"]] == ["research apples", "done"]
+    assert [m.text for m in state.values["messages"]] == [
+        "research apples",
+        "researcher done",
+    ]
     assert state.config["configurable"]["checkpoint_ns"] == AnyStr("tools:")
 
 
 @NEEDS_CONTEXTVARS
-async def test_undeclared_subgraph_aget_state_history(
+async def test_undeclared_subgraph_get_state_history_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """History of a namespace with no declared subgraph is read with the parent
@@ -793,7 +798,7 @@ async def test_undeclared_subgraph_aget_state_history(
     history = [s async for s in parent.aget_state_history(ns_config)]
 
     assert [[m.text for m in s.values.get("messages", [])] for s in history] == [
-        ["research apples", "done"],
+        ["research apples", "researcher done"],
         ["research apples"],
         [],
     ]
@@ -803,7 +808,7 @@ async def test_undeclared_subgraph_aget_state_history(
 
 
 @NEEDS_CONTEXTVARS
-async def test_undeclared_subgraph_aupdate_state_raises(
+async def test_undeclared_subgraph_update_state_raises_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Unlike a read, an update can't fall back to the parent graph: its nodes
@@ -821,10 +826,34 @@ async def test_undeclared_subgraph_aupdate_state_raises(
 async def test_prefix_named_namespaces_resolve_to_their_own_graph_async(
     async_checkpointer: BaseCheckpointSaver, review_declared: bool
 ) -> None:
-    """`research_review` starts with `research`, which declares a subgraph.
-    Each namespace still reads with its own graph: a declared subgraph's
-    channels, or the parent's when none is declared."""
-    subgraphs = {"review": _notes_graph("review")}
+    """`research_review` starts with `research`, whose subgraph has a `review`
+    node with its own subgraph. Each namespace still reads with its own graph:
+    a declared subgraph's channels, or the parent's when none is declared."""
+    research = (
+        StateGraph(NotesState)
+        .add_node("review", _notes_graph("research"))
+        .add_edge(START, "review")
+        .compile()
+    )
+
+    class ReviewState(NotesState):
+        verdict: str  # a key `research|review`'s graph doesn't have
+
+    def review(state: ReviewState) -> dict:
+        return {
+            "messages": [AIMessage(content="review done")],
+            "notes": "review",
+            "verdict": "approved",
+        }
+
+    # Subgraph detection doesn't follow a subscript, so `call_review` declares
+    # none.
+    subgraphs = {
+        "review": StateGraph(ReviewState)
+        .add_node("work", review)
+        .add_edge(START, "work")
+        .compile()
+    }
 
     async def call_review(state: MessagesState) -> dict:
         await subgraphs["review"].ainvoke(
@@ -834,7 +863,7 @@ async def test_prefix_named_namespaces_resolve_to_their_own_graph_async(
 
     parent = (
         StateGraph(MessagesState)
-        .add_node("research", _notes_graph("research"))
+        .add_node("research", research)
         .add_node(
             "research_review",
             subgraphs["review"] if review_declared else call_review,
@@ -843,22 +872,10 @@ async def test_prefix_named_namespaces_resolve_to_their_own_graph_async(
         .add_edge("research", "research_review")
         .compile(checkpointer=async_checkpointer)
     )
-    thread_id = str(uuid4())
-    namespaces = {
-        ns[0].split(":")[0]: ns[0]
-        async for ns, _ in parent.astream(
-            {"messages": [HumanMessage(content="go")]},
-            {"configurable": {"thread_id": thread_id}},
-            subgraphs=True,
-        )
-        if ns
-    }
+    configs = await _namespace_configs(parent)
 
     async def values(name: str) -> dict:
-        ns_config = {
-            "configurable": {"thread_id": thread_id, "checkpoint_ns": namespaces[name]}
-        }
-        state = await parent.aget_state(ns_config)
+        state = await parent.aget_state(configs[name])
         return {
             k: [m.text for m in v] if k == "messages" else v
             for k, v in state.values.items()
@@ -872,9 +889,10 @@ async def test_prefix_named_namespaces_resolve_to_their_own_graph_async(
         assert await values("research_review") == {
             "messages": ["go", "research done", "review done"],
             "notes": "review",
+            "verdict": "approved",
         }
     else:
-        # The parent's channels have no `notes`.
+        # The parent's channels have no `notes` or `verdict`.
         assert await values("research_review") == {
             "messages": ["check it", "review done"]
         }
