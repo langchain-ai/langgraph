@@ -6,6 +6,7 @@ import datetime
 import json
 import os
 import pathlib
+import sys
 import time
 import webbrowser
 from typing import Any
@@ -169,6 +170,40 @@ def get_access_token(api_url: str) -> str:
     return token["access_token"]
 
 
+def _write_login_success(api_url: str) -> None:
+    name = _profile_name(_read_config())
+    if not sys.stdout.isatty() or os.environ.get("TERM") == "dumb":
+        click.echo(
+            f"Logged in to {api_url} as profile {json.dumps(name, ensure_ascii=False)}"
+        )
+        return
+    color = not bool(os.environ.get("NO_COLOR"))
+    captions = {
+        2: click.style("✓ You're in.", fg="bright_blue", bold=True),
+        4: f"Logged in as profile {json.dumps(name, ensure_ascii=False)}.",
+        6: click.style("Ready when you are.", dim=True),
+    }
+    logo = (
+        "▄█▄               ",
+        "████▄             ",
+        "██████▄ ▄▄▄▄▄▄    ",
+        " ██████ ██████▀   ",
+        "  ▀████  ▀██▀     ",
+        "    ▀█ ▄███▄▄     ",
+        "██████▀███████▄   ",
+        " █████  ▀███████▄ ",
+        "  ▀▀█▀    ▀▀███▀▀ ",
+    )
+    lines = [""]
+    for i, row in enumerate(logo):
+        line = click.style(row, fg="bright_blue")
+        if i in captions:
+            line += "  " + captions[i]
+        lines.append(line)
+    lines.append(f"\n{click.style('API', dim=True)}  {api_url}")
+    click.echo("\n".join(lines), color=color)
+
+
 def login(api_url: str, *, open_browser: bool = True) -> None:
     """Sign in with the OAuth device flow and store tokens in the profile."""
     endpoints = _oauth_endpoints(api_url)
@@ -215,7 +250,7 @@ def login(api_url: str, *, open_browser: bool = True) -> None:
             continue
         if resp.is_success and body.get("access_token"):
             _save_tokens(body, api_url)
-            click.secho("Logged in to LangSmith.", fg="green")
+            _write_login_success(api_url)
             return
         error = body.get("error") if isinstance(body, dict) else None
         if error == "slow_down":

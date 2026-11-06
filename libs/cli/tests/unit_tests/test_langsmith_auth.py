@@ -105,7 +105,7 @@ def test_expired_token_without_refresh_token_asks_to_log_in(config_file):
         langsmith_auth.get_access_token(API_URL)
 
 
-def test_login_stores_tokens_after_pending(config_file, monkeypatch):
+def test_login_stores_tokens_after_pending(config_file, monkeypatch, capsys):
     _no_discovery(monkeypatch)
     monkeypatch.setattr(langsmith_auth.time, "sleep", lambda _s: None)
     monkeypatch.setattr(langsmith_auth.webbrowser, "open", lambda _u: True)
@@ -142,6 +142,43 @@ def test_login_stores_tokens_after_pending(config_file, monkeypatch):
     profile = json.loads(config_file.read_text())["profiles"]["default"]
     assert profile["api_url"] == API_URL
     assert profile["oauth"]["access_token"] == "tok"
+    assert capsys.readouterr().out.endswith(
+        f'Logged in to {API_URL} as profile "default"\n'
+    )
+
+
+@pytest.mark.parametrize(
+    ("terminal", "term", "no_color", "celebrate", "colored"),
+    [
+        (True, "xterm-256color", "", True, True),
+        (True, "xterm-256color", "1", True, False),
+        (True, "dumb", "", False, False),
+        (False, "xterm-256color", "", False, False),
+    ],
+)
+def test_login_success_output(
+    config_file, monkeypatch, capsys, terminal, term, no_color, celebrate, colored
+):
+    monkeypatch.setenv("LANGSMITH_PROFILE", "work")
+    monkeypatch.setenv("TERM", term)
+    monkeypatch.setenv("NO_COLOR", no_color)
+    monkeypatch.setattr(langsmith_auth.sys.stdout, "isatty", lambda: terminal)
+
+    langsmith_auth._write_login_success(API_URL)
+
+    output = capsys.readouterr().out
+    assert ("\x1b[" in output) == colored
+    if celebrate:
+        for text in (
+            "▄█▄",
+            "✓ You're in.",
+            'Logged in as profile "work".',
+            "Ready when you are.",
+            f"API  {API_URL}",
+        ):
+            assert text in click.unstyle(output)
+    else:
+        assert output == f'Logged in to {API_URL} as profile "work"\n'
 
 
 def test_client_sends_bearer_token_per_request():
