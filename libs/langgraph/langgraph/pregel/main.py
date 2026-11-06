@@ -728,6 +728,14 @@ class Pregel(
 
     interrupt_before_nodes: All | Sequence[str]
 
+    insert_before_nodes: Sequence[str] = ()
+    """Nodes before which input inserted into a running run may be applied.
+
+    !!! warning "Experimental"
+
+        This attribute may change without notice.
+    """
+
     input_channels: str | Sequence[str]
 
     step_timeout: float | None = None
@@ -773,6 +781,7 @@ class Pregel(
         stream_channels: str | Sequence[str] | None = None,
         interrupt_after_nodes: All | Sequence[str] = (),
         interrupt_before_nodes: All | Sequence[str] = (),
+        insert_before_nodes: Sequence[str] = (),
         input_channels: str | Sequence[str],
         step_timeout: float | None = None,
         debug: bool | None = None,
@@ -819,6 +828,7 @@ class Pregel(
         self.stream_channels = stream_channels
         self.interrupt_after_nodes = interrupt_after_nodes
         self.interrupt_before_nodes = interrupt_before_nodes
+        self.insert_before_nodes = insert_before_nodes
         self.input_channels = input_channels
         self.step_timeout = step_timeout
         self.debug = debug if debug is not None else get_debug()
@@ -996,6 +1006,10 @@ class Pregel(
             "text/plain": repr(self),
             "image/png": self.get_graph().draw_mermaid_png(),
         }
+
+    def _inserted_input_channels(self) -> Sequence[str]:
+        """Channels inserted input may write; none for a plain `Pregel`."""
+        return ()
 
     def copy(self, update: dict[str, Any] | None = None) -> Self:
         attrs = {k: v for k, v in self.__dict__.items() if k != "__orig_class__"}
@@ -2821,7 +2835,8 @@ class Pregel(
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
-            control: Optional run control used to request cooperative drain.
+            control: Optional run control used to request cooperative drain or to
+                insert input into the run (see `RunControl`).
             subgraphs: Whether to stream events from inside subgraphs, defaults to `False`.
 
                 If `True`, the events will be emitted as tuples `(namespace, data)`,
@@ -3022,6 +3037,8 @@ class Pregel(
                 stream_keys=self.stream_channels_asis,
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,
+                insert_before=self.insert_before_nodes,
+                insert_channels=self._inserted_input_channels(),
                 manager=run_manager,
                 durability=durability_,
                 trigger_to_nodes=self.trigger_to_nodes,
@@ -3233,7 +3250,8 @@ class Pregel(
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
-            control: Optional run control used to request cooperative drain.
+            control: Optional run control used to request cooperative drain or to
+                insert input into the run (see `RunControl`).
             subgraphs: Whether to stream events from inside subgraphs, defaults to `False`.
 
                 If `True`, the events will be emitted as tuples `(namespace, data)`,
@@ -3471,6 +3489,8 @@ class Pregel(
                 stream_keys=self.stream_channels_asis,
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,
+                insert_before=self.insert_before_nodes,
+                insert_channels=self._inserted_input_channels(),
                 manager=run_manager,
                 durability=durability_,
                 trigger_to_nodes=self.trigger_to_nodes,
@@ -3980,7 +4000,8 @@ class Pregel(
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
-            control: Optional run control used to request cooperative drain.
+            control: Optional run control used to request cooperative drain or to
+                insert input into the run (see `RunControl`).
             version: The streaming format version. `"v1"` (default) returns the
                 traditional format, `"v2"` returns `StreamPart` typed dicts when
                 `stream_mode` is not `"values"`.
@@ -4157,7 +4178,8 @@ class Pregel(
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
-            control: Optional run control used to request cooperative drain.
+            control: Optional run control used to request cooperative drain or to
+                insert input into the run (see `RunControl`).
             version: The streaming format version. `"v1"` (default) returns the
                 traditional format, `"v2"` returns `StreamPart` typed dicts when
                 `stream_mode` is not `"values"`.
