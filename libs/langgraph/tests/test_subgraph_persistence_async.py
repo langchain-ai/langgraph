@@ -12,17 +12,18 @@ one where no subgraph is declared, such as a subagent a tool invokes.
 """
 
 import sys
-from typing import Any
+from typing import Annotated, Any
 from uuid import uuid4
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from typing_extensions import TypedDict
 
+from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import START, StateGraph
-from langgraph.graph.message import MessagesState
+from langgraph.graph.message import MessagesState, _messages_delta_reducer
 from langgraph.types import Command, Interrupt, interrupt
 from tests.any_str import AnyStr
 
@@ -721,12 +722,25 @@ class NotesState(MessagesState):
     notes: str  # a key only the subgraphs have
 
 
-def _notes_graph(label: str) -> Any:
-    def work(state: NotesState) -> dict:
+class DeltaMessagesState(TypedDict):
+    # Stores `messages` as deltas between snapshots, as deepagents' parent does.
+    messages: Annotated[list[AnyMessage], DeltaChannel(_messages_delta_reducer)]
+
+
+class DeltaNotesState(DeltaMessagesState):
+    notes: str
+
+
+def _notes_graph(label: str, state_schema: type = NotesState) -> Any:
+    # Typed `dict` so it fits either schema (see `_run_tool_subgraph`).
+    def work(state: dict) -> dict:
         return {"messages": [AIMessage(content=f"{label} done")], "notes": label}
 
     return (
-        StateGraph(NotesState).add_node("work", work).add_edge(START, "work").compile()
+        StateGraph(state_schema)
+        .add_node("work", work)
+        .add_edge(START, "work")
+        .compile()
     )
 
 
@@ -749,21 +763,26 @@ async def _namespace_configs(parent: Any) -> dict[str, RunnableConfig]:
 
 async def _run_tool_subgraph(
     checkpointer: BaseCheckpointSaver,
+    *,
+    parent_schema: type = MessagesState,
+    subagent_schema: type = NotesState,
 ) -> tuple[Any, RunnableConfig]:
     """Run a parent whose `tools` node invokes a subgraph it doesn't declare,
     as deepagents runs subagents. Returns the parent and a config for the
     subgraph's `tools:<task_id>` namespace."""
     # Subgraph detection doesn't follow a subscript, so `tools` declares none.
-    subagents = {"researcher": _notes_graph("researcher")}
+    subagents = {"researcher": _notes_graph("researcher", subagent_schema)}
 
-    async def tools(state: MessagesState) -> dict:
+    # Typed `dict`: a schema here would add its `messages` channel to the
+    # parent's, and a plain one clashes with a `DeltaChannel` one.
+    async def tools(state: dict) -> dict:
         await subagents["researcher"].ainvoke(
             {"messages": [HumanMessage(content="research apples")]}
         )
         return {"messages": [AIMessage(content="tool done")]}
 
     parent = (
-        StateGraph(MessagesState)
+        StateGraph(parent_schema)
         .add_node("tools", tools)
         .add_edge(START, "tools")
         .compile(checkpointer=checkpointer)
@@ -819,6 +838,40 @@ async def test_undeclared_subgraph_update_state_raises_async(
         await parent.aupdate_state(ns_config, {"messages": [AIMessage(content="edit")]})
 
     assert len([s async for s in parent.aget_state_history(ns_config)]) == 3
+
+
+@NEEDS_CONTEXTVARS
+@pytest.mark.parametrize(
+    ("parent_schema", "subagent_schema"),
+    [(DeltaMessagesState, NotesState), (MessagesState, DeltaNotesState)],
+    ids=["delta_parent", "delta_subagent"],
+)
+async def test_undeclared_subgraph_read_across_messages_channel_types_async(
+    async_checkpointer: BaseCheckpointSaver,
+    parent_schema: type,
+    subagent_schema: type,
+) -> None:
+    """deepagents' parent stores `messages` in a `DeltaChannel`, and its
+    subagents in a plain `add_messages` channel. Reading a subagent's namespace
+    with the parent's channel restores its messages, either way round."""
+    parent, ns_config = await _run_tool_subgraph(
+        async_checkpointer,
+        parent_schema=parent_schema,
+        subagent_schema=subagent_schema,
+    )
+
+    state = await parent.aget_state(ns_config)
+    history = [s async for s in parent.aget_state_history(ns_config)]
+
+    assert [m.text for m in state.values["messages"]] == [
+        "research apples",
+        "researcher done",
+    ]
+    assert [[m.text for m in s.values.get("messages", [])] for s in history] == [
+        ["research apples", "researcher done"],
+        ["research apples"],
+        [],
+    ]
 
 
 @NEEDS_CONTEXTVARS
