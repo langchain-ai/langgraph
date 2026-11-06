@@ -884,20 +884,38 @@ class Pregel(
         )
 
     def _subgraph_for_namespace(
-        self, config: RunnableConfig, checkpointer: BaseCheckpointSaver
+        self,
+        config: RunnableConfig,
+        checkpointer: BaseCheckpointSaver,
+        *,
+        for_update: bool = False,
     ) -> tuple[PregelProtocol, RunnableConfig] | None:
         """The subgraph a state method's namespaced config addresses, and the
         config to call it with, lending it `checkpointer`. `None` when the
-        config is for this graph."""
+        config is for this graph, or names no subgraph this graph declares or
+        detects (such as one a tool invokes), so a read uses this graph's
+        channels.
+
+        Raises:
+            ValueError: If `for_update` and the namespace names no such
+                subgraph: this graph's nodes and channels would write the wrong
+                state into it.
+        """
         checkpoint_ns = config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         if not checkpoint_ns or CONFIG_KEY_CHECKPOINTER in config[CONF]:
             return None
         recast = recast_checkpoint_ns(checkpoint_ns)
-        for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
-            return pregel, patch_configurable(
-                config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
-            )
-        raise ValueError(f"Subgraph {recast} not found")
+        # Walk every subgraph rather than filter by `namespace=`: that filter
+        # matches by prefix, so for `research_review` it can yield
+        # `research|review` and skip a declared `research_review`.
+        for name, pregel in self.get_subgraphs(recurse=True):
+            if name == recast:
+                return pregel, patch_configurable(
+                    config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
+                )
+        if for_update:
+            raise ValueError(f"Subgraph {recast} not found")
+        return None
 
     def _apply_checkpointer_allowlist(
         self, checkpointer: BaseCheckpointSaver | None
@@ -1641,7 +1659,9 @@ class Pregel(
         if any(len(u) == 0 for u in supersteps):
             raise ValueError("No updates provided")
 
-        if subgraph := self._subgraph_for_namespace(config, checkpointer):
+        if subgraph := self._subgraph_for_namespace(
+            config, checkpointer, for_update=True
+        ):
             pregel, subgraph_config = subgraph
             return pregel.bulk_update_state(subgraph_config, supersteps)
 
@@ -2142,7 +2162,9 @@ class Pregel(
         if any(len(u) == 0 for u in supersteps):
             raise ValueError("No updates provided")
 
-        if subgraph := self._subgraph_for_namespace(config, checkpointer):
+        if subgraph := self._subgraph_for_namespace(
+            config, checkpointer, for_update=True
+        ):
             pregel, subgraph_config = subgraph
             return await pregel.abulk_update_state(subgraph_config, supersteps)
 
