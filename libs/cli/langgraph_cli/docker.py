@@ -387,6 +387,8 @@ def build_docker_image(
         install_command=install_command,
         build_command=build_command,
         build_context=build_context,
+        # Safe because this Dockerfile is built immediately, not saved for later.
+        single_root_copy=True,
     )
     # add additional_contexts
     if additional_contexts:
