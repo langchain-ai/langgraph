@@ -36,7 +36,7 @@ from langchain_core.runnables import (
     RunnablePassthrough,
 )
 from langchain_core.runnables.graph import Edge
-from langchain_core.tools import tool
+from langchain_core.tools import StructuredTool, tool
 from langchain_core.version import VERSION as LANGCHAIN_CORE_VERSION
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
@@ -3103,6 +3103,49 @@ def test_simple_multi_edge(snapshot: SnapshotAssertion) -> None:
             {"down": None},
         ],
     )
+
+
+def test_tool_node_lists_tool_subagents_in_graph_metadata() -> None:
+    class TaskTool(StructuredTool):
+        subagents: list[dict[str, Any]] = []
+
+    def run_task(description: str, subagent_type: str) -> str:
+        return subagent_type
+
+    task = TaskTool.from_function(run_task, name="task", description="Run a subagent.")
+    task.subagents = [
+        {"name": "researcher", "description": "Researches a topic."},
+        {
+            "name": "critic",
+            "description": "Reviews drafts.",
+            "forked": True,
+            "system_prompt": "You are a critic.",
+            "runnable": object(),
+        },
+        {"name": "planner", "description": None, "forked": "yes"},
+    ]
+
+    @tool
+    def search(query: str) -> str:
+        """Search the web."""
+        return query
+
+    builder = StateGraph(MessagesState)
+    builder.add_node("agent", lambda state: state)
+    builder.add_node("tools", ToolNode([search, task]))
+    builder.add_edge(START, "agent")
+    builder.add_edge("agent", "tools")
+    graph = builder.compile().get_graph().to_json()
+    nodes = {node["id"]: node for node in graph["nodes"]}
+
+    assert nodes["tools"]["metadata"]["__subagents"] == {
+        "task": [
+            {"name": "researcher", "description": "Researches a topic."},
+            {"name": "critic", "description": "Reviews drafts.", "forked": True},
+            {"name": "planner"},
+        ]
+    }
+    assert "__subagents" not in (nodes["agent"].get("metadata") or {})
 
 
 def test_nested_graph_xray(snapshot: SnapshotAssertion) -> None:
