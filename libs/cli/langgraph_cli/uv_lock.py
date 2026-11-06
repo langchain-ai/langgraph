@@ -65,6 +65,7 @@ class UvLockPlan:
 @dataclass(slots=True)
 class DockerBuildPlan:
     lines: list[str]
+    workdir: str | None = None
 
     def add_blank(self) -> None:
         self.lines.append("")
@@ -73,6 +74,11 @@ class DockerBuildPlan:
         self.lines.append(line)
 
     def add_instruction(self, opcode: str, value: str | None = None) -> None:
+        # Repeating the current WORKDIR changes nothing but still costs a build step.
+        if opcode == "WORKDIR":
+            if value == self.workdir:
+                return
+            self.workdir = value
         if value:
             self.lines.append(f"{opcode} {value}")
         else:
