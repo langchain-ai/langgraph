@@ -1,16 +1,23 @@
 import asyncio
 import logging
 import operator
+import sys
 from typing import Annotated, Any
 
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from typing_extensions import TypedDict
 
+from langgraph.errors import RunCancelled
 from langgraph.graph import START, StateGraph
 from langgraph.runtime import Runtime
 
-pytestmark = pytest.mark.anyio
+pytestmark = [
+    pytest.mark.anyio,
+    pytest.mark.skipif(
+        sys.version_info < (3, 11), reason="cancel messages propagate from Python 3.11"
+    ),
+]
 
 
 class State(TypedDict):
@@ -36,16 +43,58 @@ def _builder() -> StateGraph:
     )
 
 
+class Rollback(RunCancelled):
+    run_cancel_handler = False
+
+
 async def _cancel_mid_tool(
-    graph: Any, config: dict, value: list[str], durability: Any = None
+    graph: Any,
+    config: dict,
+    value: list[str],
+    durability: Any = None,
+    msg: Any = RunCancelled("user stop"),
 ) -> None:
     run = asyncio.create_task(
         graph.ainvoke({"log": value}, config, durability=durability)
     )
     await asyncio.sleep(0.1)
-    run.cancel()
+    run.cancel(msg)
     with pytest.raises(asyncio.CancelledError):
         await run
+
+
+def _appends_cancelled(state: State, runtime: Runtime) -> dict[str, Any]:
+    return {"log": ["cancelled"]}
+
+
+@pytest.mark.parametrize("msg", [None, "stop", Rollback("rollback")])
+async def test_cancel_handler_skipped_without_run_cancelled(msg: Any) -> None:
+    graph = (
+        _builder()
+        .set_cancel_handler(_appends_cancelled)
+        .compile(checkpointer=InMemorySaver())
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    await _cancel_mid_tool(graph, config, ["h0"], msg=msg)
+
+    state = await graph.aget_state(config)
+    assert state.values["log"] == ["h0", "call"]
+
+
+async def test_cancel_handler_skipped_on_wait_for_timeout() -> None:
+    graph = (
+        _builder()
+        .set_cancel_handler(_appends_cancelled)
+        .compile(checkpointer=InMemorySaver())
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(graph.ainvoke({"log": ["h0"]}, config), timeout=0.1)
+
+    state = await graph.aget_state(config)
+    assert state.values["log"] == ["h0", "call"]
 
 
 @pytest.mark.parametrize("durability", ["sync", "async", "exit"])

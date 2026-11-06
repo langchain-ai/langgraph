@@ -119,6 +119,7 @@ from langgraph.errors import (
     GraphDrained,
     GraphRecursionError,
     InvalidUpdateError,
+    RunCancelled,
     create_error_message,
 )
 from langgraph.managed.base import ManagedValueSpec
@@ -766,8 +767,8 @@ class Pregel(
 
     cancel_handler: Callable[[Any, Runtime], Any] | None = None
     """Called with the latest state and the run's `Runtime` when a top-level async
-    run with a checkpointer is cancelled. A non-`None` return is saved as a state
-    update before the cancellation propagates."""
+    run with a checkpointer is cancelled with a `RunCancelled` message. A non-`None`
+    return is saved as a state update before the cancellation propagates."""
 
     cancel_timeout: float = 5.0
     """Seconds the cancel handler may take, including the wait for the cancelled
@@ -3638,11 +3639,14 @@ class Pregel(
     ) -> None:
         """Give the graph one bounded state update after its run is cancelled."""
         handler = self.cancel_handler
+        reason = exc.args[0] if exc.args else None
         # A nested graph's parent owns the cancel; without a checkpointer nothing was saved.
         if (
             handler is None
             or checkpointer is None
             or CONFIG_KEY_TASK_ID in config[CONF]
+            or not isinstance(reason, RunCancelled)
+            or not reason.run_cancel_handler
         ):
             return
         runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)

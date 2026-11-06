@@ -351,6 +351,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         and the run's `Runtime`. A returned update is saved with `update_state`,
         then the cancellation propagates.
 
+        The handler runs only when the cancel message is a `RunCancelled`, as in
+        `task.cancel(RunCancelled("user stop"))`. Plain cancels, like `asyncio.timeout`
+        or a process shutting down, skip it so the run can be resumed as is.
+
         Only top-level async runs with a checkpointer call the handler. It gets
         `timeout` seconds in total; if it runs over or raises, the error is logged
         and the update is skipped.
