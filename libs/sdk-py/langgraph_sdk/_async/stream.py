@@ -338,8 +338,15 @@ class _OutputAwaitable:
 
         # Normal path: wait for the lifecycle terminal signal.
         if self._timeout is not None:
+            # Shield the shared `_run_done` future. `wait_for` cancels the task
+            # it awaits on timeout, and without the shield that cancellation
+            # propagates into the stream's shared future, so every later
+            # `thread.output` awaiter gets CancelledError instead of the run's
+            # terminal state (#9609). The bounded waiter may be cancelled; the
+            # run-completion future must not be.
             terminal = await asyncio.wait_for(
-                self._thread._wait_for_run_done(), timeout=self._timeout
+                asyncio.shield(self._thread._wait_for_run_done()),
+                timeout=self._timeout,
             )
         else:
             terminal = await self._thread._wait_for_run_done()

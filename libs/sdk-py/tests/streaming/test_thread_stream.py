@@ -848,6 +848,32 @@ async def test_output_with_timeout_returns_new_awaitable_not_self():
             assert thread.output._timeout is None
 
 
+async def test_output_with_timeout_does_not_cancel_original_output():
+    """A bounded wait must not cancel the shared run-completion future (#9609).
+
+    `with_timeout()` documents that the original `thread.output` is unaffected.
+    A timeout used to propagate cancellation into `_run_done`, so the original
+    output raised CancelledError even after the run completed normally.
+    """
+    fake = FakeServer()
+    # Delay each lifecycle event so the bounded wait expires while the run is
+    # still in flight, then let the run finish.
+    fake.script(
+        [lifecycle_started_event(seq=0), lifecycle_completed_event(seq=1)],
+        delay=0.2,
+    )
+    fake.set_state({"answer": 42})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            with pytest.raises(asyncio.TimeoutError):
+                await thread.output.with_timeout(0.01)
+            result = await asyncio.wait_for(thread.output, timeout=5.0)
+    assert result == {"answer": 42}
+
+
 async def test_threads_stream_accepts_websocket_transport_option():
     async with httpx.AsyncClient(base_url="http://test") as raw:
         threads = ThreadsClient(HttpClient(raw))
