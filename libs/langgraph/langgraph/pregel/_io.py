@@ -130,35 +130,35 @@ def map_output_updates(
     ]
     if not output_tasks:
         return
+    # a set: a wide state would otherwise scan every key for each write
+    output_keys = (
+        frozenset(output_channels) if not isinstance(output_channels, str) else None
+    )
     updated: list[tuple[str, Any]] = []
     for task, writes in output_tasks:
         rtn = next((value for chan, value in writes if chan == RETURN), MISSING)
         if rtn is not MISSING:
             updated.append((task.name, rtn))
-        elif isinstance(output_channels, str):
+        elif output_keys is None:
             updated.extend(
                 (task.name, value) for chan, value in writes if chan == output_channels
             )
-        elif any(chan in output_channels for chan, _ in writes):
+        elif any(chan in output_keys for chan, _ in writes):
             counts = Counter(chan for chan, _ in writes)
-            if any(counts[chan] > 1 for chan in output_channels):
+            if any(n > 1 for chan, n in counts.items() if chan in output_keys):
                 updated.extend(
                     (
                         task.name,
                         {chan: value},
                     )
                     for chan, value in writes
-                    if chan in output_channels
+                    if chan in output_keys
                 )
             else:
                 updated.append(
                     (
                         task.name,
-                        {
-                            chan: value
-                            for chan, value in writes
-                            if chan in output_channels
-                        },
+                        {chan: value for chan, value in writes if chan in output_keys},
                     )
                 )
     grouped: dict[str, Any] = {t.name: [] for t, _ in output_tasks}

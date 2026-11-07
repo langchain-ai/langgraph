@@ -1452,6 +1452,8 @@ class CompiledStateGraph(
             output_keys = list(self.builder.channels) + [
                 k for k, v in self.builder.managed.items()
             ]
+        # for membership checks, which run on every key of every node update
+        output_key_set = frozenset(output_keys)
 
         def _get_updates(
             input: None | dict | Any,
@@ -1459,12 +1461,12 @@ class CompiledStateGraph(
             if input is None:
                 return None
             elif isinstance(input, dict):
-                return [(k, v) for k, v in input.items() if k in output_keys]
+                return [(k, v) for k, v in input.items() if k in output_key_set]
             elif isinstance(input, Command):
                 if input.graph == Command.PARENT:
                     return None
                 return [
-                    (k, v) for k, v in input._update_as_tuples() if k in output_keys
+                    (k, v) for k, v in input._update_as_tuples() if k in output_key_set
                 ]
             elif (
                 isinstance(input, (list, tuple))
@@ -1477,7 +1479,9 @@ class CompiledStateGraph(
                         if i.graph == Command.PARENT:
                             continue
                         updates.extend(
-                            (k, v) for k, v in i._update_as_tuples() if k in output_keys
+                            (k, v)
+                            for k, v in i._update_as_tuples()
+                            if k in output_key_set
                         )
                     else:
                         updates.extend(_get_updates(i) or ())
