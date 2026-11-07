@@ -39,6 +39,24 @@ _AIO_ERROR_MSG = (
 
 logger = logging.getLogger(__name__)
 
+
+_INT64_MIN = -(2**63)
+_INT64_MAX = 2**63 - 1
+
+
+def _bind_numeric(value: int | float) -> int | float:
+    """Bind an integer losslessly when SQLite can represent it exactly.
+
+    ``float(2**53 + 1)`` is ``2**53``, so coercing every numeric filter to a
+    REAL makes equality filters match adjacent records. Integers outside the
+    signed 64-bit range and non-finite floats keep the existing float fallback.
+    """
+    if isinstance(value, int) and not isinstance(value, bool):
+        if _INT64_MIN <= value <= _INT64_MAX:
+            return value
+    return float(value)
+
+
 MIGRATIONS = [
     """
 CREATE TABLE IF NOT EXISTS store (
@@ -491,7 +509,7 @@ class BaseSqliteStore:
                             filter_conditions.append(
                                 "json_extract(value, '$." + key + "') = ?"
                             )
-                            filter_params.append(float(value))
+                            filter_params.append(_bind_numeric(value))
                         else:
                             # Complex objects (list, dict, …) – compare JSON text
                             filter_conditions.append(
@@ -727,17 +745,17 @@ class BaseSqliteStore:
                 # SQLite JSON stores booleans as integers
                 return f"json_extract(value, '$.{key}') = {1 if value else 0}", []
             elif isinstance(value, (int, float)):
-                # Convert to float to handle inf, -inf, nan, and very large integers
-                # SQLite REAL can handle these cases better than INTEGER
-                return f"json_extract(value, '$.{key}') = ?", [float(value)]
+                # Bind integers exactly; keep the float fallback for
+                # inf, -inf, nan and integers beyond SQLite's INTEGER range.
+                return f"json_extract(value, '$.{key}') = ?", [_bind_numeric(value)]
             else:
                 return f"json_extract(value, '$.{key}') = ?", [orjson.dumps(value)]
         elif op == "$gt":
             # For numeric values, SQLite needs to compare as numbers, not strings
             if isinstance(value, (int, float)):
-                # Convert to float to handle special values and very large integers
-                return f"CAST(json_extract(value, '$.{key}') AS REAL) > ?", [
-                    float(value)
+                # NUMERIC keeps stored integers exact; REAL rounds 2**53 + 1.
+                return f"CAST(json_extract(value, '$.{key}') AS NUMERIC) > ?", [
+                    _bind_numeric(value)
                 ]
             elif isinstance(value, str):
                 return f"json_extract(value, '$.{key}') > ?", [value]
@@ -745,8 +763,8 @@ class BaseSqliteStore:
                 return f"json_extract(value, '$.{key}') > ?", [orjson.dumps(value)]
         elif op == "$gte":
             if isinstance(value, (int, float)):
-                return f"CAST(json_extract(value, '$.{key}') AS REAL) >= ?", [
-                    float(value)
+                return f"CAST(json_extract(value, '$.{key}') AS NUMERIC) >= ?", [
+                    _bind_numeric(value)
                 ]
             elif isinstance(value, str):
                 return f"json_extract(value, '$.{key}') >= ?", [value]
@@ -754,8 +772,8 @@ class BaseSqliteStore:
                 return f"json_extract(value, '$.{key}') >= ?", [orjson.dumps(value)]
         elif op == "$lt":
             if isinstance(value, (int, float)):
-                return f"CAST(json_extract(value, '$.{key}') AS REAL) < ?", [
-                    float(value)
+                return f"CAST(json_extract(value, '$.{key}') AS NUMERIC) < ?", [
+                    _bind_numeric(value)
                 ]
             elif isinstance(value, str):
                 return f"json_extract(value, '$.{key}') < ?", [value]
@@ -763,8 +781,8 @@ class BaseSqliteStore:
                 return f"json_extract(value, '$.{key}') < ?", [orjson.dumps(value)]
         elif op == "$lte":
             if isinstance(value, (int, float)):
-                return f"CAST(json_extract(value, '$.{key}') AS REAL) <= ?", [
-                    float(value)
+                return f"CAST(json_extract(value, '$.{key}') AS NUMERIC) <= ?", [
+                    _bind_numeric(value)
                 ]
             elif isinstance(value, str):
                 return f"json_extract(value, '$.{key}') <= ?", [value]
@@ -778,8 +796,9 @@ class BaseSqliteStore:
             elif isinstance(value, bool):
                 return f"json_extract(value, '$.{key}') != {1 if value else 0}", []
             elif isinstance(value, (int, float)):
-                # Convert to float for consistency
-                return f"json_extract(value, '$.{key}') != ?", [float(value)]
+                # Bind integers exactly; keep the float fallback for
+                # inf, -inf, nan and integers beyond SQLite's INTEGER range.
+                return f"json_extract(value, '$.{key}') != ?", [_bind_numeric(value)]
             else:
                 return f"json_extract(value, '$.{key}') != ?", [orjson.dumps(value)]
         else:
@@ -951,17 +970,17 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                 # SQLite JSON stores booleans as integers
                 return f"json_extract(value, '$.{key}') = {1 if value else 0}", []
             elif isinstance(value, (int, float)):
-                # Convert to float to handle inf, -inf, nan, and very large integers
-                # SQLite REAL can handle these cases better than INTEGER
-                return f"json_extract(value, '$.{key}') = ?", [float(value)]
+                # Bind integers exactly; keep the float fallback for
+                # inf, -inf, nan and integers beyond SQLite's INTEGER range.
+                return f"json_extract(value, '$.{key}') = ?", [_bind_numeric(value)]
             else:
                 return f"json_extract(value, '$.{key}') = ?", [orjson.dumps(value)]
         elif op == "$gt":
             # For numeric values, SQLite needs to compare as numbers, not strings
             if isinstance(value, (int, float)):
-                # Convert to float to handle special values and very large integers
-                return f"CAST(json_extract(value, '$.{key}') AS REAL) > ?", [
-                    float(value)
+                # NUMERIC keeps stored integers exact; REAL rounds 2**53 + 1.
+                return f"CAST(json_extract(value, '$.{key}') AS NUMERIC) > ?", [
+                    _bind_numeric(value)
                 ]
             elif isinstance(value, str):
                 return f"json_extract(value, '$.{key}') > ?", [value]
@@ -969,8 +988,8 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                 return f"json_extract(value, '$.{key}') > ?", [orjson.dumps(value)]
         elif op == "$gte":
             if isinstance(value, (int, float)):
-                return f"CAST(json_extract(value, '$.{key}') AS REAL) >= ?", [
-                    float(value)
+                return f"CAST(json_extract(value, '$.{key}') AS NUMERIC) >= ?", [
+                    _bind_numeric(value)
                 ]
             elif isinstance(value, str):
                 return f"json_extract(value, '$.{key}') >= ?", [value]
@@ -978,8 +997,8 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                 return f"json_extract(value, '$.{key}') >= ?", [orjson.dumps(value)]
         elif op == "$lt":
             if isinstance(value, (int, float)):
-                return f"CAST(json_extract(value, '$.{key}') AS REAL) < ?", [
-                    float(value)
+                return f"CAST(json_extract(value, '$.{key}') AS NUMERIC) < ?", [
+                    _bind_numeric(value)
                 ]
             elif isinstance(value, str):
                 return f"json_extract(value, '$.{key}') < ?", [value]
@@ -987,8 +1006,8 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                 return f"json_extract(value, '$.{key}') < ?", [orjson.dumps(value)]
         elif op == "$lte":
             if isinstance(value, (int, float)):
-                return f"CAST(json_extract(value, '$.{key}') AS REAL) <= ?", [
-                    float(value)
+                return f"CAST(json_extract(value, '$.{key}') AS NUMERIC) <= ?", [
+                    _bind_numeric(value)
                 ]
             elif isinstance(value, str):
                 return f"json_extract(value, '$.{key}') <= ?", [value]
@@ -1002,8 +1021,9 @@ class SqliteStore(BaseSqliteStore, BaseStore):
             elif isinstance(value, bool):
                 return f"json_extract(value, '$.{key}') != {1 if value else 0}", []
             elif isinstance(value, (int, float)):
-                # Convert to float for consistency
-                return f"json_extract(value, '$.{key}') != ?", [float(value)]
+                # Bind integers exactly; keep the float fallback for
+                # inf, -inf, nan and integers beyond SQLite's INTEGER range.
+                return f"json_extract(value, '$.{key}') != ?", [_bind_numeric(value)]
             else:
                 return f"json_extract(value, '$.{key}') != ?", [orjson.dumps(value)]
         else:

@@ -1495,3 +1495,37 @@ def test_batch_allows_empty_search_prefix_and_listing_wildcards(
 
     assert [item.namespace for item in found] == [("foo", "bar")]
     assert listed == [("foo", "bar")]
+
+
+def test_large_integer_filter_keeps_precision(store: SqliteStore) -> None:
+    """Regression test for #9607.
+
+    ``float(2**53 + 1)`` is ``2**53``, so coercing filter parameters to REAL
+    made an equality filter return the adjacent record. Ordered comparisons
+    also cast the stored JSON number to REAL and lost the same precision.
+    """
+    previous, target = 2**53, 2**53 + 1
+    store.put(("precision",), "previous", {"sequence": previous})
+    store.put(("precision",), "target", {"sequence": target})
+
+    found = store.search(("precision",), filter={"sequence": target})
+    assert [item.key for item in found] == ["target"]
+
+    found = store.search(("precision",), filter={"sequence": {"$eq": target}})
+    assert [item.key for item in found] == ["target"]
+
+    found = store.search(("precision",), filter={"sequence": {"$gt": previous}})
+    assert [item.key for item in found] == ["target"]
+
+    found = store.search(("precision",), filter={"sequence": {"$gte": target}})
+    assert [item.key for item in found] == ["target"]
+
+    found = store.search(("precision",), filter={"sequence": {"$lte": previous}})
+    assert [item.key for item in found] == ["previous"]
+
+    found = store.search(("precision",), filter={"sequence": {"$ne": target}})
+    assert [item.key for item in found] == ["previous"]
+
+    # Non-integer and oversized values keep the existing float fallback.
+    assert store.search(("precision",), filter={"sequence": {"$eq": 1.5}}) == []
+    assert store.search(("precision",), filter={"sequence": {"$lt": 10**100}}) != []

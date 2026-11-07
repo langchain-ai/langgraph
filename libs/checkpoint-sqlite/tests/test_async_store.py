@@ -809,3 +809,23 @@ async def test_sync_methods_reject_invalid_namespace_labels(
 
     item = await store.aget(("foo", "bar"), "key")
     assert item is not None and item.value == {"original": True}
+
+
+@pytest.mark.asyncio
+async def test_large_integer_filter_keeps_precision(store: AsyncSqliteStore) -> None:
+    """Async counterpart of the #9607 regression test."""
+    previous, target = 2**53, 2**53 + 1
+    await store.aput(("precision",), "previous", {"sequence": previous})
+    await store.aput(("precision",), "target", {"sequence": target})
+
+    found = await store.asearch(("precision",), filter={"sequence": target})
+    assert [item.key for item in found] == ["target"]
+
+    found = await store.asearch(("precision",), filter={"sequence": {"$eq": target}})
+    assert [item.key for item in found] == ["target"]
+
+    found = await store.asearch(("precision",), filter={"sequence": {"$gt": previous}})
+    assert [item.key for item in found] == ["target"]
+
+    found = await store.asearch(("precision",), filter={"sequence": {"$ne": target}})
+    assert [item.key for item in found] == ["previous"]
