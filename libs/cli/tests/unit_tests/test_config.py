@@ -255,6 +255,32 @@ def test_validate_config():
         )
 
 
+def test_validate_config_unquoted_versions():
+    """Unquoted numeric versions in JSON (float/int) must raise a clear UsageError.
+
+    A bare `3.12` is parsed by JSON as a float and `20` as an int; previously this
+    surfaced as a raw AttributeError/TypeError instead of actionable guidance.
+    See https://github.com/langchain-ai/langgraph/issues/9603.
+    """
+    with pytest.raises(click.UsageError, match="must be a string"):
+        validate_config(
+            {
+                "python_version": 3.12,
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+            }
+        )
+
+    with pytest.raises(click.UsageError, match="must be a string"):
+        validate_config(
+            {
+                "node_version": 20,
+                "dependencies": ["."],
+                "graphs": {"js": "./js.mts:agent"},
+            }
+        )
+
+
 def test_validate_config_image_distro():
     """Test validation of image_distro field."""
     # Valid image_distro values should work

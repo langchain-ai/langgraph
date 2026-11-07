@@ -144,6 +144,11 @@ def _parse_version(version_str: str) -> tuple[int, int]:
 
 def _parse_node_version(version_str: str) -> int:
     """Parse a Node.js version string into a major version number."""
+    if not isinstance(version_str, str):
+        raise click.UsageError(
+            f"Node.js version must be a string, got {type(version_str).__name__}. "
+            'Use the quoted form, e.g. \'"node_version": "20"\'.'
+        )
     try:
         if "." in version_str:
             raise ValueError("Node.js version must be major version only")
@@ -430,6 +435,11 @@ def validate_config(config: Config) -> Config:
 
     if config.get("python_version"):
         pyversion = config["python_version"]
+        if not isinstance(pyversion, str):
+            raise click.UsageError(
+                f"Python version must be a string, got {type(pyversion).__name__}. "
+                'Use the quoted form, e.g. \'"python_version": "3.12"\'.'
+            )
         if not pyversion.count(".") == 1 or not all(
             part.isdigit() for part in pyversion.split("-")[0].split(".")
         ):
