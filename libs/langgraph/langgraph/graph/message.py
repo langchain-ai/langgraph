@@ -194,14 +194,8 @@ def add_messages(
     if not isinstance(right, list):
         right = [right]  # type: ignore[assignment]
     # coerce to message
-    left = [
-        message_chunk_to_message(cast(BaseMessageChunk, m))
-        for m in convert_to_messages(left)
-    ]
-    right = [
-        message_chunk_to_message(cast(BaseMessageChunk, m))
-        for m in convert_to_messages(right)
-    ]
+    left = _coerce_to_messages(left)
+    right = _coerce_to_messages(right)
     # assign missing ids
     for m in left:
         if m.id is None:
@@ -234,7 +228,8 @@ def add_messages(
 
             merged_by_id[m.id] = len(merged)
             merged.append(m)
-    merged = [m for m in merged if m.id not in ids_to_remove]
+    if ids_to_remove:
+        merged = [m for m in merged if m.id not in ids_to_remove]
 
     if format == "langchain-openai":
         merged = _format_messages(merged)
@@ -245,6 +240,20 @@ def add_messages(
         pass
 
     return merged
+
+
+def _coerce_to_messages(messages: list) -> list[Any]:
+    # Both conversions return a plain message unchanged, and a long history is
+    # all plain messages, so check the few distinct types instead of each item.
+    if all(
+        issubclass(t, BaseMessage) and not issubclass(t, BaseMessageChunk)
+        for t in set(map(type, messages))
+    ):
+        return messages
+    return [
+        message_chunk_to_message(cast(BaseMessageChunk, m))
+        for m in convert_to_messages(messages)
+    ]
 
 
 @deprecated(
