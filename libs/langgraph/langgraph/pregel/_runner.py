@@ -78,6 +78,7 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
     should_stop: Callable[[set[F]], bool]
     counter: int
     done: set[F]
+    failed: set[F]
     lock: threading.Lock
 
     def __init__(
@@ -97,6 +98,7 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
         self.should_stop = should_stop
         self.counter = 0
         self.done: set[F] = set()
+        self.failed: set[F] = set()
 
     def __setitem__(
         self,
@@ -123,9 +125,13 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
             with self.lock:
                 self.done.add(fut)
                 self.counter -= 1
+                # Only a future that raised can meet the stop condition, so check
+                # those instead of every done future (quadratic in wide steps).
+                if not fut.cancelled() and fut.exception() is not None:
+                    self.failed.add(fut)
                 # Wake waiter when all tracked futures are done, or when runner-level
                 # stop condition is met (for example, a non-handled fatal exception).
-                if self.counter == 0 or self.should_stop(self.done):
+                if self.counter == 0 or self.should_stop(self.failed):
                     self.event.set()
 
 
@@ -234,6 +240,7 @@ class PregelRunner:
                         fut: concurrent.futures.Future = concurrent.futures.Future()
                         fut.set_exception(exc)
                         futures.done.add(fut)
+                        futures.failed.add(fut)
                 elif reraise and id(exc) not in self._handled_exception_ids:
                     # let the caller stream this task's result before it raises
                     yield
@@ -427,6 +434,7 @@ class PregelRunner:
                         fut: asyncio.Future = loop.create_future()
                         fut.set_exception(exc)
                         futures.done.add(fut)
+                        futures.failed.add(fut)
                 elif reraise and id(exc) not in self._handled_exception_ids:
                     # let the caller stream this task's result before it raises
                     yield
