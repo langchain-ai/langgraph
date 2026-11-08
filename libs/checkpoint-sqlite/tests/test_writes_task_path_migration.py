@@ -149,3 +149,68 @@ async def test_async_read_only_legacy_database_still_reads_delta_history(
         got = await saver.aget_delta_channel_history(config=child, channels=["ch"])
 
     assert got["ch"] == {"seed": "seed", "writes": [("task", "ch", "write")]}
+
+
+class _NonStdlibOperationalError(Exception):
+    """Pretends to be a sqlcipher-style OperationalError.
+
+    Crucially, it is NOT a subclass of stdlib sqlite3.OperationalError, which is
+    what the old setup() guard relied on.
+    """
+
+
+class _SyncCursor:
+    def fetchall(self):
+        # task_path is already present in the (fresh) schema.
+        return [
+            (0, "thread_id", "", 0, None, 0),
+            (1, "task_path", "", 0, None, 0),
+        ]
+
+
+class _FakeSyncConn:
+    def executescript(self, sql):
+        # Pretend the writes table was created with task_path already.
+        return None
+
+    def execute(self, sql):
+        normalized = sql.strip()
+        if normalized.upper().startswith("PRAGMA TABLE_INFO"):
+            return _SyncCursor()
+        if normalized.upper().startswith("ALTER TABLE WRITES ADD COLUMN"):
+            # A non-stdlib driver raises its own OperationalError here.
+            raise _NonStdlibOperationalError("duplicate column name: task_path")
+        return _SyncCursor()
+
+
+def test_setup_idempotent_for_non_stdlib_driver():
+    # Regression for #9561: a non-stdlib sqlite driver (e.g. sqlcipher) raises
+    # its own OperationalError, which is not a subclass of stdlib
+    # sqlite3.OperationalError, so the old unconditional ALTER leaked. setup()
+    # must be idempotent and skip the ALTER when the column already exists.
+    saver = SqliteSaver(_FakeSyncConn())
+    saver.setup()
+    assert saver.is_setup
+
+
+class _AsyncCursor:
+    def __init__(self, rows):
+        self._rows = list(rows)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if not self._rows:
+            raise StopAsyncIteration
+        return self._rows.pop(0)
+
+
+async def test_async_setup_idempotent_for_non_stdlib_driver():
+    # Mirrors the sync regression for #9561. A fresh in-memory database already
+    # has the task_path column (from the CREATE TABLE), so setup() must skip the
+    # ALTER and not raise. Run twice to confirm idempotency.
+    async with aiosqlite.connect(":memory:", isolation_level=None) as conn:
+        saver = AsyncSqliteSaver(conn)
+        await saver.setup()
+        assert saver.is_setup

@@ -169,18 +169,24 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             """
         )
         # sqlite has no ADD COLUMN IF NOT EXISTS; this migrates databases
-        # created before `task_path` existed and is a no-op on the rest.
-        try:
-            self.conn.execute(
-                "ALTER TABLE writes ADD COLUMN task_path TEXT NOT NULL DEFAULT ''"
-            )
-        except sqlite3.OperationalError as e:
-            # A read-only database from before the column can still be read;
-            # its rows would all read back as '' anyway.
-            if "readonly database" in str(e):
-                self._has_task_path = False
-            elif "duplicate column name" not in str(e):
-                raise
+        # created before `task_path` existed. Check first so non-stdlib drivers
+        # (e.g. sqlcipher) whose OperationalError is not a subclass of stdlib
+        # sqlite3.OperationalError also work.
+        columns = {
+            row[1] for row in self.conn.execute("PRAGMA table_info(writes)").fetchall()
+        }
+        if "task_path" not in columns:
+            try:
+                self.conn.execute(
+                    "ALTER TABLE writes ADD COLUMN task_path TEXT NOT NULL DEFAULT ''"
+                )
+            except sqlite3.OperationalError as e:
+                # A read-only database from before the column can still be read;
+                # its rows would all read back as '' anyway.
+                if "readonly database" in str(e):
+                    self._has_task_path = False
+                elif "duplicate column name" not in str(e):
+                    raise
 
         self.is_setup = True
 
