@@ -230,6 +230,12 @@ def test_validate_config():
         validate_config({"python_version": "3.10"})
     assert "Minimum required version" in str(exc_info.value)
 
+    with pytest.raises(click.UsageError, match="Invalid Python version format"):
+        validate_config({"python_version": 3.12})
+
+    with pytest.raises(click.UsageError, match="Invalid Node.js version format"):
+        validate_config({"node_version": 20})
+
     with pytest.raises(click.UsageError, match="Bullseye images were deprecated"):
         validate_config(
             {

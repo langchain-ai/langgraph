@@ -456,8 +456,13 @@ def validate_config(
     if api_version:
         config["api_version"] = api_version
 
-    if config.get("node_version"):
-        node_version = config["node_version"]
+    node_version = config.get("node_version")
+    if node_version is not None and not isinstance(node_version, str):
+        raise click.UsageError(
+            f"Invalid Node.js version format: {node_version}. "
+            "Use major version only (e.g., '20')."
+        )
+    if node_version:
         try:
             major = _parse_node_version(node_version)
             min_major = _parse_node_version(MIN_NODE_VERSION)
@@ -501,8 +506,13 @@ def validate_config(
             '  "source": {"kind": "uv", "root": ".."}'
         )
 
-    if config.get("python_version"):
-        pyversion = config["python_version"]
+    pyversion = config.get("python_version")
+    if pyversion is not None and not isinstance(pyversion, str):
+        raise click.UsageError(
+            f"Invalid Python version format: {pyversion}. "
+            "Use 'major.minor' format — patch version cannot be specified."
+        )
+    if pyversion:
         if not pyversion.count(".") == 1 or not all(
             part.isdigit() for part in pyversion.split("-")[0].split(".")
         ):
