@@ -437,6 +437,32 @@ def test_list_namespaces_no_conditions() -> None:
     assert sorted(result) == sorted(expected)
 
 
+def test_search_pages_match_full_listing() -> None:
+    store = InMemoryStore()
+    items_per_namespace = 7
+    for ns in [("a",), ("a", "b"), ("ab",), ("a", "c", "d")]:
+        for i in range(items_per_namespace):
+            store.put(ns, f"k{i}", {"i": i, "even": i % 2 == 0})
+
+    def keys(items: list) -> list[tuple[tuple[str, ...], str]]:
+        return [(item.namespace, item.key) for item in items]
+
+    full = keys(store.search(("a",), limit=100))
+    assert {ns for ns, _ in full} == {("a",), ("a", "b"), ("a", "c", "d")}
+    assert len(full) == 3 * items_per_namespace
+    paged = [
+        key
+        for offset in range(0, len(full), 4)
+        for key in keys(store.search(("a",), limit=4, offset=offset))
+    ]
+    assert paged == full
+    even = keys(store.search(("a",), filter={"even": True}, limit=100))
+    assert (
+        keys(store.search(("a",), filter={"even": True}, limit=3, offset=2))
+        == even[2:5]
+    )
+
+
 def test_list_namespaces_empty_store() -> None:
     store = InMemoryStore()
 
