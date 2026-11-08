@@ -24,6 +24,10 @@ from psycopg.types.json import Jsonb
 # Page size for stage-1 paged scan in `get_delta_channel_history`. Internal
 # constant — exposing this as a kwarg is left as a follow-up.
 _DELTA_PAGE_SIZE = 1024
+# Most walks end within one snapshot interval (100 updates by default), and
+# each row read costs JSONB lookups and a blob probe, so the first page is
+# smaller.
+_DELTA_FIRST_PAGE_SIZE = 128
 
 MetadataInput = dict[str, Any] | None
 

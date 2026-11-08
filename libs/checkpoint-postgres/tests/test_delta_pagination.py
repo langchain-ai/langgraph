@@ -15,7 +15,11 @@ from langgraph.checkpoint.serde.types import _DeltaSnapshot
 
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from langgraph.checkpoint.postgres.base import _DELTA_PAGE_SIZE, BasePostgresSaver
+from langgraph.checkpoint.postgres.base import (
+    _DELTA_FIRST_PAGE_SIZE,
+    _DELTA_PAGE_SIZE,
+    BasePostgresSaver,
+)
 from tests.conftest import DEFAULT_URI
 
 CHANNEL = "items"
@@ -24,9 +28,16 @@ SEED_STEP = 1
 SEED_VALUE = [10, 20]
 TARGET_STEP = 4
 
-# The real page size is the control; the rest split the walk from the target
-# to its seed across pages.
-PAGE_SIZES = [_DELTA_PAGE_SIZE, 3, 2, 1]
+# First and later page sizes. The real ones are the control; the rest split the
+# walk from the target to its seed across pages, the last with a first page
+# smaller than the others.
+PAGE_SIZES = [
+    (_DELTA_FIRST_PAGE_SIZE, _DELTA_PAGE_SIZE),
+    (3, 3),
+    (2, 2),
+    (1, 1),
+    (1, 2),
+]
 
 
 def _step_args(
@@ -92,10 +103,13 @@ def _assert_history(entry: DeltaChannelHistory, page_size: int) -> None:
     )
 
 
-@pytest.mark.parametrize("page_size", PAGE_SIZES)
+@pytest.mark.parametrize(("first_page_size", "page_size"), PAGE_SIZES)
 async def test_async_walk_continues_across_pages(
-    page_size: int, monkeypatch: pytest.MonkeyPatch
+    first_page_size: int, page_size: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(
+        "langgraph.checkpoint.postgres.aio._DELTA_FIRST_PAGE_SIZE", first_page_size
+    )
     monkeypatch.setattr("langgraph.checkpoint.postgres.aio._DELTA_PAGE_SIZE", page_size)
     async with AsyncPostgresSaver.from_conn_string(DEFAULT_URI) as saver:
         await saver.setup()
@@ -106,10 +120,13 @@ async def test_async_walk_continues_across_pages(
         _assert_history(result[CHANNEL], page_size)
 
 
-@pytest.mark.parametrize("page_size", PAGE_SIZES)
+@pytest.mark.parametrize(("first_page_size", "page_size"), PAGE_SIZES)
 def test_sync_walk_continues_across_pages(
-    page_size: int, monkeypatch: pytest.MonkeyPatch
+    first_page_size: int, page_size: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(
+        "langgraph.checkpoint.postgres._DELTA_FIRST_PAGE_SIZE", first_page_size
+    )
     monkeypatch.setattr("langgraph.checkpoint.postgres._DELTA_PAGE_SIZE", page_size)
     with PostgresSaver.from_conn_string(DEFAULT_URI) as saver:
         saver.setup()
@@ -201,6 +218,7 @@ def test_sync_empty_checkpoint_id_reads_from_the_latest_checkpoint() -> None:
 async def test_root_target_has_no_history_and_still_terminates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr("langgraph.checkpoint.postgres.aio._DELTA_FIRST_PAGE_SIZE", 1)
     monkeypatch.setattr("langgraph.checkpoint.postgres.aio._DELTA_PAGE_SIZE", 1)
     async with AsyncPostgresSaver.from_conn_string(DEFAULT_URI) as saver:
         await saver.setup()

@@ -26,6 +26,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from langgraph.checkpoint.postgres import _ainternal
 from langgraph.checkpoint.postgres.base import (
+    _DELTA_FIRST_PAGE_SIZE,
     _DELTA_PAGE_SIZE,
     PRUNE_DELETE_THREADS_SQL,
     PRUNE_STRATEGIES,
@@ -488,6 +489,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         walk_cursor_by_ch: dict[str, str | None] = {}
         seeded: set[str] = set()
         cursor: str | None = checkpoint_id
+        page_size = _DELTA_FIRST_PAGE_SIZE
 
         async with self._cursor() as cur:
             while True:
@@ -495,9 +497,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 for ch in channels:
                     # ver_i, blob channel, blob version, inline_i
                     stage1_params.extend([ch, ch, ch, ch])
-                stage1_params.extend(
-                    [thread_id, checkpoint_ns, cursor, _DELTA_PAGE_SIZE]
-                )
+                stage1_params.extend([thread_id, checkpoint_ns, cursor, page_size])
                 await cur.execute(stage1_sql, stage1_params)
                 page = await cur.fetchall()
                 if not page:
@@ -523,9 +523,10 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     walk_cursor_by_ch,
                     seeded,
                 )
-                if len(seeded) == len(channels) or len(page) < _DELTA_PAGE_SIZE:
+                if len(seeded) == len(channels) or len(page) < page_size:
                     break
                 cursor = oldest
+                page_size = _DELTA_PAGE_SIZE
                 stage1_sql = _build_delta_stage1_sql(channels, paged=True)
 
         channels_with_chain = [ch for ch in channels if chain_by_ch[ch]]

@@ -26,6 +26,7 @@ from psycopg_pool import ConnectionPool
 
 from langgraph.checkpoint.postgres import _internal
 from langgraph.checkpoint.postgres.base import (
+    _DELTA_FIRST_PAGE_SIZE,
     _DELTA_PAGE_SIZE,
     PRUNE_DELETE_THREADS_SQL,
     PRUNE_STRATEGIES,
@@ -523,8 +524,8 @@ class PostgresSaver(BasePostgresSaver):
         * Stage 1 (paged): dynamic SELECT over `checkpoints` with three
           columns per channel: its version, an `EXISTS` probe for a stored
           blob at that version, and its inline value. Pages newest-first by
-          `checkpoint_id`, starting at the target; page size is
-          `_DELTA_PAGE_SIZE`.
+          `checkpoint_id`, starting at the target. The first page holds
+          `_DELTA_FIRST_PAGE_SIZE` rows, later ones `_DELTA_PAGE_SIZE`.
           Stops paging when every channel has found its seed or a page comes
           back short.
 
@@ -560,6 +561,7 @@ class PostgresSaver(BasePostgresSaver):
         walk_cursor_by_ch: dict[str, str | None] = {}
         seeded: set[str] = set()
         cursor: str | None = checkpoint_id
+        page_size = _DELTA_FIRST_PAGE_SIZE
 
         with self._cursor() as cur:
             while True:
@@ -567,9 +569,7 @@ class PostgresSaver(BasePostgresSaver):
                 for ch in channels:
                     # ver_i, blob channel, blob version, inline_i
                     stage1_params.extend([ch, ch, ch, ch])
-                stage1_params.extend(
-                    [thread_id, checkpoint_ns, cursor, _DELTA_PAGE_SIZE]
-                )
+                stage1_params.extend([thread_id, checkpoint_ns, cursor, page_size])
                 cur.execute(stage1_sql, stage1_params)
                 page = cur.fetchall()
                 if not page:
@@ -597,9 +597,10 @@ class PostgresSaver(BasePostgresSaver):
                 )
                 # Stop if every channel is seeded, or the page was short
                 # (chain exhausted — no more rows to fetch).
-                if len(seeded) == len(channels) or len(page) < _DELTA_PAGE_SIZE:
+                if len(seeded) == len(channels) or len(page) < page_size:
                     break
                 cursor = oldest
+                page_size = _DELTA_PAGE_SIZE
                 stage1_sql = _build_delta_stage1_sql(channels, paged=True)
 
         # Stage 2: per-channel UNION ALL — one writes branch per channel
