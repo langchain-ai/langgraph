@@ -11,7 +11,7 @@ from typing_extensions import TypedDict
 
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import START, StateGraph
-from langgraph.types import CachePolicy, Durability
+from langgraph.types import CachePolicy, Durability, Send
 
 pytestmark = pytest.mark.anyio
 
@@ -120,3 +120,41 @@ async def test_a_node_that_fails_is_not_cached_async() -> None:
             await graph.ainvoke(INPUT, {"configurable": {"thread_id": thread}})
 
     assert runs == ["b", "b"]
+
+
+def _duplicate_send_cache_graph(runs: list[int]) -> Any:
+    class State(TypedDict):
+        out: Annotated[list, operator.add]
+        q: int
+
+    def worker(state: State) -> dict:
+        runs.append(state["q"])
+        return {"out": [state["q"]]}
+
+    def fan_out(_: State) -> list[Send]:
+        return [Send("worker", {"q": q, "out": []}) for q in (1, 1, 2)]
+
+    builder = StateGraph(State)
+    builder.add_node("worker", worker, cache_policy=CachePolicy())
+    builder.add_conditional_edges(START, fan_out, ["worker"])
+    return builder.compile(cache=InMemoryCache())
+
+
+def test_duplicate_send_inputs_all_use_cached_writes() -> None:
+    runs: list[int] = []
+    graph = _duplicate_send_cache_graph(runs)
+
+    assert graph.invoke({"out": [], "q": 0})["out"] == [1, 1, 2]
+    runs.clear()
+    assert graph.invoke({"out": [], "q": 0})["out"] == [1, 1, 2]
+    assert runs == []
+
+
+async def test_duplicate_send_inputs_all_use_cached_writes_async() -> None:
+    runs: list[int] = []
+    graph = _duplicate_send_cache_graph(runs)
+
+    assert (await graph.ainvoke({"out": [], "q": 0}))["out"] == [1, 1, 2]
+    runs.clear()
+    assert (await graph.ainvoke({"out": [], "q": 0}))["out"] == [1, 1, 2]
+    assert runs == []

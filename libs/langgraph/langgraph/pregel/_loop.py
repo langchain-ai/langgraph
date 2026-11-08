@@ -1760,15 +1760,17 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         if self.cache is None:
             return ()
         matched: list[PregelExecutableTask] = []
-        if cached := {
-            (t.cache_key.ns, t.cache_key.key): t
-            for t in self.tasks.values()
-            if t.cache_key and not t.writes
-        }:
+        cached: defaultdict[tuple[str, str], list[PregelExecutableTask]] = defaultdict(
+            list
+        )
+        for task in self.tasks.values():
+            if task.cache_key and not task.writes:
+                cached[(task.cache_key.ns, task.cache_key.key)].append(task)
+        if cached:
             for key, values in self.cache.get(tuple(cached)).items():
-                task = cached[key]
-                task.writes.extend(values)
-                matched.append(task)
+                for task in cached[key]:
+                    task.writes.extend(values)
+                    matched.append(task)
         return matched
 
     def accept_push(
@@ -2016,15 +2018,17 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         if self.cache is None:
             return []
         matched: list[PregelExecutableTask] = []
-        if cached := {
-            (t.cache_key.ns, t.cache_key.key): t
-            for t in self.tasks.values()
-            if t.cache_key and not t.writes
-        }:
+        cached: defaultdict[tuple[str, str], list[PregelExecutableTask]] = defaultdict(
+            list
+        )
+        for task in self.tasks.values():
+            if task.cache_key and not task.writes:
+                cached[(task.cache_key.ns, task.cache_key.key)].append(task)
+        if cached:
             for key, values in (await self.cache.aget(tuple(cached))).items():
-                task = cached[key]
-                task.writes.extend(values)
-                matched.append(task)
+                for task in cached[key]:
+                    task.writes.extend(values)
+                    matched.append(task)
         return matched
 
     async def aaccept_push(
