@@ -1158,6 +1158,27 @@ def test_numeric_filter_safety(store: SqliteStore) -> None:
     assert results[0].key == "item4"
 
 
+def test_integer_filters_preserve_sqlite_precision(store: SqliteStore) -> None:
+    """Integer filters must not round adjacent values above the float mantissa."""
+    previous, target = 2**53, 2**53 + 1
+    store.put(("large-integers",), "previous", {"sequence": previous})
+    store.put(("large-integers",), "target", {"sequence": target})
+
+    assert [
+        item.key
+        for item in store.search(("large-integers",), filter={"sequence": target})
+    ] == ["target"]
+    assert [
+        item.key
+        for item in store.search(
+            ("large-integers",), filter={"sequence": {"$gte": target}}
+        )
+    ] == ["target"]
+
+    # Values outside SQLite's integer range retain the existing float fallback.
+    assert store.search(("large-integers",), filter={"sequence": {"$lt": 2**100}})
+
+
 def test_boolean_filter_safety(store: SqliteStore) -> None:
     """Test that boolean filter values are handled safely."""
     store.put(("flags",), "flag1", {"active": True, "name": "Feature A"})

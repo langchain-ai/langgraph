@@ -720,6 +720,28 @@ async def test_search_items(
             await store.adelete(ns, key)
 
 
+async def test_integer_filters_preserve_sqlite_precision(
+    store: AsyncSqliteStore,
+) -> None:
+    """Integer filters must not round adjacent values above the float mantissa."""
+    previous, target = 2**53, 2**53 + 1
+    await store.aput(("large-integers",), "previous", {"sequence": previous})
+    await store.aput(("large-integers",), "target", {"sequence": target})
+
+    assert [
+        item.key
+        for item in await store.asearch(
+            ("large-integers",), filter={"sequence": target}
+        )
+    ] == ["target"]
+    assert [
+        item.key
+        for item in await store.asearch(
+            ("large-integers",), filter={"sequence": {"$gte": target}}
+        )
+    ] == ["target"]
+
+
 async def test_async_namespace_segment_boundary(store: AsyncSqliteStore) -> None:
     """Segment-aware scoping on the async path.
 
