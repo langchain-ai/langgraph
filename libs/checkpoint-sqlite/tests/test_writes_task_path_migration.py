@@ -149,3 +149,114 @@ async def test_async_read_only_legacy_database_still_reads_delta_history(
         got = await saver.aget_delta_channel_history(config=child, channels=["ch"])
 
     assert got["ch"] == {"seed": "seed", "writes": [("task", "ch", "write")]}
+
+
+class _DriverOperationalError(Exception):
+    """Stands in for a driver error that shares the name but not the class.
+
+    sqlcipher3.dbapi2 raises `sqlcipher3.dbapi2.OperationalError`, which is not a
+    subclass of `sqlite3.OperationalError`, so a guard written against the
+    std-lib class never fires.
+    """
+
+
+class _DriverConnection:
+    """A connection whose errors are raised by the driver, not by sqlite3."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._conn, name)
+
+    def execute(self, sql: str, *args: object) -> sqlite3.Cursor:
+        try:
+            return self._conn.execute(sql, *args)
+        except sqlite3.OperationalError as exc:
+            raise _DriverOperationalError(str(exc)) from None
+
+    def executescript(self, sql: str) -> sqlite3.Cursor:
+        try:
+            return self._conn.executescript(sql)
+        except sqlite3.OperationalError as exc:
+            raise _DriverOperationalError(str(exc)) from None
+
+
+class _AsyncDriverConnection:
+    """The aiosqlite connection, with the same substitution of the error class."""
+
+    def __init__(self, conn: aiosqlite.Connection) -> None:
+        self._conn = conn
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._conn, name)
+
+    async def execute(self, sql: str, *args: object) -> aiosqlite.Cursor:
+        try:
+            return await self._conn.execute(sql, *args)
+        except aiosqlite.OperationalError as exc:
+            raise _DriverOperationalError(str(exc)) from None
+
+    def executescript(self, sql: str) -> object:
+        return self._conn.executescript(sql)
+
+
+def test_setup_on_a_fresh_database_with_a_driver_specific_error() -> None:
+    """setup() must not depend on which module raised the error.
+
+    `CREATE TABLE` already declares `task_path`, so the migration's `ALTER TABLE`
+    raises "duplicate column name". The guard around it names the std-lib class,
+    so a driver that raises its own OperationalError leaked the exception and
+    every fresh database failed to set up.
+    """
+    saver = SqliteSaver(_DriverConnection(sqlite3.connect(":memory:")))
+
+    saver.setup()
+
+    assert saver.is_setup
+    assert saver._has_task_path is True
+    assert "task_path" in [row[1] for row in saver.conn.execute("PRAGMA table_info(writes)")]
+
+
+async def test_async_setup_on_a_fresh_database_with_a_driver_specific_error(
+    tmp_path: Path,
+) -> None:
+    conn = await aiosqlite.connect(tmp_path / "fresh.sqlite")
+    try:
+        saver = AsyncSqliteSaver(_AsyncDriverConnection(conn))
+
+        await saver.setup()
+
+        assert saver.is_setup
+        assert "task_path" in [
+            row[1] for row in await (await conn.execute("PRAGMA table_info(writes)")).fetchall()
+        ]
+    finally:
+        await conn.close()
+
+
+def test_setup_migrates_a_legacy_table_with_a_driver_specific_error(
+    legacy_db: Path,
+) -> None:
+    saver = SqliteSaver(_DriverConnection(sqlite3.connect(str(legacy_db))))
+
+    saver.setup()
+
+    assert saver.conn.execute("SELECT task_id, task_path FROM writes").fetchall() == [
+        ("old-task", "")
+    ]
+
+
+def test_setup_still_raises_an_unrelated_driver_error(legacy_db: Path) -> None:
+    """Only the migration's own errors are tolerated."""
+
+    class _Broken(_DriverConnection):
+        def execute(self, sql: str, *args: object) -> sqlite3.Cursor:
+            if sql.lstrip().upper().startswith("ALTER TABLE"):
+                raise _DriverOperationalError("disk I/O error")
+            return super().execute(sql, *args)
+
+    saver = SqliteSaver(_Broken(sqlite3.connect(str(legacy_db))))
+
+    with pytest.raises(_DriverOperationalError, match="disk I/O error"):
+        saver.setup()

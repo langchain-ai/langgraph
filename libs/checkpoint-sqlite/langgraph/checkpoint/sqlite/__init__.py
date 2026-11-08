@@ -170,19 +170,34 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         )
         # sqlite has no ADD COLUMN IF NOT EXISTS; this migrates databases
         # created before `task_path` existed and is a no-op on the rest.
-        try:
-            self.conn.execute(
-                "ALTER TABLE writes ADD COLUMN task_path TEXT NOT NULL DEFAULT ''"
-            )
-        except sqlite3.OperationalError as e:
-            # A read-only database from before the column can still be read;
-            # its rows would all read back as '' anyway.
-            if "readonly database" in str(e):
-                self._has_task_path = False
-            elif "duplicate column name" not in str(e):
-                raise
+        # The column is looked up before ALTER runs: a connection that does not
+        # come from the std-lib module (sqlcipher3.dbapi2, for instance) raises
+        # its own OperationalError, which the `sqlite3` class below does not
+        # catch, so on such a connection every fresh database failed to set up.
+        if not self._writes_has_task_path():
+            try:
+                self.conn.execute(
+                    "ALTER TABLE writes ADD COLUMN task_path TEXT NOT NULL DEFAULT ''"
+                )
+            except Exception as e:
+                # A read-only database from before the column can still be read;
+                # its rows would all read back as '' anyway.
+                if "readonly database" in str(e):
+                    self._has_task_path = False
+                elif "duplicate column name" not in str(e):
+                    raise
 
         self.is_setup = True
+
+    def _writes_has_task_path(self) -> bool:
+        """Report whether the `writes` table already carries `task_path`.
+
+        `PRAGMA table_info` is answered by every SQLite driver, so the migration
+        can decide what to do without provoking an error whose class depends on
+        the driver that raised it.
+        """
+        columns = self.conn.execute("PRAGMA table_info(writes)").fetchall()
+        return any(column[1] == "task_path" for column in columns)
 
     @contextmanager
     def cursor(self, transaction: bool = True) -> Iterator[sqlite3.Cursor]:

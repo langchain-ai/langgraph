@@ -349,20 +349,39 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
 
             # sqlite has no ADD COLUMN IF NOT EXISTS; this migrates databases
             # created before `task_path` existed and is a no-op on the rest.
-            try:
-                await self.conn.execute(
-                    "ALTER TABLE writes ADD COLUMN task_path TEXT NOT NULL DEFAULT ''"
-                )
-                await self.conn.commit()
-            except aiosqlite.OperationalError as e:
-                # A read-only database from before the column can still be read;
-                # its rows would all read back as '' anyway.
-                if "readonly database" in str(e):
-                    self._has_task_path = False
-                elif "duplicate column name" not in str(e):
-                    raise
+            # The column is looked up before ALTER runs: a driver other than
+            # aiosqlite raises its own OperationalError, which the class below
+            # does not catch, so on such a connection every fresh database
+            # failed to set up.
+            if not await self._writes_has_task_path():
+                try:
+                    await self.conn.execute(
+                        "ALTER TABLE writes ADD COLUMN task_path TEXT NOT NULL DEFAULT ''"
+                    )
+                    await self.conn.commit()
+                except Exception as e:
+                    # A read-only database from before the column can still be
+                    # read; its rows would all read back as '' anyway.
+                    if "readonly database" in str(e):
+                        self._has_task_path = False
+                    elif "duplicate column name" not in str(e):
+                        raise
 
             self.is_setup = True
+
+    async def _writes_has_task_path(self) -> bool:
+        """Report whether the `writes` table already carries `task_path`.
+
+        `PRAGMA table_info` is answered by every SQLite driver, so the migration
+        can decide what to do without provoking an error whose class depends on
+        the driver that raised it. The caller holds `self.lock`.
+        """
+        cursor = await self.conn.execute("PRAGMA table_info(writes)")
+        try:
+            columns = await cursor.fetchall()
+        finally:
+            await cursor.close()
+        return any(column[1] == "task_path" for column in columns)
 
     async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database asynchronously.
