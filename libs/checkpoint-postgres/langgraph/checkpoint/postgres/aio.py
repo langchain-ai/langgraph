@@ -594,7 +594,11 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 if value["parent_checkpoint_id"]
                 else None
             ),
-            await asyncio.to_thread(self._load_writes, value["pending_writes"]),
+            (
+                await asyncio.to_thread(self._load_writes, value["pending_writes"])
+                if value["pending_writes"]
+                else []
+            ),
         )
 
     def list(
