@@ -86,3 +86,24 @@ async def test_validation_node(tool_schema: Any, use_message_key: bool):
     if use_message_key:
         result_sync = result_sync["messages"]
     check_results(result_sync)
+
+
+async def test_validation_node_unknown_tool_name():
+    validation_node = ValidationNode([MyModel])
+    inputs = {
+        "messages": [
+            AIMessage(
+                "",
+                tool_calls=[{"name": "does_not_exist", "args": {}, "id": "c0"}],
+            )
+        ]
+    }
+    result = await validation_node.ainvoke(inputs)
+    messages = result["messages"]
+    assert len(messages) == 1
+    assert messages[0].additional_kwargs.get("is_error")
+    assert "does_not_exist" in messages[0].content
+
+    result_sync = validation_node.invoke(inputs)
+    messages_sync = result_sync["messages"]
+    assert messages_sync[0].additional_kwargs.get("is_error")
