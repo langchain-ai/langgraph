@@ -302,14 +302,20 @@ def _dedupe_ops(values: list[Op]) -> tuple[list[int] | None, list[Op]]:
     dedupped: list[Op] = []
     listen: list[int] = []
     puts: dict[tuple[tuple[str, ...], str], int] = {}
+    reads: dict[Op, int] = {}
 
     for op in values:
         if isinstance(op, (GetOp, SearchOp, ListNamespacesOp)):
             try:
-                listen.append(dedupped.index(op))
-            except ValueError:
-                listen.append(len(dedupped))
+                ix = reads.setdefault(op, len(dedupped))
+            except TypeError:  # an op holding a dict or a list is unhashable
+                try:
+                    ix = dedupped.index(op)
+                except ValueError:
+                    ix = len(dedupped)
+            if ix == len(dedupped):
                 dedupped.append(op)
+            listen.append(ix)
         elif isinstance(op, PutOp):
             putkey = (op.namespace, op.key)
             if putkey in puts:
