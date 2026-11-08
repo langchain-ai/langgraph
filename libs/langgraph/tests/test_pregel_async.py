@@ -1562,6 +1562,21 @@ async def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> 
     assert await app.ainvoke({"input": 2}) == {"output": 3}
 
 
+async def test_get_graph_list_input_channels(mocker: MockerFixture) -> None:
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
+    chain = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
+
+    app = Pregel(
+        nodes={"one": chain},
+        channels={"input": LastValue(int), "output": LastValue(int)},
+        input_channels=["input"],
+        output_channels=["output"],
+    )
+
+    graph = app.get_graph()
+    assert "one" in graph.nodes
+
+
 async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     one = NodeBuilder().subscribe_only("input").do(add_one).write_to("inbox")

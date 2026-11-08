@@ -114,6 +114,10 @@ def draw_graph(
         updated_channels=updated_channels,
     )
     start_tasks = tasks
+    # Initialize before the loop so they exist even when the loop body never runs
+    # (e.g. an empty initial input with list input_channels yields no tasks).
+    deferred_nodes: set[str] = set()
+    edges_to_deferred_nodes: set[Edge] = set()
     # run the pregel loop
     for step in range(step, limit):
         if not tasks:
