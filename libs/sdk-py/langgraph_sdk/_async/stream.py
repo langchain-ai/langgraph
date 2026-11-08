@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import weakref
 from collections.abc import AsyncGenerator, AsyncIterator, Generator, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict, cast
@@ -1299,7 +1300,47 @@ class AsyncThreadStream:
             raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
         handle = self._transport.open_event_stream({"channels": _ALL_CHANNELS})
         self._open_handles.append(handle)
-        return handle.events
+        return self._iter_events(handle)
+
+    async def _iter_events(self, handle: EventStreamHandle) -> AsyncIterator[Event]:
+        """Iterate a handle's events and release it from bookkeeping on completion.
+
+        When the iterator is exhausted (or closed/interrupted), the handle is
+        removed from ``_open_handles`` so a long-lived session does not retain
+        completed handles until the whole stream is released.
+        """
+        gen = handle.events
+        try:
+            while True:
+                try:
+                    event = await gen.__anext__()
+                except StopAsyncIteration:
+                    self._release_handle(handle)
+                    return
+                yield event
+        finally:
+            self._release_handle(handle)
+
+    def _release_handle(self, handle: EventStreamHandle) -> None:
+        with contextlib.suppress(ValueError):
+            self._open_handles.remove(handle)
+        # Close the handle without keeping a strong reference to it, so it can be
+        # garbage-collected immediately. The weakref resolves to None if the
+        # handle is already gone, in which case there is nothing to close.
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        ref = weakref.ref(handle)
+        loop.create_task(self._close_handle_weak(ref))
+
+    @staticmethod
+    async def _close_handle_weak(ref: weakref.ref[EventStreamHandle]) -> None:
+        handle = ref()
+        if handle is None:
+            return
+        with contextlib.suppress(Exception):
+            await handle.close()
 
     async def close(self) -> None:
         """Tear down the thread stream. Idempotent."""
@@ -1308,6 +1349,7 @@ class AsyncThreadStream:
         self._closed = True
         for handle in self._open_handles:
             await handle.close()
+        self._open_handles.clear()
         # Cancel _run_done so thread.output doesn't wait forever on close.
         run_done = self._run_done
         if run_done is not None and not run_done.done():
