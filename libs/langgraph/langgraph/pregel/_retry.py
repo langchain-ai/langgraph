@@ -573,10 +573,13 @@ def _checkpoint_ns_for_parent_command(ns: str) -> str:
     return NS_SEP.join(parts)
 
 
-def _reset_interrupt_counter(config: RunnableConfig) -> RunnableConfig:
-    # A retry reruns the node from its first line, so its interrupt() calls count
-    # from the first again to reuse the answers its task already has, rather than
-    # asking again under an id the next resume can't match.
+def _reset_scratchpad_counters(config: RunnableConfig) -> RunnableConfig:
+    # A retry reruns the node from its first line, so its interrupt() calls and
+    # its subgraph calls count from the first again. Interrupts then reuse the
+    # answers the task already has, rather than asking again under an id the next
+    # resume can't match. Subgraphs then resume from the checkpoint namespace the
+    # failed attempt used, the one a later resume of this task will also read,
+    # rather than start in a new namespace nothing else looks at.
     scratchpad = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
     if scratchpad is None:
         return config
@@ -584,7 +587,9 @@ def _reset_interrupt_counter(config: RunnableConfig) -> RunnableConfig:
         config,
         {
             CONFIG_KEY_SCRATCHPAD: replace(
-                scratchpad, interrupt_counter=LazyAtomicCounter()
+                scratchpad,
+                interrupt_counter=LazyAtomicCounter(),
+                subgraph_counter=LazyAtomicCounter(),
             )
         },
     )
@@ -700,7 +705,7 @@ def run_with_retry(
             )
             # signal subgraphs to resume (if available)
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
-            config = _reset_interrupt_counter(config)
+            config = _reset_scratchpad_counters(config)
 
 
 async def arun_with_retry(
@@ -849,7 +854,7 @@ async def arun_with_retry(
             )
             # signal subgraphs to resume (if available)
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
-            config = _reset_interrupt_counter(config)
+            config = _reset_scratchpad_counters(config)
 
 
 def _return_value(task: PregelExecutableTask) -> Any:
