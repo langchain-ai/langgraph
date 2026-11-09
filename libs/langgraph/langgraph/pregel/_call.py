@@ -110,6 +110,20 @@ def identifier(obj: Any, name: str | None = None) -> str | None:
     return f"{module_name}.{name}"
 
 
+def cache_namespace(obj: Any) -> str | None:
+    """Return a stable namespace for caching ``obj``, if one can be inferred.
+
+    Callable instances, partials, closures, and lambdas can share the same
+    identifier (or have no identifier at all).  Reusing that namespace would
+    let unrelated graphs read each other's cached writes, so these callables
+    are intentionally left uncached.
+    """
+    value = identifier(obj)
+    if value is None or "<lambda>" in value or "<locals>" in value:
+        return None
+    return value
+
+
 def _lookup_module_and_qualname(
     obj: Any, name: str | None = None
 ) -> tuple[types.ModuleType, str] | None:

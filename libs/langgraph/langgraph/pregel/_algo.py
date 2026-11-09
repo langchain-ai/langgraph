@@ -71,7 +71,7 @@ from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import NodeError
 from langgraph.managed.base import ManagedValueMapping
-from langgraph.pregel._call import get_runnable_for_task, identifier
+from langgraph.pregel._call import cache_namespace, get_runnable_for_task
 from langgraph.pregel._io import read_channels
 from langgraph.pregel._log import logger
 from langgraph.pregel._read import INPUT_CACHE_KEY_TYPE, PregelNode
@@ -666,12 +666,13 @@ def prepare_single_task(
                         metadata.update(proc.metadata)
                     writes: deque[tuple[str, Any]] = deque()
                     cache_policy = proc.cache_policy or cache_policy
-                    if cache_policy:
+                    namespace = cache_namespace(proc) if cache_policy else None
+                    if cache_policy and namespace is not None:
                         args_key = cache_policy.key_func(val)
                         cache_key = CacheKey(
                             (
                                 CACHE_NS_WRITES,
-                                (identifier(proc) or "__dynamic__"),
+                                namespace,
                                 name,
                             ),
                             xxh3_128_hexdigest(
@@ -856,12 +857,13 @@ def prepare_push_task_functional(
     if for_execution:
         writes: deque[tuple[str, Any]] = deque()
         cache_policy = call.cache_policy or cache_policy
-        if cache_policy:
+        namespace = cache_namespace(call.func) if cache_policy else None
+        if cache_policy and namespace is not None:
             args_key = cache_policy.key_func(*call.input[0], **call.input[1])
             cache_key: CacheKey | None = CacheKey(
                 (
                     CACHE_NS_WRITES,
-                    (identifier(call.func) or "__dynamic__"),
+                    namespace,
                 ),
                 xxh3_128_hexdigest(
                     args_key.encode() if isinstance(args_key, str) else args_key,
@@ -1017,12 +1019,13 @@ def prepare_push_task_send(
             metadata.update(proc.metadata)
         writes: deque[tuple[str, Any]] = deque()
         cache_policy = proc.cache_policy or cache_policy
-        if cache_policy:
+        namespace = cache_namespace(proc) if cache_policy else None
+        if cache_policy and namespace is not None:
             args_key = cache_policy.key_func(packet.arg)
             cache_key = CacheKey(
                 (
                     CACHE_NS_WRITES,
-                    (identifier(proc) or "__dynamic__"),
+                    namespace,
                     packet.node,
                 ),
                 xxh3_128_hexdigest(
@@ -1165,12 +1168,13 @@ def prepare_node_error_handler_task(
 
     effective_retry_policy = proc.retry_policy or retry_policy
     effective_cache_policy = proc.cache_policy or cache_policy
-    if effective_cache_policy:
+    namespace = cache_namespace(proc) if effective_cache_policy else None
+    if effective_cache_policy and namespace is not None:
         args_key = effective_cache_policy.key_func(failed_task.input)
         cache_key = CacheKey(
             (
                 CACHE_NS_WRITES,
-                (identifier(proc) or "__dynamic__"),
+                namespace,
                 handler_node_name,
             ),
             xxh3_128_hexdigest(

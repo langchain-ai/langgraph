@@ -35,6 +35,37 @@ class _CountsSets(InMemoryCache):
         super().set(keys)
 
 
+class _CallableNode:
+    def __init__(self, value: str, runs: list[str]) -> None:
+        self.value = value
+        self.runs = runs
+
+    def __call__(self, state: dict[str, str]) -> dict[str, str]:
+        self.runs.append(self.value)
+        return {"value": self.value}
+
+
+def test_callable_nodes_in_different_graphs_do_not_share_cache_entries() -> None:
+    """Callable instances have no stable identifier and must not collide."""
+    cache = InMemoryCache()
+    runs: list[str] = []
+
+    def build(value: str) -> Any:
+        builder = StateGraph(dict[str, str])
+        builder.add_node(
+            "process", _CallableNode(value, runs), cache_policy=CachePolicy()
+        )
+        builder.add_edge(START, "process")
+        return builder.compile(cache=cache)
+
+    graph_a = build("from graph A")
+    graph_b = build("from graph B")
+
+    assert graph_a.invoke({"value": "input"}) == {"value": "from graph A"}
+    assert graph_b.invoke({"value": "input"}) == {"value": "from graph B"}
+    assert runs == ["from graph A", "from graph B"]
+
+
 def _a_then_cached_b_then_c(runs: list[str], cache: InMemoryCache) -> Any:
     def node(name: str) -> Any:
         def run(state: _State) -> dict:
