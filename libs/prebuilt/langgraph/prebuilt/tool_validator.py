@@ -188,6 +188,13 @@ class ValidationNode(RunnableCallable):
         output_type, message = self._get_message(input)
 
         def run_one(call: ToolCall) -> ToolMessage:
+            if call["name"] not in self.schemas_by_name:
+                return ToolMessage(
+                    content=f"{call['name']} is not a valid tool, try one of [{', '.join(self.schemas_by_name.keys())}].",
+                    name=call["name"],
+                    tool_call_id=cast(str, call["id"]),
+                    additional_kwargs={"is_error": True},
+                )
             schema = self.schemas_by_name[call["name"]]
             try:
                 if issubclass(schema, BaseModel):

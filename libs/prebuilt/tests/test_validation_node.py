@@ -86,3 +86,59 @@ async def test_validation_node(tool_schema: Any, use_message_key: bool):
     if use_message_key:
         result_sync = result_sync["messages"]
     check_results(result_sync)
+
+
+@pytest.mark.parametrize("use_message_key", [True, False])
+async def test_validation_node_unknown_tool(use_message_key: bool):
+    validation_node = ValidationNode([my_tool, MyModel])
+    inputs = [
+        AIMessage(
+            "call tools",
+            tool_calls=[
+                {
+                    "name": "unknown_tool",
+                    "args": {"param": "value"},
+                    "id": "unknown_id_1",
+                },
+                {
+                    "name": "my_tool",
+                    "args": {"some_val": 10, "some_other_val": "bar"},
+                    "id": "valid_id_2",
+                },
+            ],
+        ),
+    ]
+    if use_message_key:
+        inputs = {"messages": inputs}
+
+    def check_results(messages: list):
+        assert len(messages) == 2
+        assert all(m.type == "tool" for m in messages)
+
+        # Check unknown tool error response
+        error_msg = messages[0]
+        assert error_msg.name == "unknown_tool"
+        assert error_msg.tool_call_id == "unknown_id_1"
+        assert error_msg.additional_kwargs.get("is_error") is True
+        assert (
+            error_msg.content
+            == "unknown_tool is not a valid tool, try one of [my_tool, MyModel]."
+        )
+
+        # Check valid tool response
+        valid_msg = messages[1]
+        assert valid_msg.name == "my_tool"
+        assert valid_msg.tool_call_id == "valid_id_2"
+        assert not valid_msg.additional_kwargs.get("is_error")
+
+    # Asynchronous execution (ainvoke)
+    result_async = await validation_node.ainvoke(inputs)
+    if use_message_key:
+        result_async = result_async["messages"]
+    check_results(result_async)
+
+    # Synchronous execution (invoke)
+    result_sync = validation_node.invoke(inputs)
+    if use_message_key:
+        result_sync = result_sync["messages"]
+    check_results(result_sync)
