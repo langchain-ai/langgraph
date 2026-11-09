@@ -38,7 +38,6 @@ def compact_deployment_metrics(
     *,
     start_time: str,
     end_time: str,
-    summary: bool = False,
 ) -> dict[str, Any]:
     """Reshape UI charts without mutating the response; step is in seconds."""
     sections = {}
@@ -74,14 +73,13 @@ def compact_deployment_metrics(
                     "max": round(max(values), 3) if values else None,
                     "avg": round(fmean(values), 3) if values else None,
                 }
-                if not summary:
-                    stats["points"] = [
-                        [
-                            _iso(timestamp),
-                            round(value, 3) if value is not None else None,
-                        ]
-                        for timestamp, value in points
+                stats["points"] = [
+                    [
+                        _iso(timestamp),
+                        round(value, 3) if value is not None else None,
                     ]
+                    for timestamp, value in points
+                ]
                 series_output[series["name"]] = stats
             charts[chart["title"]] = series_output or {"_empty": True}
         sections[section["title"]] = charts or {"_empty": True}

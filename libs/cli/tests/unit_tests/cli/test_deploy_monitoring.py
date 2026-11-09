@@ -34,6 +34,30 @@ def invoke(monkeypatch, args, handler, input=None):
 @pytest.mark.parametrize("mode", [None, "--summary", "--raw"])
 def test_metrics(monkeypatch, bounds, mode, deployment_metrics_response):
     charts = deployment_metrics_response
+    server_summary = {
+        "deployment_id": DEPLOYMENT_ID,
+        "step_seconds": 60,
+        "sections": {
+            "API": {
+                "Metrics": {
+                    metric: {
+                        "metric": metric,
+                        "unit": unit,
+                        "latest": 1.234567,
+                        "min": 1.234567,
+                        "max": 1.234567,
+                        "avg": 1.234567,
+                    }
+                    for metric, unit in (
+                        ("cpu_usage", "percent"),
+                        ("replica_count", "count"),
+                        ("p95_latency", "milliseconds"),
+                        ("responses_per_second", "responses_per_second"),
+                    )
+                }
+            }
+        },
+    }
 
     class FrozenDatetime(datetime):
         @classmethod
@@ -57,6 +81,8 @@ def test_metrics(monkeypatch, bounds, mode, deployment_metrics_response):
         "end_time": "2026-10-28T23:02:33+00:00",
         **options,
     }
+    if mode == "--summary":
+        params["summary"] = "true"
 
     def handler(request):
         assert request.method == "GET"
@@ -64,7 +90,9 @@ def test_metrics(monkeypatch, bounds, mode, deployment_metrics_response):
         assert dict(request.url.params) == params
         assert request.headers["x-tenant-id"] == "workspace-id"
         assert request.headers["x-api-key"] == "key"
-        return httpx.Response(200, json=charts)
+        return httpx.Response(
+            200, json=server_summary if mode == "--summary" else charts
+        )
 
     args = ["metrics", DEPLOYMENT_ID]
     for key, value in options.items():
@@ -73,19 +101,19 @@ def test_metrics(monkeypatch, bounds, mode, deployment_metrics_response):
         args.append(mode)
     result = invoke(monkeypatch, args, handler)
     assert result.exit_code == 0, result.output
-    expected = (
-        charts
-        if mode == "--raw"
-        else compact_deployment_metrics(
+    if mode == "--summary":
+        expected = server_summary
+    elif mode == "--raw":
+        expected = charts
+    else:
+        expected = compact_deployment_metrics(
             charts,
             DEPLOYMENT_ID,
-            start_time=params.get("start_time"),
-            end_time=params.get("end_time"),
-            summary=mode == "--summary",
+            start_time=params["start_time"],
+            end_time=params["end_time"],
         )
-    )
     assert json.loads(result.output) == expected
-    if mode != "--raw":
+    if mode is None:
         assert expected["start_time"] == params["start_time"]
         assert expected["end_time"] == params["end_time"]
     assert result.output.strip() == json.dumps(expected, separators=(",", ":"))
