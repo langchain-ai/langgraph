@@ -120,9 +120,5 @@ def test_context_is_frozen():
 
 
 def test_every_settings_key_is_optional():
-    assert PrioritySettings.__optional_keys__ == {
-        "priority",
-        "fairness_group",
-        "fairness_weight",
-    }
+    assert PrioritySettings.__optional_keys__ == {"priority", "fairness_group"}
     assert PrioritySettings.__required_keys__ == frozenset()

@@ -21,6 +21,7 @@ from langgraph_sdk.schema import (
     ThreadSelectField,
     ThreadSortBy,
     ThreadState,
+    ThreadStateSelectField,
     ThreadStatus,
     ThreadStreamMode,
     ThreadUpdateStateResponse,
@@ -489,6 +490,7 @@ class ThreadsClient:
         checkpoint_id: str | None = None,  # deprecated
         *,
         subgraphs: bool = False,
+        select: list[ThreadStateSelectField] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> ThreadState:
@@ -499,6 +501,9 @@ class ThreadsClient:
             checkpoint: The checkpoint to get the state of.
             checkpoint_id: (deprecated) The checkpoint ID to get the state of.
             subgraphs: Include subgraphs states.
+            select: Fields to include in the response. Use `values.<key>` to
+                return a single state key (e.g. `values.messages`), which lets the
+                server skip loading the rest of the state. Defaults to all fields.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -591,16 +596,30 @@ class ThreadsClient:
                     }
             }
             ```
+
+            Fetch only the `messages` state key:
+
+            ```python
+            thread_state = await client.threads.get_state(
+                thread_id="my_thread_id",
+                select=["values.messages"],
+            )
+            ```
         """
         if checkpoint:
+            payload: dict[str, Any] = {"checkpoint": checkpoint, "subgraphs": subgraphs}
+            if select:
+                payload["select"] = select
             return await self.http.post(
                 f"/threads/{_quote_path_param(thread_id)}/state/checkpoint",
-                json={"checkpoint": checkpoint, "subgraphs": subgraphs},
+                json=payload,
                 headers=headers,
                 params=params,
             )
         elif checkpoint_id:
-            get_params = {"subgraphs": subgraphs}
+            get_params: dict[str, Any] = {"subgraphs": subgraphs}
+            if select:
+                get_params["select"] = select
             if params:
                 get_params = {**get_params, **dict(params)}
             return await self.http.get(
@@ -609,7 +628,9 @@ class ThreadsClient:
                 headers=headers,
             )
         else:
-            get_params = {"subgraphs": subgraphs}
+            get_params: dict[str, Any] = {"subgraphs": subgraphs}
+            if select:
+                get_params["select"] = select
             if params:
                 get_params = {**get_params, **dict(params)}
             return await self.http.get(
@@ -692,6 +713,7 @@ class ThreadsClient:
         before: str | Checkpoint | None = None,
         metadata: Mapping[str, Any] | None = None,
         checkpoint: Checkpoint | None = None,
+        select: list[ThreadStateSelectField] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[ThreadState]:
@@ -703,6 +725,9 @@ class ThreadsClient:
             limit: The maximum number of states to return.
             before: Return states before this checkpoint.
             metadata: Filter states by metadata key-value pairs.
+            select: Fields to include in the response. Use `values.<key>` to
+                return a single state key (e.g. `values.messages`), which lets the
+                server skip loading the rest of the state. Defaults to all fields.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -729,6 +754,8 @@ class ThreadsClient:
             payload["metadata"] = metadata
         if checkpoint:
             payload["checkpoint"] = checkpoint
+        if select:
+            payload["select"] = select
         return await self.http.post(
             f"/threads/{_quote_path_param(thread_id)}/history",
             json=payload,

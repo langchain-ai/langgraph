@@ -56,6 +56,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_STREAM,
+    CONFIG_KEY_STRICT_RESUME,
     CONFIG_KEY_TASK_ID,
     INTERRUPT,
     NS_SEP,
@@ -90,6 +91,7 @@ _CONF_DROPLIST = frozenset(
         CONFIG_KEY_RESUME_MAP,
         CONFIG_KEY_RESUME_MAP_SENT,
         CONFIG_KEY_RESUMING,
+        CONFIG_KEY_STRICT_RESUME,
     ),
 )
 

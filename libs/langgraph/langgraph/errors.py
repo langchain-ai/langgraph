@@ -28,6 +28,7 @@ __all__ = (
     "ParentCommand",
     "EmptyInputError",
     "TaskNotFound",
+    "UnknownInterruptError",
     "is_invalid_resume",
 )
 
@@ -144,6 +145,46 @@ class TaskNotFound(Exception):
     """Raised when the executor is unable to find a task (for distributed mode)."""
 
     pass
+
+
+class UnknownInterruptError(Exception):
+    """Raised in strict resume mode when a resume doesn't match the pending interrupts.
+
+    `reason` says how it doesn't match:
+
+    - `"not_pending"`: the resume names interrupts that aren't pending, listed in
+      `interrupt_ids`.
+    - `"empty_map"`: the resume is an empty map.
+    - `"ambiguous"`: the resume is a single value while several interrupts are
+      pending.
+
+    `pending_ids` lists the interrupts still waiting for an answer. The error is
+    raised before anything is written, so they can still be answered.
+
+    A single value with no interrupt pending is accepted, because it resumes a
+    graph paused at a static breakpoint (`interrupt_before` or `interrupt_after`).
+
+    Each `interrupt()` call in a task has its own id, so an answer retried after
+    the task asked its next question is refused instead of answering that
+    question.
+    """
+
+    reason: Literal["not_pending", "empty_map", "ambiguous"]
+    interrupt_ids: tuple[str, ...]
+    pending_ids: tuple[str, ...]
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: Literal["not_pending", "empty_map", "ambiguous"],
+        interrupt_ids: Sequence[str] = (),
+        pending_ids: Sequence[str] = (),
+    ) -> None:
+        super().__init__(message)
+        self.reason = reason
+        self.interrupt_ids = tuple(interrupt_ids)
+        self.pending_ids = tuple(pending_ids)
 
 
 @dataclass(frozen=True, slots=True)

@@ -102,7 +102,7 @@ class Priority:
         @priority.assign
         async def assign(ctx: PriorityContext) -> PrioritySettings | None:
             return {
-                "priority": 3 if "premium" in ctx.permissions else 0,
+                "priority": -3 if "premium" in ctx.permissions else 0,
                 # Stored unencrypted, so an opaque ID rather than personal data.
                 "fairness_group": ctx.user["org_id"],
             }
@@ -134,7 +134,7 @@ class Priority:
             @priority.assign
             async def assign(ctx: PriorityContext) -> PrioritySettings | None:
                 if ctx.cron_id is not None:
-                    return {"priority": -2}
+                    return {"priority": 2}
                 return None
             ```
 
