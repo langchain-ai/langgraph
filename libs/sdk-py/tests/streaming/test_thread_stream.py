@@ -358,6 +358,7 @@ async def test_events_yields_raw_events_after_run_start():
         async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
             await thread.run.start(input={})
             received = [e async for e in thread.events]
+            assert thread._open_handles == []
     methods = [e["method"] for e in received]
     assert methods == ["lifecycle", "values"]
 

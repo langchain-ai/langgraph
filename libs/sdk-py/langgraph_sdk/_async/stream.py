@@ -1299,7 +1299,17 @@ class AsyncThreadStream:
             raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
         handle = self._transport.open_event_stream({"channels": _ALL_CHANNELS})
         self._open_handles.append(handle)
-        return handle.events
+
+        async def events() -> AsyncIterator[Event]:
+            try:
+                async for event in handle.events:
+                    yield event
+            finally:
+                with contextlib.suppress(ValueError):
+                    self._open_handles.remove(handle)
+                await handle.close()
+
+        return events()
 
     async def close(self) -> None:
         """Tear down the thread stream. Idempotent."""
@@ -1308,6 +1318,7 @@ class AsyncThreadStream:
         self._closed = True
         for handle in self._open_handles:
             await handle.close()
+        self._open_handles.clear()
         # Cancel _run_done so thread.output doesn't wait forever on close.
         run_done = self._run_done
         if run_done is not None and not run_done.done():
