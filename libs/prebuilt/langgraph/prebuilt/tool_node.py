@@ -379,7 +379,8 @@ class ToolInvocationError(ToolException):
 def _default_handle_tool_errors(e: Exception) -> str:
     """Default error handler for tool errors.
 
-    If the tool is a tool invocation error, return its message.
+    If the error is a tool invocation error, return its message.
+    If the error is any other `ToolException`, return its string form.
     Otherwise, raise the error.
     """
     if isinstance(e, ToolInvocationError):
@@ -687,7 +688,9 @@ class ToolNode(RunnableCallable):
 
             - Catches tool invocation errors (due to invalid arguments provided by the
                 model) and returns a descriptive error message
-            - Ignores tool execution errors (they will be re-raised)
+            - Catches `ToolException` raised during tool execution and returns its
+                message as an error `ToolMessage`
+            - Re-raises all other tool execution errors (e.g. `ValueError`)
 
         messages_key: The key in the state dictionary that contains the message list.
             This same key will be used for the output `ToolMessage` objects.

@@ -336,6 +336,40 @@ async def test_tool_node_error_handling_tool_exception() -> None:
     assert tool_message.content == "Test error"
 
 
+def test_tool_node_error_handling_tool_exception_sync() -> None:
+    """Test that ToolException is handled by default in sync invocation."""
+
+    def sync_tool2(some_val: int, some_other_val: str) -> str:
+        """Sync tool 2 docstring."""
+        if some_val == 0:
+            msg = "Test error"
+            raise ToolException(msg)
+        return f"tool2: {some_val} - {some_other_val}"
+
+    result = ToolNode([sync_tool2]).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "sync_tool2",
+                            "args": {"some_val": 0, "some_other_val": "bar"},
+                            "id": "some id",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+
+    tool_message: ToolMessage = result["messages"][-1]
+    assert tool_message.type == "tool"
+    assert tool_message.status == "error"
+    assert tool_message.content == "Test error"
+
+
 async def test_tool_node_error_handling() -> None:
     def handle_all(e: ValueError | ToolException | ToolInvocationError):
         return TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
