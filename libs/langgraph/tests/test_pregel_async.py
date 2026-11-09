@@ -4968,6 +4968,49 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     assert times_called == 1
 
 
+async def test_astream_events_respects_subgraph_output_schema() -> None:
+    class State(TypedDict):
+        n: int
+        results: Annotated[list, operator.add]
+        text: str
+
+    class Output(TypedDict):
+        text: str
+
+    subgraph = StateGraph(State, output_schema=Output)
+    subgraph.add_node("render", lambda state: {"text": "done"})
+    subgraph.add_edge(START, "render")
+    subgraph.add_edge("render", END)
+
+    builder = StateGraph(State)
+    builder.add_node("fan_out", lambda state: {})
+    builder.add_node("item", lambda state: {"results": [state["n"]]})
+    builder.add_node("first", lambda state: {})
+    builder.add_node("second", lambda state: {})
+    builder.add_node("subgraph", subgraph.compile())
+    builder.add_edge(START, "fan_out")
+    builder.add_conditional_edges(
+        "fan_out",
+        lambda state: [Send("item", {**state, "n": n}) for n in range(3)],
+        ["item"],
+    )
+    builder.add_edge(START, "first")
+    builder.add_edge("first", "second")
+    builder.add_edge("second", "subgraph")
+    builder.add_edge("item", END)
+    graph = builder.compile()
+    initial = {"n": 0, "results": [], "text": ""}
+
+    assert (await graph.ainvoke(initial))["results"] == [0, 1, 2]
+
+    final = None
+    async for event in graph.astream_events(initial, version="v2"):
+        if event["event"] == "on_chain_end" and event["name"] == "LangGraph":
+            final = event["data"]["output"]
+
+    assert final["results"] == [0, 1, 2]
+
+
 async def test_subgraph_checkpoint_true(
     async_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:

@@ -2684,7 +2684,14 @@ class Pregel(
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
         if output_keys is None:
-            output_keys = self.stream_channels_asis
+            # A graph invoked as a node must return its declared output
+            # schema, just like invoke/ainvoke. Streaming all state channels
+            # here writes reducer-backed inputs back into the parent.
+            output_keys = (
+                self.output_channels
+                if CONFIG_KEY_TASK_ID in config.get(CONF, {})
+                else self.stream_channels_asis
+            )
         else:
             validate_keys(output_keys, self.channels)
         interrupt_before = interrupt_before or self.interrupt_before_nodes
@@ -3830,6 +3837,11 @@ class Pregel(
                 transformers=transformers,
                 **kwargs,
             )
+        # Runnable.stream_events forwards execution kwargs to ``stream``.  Use
+        # the graph's declared output channels by default so event callbacks
+        # observe the same output schema as invoke/ainvoke, including when a
+        # graph is nested inside another graph.
+        kwargs.setdefault("output_keys", self.output_channels)
         return super().stream_events(input, config, version=version, **kwargs)
 
     @overload
@@ -3887,6 +3899,11 @@ class Pregel(
                 transformers=transformers,
                 **kwargs,
             )
+        # Runnable.astream_events forwards execution kwargs to ``astream``.
+        # Without an explicit output selection, a nested graph streams every
+        # state channel and its reducer-backed inputs are written back to the
+        # parent.  Match invoke/ainvoke by defaulting to the declared outputs.
+        kwargs.setdefault("output_keys", self.output_channels)
         return super().astream_events(input, config, version=version, **kwargs)
 
     @overload
