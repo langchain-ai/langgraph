@@ -6,6 +6,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import AsyncIterator
+from concurrent.futures import Future
 from datetime import datetime, timedelta
 from typing import Annotated, Any
 from unittest.mock import Mock, patch
@@ -57,6 +58,7 @@ from langgraph.pregel._retry import (
     arun_with_retry,
     run_with_retry,
 )
+from langgraph.pregel._runner import _should_stop_others
 from langgraph.pregel.protocol import StreamProtocol
 from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
 from langgraph.types import (
@@ -84,6 +86,24 @@ NEEDS_TASK_CANCELLING = pytest.mark.skipif(
     reason="LSD-1507 user-cancellation conversion requires Python 3.11+ "
     "(asyncio.Task.cancelling)",
 )
+
+
+def test_handled_exception_tracking_uses_exception_identity() -> None:
+    handled = RuntimeError("handled")
+    handled_future: Future[None] = Future()
+    handled_future.set_exception(handled)
+
+    assert not _should_stop_others(
+        {handled_future}, handled_exceptions={id(handled): handled}
+    )
+
+    unrelated = RuntimeError("unrelated")
+    unrelated_future: Future[None] = Future()
+    unrelated_future.set_exception(unrelated)
+
+    assert _should_stop_others(
+        {unrelated_future}, handled_exceptions={id(handled): handled}
+    )
 
 
 def test_should_retry_on_single_exception():
