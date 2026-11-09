@@ -106,6 +106,32 @@ def test_trace_policy_none_records_real_payloads() -> None:
     assert run.outputs == {"value": 2}
 
 
+def test_conditional_edge_trace_can_be_disabled() -> None:
+    class FanoutState(TypedDict):
+        items: list[str]
+
+    def fan_out(state: FanoutState) -> list[str]:
+        return state["items"]
+
+    graph = (
+        StateGraph(FanoutState)
+        .add_node("router", lambda _: {})
+        .add_node("worker", lambda _: {})
+        .add_edge(START, "router")
+        .add_conditional_edges(
+            "router", fan_out, {"a": "worker", "b": "worker"}, trace=False
+        )
+        .add_edge("worker", END)
+        .compile()
+    )
+
+    tracer = FakeTracer()
+    assert graph.invoke({"items": ["a", "b"]}, {"callbacks": [tracer]}) == {
+        "items": ["a", "b"]
+    }
+    assert not any(run.name == "fan_out" for run in tracer.flattened_runs())
+
+
 def test_trace_policy_processor_error_safe_without_callbacks() -> None:
     def boom(_inp: Any) -> Any:
         raise RuntimeError("processor failed")

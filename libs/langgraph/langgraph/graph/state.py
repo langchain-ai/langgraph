@@ -986,6 +986,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         | Callable[..., Awaitable[Hashable | Sequence[Hashable]]]
         | Runnable[Any, Hashable | Sequence[Hashable]],
         path_map: dict[Hashable, str] | list[str] | None = None,
+        *,
+        trace: bool = True,
     ) -> Self:
         """Add a conditional edge from the starting node to any number of destination nodes.
 
@@ -1000,6 +1002,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             path_map: Optional mapping of paths to node names.
 
                 If omitted the paths returned by `path` should be node names.
+            trace: Whether to trace the condition callable as a child run. Set to
+                ``False`` when the condition returns large ``Send`` payloads that
+                should not be serialized into trace outputs.
 
         Returns:
             Self: The instance of the graph, allowing for method chaining.
@@ -1016,7 +1021,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             )
 
         # find a name for the condition
-        path = coerce_to_runnable(path, name=None, trace=True)
+        path = coerce_to_runnable(path, name=None, trace=trace)
         name = path.name or "condition"
         # validate the condition
         if name in self.branches[source]:
