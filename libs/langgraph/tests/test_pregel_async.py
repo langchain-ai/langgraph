@@ -5809,6 +5809,60 @@ async def test_store_injected_async(
     )  # still overwriting the same one
 
 
+@pytest.mark.parametrize("stream_mode", ["tasks", "debug"])
+async def test_failing_task_result_is_streamed_before_the_error(
+    stream_mode: str,
+) -> None:
+    class State(TypedDict):
+        x: str
+
+    async def failing(state: State) -> State:
+        raise ValueError("boom")
+
+    graph = StateGraph(State).add_node("failing", failing).add_edge(START, "failing")
+    errors = []
+    with pytest.raises(ValueError, match="boom"):
+        async for chunk in graph.compile().astream({"x": ""}, stream_mode=stream_mode):
+            payload = chunk["payload"] if stream_mode == "debug" else chunk
+            if "error" in payload:
+                errors.append(payload["error"])
+
+    assert [type(error) for error in errors] == [ValueError]
+
+
+@pytest.mark.parametrize(
+    ("parallel", "stream_mode"), [(False, "custom"), (True, "values")]
+)
+async def test_graph_error_handler_recovers_on_the_executor_path(
+    parallel: bool, stream_mode: str
+) -> None:
+    class State(TypedDict):
+        x: str
+
+    async def failing(state: State) -> State:
+        raise ValueError("boom")
+
+    async def handler(state: State) -> Command:
+        return Command(update={"x": "handled"}, goto=END)
+
+    builder = (
+        StateGraph(State)
+        .add_node("failing", failing, error_handler=handler)
+        .add_edge(START, "failing")
+    )
+    if parallel:
+        builder.add_node("sibling", lambda state: {}).add_edge(START, "sibling")
+
+    chunks = [
+        chunk
+        async for chunk in builder.compile().astream(
+            {"x": ""}, stream_mode=[stream_mode, "values"]
+        )
+    ]
+
+    assert [c[-1] for c in chunks if c[0] == "values"][-1] == {"x": "handled"}
+
+
 async def test_debug_retry(async_checkpointer: BaseCheckpointSaver):
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
@@ -5873,6 +5927,55 @@ async def test_debug_retry(async_checkpointer: BaseCheckpointSaver):
 
         history_parent_conf = lax_normalize_config(history.parent_config)
         assert stream_parent_conf == history_parent_conf
+
+
+async def test_interrupt_after_streams_the_checkpoint_it_pauses_on(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        x: int
+
+    graph = (
+        StateGraph(State)
+        .add_node("one", lambda state: {"x": 1})
+        .add_node("two", lambda state: {"x": 2})
+        .add_edge(START, "one")
+        .add_edge("one", "two")
+        .compile(checkpointer=async_checkpointer, interrupt_after=["one"])
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    checkpoints = [
+        chunk
+        async for chunk in graph.astream({"x": 0}, config, stream_mode="checkpoints")
+    ]
+
+    state = await graph.aget_state(config)
+    assert checkpoints[-1]["config"] == state.config
+    assert checkpoints[-1]["next"] == ["two"]
+
+
+async def test_recursion_limit_streams_the_last_checkpoint_saved(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        x: int
+
+    graph = (
+        StateGraph(State)
+        .add_node("loop", lambda state: {"x": state["x"] + 1})
+        .add_edge(START, "loop")
+        .add_edge("loop", "loop")
+        .compile(checkpointer=async_checkpointer)
+    )
+    config = {"configurable": {"thread_id": "1"}, "recursion_limit": 3}
+    checkpoints = []
+
+    with pytest.raises(GraphRecursionError):
+        async for chunk in graph.astream({"x": 0}, config, stream_mode="checkpoints"):
+            checkpoints.append(chunk)
+
+    assert checkpoints[-1]["config"] == (await graph.aget_state(config)).config
 
 
 async def test_debug_subgraphs(
@@ -6732,6 +6835,31 @@ async def test_multiple_updates() -> None:
 
 
 @NEEDS_CONTEXTVARS
+async def test_task_in_subgraph_node_returns_its_value_with_tools_mode() -> None:
+    class State(TypedDict):
+        out: int | None
+
+    @task
+    async def double(x: int) -> int:
+        return x * 2
+
+    async def node(state: State) -> State:
+        return {"out": await double(21)}
+
+    inner = StateGraph(State).add_node("node", node).add_edge(START, "node").compile()
+    graph = (
+        StateGraph(State).add_node("inner", inner).add_edge(START, "inner").compile()
+    )
+
+    chunks = [
+        chunk
+        async for chunk in graph.astream({"out": None}, stream_mode=["values", "tools"])
+    ]
+
+    assert chunks[-1] == ("values", {"out": 42})
+
+
+@NEEDS_CONTEXTVARS
 async def test_falsy_return_from_task(async_checkpointer: BaseCheckpointSaver) -> None:
     """Test with a falsy return from a task."""
 
@@ -7496,6 +7624,40 @@ async def test_entrypoint_from_async_generator() -> None:
 
 
 @NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("timeout", [None, 30])
+@pytest.mark.parametrize("version", ["v1", "v2"])
+async def test_awaited_task_returns_its_value_under_astream_events(
+    version: Literal["v1", "v2"], timeout: int | None
+) -> None:
+    class State(TypedDict):
+        doubled: int
+        zeroed: int
+
+    @task(timeout=timeout)
+    async def double(x: int) -> int:
+        return x * 2
+
+    @task(timeout=timeout)
+    async def zero() -> int:
+        return 0
+
+    async def node(state: State) -> State:
+        return {"doubled": await double(21), "zeroed": await zero()}
+
+    graph = StateGraph(State).add_node("node", node).add_edge(START, "node").compile()
+
+    outputs = [
+        event["data"]["output"]
+        async for event in graph.astream_events(
+            {"doubled": 0, "zeroed": 1}, version=version
+        )
+        if event["event"] == "on_chain_end" and event["name"] == "node"
+    ]
+
+    assert outputs == [{"doubled": 42, "zeroed": 0}]
+
+
+@NEEDS_CONTEXTVARS
 async def test_named_tasks_functional() -> None:
     class Foo:
         async def foo(self, value: str) -> dict:
@@ -8157,9 +8319,9 @@ async def test_no_redundant_put_writes_for_cached_task(
     put_writes_task_ids: list[str] = []
     orig = PregelLoop.put_writes
 
-    def spy(self, task_id, writes):
+    def spy(self, task_id, writes, **kwargs):
         put_writes_task_ids.append(task_id)
-        return orig(self, task_id, writes)
+        return orig(self, task_id, writes, **kwargs)
 
     with patch.object(PregelLoop, "put_writes", spy):
         result = await workflow.ainvoke(Command(resume="ans"), config=config)
@@ -9339,6 +9501,44 @@ async def test_subgraph_streaming_async() -> None:
 
     assert result["last_chunk"].content == "today."
     assert result["num_chunks"] == 9
+
+
+async def test_subgraph_streaming_node_output_messages_async() -> None:
+    """Messages returned by a node (not streamed by an LLM) are emitted when a
+    graph is explicitly streamed with `stream_mode="messages"` inside a node."""
+
+    async def respond(state: MessagesState) -> dict:
+        return {"messages": [AIMessage("hi there", id="ai1")]}
+
+    subgraph = (
+        StateGraph(MessagesState)
+        .add_node("respond", respond)
+        .add_edge(START, "respond")
+        .compile()
+    )
+    msgs = {"messages": [("user", "hello")]}
+
+    top_level = [msg async for msg, _ in subgraph.astream(msgs, stream_mode="messages")]
+
+    async def parent_node(state: MessagesState, config: RunnableConfig) -> dict:
+        nonlocal in_node
+        in_node = [
+            msg
+            async for msg, _ in subgraph.astream(msgs, config, stream_mode="messages")
+        ]
+        return {}
+
+    in_node: list = []
+    await (
+        StateGraph(MessagesState)
+        .add_node("parent", parent_node)
+        .add_edge(START, "parent")
+        .compile()
+        .ainvoke(msgs)
+    )
+
+    assert [m.content for m in top_level] == ["hi there"]
+    assert [m.content for m in in_node] == ["hi there"]
 
 
 @NEEDS_CONTEXTVARS

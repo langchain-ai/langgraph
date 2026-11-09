@@ -65,6 +65,39 @@ async def test_async_walk_reaches_parent_whatever_the_id_order(
         assert got[CHANNEL] == EXPECTED
 
 
+EMPTY_CHECKPOINT_ID: dict[str, Any] = {
+    "configurable": {**CONFIG["configurable"], "checkpoint_id": ""}
+}
+
+
+def test_sync_empty_checkpoint_id_reads_from_the_latest_checkpoint() -> None:
+    with SqliteSaver.from_conn_string(":memory:") as saver:
+        root = saver.put(CONFIG, _checkpoint("a-older", {CHANNEL: "seed"}), {}, {})
+        saver.put_writes(root, [(CHANNEL, "write-root")], "task")
+        saver.put(root, _checkpoint("z-newer", {}), {}, {})
+
+        got = saver.get_delta_channel_history(
+            config=EMPTY_CHECKPOINT_ID, channels=[CHANNEL]
+        )
+
+        assert got[CHANNEL] == EXPECTED
+
+
+async def test_async_empty_checkpoint_id_reads_from_the_latest_checkpoint() -> None:
+    async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+        root = await saver.aput(
+            CONFIG, _checkpoint("a-older", {CHANNEL: "seed"}), {}, {}
+        )
+        await saver.aput_writes(root, [(CHANNEL, "write-root")], "task")
+        await saver.aput(root, _checkpoint("z-newer", {}), {}, {})
+
+        got = await saver.aget_delta_channel_history(
+            config=EMPTY_CHECKPOINT_ID, channels=[CHANNEL]
+        )
+
+        assert got[CHANNEL] == EXPECTED
+
+
 def test_walk_reaches_root_of_long_chain_with_descending_ids() -> None:
     steps = 40
     with SqliteSaver.from_conn_string(":memory:") as saver:

@@ -25,6 +25,7 @@ from langchain_core.runnables.config import RunnableConfig
 from langchain_core.tools import BaseTool, InjectedToolArg, ToolException
 from langchain_core.tools import tool as dec_tool
 from langchain_core.tools.base import InjectedToolCallId
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.config import get_stream_writer
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.graph import START, MessagesState, StateGraph
@@ -32,8 +33,8 @@ from langgraph.graph.message import REMOVE_ALL_MESSAGES, add_messages
 from langgraph.runtime import ExecutionInfo, ServerInfo
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
-from langgraph.types import Command, Send
-from pydantic import BaseModel
+from langgraph.types import Command, Send, interrupt
+from pydantic import BaseModel, ValidationError
 from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import TypedDict
 
@@ -624,6 +625,149 @@ def test_tool_node_node_interrupt() -> None:
                 config=_create_config_with_runtime(),
             )
             assert exc_info.value == "foo"
+
+
+class _Approval(BaseModel):
+    approved: bool
+
+
+class _AskState(TypedDict, total=False):
+    answer: str
+
+
+def _approval_graph():
+    """A graph that asks a human for approval with a typed interrupt."""
+
+    def ask(state: _AskState) -> _AskState:
+        approval = interrupt("Approve?", response_schema=_Approval)
+        return {"answer": f"approved={approval.approved}"}
+
+    return StateGraph(_AskState).add_node("ask", ask).add_edge(START, "ask").compile()
+
+
+def _ask_human_call() -> dict[str, list[AnyMessage]]:
+    call = ToolCall(name="ask_human", args={}, id="call_1")
+    return {"messages": [AIMessage("", tool_calls=[call])]}
+
+
+def _handle_any(e):  # no annotation: handles every error
+    return "handled"
+
+
+# A bad answer to an interrupt must fail the run whatever `handle_tool_errors` is,
+# including settings that cover `ValidationError` (a `ValueError`), with or without
+# a wrapper. `create_agent` always runs tools through a wrapper (its middleware).
+_TOOL_NODES = pytest.mark.parametrize(
+    ("wrapped", "handle_tool_errors"),
+    [
+        (wrapped, handler)
+        for wrapped in (False, True)
+        for handler in (None, True, (ValueError,), _handle_any)
+    ],
+    ids=[
+        f"{wrapped}-{handler}"
+        for wrapped in ("plain", "wrapped")
+        for handler in ("default", "handle_true", "handle_value_error", "untyped")
+    ],
+)
+# The interrupt either runs in a graph the tool starts (a subagent) or in the tool.
+_SHAPE = pytest.mark.parametrize("nested", [True, False], ids=["nested", "direct"])
+
+
+@_TOOL_NODES
+@_SHAPE
+def test_tool_node_reraises_invalid_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+    wrapped: bool,
+    nested: bool,
+    handle_tool_errors: Any,
+) -> None:
+    asker = _approval_graph()
+
+    @dec_tool
+    def ask_human() -> str:
+        """Ask a human for approval."""
+        if nested:
+            return asker.invoke({})["answer"]
+        approval = interrupt("Approve?", response_schema=_Approval)
+        return f"approved={approval.approved}"
+
+    def pass_through(request, handler):
+        return handler(request)
+
+    errors = (
+        {} if handle_tool_errors is None else {"handle_tool_errors": handle_tool_errors}
+    )
+    graph = (
+        StateGraph(MessagesState)
+        .add_node(
+            "tools",
+            ToolNode(
+                [ask_human], wrap_tool_call=pass_through if wrapped else None, **errors
+            ),
+        )
+        .add_edge(START, "tools")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config: RunnableConfig = {"configurable": {"thread_id": "1"}}
+    [pending] = graph.invoke(_ask_human_call(), config)["__interrupt__"]
+
+    # A bad answer isn't a bad tool argument: the run fails without saving, so
+    # the same interrupt can be answered again.
+    with pytest.raises(ValidationError, match="approved"):
+        graph.invoke(Command(resume={pending.id: {"approved": "maybe"}}), config)
+    assert [i.id for i in graph.get_state(config).interrupts] == [pending.id]
+
+    result = graph.invoke(Command(resume={pending.id: {"approved": True}}), config)
+    assert result["messages"][-1].content == "approved=True"
+
+
+@_TOOL_NODES
+@_SHAPE
+async def test_tool_node_reraises_invalid_resume_async(
+    async_checkpointer: BaseCheckpointSaver,
+    wrapped: bool,
+    nested: bool,
+    handle_tool_errors: Any,
+) -> None:
+    asker = _approval_graph()
+
+    @dec_tool
+    async def ask_human() -> str:
+        """Ask a human for approval."""
+        if nested:
+            return (await asker.ainvoke({}))["answer"]
+        approval = interrupt("Approve?", response_schema=_Approval)
+        return f"approved={approval.approved}"
+
+    async def pass_through(request, handler):
+        return await handler(request)
+
+    errors = (
+        {} if handle_tool_errors is None else {"handle_tool_errors": handle_tool_errors}
+    )
+    graph = (
+        StateGraph(MessagesState)
+        .add_node(
+            "tools",
+            ToolNode(
+                [ask_human], awrap_tool_call=pass_through if wrapped else None, **errors
+            ),
+        )
+        .add_edge(START, "tools")
+        .compile(checkpointer=async_checkpointer)
+    )
+    config: RunnableConfig = {"configurable": {"thread_id": "1"}}
+    [pending] = (await graph.ainvoke(_ask_human_call(), config))["__interrupt__"]
+
+    with pytest.raises(ValidationError, match="approved"):
+        await graph.ainvoke(Command(resume={pending.id: {"approved": "maybe"}}), config)
+    state = await graph.aget_state(config)
+    assert [i.id for i in state.interrupts] == [pending.id]
+
+    resume = Command(resume={pending.id: {"approved": True}})
+    result = await graph.ainvoke(resume, config)
+    assert result["messages"][-1].content == "approved=True"
 
 
 @pytest.mark.parametrize("input_type", ["dict", "tool_calls"])

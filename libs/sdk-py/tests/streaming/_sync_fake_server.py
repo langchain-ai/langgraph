@@ -14,6 +14,7 @@ import orjson
 class SyncStreamScript:
     events: list[dict[str, Any]]
     fail_after: int | None = None
+    status: int = 200
 
 
 class _SseByteStream(httpx.SyncByteStream):
@@ -113,6 +114,8 @@ class SyncFakeServer:
                 if self._stream_scripts
                 else SyncStreamScript(events=list(self.scripted_events))
             )
+            if script.status != 200:
+                return httpx.Response(script.status, json={"detail": "scripted"})
             return httpx.Response(
                 200,
                 headers={"content-type": "text/event-stream"},

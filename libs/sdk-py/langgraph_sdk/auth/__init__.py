@@ -811,7 +811,7 @@ class _On:
     def __call__(
         self,
         *,
-        resources: str | Sequence[str],
+        resources: str | Sequence[str] | None = None,
         actions: str | Sequence[str] | None = None,
     ) -> Callable[[AHO], AHO]: ...
 

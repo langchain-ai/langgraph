@@ -27,10 +27,15 @@ from psycopg_pool import AsyncConnectionPool
 from langgraph.checkpoint.postgres import _ainternal
 from langgraph.checkpoint.postgres.base import (
     _DELTA_PAGE_SIZE,
+    PRUNE_DELETE_THREADS_SQL,
+    PRUNE_STRATEGIES,
     BasePostgresSaver,
+    _aexecute,
     _build_delta_stage1_sql,
     _build_delta_stage2_sql,
     _DeltaStage2Row,
+    _keep_latest,
+    _refuse_delta_threads,
 )
 from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
 
@@ -360,6 +365,55 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 (str(thread_id),),
             )
 
+    async def aprune(
+        self,
+        thread_ids: Sequence[str],
+        *,
+        strategy: str = "keep_latest",
+    ) -> None:
+        """Prune checkpoints for the given threads.
+
+        See `PostgresSaver.prune` for what each strategy keeps.
+
+        Args:
+            thread_ids: The thread IDs to prune.
+            strategy: `"keep_latest"` or `"delete"`.
+
+        Raises:
+            TypeError: If `thread_ids` is a single string.
+            ValueError: If `strategy` is unknown.
+            NotImplementedError: If `strategy` is `"keep_latest"` and a thread
+                uses a `DeltaChannel`.
+            psycopg.errors.SerializationFailure: If another transaction, such
+                as a second prune, changes a thread's rows while `"keep_latest"`
+                prunes it.
+            psycopg.errors.DeadlockDetected: If a second prune of a thread runs
+                at the same time.
+        """
+        if isinstance(thread_ids, str):
+            raise TypeError("thread_ids must be a sequence of thread IDs, not a str")
+        if strategy not in PRUNE_STRATEGIES:
+            raise ValueError(f"Unknown prune strategy: {strategy!r}")
+        thread_ids = [str(t) for t in thread_ids]
+        if not thread_ids:
+            return
+        if strategy == "delete":
+            async with self._cursor() as cur, cur.connection.transaction():
+                for sql in PRUNE_DELETE_THREADS_SQL:
+                    await cur.execute(sql, (thread_ids,))
+            return
+        async with self._cursor() as cur:
+            await _aexecute(cur, _refuse_delta_threads(thread_ids))
+        for thread_id in thread_ids:
+            async with self._cursor() as cur:
+                if self.pipe:
+                    # The transaction has to start with its isolation level, and
+                    # in pipeline mode it would take in what ran since the last
+                    # sync.
+                    await self.pipe.sync()
+                async with cur.connection.transaction():
+                    await _aexecute(cur, _keep_latest(thread_id))
+
     @asynccontextmanager
     async def _cursor(
         self, *, pipeline: bool = False
@@ -417,13 +471,13 @@ class AsyncPostgresSaver(BasePostgresSaver):
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = get_checkpoint_id(config)
-        if checkpoint_id is None:
+        if not checkpoint_id:
             target = await self.aget_tuple(config)
             if target is None:
                 return {ch: {"writes": []} for ch in channels}
             checkpoint_id = target.config["configurable"]["checkpoint_id"]
 
-        stage1_sql = _build_delta_stage1_sql(channels, paged=True)
+        stage1_sql = _build_delta_stage1_sql(channels, paged=True, include_cursor=True)
         parent_of: dict[str, str | None] = {}
         ver_by_i_by_cid: list[dict[str, str | None]] = [{} for _ in channels]
         hb_by_i_by_cid: list[dict[str, bool]] = [{} for _ in channels]
@@ -433,7 +487,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         seed_inline_by_ch: dict[str, Any] = {}
         walk_cursor_by_ch: dict[str, str | None] = {}
         seeded: set[str] = set()
-        cursor: str | None = None
+        cursor: str | None = checkpoint_id
 
         async with self._cursor() as cur:
             while True:
@@ -442,7 +496,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     # ver_i, blob channel, blob version, inline_i
                     stage1_params.extend([ch, ch, ch, ch])
                 stage1_params.extend(
-                    [thread_id, checkpoint_ns, cursor, cursor, _DELTA_PAGE_SIZE]
+                    [thread_id, checkpoint_ns, cursor, _DELTA_PAGE_SIZE]
                 )
                 await cur.execute(stage1_sql, stage1_params)
                 page = await cur.fetchall()
@@ -472,6 +526,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 if len(seeded) == len(channels) or len(page) < _DELTA_PAGE_SIZE:
                     break
                 cursor = oldest
+                stage1_sql = _build_delta_stage1_sql(channels, paged=True)
 
         channels_with_chain = [ch for ch in channels if chain_by_ch[ch]]
         channels_with_seed = [ch for ch in channels if seed_ver_by_ch[ch] is not None]
@@ -685,6 +740,33 @@ class AsyncPostgresSaver(BasePostgresSaver):
             pass
         return asyncio.run_coroutine_threadsafe(
             self.adelete_thread(thread_id), self.loop
+        ).result()
+
+    def prune(
+        self,
+        thread_ids: Sequence[str],
+        *,
+        strategy: str = "keep_latest",
+    ) -> None:
+        """Prune checkpoints for the given threads.
+
+        See `PostgresSaver.prune` for what each strategy keeps.
+
+        Args:
+            thread_ids: The thread IDs to prune.
+            strategy: `"keep_latest"` or `"delete"`.
+        """
+        try:
+            if asyncio.get_running_loop() is self.loop:
+                raise asyncio.InvalidStateError(
+                    "Synchronous calls to AsyncPostgresSaver are only allowed from a "
+                    "different thread. From the main thread, use the async interface. "
+                    "For example, use `await checkpointer.aprune(...)`."
+                )
+        except RuntimeError:
+            pass
+        return asyncio.run_coroutine_threadsafe(
+            self.aprune(thread_ids, strategy=strategy), self.loop
         ).result()
 
     def get_delta_channel_history(

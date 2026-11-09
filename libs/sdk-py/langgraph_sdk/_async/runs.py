@@ -99,6 +99,8 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
+        strict_resume: bool | None = None,
         version: Literal["v1"] = "v1",
     ) -> AsyncIterator[StreamPart]: ...
 
@@ -131,6 +133,8 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
+        strict_resume: bool | None = None,
         version: Literal["v2"],
     ) -> AsyncIterator[StreamPartV2]: ...
 
@@ -147,6 +151,7 @@ class RunsClient:
         stream_resumable: bool = False,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint_during: bool | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -160,6 +165,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
         version: Literal["v1"] = "v1",
     ) -> AsyncIterator[StreamPart]: ...
 
@@ -176,6 +182,7 @@ class RunsClient:
         stream_resumable: bool = False,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint_during: bool | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -189,6 +196,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
         version: Literal["v2"],
     ) -> AsyncIterator[StreamPartV2]: ...
 
@@ -222,6 +230,7 @@ class RunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
+        strict_resume: bool | None = None,
         version: StreamVersion = "v1",
     ) -> AsyncIterator[StreamPart | StreamPartV2]:
         """Create a run and stream the results.
@@ -266,6 +275,10 @@ class RunsClient:
                 "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
                 "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
                 "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
+            strict_resume: Refuse a resume that answers an interrupt that isn't waiting,
+                instead of ignoring the answer: the run fails with `UnknownInterruptError`
+                and the thread stays as it was. Takes effect on servers whose `/info`
+                reports `strict_resume`.
             version: Stream format version. "v1" (default) returns raw SSE StreamPart
                 NamedTuples. "v2" returns typed dicts with `type`, `ns`, and `data` keys.
 
@@ -299,7 +312,7 @@ class RunsClient:
             StreamPart(event='metadata', data={'run_id': '1ef4a9b8-d7da-679a-a45a-872054341df2'})
             StreamPart(event='values', data={'messages': [{'content': 'how are you?', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'human', 'name': None, 'id': 'fe0a5778-cfe9-42ee-b807-0adaa1873c10', 'example': False}]})
             StreamPart(event='values', data={'messages': [{'content': 'how are you?', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'human', 'name': None, 'id': 'fe0a5778-cfe9-42ee-b807-0adaa1873c10', 'example': False}, {'content': "I'm doing well, thanks for asking! I'm an AI assistant created by Anthropic to be helpful, honest, and harmless.", 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'ai', 'name': None, 'id': 'run-159b782c-b679-4830-83c6-cef87798fe8b', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]})
-            StreamPart(event='end', data=None)
+            StreamPart(event='end', data={'run_id': '1ef4a9b8-d7da-679a-a45a-872054341df2', 'status': 'success'})
             ```
 
         """
@@ -335,6 +348,7 @@ class RunsClient:
             "on_completion": on_completion,
             "after_seconds": after_seconds,
             "durability": durability,
+            "strict_resume": strict_resume,
             "langsmith_tracer": langsmith_tracing,
         }
         endpoint = (
@@ -385,6 +399,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> Run: ...
 
     @overload
@@ -414,6 +429,8 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
+        strict_resume: bool | None = None,
     ) -> Run: ...
 
     async def create(
@@ -444,6 +461,7 @@ class RunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
+        strict_resume: bool | None = None,
     ) -> Run:
         """Create a background run.
 
@@ -483,6 +501,10 @@ class RunsClient:
                 "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
                 "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
                 "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
+            strict_resume: Refuse a resume that answers an interrupt that isn't waiting,
+                instead of ignoring the answer: the run fails with `UnknownInterruptError`
+                and the thread stays as it was. Takes effect on servers whose `/info`
+                reports `strict_resume`.
 
         Returns:
             The created background run.
@@ -587,6 +609,7 @@ class RunsClient:
             "on_completion": on_completion,
             "after_seconds": after_seconds,
             "durability": durability,
+            "strict_resume": strict_resume,
             "langsmith_tracer": langsmith_tracing,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
@@ -647,6 +670,8 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
+        strict_resume: bool | None = None,
     ) -> builtins.list[dict] | dict[str, Any]: ...
 
     @overload
@@ -673,6 +698,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> builtins.list[dict] | dict[str, Any]: ...
 
     async def wait(
@@ -702,6 +728,7 @@ class RunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
+        strict_resume: bool | None = None,
     ) -> builtins.list[dict] | dict[str, Any]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -739,6 +766,10 @@ class RunsClient:
                 "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
                 "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
                 "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
+            strict_resume: Refuse a resume that answers an interrupt that isn't waiting,
+                instead of ignoring the answer: the run fails with `UnknownInterruptError`
+                and the thread stays as it was. Takes effect on servers whose `/info`
+                reports `strict_resume`.
 
         Returns:
             The output of the run.
@@ -819,6 +850,7 @@ class RunsClient:
             "on_completion": on_completion,
             "after_seconds": after_seconds,
             "durability": durability,
+            "strict_resume": strict_resume,
             "langsmith_tracer": langsmith_tracing,
         }
         endpoint = (

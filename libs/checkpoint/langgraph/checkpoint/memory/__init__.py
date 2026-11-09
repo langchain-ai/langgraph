@@ -170,8 +170,8 @@ class InMemorySaver(
             return {}
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        checkpoint_id = config["configurable"].get("checkpoint_id", "")
         ns_storage = self.storage.get(thread_id, {}).get(checkpoint_ns, {})
+        checkpoint_id = get_checkpoint_id(config) or max(ns_storage, default="")
 
         chain: list[str] = []
         target_entry = ns_storage.get(checkpoint_id)

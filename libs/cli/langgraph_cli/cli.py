@@ -847,6 +847,7 @@ def dev(
         store=config_json.get("store"),
         wait_for_client=wait_for_client,
         auth=config_json.get("auth"),
+        priority=config_json.get("priority"),
         http=config_json.get("http"),
         ui=config_json.get("ui"),
         ui_config=config_json.get("ui_config"),

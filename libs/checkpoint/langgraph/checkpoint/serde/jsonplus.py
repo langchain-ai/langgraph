@@ -55,6 +55,7 @@ logger = logging.getLogger(__name__)
 _MAX_WARNED_TYPES = 1000
 _warned_unregistered_types: set[tuple[str, str]] = set()
 _warned_blocked_types: set[tuple[str, str]] = set()
+_warned_unreconstructable_types: set[tuple[str, str]] = set()
 
 
 def _is_safe_json_type(id_list: list[str]) -> bool:
@@ -77,6 +78,27 @@ def _warn_once(
         return
     seen.add(key)
     logger.warning(msg, *args)
+
+
+def _reconstruction_fallback(tup: Any, exc: Exception) -> Any:
+    """Return the serialized payload of an object that could not be rebuilt.
+
+    Returning `None` here would silently erase the value from restored state.
+    """
+    try:
+        module, name, payload = tup[0], tup[1], tup[2]
+    except Exception:
+        return None
+    _warn_once(
+        _warned_unreconstructable_types,
+        (str(module), str(name)),
+        "Could not reconstruct %s.%s from checkpoint (%s); "
+        "returning its serialized data instead.",
+        module,
+        name,
+        type(exc).__name__,
+    )
+    return payload
 
 
 class JsonPlusSerializer(SerializerProtocol):
@@ -638,6 +660,7 @@ def _create_msgpack_ext_hook(
                 )
             )
         elif code == EXT_CONSTRUCTOR_SINGLE_ARG:
+            tup = None
             try:
                 tup = ormsgpack.unpackb(
                     data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
@@ -649,9 +672,10 @@ def _create_msgpack_ext_hook(
                     return tup[2]
                 # module, name, arg
                 return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
-            except Exception:
-                return None
+            except Exception as exc:
+                return _reconstruction_fallback(tup, exc)
         elif code == EXT_CONSTRUCTOR_POS_ARGS:
+            tup = None
             try:
                 tup = ormsgpack.unpackb(
                     data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
@@ -662,9 +686,10 @@ def _create_msgpack_ext_hook(
                     return _send_from_args(tup[2])
                 # module, name, args
                 return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
-            except Exception:
-                return None
+            except Exception as exc:
+                return _reconstruction_fallback(tup, exc)
         elif code == EXT_CONSTRUCTOR_KW_ARGS:
+            tup = None
             try:
                 tup = ormsgpack.unpackb(
                     data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
@@ -673,9 +698,10 @@ def _create_msgpack_ext_hook(
                     return tup[2]
                 # module, name, kwargs
                 return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
-            except Exception:
-                return None
+            except Exception as exc:
+                return _reconstruction_fallback(tup, exc)
         elif code == EXT_METHOD_SINGLE_ARG:
+            tup = None
             try:
                 tup = ormsgpack.unpackb(
                     data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
@@ -686,8 +712,8 @@ def _create_msgpack_ext_hook(
                 return getattr(
                     getattr(importlib.import_module(tup[0]), tup[1]), tup[3]
                 )(tup[2])
-            except Exception:
-                return None
+            except Exception as exc:
+                return _reconstruction_fallback(tup, exc)
         elif code == EXT_PYDANTIC_V1:
             try:
                 tup = ormsgpack.unpackb(

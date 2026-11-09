@@ -22,8 +22,11 @@ from langchain_core.messages import (
 )
 from typing_extensions import TypedDict, deprecated
 
-from langgraph._internal._constants import CONF, CONFIG_KEY_SEND, NS_SEP
+from langgraph._internal._constants import CONF, CONFIG_KEY_SEND
 from langgraph.graph.state import StateGraph
+from langgraph.pregel._messages import (
+    _messages_delta_reducer as _messages_delta_reducer,
+)
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 __all__ = (
@@ -244,71 +247,6 @@ def add_messages(
     return merged
 
 
-def _messages_delta_reducer(
-    state: list[AnyMessage], writes: list[list[AnyMessage]]
-) -> list[AnyMessage]:
-    """**Experimental.** Batch reducer for use with `DeltaChannel`.
-
-    Processes all writes in one pass — dedup by ID, `RemoveMessage`
-    tombstoning — without calling `add_messages`.
-
-    This reducer is batching-invariant, as required by `DeltaChannel`:
-    `reducer(reducer(state, xs), ys) == reducer(state, xs + ys)`.
-
-    Raw dict / string / tuple inputs are coerced to typed `BaseMessage`
-    objects so that HTTP-driven graphs work without a separate coercion
-    step. This is not full `add_messages` parity — `REMOVE_ALL_MESSAGES`,
-    unknown-id `RemoveMessage` errors, missing-id UUID assignment, and
-    `BaseMessageChunk` conversion are not handled here.
-
-    Example::
-
-        from typing import Annotated
-        from langgraph.channels.delta import DeltaChannel
-        from langgraph.graph.message import _messages_delta_reducer
-
-        class State(TypedDict):
-            messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
-    """
-
-    # Each write is either a list of message-likes or a single message-like
-    # (BaseMessage / dict / str / tuple). Only lists flatten; everything
-    # else is one message.
-    flat: list[Any] = []
-    for w in writes:
-        if isinstance(w, list):
-            flat.extend(w)
-        else:
-            flat.append(w)
-    # Steady state: the reducer's own output is already typed, so skip
-    # `convert_to_messages` on state when the first element is a BaseMessage.
-    # Only raw input (initial dicts, deserialized blobs) hits the slow path.
-    if state and isinstance(state[0], BaseMessage):
-        state_msgs = state
-    else:
-        state_msgs = cast("list[AnyMessage]", convert_to_messages(state))
-    msgs = cast("list[AnyMessage]", convert_to_messages(flat))
-
-    index: dict[str, int] = {
-        m.id: i for i, m in enumerate(state_msgs) if m.id is not None
-    }
-    result: list[AnyMessage | None] = list(state_msgs)
-    for msg in msgs:
-        mid = msg.id
-        if mid is None:
-            result.append(msg)
-        elif isinstance(msg, RemoveMessage):
-            if mid in index:
-                result[index[mid]] = None
-                del index[mid]
-        elif mid in index:
-            result[index[mid]] = msg
-        else:
-            index[mid] = len(result)
-            result.append(msg)
-    return [m for m in result if m is not None]
-
-
 @deprecated(
     "MessageGraph is deprecated in langgraph 1.0.0, to be removed in 2.0.0. Please use StateGraph with a `messages` key instead.",
     category=None,
@@ -405,7 +343,7 @@ def push_message(
     )
 
     from langgraph.config import get_config
-    from langgraph.pregel._messages import StreamMessagesHandler
+    from langgraph.pregel._messages import StreamMessagesHandler, graph_namespace
 
     config = get_config()
     message = next(x for x in convert_to_messages([message]))
@@ -421,15 +359,12 @@ def push_message(
     ):
         handlers = config["callbacks"]
 
-    if stream_handler := next(
-        (x for x in handlers if isinstance(x, StreamMessagesHandler)), None
-    ):
-        metadata = config["metadata"]
-        message_meta = (
-            tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP)),
-            metadata,
-        )
-        stream_handler._emit(message_meta, message, dedupe=False)
+    metadata = config["metadata"]
+    for handler in handlers:
+        if isinstance(handler, StreamMessagesHandler):
+            ns = graph_namespace(metadata)
+            if handler.subgraphs or not ns or ns == handler.parent_ns:
+                handler._emit((ns, metadata), message, dedupe=False)
 
     if state_key:
         config[CONF][CONFIG_KEY_SEND]([(state_key, message)])
