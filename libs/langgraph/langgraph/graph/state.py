@@ -104,7 +104,7 @@ class _NodeDefaults:
     """Default node policies applied to every node at compile time."""
 
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None
-    cache_policy: CachePolicy | None = None
+    cache_policy: CachePolicy[Any] | None = None
     error_handler: StateNode[Any, Any] | None = None
     timeout: TimeoutPolicy | None = None
 
@@ -273,7 +273,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         self,
         *,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
-        cache_policy: CachePolicy | None = None,
+        cache_policy: CachePolicy[Any] | None = None,
         error_handler: StateNode[Any, ContextT] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
     ) -> Self:
@@ -381,7 +381,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         metadata: dict[str, Any] | None = None,
         input_schema: None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
-        cache_policy: CachePolicy | None = None,
+        cache_policy: CachePolicy[Any] | None = None,
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
@@ -451,7 +451,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         metadata: dict[str, Any] | None = None,
         input_schema: type[NodeInputT],
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
-        cache_policy: CachePolicy | None = None,
+        cache_policy: CachePolicy[Any] | None = None,
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
@@ -526,7 +526,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         metadata: dict[str, Any] | None = None,
         input_schema: None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
-        cache_policy: CachePolicy | None = None,
+        cache_policy: CachePolicy[Any] | None = None,
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
@@ -596,7 +596,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         metadata: dict[str, Any] | None = None,
         input_schema: type[NodeInputT],
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
-        cache_policy: CachePolicy | None = None,
+        cache_policy: CachePolicy[Any] | None = None,
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
@@ -673,7 +673,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         metadata: dict[str, Any] | None = None,
         input_schema: type[NodeInputT] | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
-        cache_policy: CachePolicy | None = None,
+        cache_policy: CachePolicy[Any] | None = None,
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
@@ -1178,7 +1178,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         self,
         checkpointer: Checkpointer = None,
         *,
-        cache: BaseCache | None = None,
+        cache: BaseCache[Any] | None = None,
         store: BaseStore | None = None,
         interrupt_before: All | list[str] | None = None,
         interrupt_after: All | list[str] | None = None,

@@ -107,7 +107,7 @@ Durability = Literal["sync", "async", "exit"]
 All = Literal["*"]
 """Special value to indicate that graph should interrupt on all nodes."""
 
-Checkpointer = None | bool | BaseCheckpointSaver
+Checkpointer = None | bool | BaseCheckpointSaver[Any]
 """Type of the checkpointer to use for a subgraph.
 
 - `True` enables persistent checkpointing for this subgraph.
