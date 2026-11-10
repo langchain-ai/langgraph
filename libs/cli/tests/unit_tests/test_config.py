@@ -16,6 +16,7 @@ from langgraph_cli.config import (
     config_to_docker,
     default_base_image,
     docker_tag,
+    get_unknown_keys,
     has_disallowed_build_command_content,
     validate_config,
     validate_config_file,
@@ -155,6 +156,7 @@ def test_validate_config():
         "store": None,
         "auth": None,
         "encryption": None,
+        "priority": None,
         "webhooks": None,
         "checkpointer": None,
         "http": None,
@@ -184,6 +186,7 @@ def test_validate_config():
         "store": None,
         "auth": None,
         "encryption": None,
+        "priority": None,
         "webhooks": None,
         "checkpointer": None,
         "http": None,
@@ -253,6 +256,243 @@ def test_validate_config():
                 "http": {"app": "../../examples/my_app.py"},
             }
         )
+
+
+@pytest.mark.parametrize(
+    "dependency",
+    [
+        "git+https://user:secret-token@github.com/org/private.git@main",
+        "private-package @ git+http://token@github.com/org/private.git",
+        "git+HTTPS://user%40example.com:secret%2Ftoken@github.com/org/private.git",
+        "git+https://${GIT_TOKEN}@github.com/org/private.git",
+    ],
+)
+def test_validate_config_rejects_git_http_url_userinfo(dependency: str):
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": [dependency],
+                "graphs": {"agent": "./agent.py:graph"},
+            }
+        )
+
+    message = str(exc_info.value)
+    assert "must not contain credentials or other URL userinfo" in message
+    assert "secret-token" not in message
+    assert "secret%2Ftoken" not in message
+
+
+def test_validate_config_file_reports_source_for_git_http_url_userinfo(
+    tmp_path: pathlib.Path,
+):
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "python_version": "3.11",
+                "dependencies": ["git+https://secret-token@github.com/org/private.git"],
+                "graphs": {"agent": "./agent.py:graph"},
+            }
+        )
+    )
+
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config_file(config_path)
+
+    message = str(exc_info.value)
+    assert "secret-token" not in message
+    assert f"Found in: {config_path.resolve()}" in message
+
+
+@pytest.mark.parametrize(
+    "manifest", ["package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml"]
+)
+def test_config_to_docker_rejects_git_http_url_userinfo_in_node_files(
+    tmp_path: pathlib.Path, manifest: str
+):
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text("{}\n")
+    (tmp_path / "agent.js").write_text("export const graph = {};\n")
+    (tmp_path / "package.json").write_text('{"name":"agent"}\n')
+    (tmp_path / manifest).write_text(
+        '"priv": "git+https://user:secret-token@github.com/org/private.git"\n'
+    )
+    config = validate_config(
+        {
+            "node_version": "20",
+            "graphs": {"agent": "./agent.js:graph"},
+        }
+    )
+
+    with pytest.raises(click.UsageError) as exc_info:
+        config_to_docker(
+            config_path,
+            config,
+            base_image="langchain/langgraphjs-api",
+        )
+
+    message = str(exc_info.value)
+    assert "must not contain credentials or other URL userinfo" in message
+    assert "secret-token" not in message
+    assert f"Found in: {(tmp_path / manifest).resolve()}" in message
+
+
+def test_config_to_docker_allows_node_git_urls_without_http_userinfo(
+    tmp_path: pathlib.Path,
+):
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text("{}\n")
+    (tmp_path / "agent.js").write_text("export const graph = {};\n")
+    (tmp_path / "package.json").write_text(
+        '{"dependencies":{"public":"git+https://github.com/org/public.git"}}\n'
+    )
+    config = validate_config(
+        {
+            "node_version": "20",
+            "graphs": {"agent": "./agent.js:graph"},
+        }
+    )
+
+    docker, _ = config_to_docker(
+        config_path,
+        config,
+        base_image="langchain/langgraphjs-api",
+    )
+
+    assert f"ADD . /deps/{tmp_path.name}" in docker
+
+
+def test_config_to_docker_rejects_git_http_url_userinfo_in_node_workspace(
+    tmp_path: pathlib.Path,
+):
+    config_root = tmp_path / "apps" / "agent"
+    config_root.mkdir(parents=True)
+    config_path = config_root / "langgraph.json"
+    config_path.write_text("{}\n")
+    (config_root / "agent.js").write_text("export const graph = {};\n")
+    (config_root / "package.json").write_text(
+        '{"dependencies":{"priv":"git+https://secret-token@github.com/org/private.git"}}\n'
+    )
+    (tmp_path / "package.json").write_text('{"name":"workspace"}\n')
+    config = validate_config(
+        {
+            "node_version": "20",
+            "graphs": {"agent": "./agent.js:graph"},
+        }
+    )
+
+    with pytest.raises(click.UsageError) as exc_info:
+        config_to_docker(
+            config_path,
+            config,
+            base_image="langchain/langgraphjs-api",
+            build_context=str(tmp_path),
+        )
+
+    message = str(exc_info.value)
+    assert "secret-token" not in message
+    assert f"Found in: {(config_root / 'package.json').resolve()}" in message
+
+
+@pytest.mark.parametrize(
+    "dependency",
+    [
+        "git+https://github.com/org/public.git@main",
+        "private-package @ git+https://github.com/org/private.git@main",
+        "git+ssh://git@github.com/org/private.git@main",
+    ],
+)
+def test_validate_config_allows_git_urls_without_http_userinfo(dependency: str):
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": [dependency],
+            "graphs": {"agent": "./agent.py:graph"},
+        }
+    )
+
+    assert config["dependencies"] == [dependency]
+
+
+def test_config_to_docker_rejects_git_http_url_userinfo_in_requirements(
+    tmp_path: pathlib.Path,
+):
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text("{}\n")
+    (tmp_path / "agent.py").write_text("graph = object()\n")
+    (tmp_path / "requirements.txt").write_text(
+        "private @ git+https://secret-token@github.com/org/private.git\n"
+    )
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+        }
+    )
+
+    with pytest.raises(click.UsageError) as exc_info:
+        config_to_docker(
+            config_path,
+            config,
+            base_image="langchain/langgraph-api:0.2.47",
+        )
+
+    message = str(exc_info.value)
+    assert "must not contain credentials or other URL userinfo" in message
+    assert "secret-token" not in message
+    assert f"Found in: {(tmp_path / 'requirements.txt').resolve()}" in message
+
+
+@pytest.mark.parametrize("manifest", ["pyproject.toml", "uv.lock"])
+def test_config_to_docker_rejects_git_http_url_userinfo_in_uv_files(
+    tmp_path: pathlib.Path, manifest: str
+):
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text("{}\n")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "agent.py").write_text("graph = object()\n")
+    pyproject = textwrap.dedent(
+        """
+        [project]
+        name = "agent"
+        version = "0.1.0"
+        dependencies = ["private"]
+
+        [tool.uv.sources]
+        private = { git = "https://github.com/org/private.git" }
+        """
+    ).strip()
+    uv_lock = "# uv lock file\n"
+    if manifest == "pyproject.toml":
+        pyproject = pyproject.replace(
+            "https://github.com", "https://secret-token@github.com"
+        )
+    else:
+        uv_lock += (
+            'source = { git = "https://secret-token@github.com/org/private.git" }\n'
+        )
+    (tmp_path / "pyproject.toml").write_text(pyproject + "\n")
+    (tmp_path / "uv.lock").write_text(uv_lock)
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "graphs": {"agent": "./src/agent.py:graph"},
+            "source": {"kind": "uv"},
+        }
+    )
+
+    with pytest.raises(click.UsageError) as exc_info:
+        config_to_docker(
+            config_path,
+            config,
+            base_image="langchain/langgraph-api:0.2.47",
+        )
+
+    message = str(exc_info.value)
+    assert "must not contain credentials or other URL userinfo" in message
+    assert "secret-token" not in message
 
 
 def test_validate_config_image_distro():
@@ -1052,6 +1292,109 @@ def test_config_to_docker_python_encryption_formatted():
     )
 
 
+@pytest.mark.parametrize(
+    "path", ["./priority.py:priority", "my_package.priority:priority"]
+)
+def test_config_to_docker_python_priority(path: str):
+    # Test that priority config is kept by validation and isn't an unknown key
+    raw_config = {
+        "python_version": "3.11",
+        "graphs": {"agent": "./agent.py:graph"},
+        "dependencies": ["."],
+        "priority": {"path": path},
+    }
+    validated = validate_config(raw_config)
+
+    assert validated["priority"] == {"path": path}
+    assert get_unknown_keys(raw_config) == []
+
+
+def test_config_to_docker_python_priority_bad_path():
+    # Test that invalid priority path format raises ValueError
+    with pytest.raises(ValueError, match="Invalid priority.path format"):
+        validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {"agent": "./agent.py:graph"},
+                "dependencies": ["."],
+                "priority": {"path": "./priority.py"},  # Missing :attribute
+            }
+        )
+
+
+@pytest.mark.parametrize("ext", [".ts", ".mts", ".cts", ".js", ".mjs", ".cjs"])
+def test_config_to_docker_python_priority_js_path(ext: str):
+    # Test that a JavaScript priority path is rejected
+    with pytest.raises(ValueError, match="JavaScript priority callbacks"):
+        validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {"agent": "./agent.py:graph"},
+                "dependencies": ["."],
+                "priority": {"path": f"./priority{ext}:priority"},
+            }
+        )
+
+
+def test_config_to_docker_nodejs_priority():
+    # Test that a Node.js-only project can name a Python priority file
+    actual_docker_stdin, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "node_version": "20",
+                "graphs": {"agent": "./graphs/agent.js:graph"},
+                "priority": {"path": "./priority.py:priority"},
+            }
+        ),
+        base_image="langchain/langgraphjs-api",
+    )
+    assert (
+        """ENV LANGGRAPH_PRIORITY='{"path": "./priority.py:priority"}'"""
+        in actual_docker_stdin
+    )
+
+
+def test_config_to_docker_python_priority_formatted():
+    # Test that priority config is written to the Docker output with its container path
+    actual_docker_stdin, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": {"agent": "./graphs/agent.py:graph"},
+                "priority": {"path": "./agent.py:my_priority"},
+            }
+        ),
+        base_image="langchain/langgraph-api",
+    )
+    assert (
+        "ENV LANGGRAPH_PRIORITY="
+        """'{"path": "/deps/outer-unit_tests/unit_tests/agent.py:my_priority"}'"""
+        in actual_docker_stdin
+    )
+
+
+def test_config_to_docker_python_priority_not_in_dependencies():
+    # Test that a priority file outside the dependencies raises ValueError
+    with pytest.raises(
+        ValueError, match="Priority file .* not covered by dependencies"
+    ):
+        config_to_docker(
+            PATH_TO_CONFIG,
+            validate_config(
+                {
+                    "python_version": "3.11",
+                    "dependencies": ["./graphs"],
+                    "graphs": {"agent": "./graphs/agent.py:graph"},
+                    "priority": {"path": "./agent.py:my_priority"},
+                }
+            ),
+            base_image="langchain/langgraph-api",
+        )
+
+
 def test_config_to_docker_nodejs_internal_docker_tag():
     graphs = {"agent": "./graphs/agent.js:graph"}
     actual_docker_stdin, additional_contexts = config_to_docker(
@@ -1490,6 +1833,38 @@ def test_config_to_docker_uv_lock_honors_root_workspace_sources():
         )
         assert (
             '"path": "/deps/workspace/libs/shared/src/shared/auth.py:create_auth"'
+            in docker
+        )
+
+
+def test_config_to_docker_uv_lock_rewrites_priority_path():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root, config_path = _write_uv_lock_workspace(
+            tmpdir_path,
+            agent_sources="[tool.uv.sources]\nshared = { workspace = true }",
+        )
+        (project_root / "libs" / "shared" / "src" / "shared" / "priority.py").touch()
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {
+                    "agent": "../../apps/agent/src/agent/graph.py:graph",
+                },
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
+                "priority": {
+                    "path": "../../libs/shared/src/shared/priority.py:priority"
+                },
+            }
+        )
+        docker, _ = config_to_docker(
+            config_path, config, base_image="langchain/langgraph-api:0.2.47"
+        )
+
+        assert (
+            "ENV LANGGRAPH_PRIORITY="
+            """'{"path": "/deps/workspace/libs/shared/src/shared/priority.py:priority"}'"""
             in docker
         )
 

@@ -27,6 +27,7 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     PendingWrite,
     V,
+    writes_sort_key,
 )
 from langgraph.store.base import BaseStore
 from xxhash import xxh3_128_hexdigest
@@ -84,6 +85,7 @@ from langgraph.types import (
     RetryPolicy,
     Send,
     TimeoutPolicy,
+    _interrupt_id,
 )
 
 GetNextVersion = Callable[[V | None, None], V]
@@ -251,9 +253,7 @@ def apply_writes(
         Set of channels that were updated in this step.
     """
     # sort tasks on path, to ensure deterministic order for update application
-    # any path parts after the 3rd are ignored for sorting
-    # (we use them for eg. task ids which aren't good for sorting)
-    tasks = sorted(tasks, key=lambda t: task_path_str(t.path[:3]))
+    tasks = sorted(tasks, key=lambda t: writes_sort_key(task_path_str(t.path)))
     # if no task has triggers this is applying writes from the null task only
     # so we don't do anything other than update the channels written to
     bump_step = any(t.triggers for t in tasks)
@@ -627,7 +627,7 @@ def prepare_single_task(
                 config[CONF].get(CONFIG_KEY_SCRATCHPAD),
                 pending_writes,
                 task_id,
-                xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+                task_checkpoint_ns,
                 config[CONF].get(CONFIG_KEY_RESUME_MAP),
                 step,
                 stop,
@@ -874,7 +874,7 @@ def prepare_push_task_functional(
             configurable.get(CONFIG_KEY_SCRATCHPAD),
             pending_writes,
             task_id,
-            xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+            task_checkpoint_ns,
             configurable.get(CONFIG_KEY_RESUME_MAP),
             step,
             stop,
@@ -1036,7 +1036,7 @@ def prepare_push_task_send(
             config[CONF].get(CONFIG_KEY_SCRATCHPAD),
             pending_writes,
             task_id,
-            xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+            task_checkpoint_ns,
             config[CONF].get(CONFIG_KEY_RESUME_MAP),
             step,
             stop,
@@ -1185,7 +1185,7 @@ def prepare_node_error_handler_task(
         config[CONF].get(CONFIG_KEY_SCRATCHPAD),
         pending_writes,
         task_id,
-        xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+        task_checkpoint_ns,
         config[CONF].get(CONFIG_KEY_RESUME_MAP),
         step,
         stop,
@@ -1281,7 +1281,7 @@ def _scratchpad(
     parent_scratchpad: PregelScratchpad | None,
     pending_writes: list[PendingWrite],
     task_id: str,
-    namespace_hash: str,
+    task_checkpoint_ns: str,
     resume_map: dict[str, Any] | None,
     step: int,
     stop: int,
@@ -1308,10 +1308,15 @@ def _scratchpad(
             task_resume_write = []
         del w
 
-        # find namespace and task-specific resume value
-        if resume_map and namespace_hash in resume_map:
-            mapped_resume_write = resume_map[namespace_hash]
-            task_resume_write.append(mapped_resume_write)
+        # find the resume value for the task's next interrupt
+        if resume_map:
+            next_id = _interrupt_id(task_checkpoint_ns, len(task_resume_write))
+            first_id = _interrupt_id(task_checkpoint_ns, 0)
+            if next_id in resume_map:
+                task_resume_write.append(resume_map[next_id])
+            # Older versions gave all of a task's interrupts the first id.
+            elif first_id in resume_map:
+                task_resume_write.append(resume_map[first_id])
 
     else:
         null_resume_write = None

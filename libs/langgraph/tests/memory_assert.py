@@ -85,11 +85,13 @@ class MemorySaverAssertImmutable(InMemorySaver):
                 )
                 == saved
             ), config["configurable"]["checkpoint_ns"]
+        next_config = super().put(config, checkpoint, metadata, new_versions)
+        # Read back, not the object handed in: a DeltaChannel a step did not
+        # write is refilled on read from the blob its inherited version points at.
         self.storage_for_copies[thread_id][checkpoint_ns][checkpoint["id"]] = (
-            self.serde.dumps_typed(checkpoint)
+            self.serde.dumps_typed(super().get(next_config))
         )
-        # call super to write checkpoint
-        return super().put(config, checkpoint, metadata, new_versions)
+        return next_config
 
 
 class MemorySaverNoPending(InMemorySaver):

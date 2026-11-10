@@ -28,7 +28,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Path to a pip config file (e.g., \"/etc/pip.conf\" or \"pip.ini\") for controlling\npackage installation (custom indices, credentials, etc.).\n\nOnly relevant if Python dependencies are installed via pip. If omitted, default pip settings are used.\n"
+              "description": "Optional. Path to a pip config file (e.g., \"/etc/pip.conf\" or \"pip.ini\") for controlling\npackage installation (custom indices, timeouts, etc.). The file is copied into the\ngenerated image, so it must not contain credentials or other secrets.\n\nOnly relevant if Python dependencies are installed via pip. If omitted, default pip settings are used.\n"
             },
             "_INTERNAL_docker_tag": {
               "anyOf": [
@@ -195,6 +195,17 @@
                   "type": "null"
                 }
               ]
+            },
+            "priority": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PriorityConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Custom run priority config, including the path to your Python priority logic.\n\nAllows you to decide each thread's priority settings at the first run on a thread with no settings,\nwhich can come long after the thread was created.\n"
             },
             "source": {
               "anyOf": [
@@ -270,7 +281,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Path to a pip config file (e.g., \"/etc/pip.conf\" or \"pip.ini\") for controlling\npackage installation (custom indices, credentials, etc.).\n\nOnly relevant if Python dependencies are installed via pip. If omitted, default pip settings are used.\n"
+              "description": "Optional. Path to a pip config file (e.g., \"/etc/pip.conf\" or \"pip.ini\") for controlling\npackage installation (custom indices, timeouts, etc.). The file is copied into the\ngenerated image, so it must not contain credentials or other secrets.\n\nOnly relevant if Python dependencies are installed via pip. If omitted, default pip settings are used.\n"
             },
             "_INTERNAL_docker_tag": {
               "anyOf": [
@@ -437,6 +448,17 @@
                   "type": "null"
                 }
               ]
+            },
+            "priority": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PriorityConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Custom run priority config, including the path to your Python priority logic.\n\nAllows you to decide each thread's priority settings at the first run on a thread with no settings,\nwhich can come long after the thread was created.\n"
             },
             "source": {
               "$ref": "#/$defs/UvSource"
@@ -665,6 +687,17 @@
                   "type": "null"
                 }
               ]
+            },
+            "priority": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PriorityConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Custom run priority config, including the path to your Python priority logic.\n\nAllows you to decide each thread's priority settings at the first run on a thread with no settings,\nwhich can come long after the thread was created.\n"
             },
             "source": {
               "anyOf": [
@@ -1166,6 +1199,18 @@
         "max_age": {
           "type": "integer",
           "description": "Optional. How many seconds the browser may cache preflight responses.\n\nDefault might be 600 (10 minutes). Larger values reduce preflight requests but can cause stale configurations.\n"
+        }
+      },
+      "required": []
+    },
+    "PriorityConfig": {
+      "title": "PriorityConfig",
+      "description": "Configuration for custom run priority logic.\n\nAllows you to decide each thread's priority settings with a Python function\nthat the server calls at the first run on a thread with no settings, which\ncan come long after the thread was created.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Required. Path to an instance of the Priority() class that registers an assign function.\n"
         }
       },
       "required": []

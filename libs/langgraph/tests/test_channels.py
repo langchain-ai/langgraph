@@ -20,6 +20,7 @@ from langgraph.errors import EmptyChannelError, InvalidUpdateError
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import _messages_delta_reducer
 from langgraph.graph.state import _get_channel
+from langgraph.pregel._checkpoint import delta_channels_to_snapshot
 from langgraph.types import Overwrite
 
 pytestmark = pytest.mark.anyio
@@ -340,6 +341,26 @@ def test_delta_channel_checkpoint_returns_missing() -> None:
 # ---------------------------------------------------------------------------
 # DeltaChannel — snapshot frequency
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("frequency", [None, 50, 1000])
+def test_delta_channel_snapshot_frequency(frequency: int | None) -> None:
+    spec = (
+        DeltaChannel(_messages_delta_reducer)
+        if frequency is None
+        else DeltaChannel(_messages_delta_reducer, snapshot_frequency=frequency)
+    )
+    expected = 100 if frequency is None else frequency
+    assert spec.snapshot_frequency == expected
+    channel = spec.from_checkpoint(MISSING)
+    channel.update([HumanMessage(content="hi", id="h1")])
+    assert channel.copy().snapshot_frequency == expected
+    for updates in (expected - 1, expected):
+        assert delta_channels_to_snapshot(
+            {"messages": channel},
+            {"messages": (updates, updates)},
+            {"messages": 1},
+        ) == ({"messages"} if updates == expected else set())
 
 
 def test_delta_channel_snapshot_version_based() -> None:

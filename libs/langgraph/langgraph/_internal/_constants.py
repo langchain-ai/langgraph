@@ -23,6 +23,9 @@ RETURN = sys.intern("__return__")
 # for writes of a task where we simply record the return value
 PREVIOUS = sys.intern("__previous__")
 # the implicit branch that handles each node's Control values
+SNAPSHOT_BUMPS = sys.intern("__snapshot_bumps__")
+# `versions_seen` key recording which entries a snapshot-only version bump
+# advanced, and the versions those nodes really read
 
 
 # --- Reserved cache namespaces ---
@@ -71,6 +74,8 @@ CONFIG_KEY_RUNTIME = sys.intern("__pregel_runtime")
 # holds a `Runtime` instance with context, store, stream writer, etc.
 CONFIG_KEY_RESUME_MAP = sys.intern("__pregel_resume_map")
 # holds a mapping of task ns -> resume value for resuming tasks
+CONFIG_KEY_STRICT_RESUME = sys.intern("__pregel_strict_resume")
+# when True, the root graph refuses a resume that can't be matched to its pending interrupts
 CONFIG_KEY_STREAM_MESSAGES_V2 = sys.intern("__pregel_stream_messages_v2")
 # when True, attach StreamMessagesHandlerV2 so content-block (v2) events
 # flow through stream_mode="messages"; set by StreamingHandler only.
@@ -116,6 +121,7 @@ RESERVED = {
     ERROR,
     ERROR_SOURCE_NODE,
     NO_WRITES,
+    SNAPSHOT_BUMPS,
     # reserved config.configurable keys
     CONFIG_KEY_SEND,
     CONFIG_KEY_READ,
@@ -130,6 +136,7 @@ RESERVED = {
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
     CONFIG_KEY_RESUME_MAP,
+    CONFIG_KEY_STRICT_RESUME,
     CONFIG_KEY_STREAM_MESSAGES_V2,
     # other constants
     PUSH,

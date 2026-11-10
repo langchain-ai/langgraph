@@ -1,10 +1,18 @@
+from collections.abc import Callable
+
 import pytest
 from langchain_core.callbacks import AsyncCallbackManager, BaseCallbackHandler
 
-from langgraph._internal._config import get_async_callback_manager_for_config
+from langgraph._internal._config import (
+    DEFAULT_RECURSION_LIMIT,
+    get_async_callback_manager_for_config,
+)
 from langgraph.graph import StateGraph
+from langgraph.pregel import Pregel
 
 pytestmark = pytest.mark.anyio
+
+EXPLICIT_DEFAULT_LIMIT = int(DEFAULT_RECURSION_LIMIT)
 
 
 def test_new_async_manager_includes_tags() -> None:
@@ -114,3 +122,27 @@ async def test_with_config_tags_preserved_on_invoke() -> None:
     await graph.ainvoke({}, {"tags": ["invoke"]})
     assert "bound" in captured, "bound tag was dropped by ensure_config overwrite"
     assert "invoke" in captured, "invoke-time tag not present"
+
+
+@pytest.mark.parametrize(
+    "rebind",
+    [
+        lambda g: g.with_config(recursion_limit=EXPLICIT_DEFAULT_LIMIT),
+        lambda g: g.with_config({"recursion_limit": EXPLICIT_DEFAULT_LIMIT}),
+        lambda g: g.with_config(
+            {"recursion_limit": 1}, recursion_limit=EXPLICIT_DEFAULT_LIMIT
+        ),
+        lambda g: g.with_config(recursion_limit=EXPLICIT_DEFAULT_LIMIT).with_config(
+            tags=["t"]
+        ),
+    ],
+    ids=["kwarg", "config", "kwarg_over_config", "kept_by_later_with_config"],
+)
+def test_with_config_applies_recursion_limit_equal_to_default(
+    rebind: Callable[[Pregel], Pregel],
+) -> None:
+    builder = StateGraph(dict)
+    builder.add_node("node", lambda state: state)
+    builder.add_edge("__start__", "node")
+    graph = builder.compile().with_config(recursion_limit=EXPLICIT_DEFAULT_LIMIT + 1)
+    assert rebind(graph).config["recursion_limit"] == EXPLICIT_DEFAULT_LIMIT

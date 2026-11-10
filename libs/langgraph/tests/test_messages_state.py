@@ -152,6 +152,11 @@ def test_empty_inputs():
     ]
 
 
+def test_invalid_format():
+    with pytest.raises(ValueError, match="Unrecognized format="):
+        add_messages([], [], format="invalid")
+
+
 def test_non_list_inputs():
     left = HumanMessage(content="Hello", id="1")
     right = AIMessage(content="Hi there!", id="2")

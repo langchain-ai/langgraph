@@ -373,6 +373,27 @@ class EncryptionConfig(TypedDict, total=False):
     """
 
 
+class PriorityConfig(TypedDict, total=False):
+    """Configuration for custom run priority logic.
+
+    Allows you to decide each thread's priority settings with a Python function
+    that the server calls at the first run on a thread with no settings, which
+    can come long after the thread was created."""
+
+    path: str
+    """Required. Path to an instance of the Priority() class that registers an assign function.
+
+    Format: "path/to/file.py:my_priority"
+
+    Example:
+        {
+            "priority": {
+                "path": "./priority.py:my_priority"
+            }
+        }
+    """
+
+
 class CorsConfig(TypedDict, total=False):
     """Specifies Cross-Origin Resource Sharing (CORS) rules for your server.
 
@@ -650,7 +671,8 @@ class Config(TypedDict, total=False):
 
     pip_config_file: str | None
     """Optional. Path to a pip config file (e.g., "/etc/pip.conf" or "pip.ini") for controlling
-    package installation (custom indices, credentials, etc.).
+    package installation (custom indices, timeouts, etc.). The file is copied into the
+    generated image, so it must not contain credentials or other secrets.
 
     Only relevant if Python dependencies are installed via pip. If omitted, default pip settings are used.
     """
@@ -689,6 +711,9 @@ class Config(TypedDict, total=False):
       - "." or "./src" if you have a local Python package
       - str (aka "anthropic") for a PyPI package
       - "git+https://github.com/org/repo.git@main" for a Git-based package
+    Git HTTP URLs must not contain userinfo such as a username or token. For private
+    dependencies, provide short-lived credentials through the build environment's
+    secret-backed Git credential helper.
     Defaults to an empty list, meaning no additional packages installed beyond your base environment.
 
     This field is not supported when `source.kind` is `uv`.
@@ -749,6 +774,13 @@ class Config(TypedDict, total=False):
     Allows you to implement custom encryption for sensitive data stored in the database.
     """
 
+    priority: PriorityConfig | None
+    """Optional. Custom run priority config, including the path to your Python priority logic.
+
+    Allows you to decide each thread's priority settings at the first run on a thread with no settings,
+    which can come long after the thread was created.
+    """
+
     http: HttpConfig | None
     """Optional. Configuration for the built-in HTTP server, controlling which custom routes are exposed
     and how cross-origin requests are handled.
@@ -780,6 +812,7 @@ __all__ = [
     "CheckpointerConfig",
     "AuthConfig",
     "EncryptionConfig",
+    "PriorityConfig",
     "HttpConfig",
     "MiddlewareOrders",
     "Distros",

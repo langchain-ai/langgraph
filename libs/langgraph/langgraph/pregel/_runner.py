@@ -41,10 +41,11 @@ from langgraph._internal._future import chain_future, run_coroutine_threadsafe
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import MISSING
 from langgraph.constants import TAG_HIDDEN
-from langgraph.errors import GraphBubbleUp, GraphInterrupt
+from langgraph.errors import GraphBubbleUp, GraphInterrupt, is_invalid_resume
 from langgraph.pregel._algo import Call
-from langgraph.pregel._executor import Submit
+from langgraph.pregel._executor import SKIP_RERAISE_SET, Submit
 from langgraph.pregel._retry import arun_with_retry, run_with_retry
+from langgraph.pregel._task_status import CONTROL_WRITES
 from langgraph.types import (
     CachePolicy,
     PregelExecutableTask,
@@ -65,10 +66,6 @@ EXCLUDED_FRAME_FNAMES = (
     "langchain_core/runnables/config.py",
     "concurrent/futures/thread.py",
     "concurrent/futures/_base.py",
-)
-
-SKIP_RERAISE_SET: weakref.WeakSet[concurrent.futures.Future | asyncio.Future] = (
-    weakref.WeakSet()
 )
 
 
@@ -238,6 +235,8 @@ class PregelRunner:
                         fut.set_exception(exc)
                         futures.done.add(fut)
                 elif reraise and id(exc) not in self._handled_exception_ids:
+                    # let the caller stream this task's result before it raises
+                    yield
                     if tb := exc.__traceback__:
                         while tb.tb_next is not None and any(
                             tb.tb_frame.f_code.co_filename.endswith(name)
@@ -429,6 +428,8 @@ class PregelRunner:
                         fut.set_exception(exc)
                         futures.done.add(fut)
                 elif reraise and id(exc) not in self._handled_exception_ids:
+                    # let the caller stream this task's result before it raises
+                    yield
                     if tb := exc.__traceback__:
                         while tb.tb_next is not None and any(
                             tb.tb_frame.f_code.co_filename.endswith(name)
@@ -606,8 +607,9 @@ class PregelRunner:
                 task.config is None or TAG_HIDDEN not in task.config.get("tags", [])
             ):
                 self.node_finished(task.name)
-            if not task.writes:
-                # add no writes marker
+            if all(chan in CONTROL_WRITES for chan, _ in task.writes):
+                # record that the task finished, even if it produced no output
+                # (see `langgraph.pregel._task_status`)
                 task.writes.append((NO_WRITES, None))
             # save task writes to checkpointer
             self.put_writes()(task.id, task.writes)  # type: ignore[misc]
@@ -619,7 +621,11 @@ def _should_stop_others(
     handled_exception_ids: set[int] | None = None,
 ) -> bool:
     """Check if any task failed, if so, cancel all other tasks.
-    GraphInterrupts are not considered failures."""
+    GraphInterrupts are not considered failures.
+
+    Neither is an invalid resume value: it's raised once the other tasks finish, so a
+    task answered in the same resume isn't cut off after its side effects and then run
+    again with its saved answer."""
     for fut in done:
         if fut.cancelled():
             continue
@@ -627,6 +633,7 @@ def _should_stop_others(
             if (
                 id(exc) not in (handled_exception_ids or set())
                 and not isinstance(exc, GraphBubbleUp)
+                and not is_invalid_resume(exc)
                 and fut not in SKIP_RERAISE_SET
             ):
                 return True
