@@ -28,6 +28,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_RUNTIME,
+    CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_TASK_ID,
@@ -44,6 +45,7 @@ from langgraph.errors import (
     NodeTimeoutError,
     ParentCommand,
 )
+from langgraph.pregel._algo import LazyAtomicCounter
 from langgraph.pregel.protocol import StreamProtocol
 from langgraph.runtime import ExecutionInfo, Runtime
 from langgraph.types import Command, PregelExecutableTask, RetryPolicy, TimeoutPolicy
@@ -571,6 +573,23 @@ def _checkpoint_ns_for_parent_command(ns: str) -> str:
     return NS_SEP.join(parts)
 
 
+def _reset_interrupt_counter(config: RunnableConfig) -> RunnableConfig:
+    # A retry reruns the node from its first line, so its interrupt() calls count
+    # from the first again to reuse the answers its task already has, rather than
+    # asking again under an id the next resume can't match.
+    scratchpad = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
+    if scratchpad is None:
+        return config
+    return patch_configurable(
+        config,
+        {
+            CONFIG_KEY_SCRATCHPAD: replace(
+                scratchpad, interrupt_counter=LazyAtomicCounter()
+            )
+        },
+    )
+
+
 def run_with_retry(
     task: PregelExecutableTask,
     retry_policy: Sequence[RetryPolicy] | None,
@@ -681,6 +700,7 @@ def run_with_retry(
             )
             # signal subgraphs to resume (if available)
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
+            config = _reset_interrupt_counter(config)
 
 
 async def arun_with_retry(
@@ -829,6 +849,7 @@ async def arun_with_retry(
             )
             # signal subgraphs to resume (if available)
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
+            config = _reset_interrupt_counter(config)
 
 
 def _return_value(task: PregelExecutableTask) -> Any:

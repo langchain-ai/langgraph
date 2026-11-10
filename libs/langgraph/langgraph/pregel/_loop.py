@@ -48,6 +48,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_STREAM,
+    CONFIG_KEY_STRICT_RESUME,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
     ERROR,
@@ -77,6 +78,7 @@ from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import (
     EmptyInputError,
     GraphInterrupt,
+    UnknownInterruptError,
 )
 from langgraph.managed.base import (
     ManagedValueMapping,
@@ -1024,17 +1026,45 @@ class PregelLoop:
                         "Cannot use Command(resume=...) without checkpointer"
                     )
 
+                strict = (
+                    self.config[CONF].get(CONFIG_KEY_STRICT_RESUME, False)
+                    # Nested calls inherit the parent's configurable.
+                    and not self.is_nested
+                    # A finished task can rerun and interrupt again on replay, while
+                    # its earlier output still makes its interrupt look answered.
+                    and not self._addressed_checkpoint_superseded
+                )
                 if resume_is_map := (
                     isinstance(resume, dict)
                     and all(is_xxh3_128_hexdigest(k) for k in resume)
                 ):
+                    if strict:
+                        pending = self._pending_interrupts()
+                        if not resume:
+                            raise UnknownInterruptError(
+                                "The resume map names no interrupt",
+                                reason="empty_map",
+                                pending_ids=sorted(pending),
+                            )
+                        if unknown := sorted(resume.keys() - pending):
+                            raise UnknownInterruptError(
+                                f"Unknown or already-consumed interrupt: {unknown[0]}",
+                                reason="not_pending",
+                                interrupt_ids=unknown,
+                                pending_ids=sorted(pending),
+                            )
                     self.config[CONF][CONFIG_KEY_RESUME_MAP] = resume
                 else:
-                    if len(self._pending_interrupts()) > 1:
-                        raise RuntimeError(
+                    if len(pending := self._pending_interrupts()) > 1:
+                        message = (
                             "When there are multiple pending interrupts, you must specify the interrupt id when resuming. "
-                            "Docs: https://docs.langchain.com/oss/python/langgraph/add-human-in-the-loop#resume-multiple-interrupts-with-one-invocation."
+                            "Docs: https://docs.langchain.com/oss/python/langgraph/interrupts#handling-multiple-interrupts."
                         )
+                        if strict:
+                            raise UnknownInterruptError(
+                                message, reason="ambiguous", pending_ids=sorted(pending)
+                            )
+                        raise RuntimeError(message)
 
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
             # group writes by task ID

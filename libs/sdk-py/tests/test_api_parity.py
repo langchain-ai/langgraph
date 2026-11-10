@@ -136,7 +136,7 @@ def test_sync_api_matches_async(async_cls, sync_cls):
 # and stateful ones (`thread_id: str`) leave out `on_completion`, which only
 # applies to stateless runs.
 _RUN_OVERLOAD_OMISSIONS = {
-    "None": {"checkpoint", "checkpoint_id", "multitask_strategy"},
+    "None": {"checkpoint", "checkpoint_id", "multitask_strategy", "strict_resume"},
     "str": {"on_completion"},
 }
 
