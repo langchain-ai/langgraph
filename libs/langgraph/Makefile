@@ -73,7 +73,7 @@ stop-dev-server:
 	fi
 
 TEST ?= .
-NO_DOCKER ?= $(sh command -v docker >/dev/null 2>&1 && echo "false" || echo "true")
+NO_DOCKER ?= $(shell command -v docker >/dev/null 2>&1 && echo "false" || echo "true")
 
 test:
 	if [ "$(NO_DOCKER)" = "false" ]; then \
