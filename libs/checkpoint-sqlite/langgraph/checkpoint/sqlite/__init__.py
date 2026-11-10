@@ -174,7 +174,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             self.conn.execute(
                 "ALTER TABLE writes ADD COLUMN task_path TEXT NOT NULL DEFAULT ''"
             )
-        except sqlite3.OperationalError as e:
+        except Exception as e:  # any sqlite driver (sqlcipher, apsw, ...), not just stdlib
             # A read-only database from before the column can still be read;
             # its rows would all read back as '' anyway.
             if "readonly database" in str(e):

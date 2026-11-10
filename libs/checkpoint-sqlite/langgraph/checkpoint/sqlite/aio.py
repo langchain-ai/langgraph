@@ -354,7 +354,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                     "ALTER TABLE writes ADD COLUMN task_path TEXT NOT NULL DEFAULT ''"
                 )
                 await self.conn.commit()
-            except aiosqlite.OperationalError as e:
+            except Exception as e:  # any sqlite driver (sqlcipher, apsw, ...), not just stdlib
                 # A read-only database from before the column can still be read;
                 # its rows would all read back as '' anyway.
                 if "readonly database" in str(e):
