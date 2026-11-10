@@ -106,7 +106,16 @@ list(checkpointer.list(read_config))
 > [!CAUTION]
 > **Memory leak risk with `InMemorySaver`:** this checkpointer stores all checkpoints in a plain Python dictionary and never evicts entries on its own.
 > In long-running applications the retained state grows monotonously — each new `thread_id` accumulates its full checkpoint history and pending writes until the process exits.
-> The caller is responsible for cleaning up stale threads via `.delete_thread()` (or by resetting the checkpointer) according to the application's retention policy.
+> The caller is responsible for cleaning up stale threads via `.delete_thread()` (or by resetting the checkpointer) according to the application's retention policy. Like in example below
+> ```python
+> async def main():
+>     thread_id = str(uuid.uuid4()     
+>     config = {"configurable": {"thread_id": thread_id}}
+>     try:
+>         result = await graph.ainvoke(state, config)
+>     finally:
+>         await graph.checkpointer.adelete_thread(thread_id)
+> ```
 
 ## 📕 Releases & Versioning
 
