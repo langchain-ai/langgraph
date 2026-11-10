@@ -1,7 +1,9 @@
+import asyncio
 import contextlib
 import dataclasses
 import json
 import sys
+import time
 import warnings
 from functools import partial
 from typing import (
@@ -2566,3 +2568,193 @@ def test_tool_node_list_return_mixed_with_regular_tool() -> None:
     tool_call_ids = {m.tool_call_id for m in all_msgs}
     assert list_tool_id in tool_call_ids
     assert regular_tool_id in tool_call_ids
+
+
+# ────────────────────────────────────────────────────────────────
+#  Async timeout tests (issue #6412: ainvoke freezing on stalled tools)
+# ────────────────────────────────────────────────────────────────
+
+
+@dec_tool
+async def stalling_tool(x: int) -> str:
+    """Simulate an MCP/SSE tool whose stream never resolves (no network)."""
+    await asyncio.Event().wait()
+    return f"result: {x}"  # pragma: no cover - always cancelled by the timeout
+
+
+@dec_tool
+async def quick_tool(x: int) -> str:
+    """Fast tool for timeout tests."""
+    return f"result: {x}"
+
+
+async def test_tool_node_async_timeout_returns_error_message() -> None:
+    """A stalled tool surfaces as an error ToolMessage when handling is enabled."""
+    tool_node = ToolNode([stalling_tool], timeout=0.1, handle_tool_errors=True)
+    msg = AIMessage(
+        "", tool_calls=[ToolCall(name="stalling_tool", args={"x": 1}, id="1")]
+    )
+    result = await tool_node.ainvoke(
+        {"messages": [msg]}, config=_create_config_with_runtime()
+    )
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.status == "error"
+    assert tool_message.tool_call_id == "1"
+    assert "timed out" in tool_message.content
+    assert "stalling_tool" in tool_message.content
+
+
+async def test_tool_node_async_timeout_raises_when_errors_not_handled() -> None:
+    """Timeout propagates as TimeoutError when handle_tool_errors is False."""
+    tool_node = ToolNode([stalling_tool], timeout=0.1, handle_tool_errors=False)
+    msg = AIMessage(
+        "", tool_calls=[ToolCall(name="stalling_tool", args={"x": 1}, id="1")]
+    )
+    with pytest.raises(TimeoutError, match="timed out"):
+        await tool_node.ainvoke(
+            {"messages": [msg]}, config=_create_config_with_runtime()
+        )
+
+
+async def test_tool_node_async_timeout_default_propagates() -> None:
+    """Default handling only converts invocation errors, so timeouts propagate."""
+    tool_node = ToolNode([stalling_tool], timeout=0.1)
+    msg = AIMessage(
+        "", tool_calls=[ToolCall(name="stalling_tool", args={"x": 1}, id="1")]
+    )
+    with pytest.raises(TimeoutError, match="stalling_tool"):
+        await tool_node.ainvoke(
+            {"messages": [msg]}, config=_create_config_with_runtime()
+        )
+
+
+async def test_tool_node_async_timeout_fast_tool_succeeds() -> None:
+    """Tools finishing before the timeout return normally."""
+    tool_node = ToolNode([quick_tool], timeout=5.0)
+    msg = AIMessage(
+        "", tool_calls=[ToolCall(name="quick_tool", args={"x": 42}, id="1")]
+    )
+    result = await tool_node.ainvoke(
+        {"messages": [msg]}, config=_create_config_with_runtime()
+    )
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.status == "success"
+    assert tool_message.content == "result: 42"
+
+
+async def test_tool_node_async_timeout_parallel_mix() -> None:
+    """Timeout applies per tool: fast tools succeed while stalled ones error."""
+    tool_node = ToolNode(
+        [stalling_tool, quick_tool], timeout=0.5, handle_tool_errors=True
+    )
+    msg = AIMessage(
+        "",
+        tool_calls=[
+            ToolCall(name="stalling_tool", args={"x": 1}, id="1"),
+            ToolCall(name="quick_tool", args={"x": 2}, id="2"),
+        ],
+    )
+    result = await tool_node.ainvoke(
+        {"messages": [msg]}, config=_create_config_with_runtime()
+    )
+    messages = result["messages"]
+    assert len(messages) == 2
+    by_name = {m.name: m for m in messages}
+    assert by_name["quick_tool"].status == "success"
+    assert by_name["quick_tool"].content == "result: 2"
+    assert by_name["stalling_tool"].status == "error"
+    assert "timed out" in by_name["stalling_tool"].content
+
+
+@dec_tool
+async def self_timing_out_tool(x: int) -> str:
+    """Tool raising its own TimeoutError (must not be relabeled)."""
+    raise TimeoutError("inner http read timed out")
+
+
+@dec_tool
+def slow_sync_tool(x: int) -> str:
+    """Sync tool for proving the sync path ignores the timeout."""
+    time.sleep(0.2)
+    return f"result: {x}"
+
+
+@dec_tool
+async def slow_finite_tool(x: int) -> str:
+    """Slow-but-finite tool for timeout=None backward compatibility."""
+    await asyncio.sleep(0.2)
+    return f"result: {x}"
+
+
+async def test_tool_node_async_timeout_typed_handler_converts() -> None:
+    """A typed handle_tool_errors=TimeoutError handler converts the timeout."""
+    tool_node = ToolNode([stalling_tool], timeout=0.1, handle_tool_errors=TimeoutError)
+    msg = AIMessage(
+        "", tool_calls=[ToolCall(name="stalling_tool", args={"x": 1}, id="1")]
+    )
+    result = await tool_node.ainvoke(
+        {"messages": [msg]}, config=_create_config_with_runtime()
+    )
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.status == "error"
+    assert "timed out" in tool_message.content
+
+
+async def test_tool_node_async_timeout_preserves_tool_own_error() -> None:
+    """A tool's own TimeoutError keeps its message, not the expiry label."""
+    tool_node = ToolNode([self_timing_out_tool], timeout=5.0, handle_tool_errors=True)
+    msg = AIMessage(
+        "", tool_calls=[ToolCall(name="self_timing_out_tool", args={"x": 1}, id="1")]
+    )
+    result = await tool_node.ainvoke(
+        {"messages": [msg]}, config=_create_config_with_runtime()
+    )
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.status == "error"
+    assert "inner http read timed out" in tool_message.content
+    assert "timed out after" not in tool_message.content
+
+
+def test_tool_node_timeout_sync_invoke_unaffected() -> None:
+    """The sync invoke path ignores the timeout entirely."""
+    tool_node = ToolNode([slow_sync_tool], timeout=0.01)
+    msg = AIMessage(
+        "", tool_calls=[ToolCall(name="slow_sync_tool", args={"x": 1}, id="1")]
+    )
+    result = tool_node.invoke({"messages": [msg]}, config=_create_config_with_runtime())
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.status == "success"
+    assert tool_message.content == "result: 1"
+
+
+async def test_tool_node_timeout_none_backward_compat() -> None:
+    """timeout=None leaves slow-finite tools to complete normally."""
+    tool_node = ToolNode([slow_finite_tool])
+    msg = AIMessage(
+        "", tool_calls=[ToolCall(name="slow_finite_tool", args={"x": 1}, id="1")]
+    )
+    result = await tool_node.ainvoke(
+        {"messages": [msg]}, config=_create_config_with_runtime()
+    )
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.status == "success"
+    assert tool_message.content == "result: 1"
+
+
+def test_tool_node_timeout_validation() -> None:
+    """timeout must be None or a finite number greater than 0."""
+    for bad in (0, -1, 0.0, -0.5, float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="greater than 0"):
+            ToolNode([quick_tool], timeout=bad)
+    for bad in ("5", True, object()):
+        with pytest.raises(TypeError, match="number of seconds or None"):
+            ToolNode([quick_tool], timeout=bad)
+    ToolNode([quick_tool], timeout=None)
+    ToolNode([quick_tool], timeout=5)
+    ToolNode([quick_tool], timeout=0.1)

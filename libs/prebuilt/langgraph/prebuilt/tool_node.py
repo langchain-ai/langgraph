@@ -42,6 +42,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import math
 from collections.abc import Awaitable, Callable
 from copy import copy, deepcopy
 from dataclasses import dataclass, field, replace
@@ -705,6 +706,22 @@ class ToolNode(RunnableCallable):
             This same key will be used for the output `ToolMessage` objects.
 
             Allows custom state schemas with different message field names.
+        timeout: Optional per-tool timeout in seconds for async execution.
+            Must be a finite number greater than 0. When set, each tool call
+            run via `ainvoke` is cancelled if it runs longer than this duration
+            (e.g. an MCP tool whose SSE stream stalls indefinitely after
+            `sse_read_timeout`). On expiry a `TimeoutError` is raised inside
+            the normal error-handling path, so it becomes an error `ToolMessage`
+            when `handle_tool_errors` handling applies and propagates otherwise.
+            Only genuine expiry is rewritten: a `TimeoutError` raised by the
+            tool itself keeps its original message. If `None` (default), no
+            timeout is applied. The sync `invoke` path is unaffected.
+            Complements node-level `add_node(timeout=...)`, which fails the
+            whole node with `NodeTimeoutError`; note a propagated `TimeoutError`
+            is an `OSError`, so a default `RetryPolicy` will not retry it.
+            The timeout bounds waiting, not execution: sync tools keep running
+            in their worker thread, and tools that swallow cancellation can
+            defeat it.
 
     Examples:
         Basic usage:
@@ -762,6 +779,7 @@ class ToolNode(RunnableCallable):
         messages_key: str = "messages",
         wrap_tool_call: ToolCallWrapper | None = None,
         awrap_tool_call: AsyncToolCallWrapper | None = None,
+        timeout: float | None = None,
     ) -> None:
         """Initialize `ToolNode` with tools and configuration.
 
@@ -776,6 +794,8 @@ class ToolNode(RunnableCallable):
                 Enables retries, caching, request modification, and control flow.
             awrap_tool_call: Async wrapper function to intercept tool execution.
                 If not provided, falls back to wrap_tool_call for async execution.
+            timeout: Optional per-tool timeout in seconds for async execution.
+                If `None` (default), no timeout is applied.
         """
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self._tools_by_name: dict[str, BaseTool] = {}
@@ -784,6 +804,15 @@ class ToolNode(RunnableCallable):
         self._messages_key = messages_key
         self._wrap_tool_call = wrap_tool_call
         self._awrap_tool_call = awrap_tool_call
+        if timeout is not None:
+            if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+                raise TypeError(
+                    "timeout must be a number of seconds or None, "
+                    f"got {type(timeout).__name__}"
+                )
+            if not math.isfinite(timeout) or timeout <= 0:
+                raise ValueError("timeout must be a finite number greater than 0")
+        self._timeout = timeout
         for tool in tools:
             if not isinstance(tool, BaseTool):
                 tool_ = create_tool(cast("type[BaseTool]", tool))
@@ -1123,7 +1152,15 @@ class ToolNode(RunnableCallable):
 
         try:
             try:
-                response = await tool.ainvoke(call_args, config)
+                if self._timeout is not None:
+                    timeout_task = asyncio.ensure_future(
+                        tool.ainvoke(call_args, config)
+                    )
+                    response = await asyncio.wait_for(
+                        timeout_task, timeout=self._timeout
+                    )
+                else:
+                    response = await tool.ainvoke(call_args, config)
             except ValidationError as exc:
                 if is_invalid_resume(exc):
                     # An `interrupt()` in this tool, or in a graph it ran, got a resume
@@ -1136,6 +1173,18 @@ class ToolNode(RunnableCallable):
                 # Use original call["args"] without injected values for error reporting
                 raise ToolInvocationError(
                     call["name"], exc, call["args"], filtered_errors
+                ) from exc
+            except (asyncio.TimeoutError, TimeoutError) as exc:
+                # Genuine wait_for expiry cancels timeout_task; a TimeoutError
+                # the tool raised itself leaves it finished. Only rewrite the
+                # former, so the tool's own error keeps its message (this also
+                # keeps 3.10, where the two types differ, consistent with 3.11+).
+                if not timeout_task.cancelled():
+                    raise
+                # Re-raise with context; the outer block below routes it
+                # through the regular handle_tool_errors handling.
+                raise TimeoutError(
+                    f"Tool '{call['name']}' timed out after {self._timeout} seconds"
                 ) from exc
 
             # Inside try so validation errors route through _handle_tool_errors
