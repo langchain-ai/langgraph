@@ -5396,6 +5396,47 @@ def test_multiple_interrupt_state_persistence(
     assert state.values["steps"] == ["step1", "step2"]
 
 
+@pytest.mark.parametrize("in_subgraph", [False, True])
+def test_consumed_resume_not_reused_by_later_interrupt(
+    sync_checkpointer: BaseCheckpointSaver, in_subgraph: bool
+) -> None:
+    """A run without a resume value must not answer a pending interrupt with
+    the resume value an earlier interrupt already used (#8837)."""
+
+    class State(TypedDict):
+        steps: Annotated[list[str], operator.add]
+
+    def node(state: State):
+        first = interrupt("first")
+        second = interrupt("second")
+        return {"steps": [first, second]}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    if in_subgraph:
+        builder = StateGraph(State)
+        builder.add_node(
+            "node",
+            StateGraph(State).add_node("node", node).add_edge(START, "node").compile(),
+        )
+        builder.add_edge(START, "node")
+    app = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    app.invoke({"steps": []}, config)
+    app.invoke(Command(resume="step1"), config)
+
+    # no resume value: the graph stays paused at the second interrupt
+    app.invoke(None, config)
+    state = app.get_state(config)
+    assert state.next == ("node",)
+    assert [i.value for t in state.tasks for i in t.interrupts] == ["second"]
+    assert state.values == {"steps": []}
+
+    assert app.invoke(Command(resume="step2"), config)["steps"] == ["step1", "step2"]
+
+
 def test_concurrent_execution_thread_safety():
     """Test thread safety during concurrent execution."""
 

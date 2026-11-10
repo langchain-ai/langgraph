@@ -1289,7 +1289,8 @@ def _scratchpad(
     if len(pending_writes) > 0:
         # find global resume value
         for w in pending_writes:
-            if w[0] == NULL_TASK_ID and w[1] == RESUME:
+            # a resume value of None marks one a task already consumed
+            if w[0] == NULL_TASK_ID and w[1] == RESUME and w[2] is not None:
                 null_resume_write = w
                 break
         else:

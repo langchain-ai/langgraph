@@ -264,6 +264,9 @@ class PregelLoop:
     # A checkpoint addressed by `checkpoint_id` that the thread has moved past,
     # so it may already have children.
     _addressed_checkpoint_superseded: bool = False
+    # Whether the checkpoint's saved writes hold the run's resume value
+    # (`Command(resume=...)`), which a task may consume.
+    _null_resume_saved: bool = False
 
     # The checkpoint_config that points at the parent loaded at `__enter__`
     # (or the synthetic-empty checkpoint, on first run). We capture it
@@ -494,6 +497,15 @@ class PregelLoop:
                 w for w in self.checkpoint_pending_writes if w[0] != task_id
             ]
             writes_to_save = writes
+            if self._null_resume_saved and not any(
+                w[0] == NULL_TASK_ID and w[1] == RESUME
+                for w in self.checkpoint_pending_writes
+            ):
+                # A task, or a subgraph it runs, consumed the resume value.
+                # Save that, or the next run would read it again and answer a
+                # later interrupt with it.
+                self._null_resume_saved = False
+                self.put_writes(NULL_TASK_ID, [(RESUME, None)])
 
         # check if any writes are to an UntrackedValue channel
         if any(
@@ -762,6 +774,7 @@ class PregelLoop:
                 self._exit_delta_writes.append((self.step, tid, path, ch, v))
         # clear pending writes
         self.checkpoint_pending_writes.clear()
+        self._null_resume_saved = False
         # only replay (re-execute) done tasks on the first tick
         self.is_replaying = False
         # save checkpoint
@@ -1090,6 +1103,10 @@ class PregelLoop:
             self._delta_channels_forced_snapshot.update(
                 delta_channels_with_pending_writes(self.specs, carried)
             )
+        self._null_resume_saved = any(
+            w[0] == NULL_TASK_ID and w[1] == RESUME
+            for w in self.checkpoint_pending_writes
+        )
         # apply NULL writes
         if null_writes := [
             w[1:]
