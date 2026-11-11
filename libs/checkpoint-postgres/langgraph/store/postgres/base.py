@@ -7,7 +7,7 @@ import logging
 import re
 import threading
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from typing import (
@@ -789,7 +789,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         pool_config: PoolConfig | None = None,
         index: PostgresIndexConfig | None = None,
         ttl: TTLConfig | None = None,
-    ) -> Iterator[PostgresStore]:
+    ) -> Generator[PostgresStore, None, None]:
         """Create a new PostgresStore instance from a connection string.
 
         Args:
@@ -940,7 +940,9 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             self.stop_ttl_sweeper(timeout=0.1)
 
     @contextmanager
-    def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
+    def _cursor(
+        self, *, pipeline: bool = False
+    ) -> Generator[Cursor[DictRow], None, None]:
         """Create a database cursor as a context manager.
 
         Args:

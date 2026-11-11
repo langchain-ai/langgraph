@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Callable, Iterable, Sequence
+from collections.abc import AsyncGenerator, Callable, Iterable, Sequence
 from contextlib import asynccontextmanager
 from types import TracebackType
 from typing import Any, cast
@@ -182,7 +182,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         pool_config: PoolConfig | None = None,
         index: PostgresIndexConfig | None = None,
         ttl: TTLConfig | None = None,
-    ) -> AsyncIterator[AsyncPostgresStore]:
+    ) -> AsyncGenerator[AsyncPostgresStore, None]:
         """Create a new AsyncPostgresStore instance from a connection string.
 
         Args:
@@ -543,7 +543,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
     @asynccontextmanager
     async def _cursor(
         self, *, pipeline: bool = False
-    ) -> AsyncIterator[AsyncCursor[DictRow]]:
+    ) -> AsyncGenerator[AsyncCursor[DictRow], None]:
         """Create a database cursor as a context manager.
 
         Args:
