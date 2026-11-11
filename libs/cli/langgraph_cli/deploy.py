@@ -465,7 +465,7 @@ def deployment_selector(deployment_id: str | None, name: str | None) -> ById | B
         return ById(deployment_id)
     if name:
         return ByName(name)
-    raise click.UsageError("Either --deployment-id or --name is required.")
+    raise click.UsageError("Either --agent-server-id or --name is required.")
 
 
 def validate_deploy_commands(
@@ -1327,7 +1327,7 @@ def _run_local_build(
                     f"Agent Server '{deployment_id}' was not created by 'langgraph deploy' "
                     "and cannot be updated with this command.\n"
                     "Please create a new Agent Server by running 'langgraph deploy' "
-                    "without --deployment-id, or use a different --name."
+                    "without --agent-server-id, or use a different --name."
                 ) from None
             raise
         deployment_token = push_data.get("token")
@@ -1558,7 +1558,7 @@ def _resolve_or_create(
             "Scale to zero deployments are not supported in AWS environments"
         ):
             raise HostBackendError(
-                f"{err.message}\nUse --deployment-type dev instead.",
+                f"{err.message}\nUse --agent-server-type dev instead.",
                 status_code=err.status_code,
                 detail=err.detail,
             ) from None
@@ -2064,6 +2064,15 @@ def _call_host_backend_with_optional_tenant(
 # Click options shared by deploy commands
 # ---------------------------------------------------------------------------
 
+
+def _normalize_deploy_token(token: str) -> str:
+    """Accept legacy option names without advertising them in help or errors."""
+    return {
+        "deployment-id": "agent-server-id",
+        "deployment-type": "agent-server-type",
+    }.get(token, token)
+
+
 OPT_HOST_API_KEY = click.option(
     "--api-key",
     envvar="LANGGRAPH_HOST_API_KEY",
@@ -2079,7 +2088,7 @@ OPT_HOST_DEPLOYMENT_NAME = click.option(
     help=(
         "Agent Server name. Can also be set via LANGSMITH_DEPLOYMENT_NAME "
         "environment variable or .env file. Defaults to current directory name "
-        "if --deployment-id is not provided."
+        "if --agent-server-id is not provided."
     ),
 )
 
@@ -2207,14 +2216,16 @@ def _deploy_base_options(
             OPT_AGENT_ID,
             OPT_AGENT_ENVIRONMENT,
             click.option(
-                "--deployment-id",
+                "--agent-server-id",
+                "deployment_id",
                 help=(
                     "ID of an existing Agent Server to update. If omitted, "
                     "--name is used to find or create the Agent Server."
                 ),
             ),
             click.option(
-                "--deployment-type",
+                "--agent-server-type",
+                "deployment_type",
                 type=click.Choice(["serverless", "dedicated", "dev", "prod"]),
                 default="serverless",
                 show_default=True,
@@ -2358,14 +2369,18 @@ def _deploy_base_options(
 @click.group(
     cls=DeployGroup,
     help=(
-        "[Beta] Build and deploy a LangGraph image to LangSmith Agent Servers.\n\n"
+        "[Beta] Build and deploy an Agent Server image to LangSmith Agent Servers.\n\n"
         "This command is in beta and under active development. "
         "Expect frequent updates and improvements.\n\n"
         "Run from the root of your LangGraph project (where langgraph.json "
         "is located). This command also accepts build flags (--base-image, "
         "--config, --pull, etc.). See 'langgraph build --help' for details."
     ),
-    context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
+    context_settings=dict(
+        ignore_unknown_options=True,
+        allow_extra_args=True,
+        token_normalize_func=_normalize_deploy_token,
+    ),
     invoke_without_command=True,  # allow `deploy` click group to execute without command
 )
 @_deploy_base_options(include_docker_args=False, validate_config_path=False)
@@ -2389,7 +2404,11 @@ def deploy(ctx: click.Context, **_: object):
 
 
 @_deploy_base_options()
-@click.command(context_settings=dict(ignore_unknown_options=True))
+@click.command(
+    context_settings=dict(
+        ignore_unknown_options=True, token_normalize_func=_normalize_deploy_token
+    )
+)
 def _deploy_cmd(
     config: pathlib.Path,
     pull: bool,
@@ -2439,7 +2458,7 @@ def _deploy_cmd(
             )
         if name is not None or deployment_id is not None:
             raise click.UsageError(
-                "--agent-id and --agent-environment cannot be combined with --name or --deployment-id."
+                "--agent-id and --agent-environment cannot be combined with --name or --agent-server-id."
             )
         agent = {"agent_id": agent_id, "environment": environment}
     if not config.exists():
@@ -2850,7 +2869,8 @@ def deploy_delete(
 @OPT_HOST_API_KEY
 @OPT_HOST_DEPLOYMENT_NAME
 @click.option(
-    "--deployment-id",
+    "--agent-server-id",
+    "deployment_id",
     help="Agent Server ID. If omitted, --name is used to find the Agent Server.",
 )
 @click.option(
