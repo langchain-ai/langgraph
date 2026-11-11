@@ -756,7 +756,7 @@ class Pregel(
 
     config: RunnableConfig | None = None
 
-    name: str = "LangGraph"
+    name: str | None = "LangGraph"
 
     trigger_to_nodes: Mapping[str, Sequence[str]]
     node_error_handler_map: Mapping[str, str]

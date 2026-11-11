@@ -196,20 +196,7 @@ class PregelLoop:
     checkpointer_get_next_version: GetNextVersion
     checkpointer_put_writes: Callable[[RunnableConfig, WritesT, str], Any] | None
     checkpointer_put_writes_accepts_task_path: bool
-    _checkpointer_put_after_previous: (
-        Callable[
-            [
-                concurrent.futures.Future | None,
-                Sequence[Any],
-                RunnableConfig,
-                Checkpoint,
-                str,
-                ChannelVersions,
-            ],
-            Any,
-        ]
-        | None
-    )
+    _checkpointer_put_after_previous: Any
     _migrate_checkpoint: Callable[[Checkpoint], None] | None
     submit: Submit
     channels: Mapping[str, BaseChannel]
