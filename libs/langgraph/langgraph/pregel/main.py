@@ -884,11 +884,23 @@ class Pregel(
         )
 
     def _subgraph_for_namespace(
-        self, config: RunnableConfig, checkpointer: BaseCheckpointSaver
+        self,
+        config: RunnableConfig,
+        checkpointer: BaseCheckpointSaver,
+        *,
+        for_update: bool = False,
     ) -> tuple[PregelProtocol, RunnableConfig] | None:
         """The subgraph a state method's namespaced config addresses, and the
         config to call it with, lending it `checkpointer`. `None` when the
-        config is for this graph."""
+        config is for this graph, or names no subgraph this graph declares or
+        detects (such as one a tool invokes), so a read uses this graph's
+        channels.
+
+        Raises:
+            ValueError: If `for_update` and the namespace names no such
+                subgraph: this graph's nodes and channels would write the wrong
+                state into it.
+        """
         checkpoint_ns = config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         if not checkpoint_ns or CONFIG_KEY_CHECKPOINTER in config[CONF]:
             return None
@@ -897,7 +909,9 @@ class Pregel(
             return pregel, patch_configurable(
                 config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
             )
-        raise ValueError(f"Subgraph {recast} not found")
+        if for_update:
+            raise ValueError(f"Subgraph {recast} not found")
+        return None
 
     def _apply_checkpointer_allowlist(
         self, checkpointer: BaseCheckpointSaver | None
@@ -1143,7 +1157,9 @@ class Pregel(
         """Get the subgraphs of the graph.
 
         Args:
-            namespace: The namespace to filter the subgraphs by.
+            namespace: Yield only the subgraph at this exact namespace, such
+                as `parent|child` (without task IDs). A nested namespace needs
+                `recurse=True`.
             recurse: Whether to recurse into the subgraphs.
                 If `False`, only the immediate subgraphs will be returned.
 
@@ -1151,9 +1167,9 @@ class Pregel(
             An iterator of the `(namespace, subgraph)` pairs.
         """
         for name, node in self.nodes.items():
-            # filter by prefix
+            # filter by the namespace's first segment, matched whole
             if namespace is not None:
-                if not namespace.startswith(name):
+                if namespace != name and not namespace.startswith(name + NS_SEP):
                     continue
 
             # find the subgraph, if any
@@ -1167,12 +1183,13 @@ class Pregel(
                 if namespace is None:
                     yield name, graph
                 if recurse and isinstance(graph, Pregel):
-                    if namespace is not None:
-                        namespace = namespace[len(name) + 1 :]
+                    child_namespace = (
+                        None if namespace is None else namespace[len(name) + 1 :]
+                    )
                     yield from (
                         (f"{name}{NS_SEP}{n}", s)
                         for n, s in graph.get_subgraphs(
-                            namespace=namespace, recurse=recurse
+                            namespace=child_namespace, recurse=recurse
                         )
                     )
 
@@ -1182,7 +1199,9 @@ class Pregel(
         """Get the subgraphs of the graph.
 
         Args:
-            namespace: The namespace to filter the subgraphs by.
+            namespace: Yield only the subgraph at this exact namespace, such
+                as `parent|child` (without task IDs). A nested namespace needs
+                `recurse=True`.
             recurse: Whether to recurse into the subgraphs.
                 If `False`, only the immediate subgraphs will be returned.
 
@@ -1641,7 +1660,9 @@ class Pregel(
         if any(len(u) == 0 for u in supersteps):
             raise ValueError("No updates provided")
 
-        if subgraph := self._subgraph_for_namespace(config, checkpointer):
+        if subgraph := self._subgraph_for_namespace(
+            config, checkpointer, for_update=True
+        ):
             pregel, subgraph_config = subgraph
             return pregel.bulk_update_state(subgraph_config, supersteps)
 
@@ -2142,7 +2163,9 @@ class Pregel(
         if any(len(u) == 0 for u in supersteps):
             raise ValueError("No updates provided")
 
-        if subgraph := self._subgraph_for_namespace(config, checkpointer):
+        if subgraph := self._subgraph_for_namespace(
+            config, checkpointer, for_update=True
+        ):
             pregel, subgraph_config = subgraph
             return await pregel.abulk_update_state(subgraph_config, supersteps)
 

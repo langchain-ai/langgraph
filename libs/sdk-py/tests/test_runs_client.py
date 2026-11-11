@@ -212,3 +212,55 @@ async def test_wait_returns_the_run_error_without_raise_error(asynchronous):
 
     assert result == run_error
     assert "raise_error" not in json.loads(requests[0].content)
+
+
+def _strict_resume_handler(requests: list[httpx.Request]):
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path.endswith("/stream"):
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/event-stream"},
+                content=b"event: end\ndata: null\n\n",
+            )
+        return httpx.Response(200, json={"run_id": "r1"})
+
+    return handler
+
+
+@pytest.mark.parametrize("method", ["create", "stream", "wait"])
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("strict_resume", [True, None], ids=["opted-in", "default"])
+async def test_runs_send_strict_resume_only_when_set(
+    method: str, asynchronous: bool, strict_resume: bool | None
+):
+    requests: list[httpx.Request] = []
+    transport = httpx.MockTransport(_strict_resume_handler(requests))
+    kwargs: dict[str, Any] = {
+        "command": {"resume": {"0" * 32: "yes"}},
+        "strict_resume": strict_resume,
+    }
+    if asynchronous:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="https://example.com"
+        ) as client:
+            result = getattr(RunsClient(HttpClient(client)), method)(
+                "t1", "agent", **kwargs
+            )
+            if method == "stream":
+                async for _ in result:
+                    pass
+            else:
+                await result
+    else:
+        with httpx.Client(
+            transport=transport, base_url="https://example.com"
+        ) as client:
+            result = getattr(SyncRunsClient(SyncHttpClient(client)), method)(
+                "t1", "agent", **kwargs
+            )
+            if method == "stream":
+                for _ in result:
+                    pass
+
+    assert json.loads(requests[0].content).get("strict_resume") == strict_resume
