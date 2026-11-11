@@ -362,6 +362,13 @@ class HostBackendClient:
             f"/v2/deployments/{deployment_id}/revisions/{revision_id}",
         )
 
+    def get_deployment_metrics(
+        self, deployment_id: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        return self._request(
+            "GET", f"/v2/deployments/{deployment_id}/metrics", params=params
+        )
+
     def get_build_logs(
         self, project_id: str, revision_id: str, payload: dict[str, Any]
     ) -> Any:

@@ -11,8 +11,9 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Generic, Protocol, TypeVar
+from uuid import UUID
 
 import click
 import click.exceptions
@@ -23,6 +24,7 @@ from langgraph_cli.analytics import log_command
 from langgraph_cli.config import Config
 from langgraph_cli.constants import DEFAULT_CONFIG
 from langgraph_cli.dependency_tracking import find_tracked_packages
+from langgraph_cli.deployment_metrics import compact_deployment_metrics
 from langgraph_cli.docker import build_docker_image, can_build_locally
 from langgraph_cli.exec import CommandRunner, Runner, subp_exec
 from langgraph_cli.host_backend import (
@@ -2632,6 +2634,81 @@ def deploy_list(
 # ---------------------------------------------------------------------------
 # deploy listeners
 # ---------------------------------------------------------------------------
+
+
+@OPT_HOST_API_KEY
+@OPT_HOST_URL
+@click.argument("deployment_id", type=click.UUID)
+@click.option(
+    "--start-time",
+    help="ISO8601 start time. Defaults to 15 minutes before --end-time.",
+)
+@click.option("--end-time", help="ISO8601 end time. Defaults to now.")
+@click.option(
+    "--metrics",
+    help=(
+        "Comma-separated metric names. Defaults to all metrics. Supported names: "
+        "memory_usage, cpu_usage, disk_usage, restart_count, replica_count, "
+        "worker_count, lg_run_count, responses_per_second, "
+        "error_responses_per_second, p95_latency, run_queue_wait_time. "
+        "Availability depends on the deployment and platform."
+    ),
+)
+@click.option(
+    "--summary", is_flag=True, help="Omit points and print per-series statistics only."
+)
+@click.option(
+    "--raw", is_flag=True, help="Print the original host-backend chart schema."
+)
+@deploy.command(
+    "metrics", help="[Beta] Fetch deployment monitoring time series as compact JSON."
+)
+def deploy_metrics(
+    api_key: str | None,
+    host_url: str | None,
+    deployment_id: UUID,
+    start_time: str | None,
+    end_time: str | None,
+    metrics: str | None,
+    summary: bool,
+    raw: bool,
+) -> None:
+    if summary and raw:
+        raise click.UsageError("--summary and --raw are mutually exclusive.")
+    end_time = end_time or datetime.now(timezone.utc).isoformat()
+    if start_time is None:
+        try:
+            end = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise click.BadParameter(
+                "Expected an ISO8601 timestamp.", param_hint="--end-time"
+            ) from exc
+        end = end.replace(tzinfo=end.tzinfo or timezone.utc).astimezone(timezone.utc)
+        start_time = (end - timedelta(minutes=15)).isoformat()
+    params = {
+        key: value
+        for key, value in {
+            "start_time": start_time,
+            "end_time": end_time,
+            "metrics": metrics,
+        }.items()
+        if value is not None
+    }
+    client = _create_host_backend_client(host_url, api_key, no_input=True)
+    result = _call_host_backend_with_optional_tenant(
+        client,
+        lambda c: c.get_deployment_metrics(str(deployment_id), params),
+        no_input=True,
+    )
+    if not raw:
+        result = compact_deployment_metrics(
+            result,
+            str(deployment_id),
+            start_time=start_time,
+            end_time=end_time,
+            summary=summary,
+        )
+    click.echo(json_mod.dumps(result, separators=(",", ":")))
 
 
 @deploy.group(
