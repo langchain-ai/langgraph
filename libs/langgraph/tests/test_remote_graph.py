@@ -16,7 +16,7 @@ from langgraph_sdk.schema import StreamPart
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
-from langgraph._internal._constants import CONFIG_KEY_STREAM
+from langgraph._internal._constants import CONFIG_KEY_STREAM, CONFIG_KEY_STRICT_RESUME
 from langgraph.errors import GraphInterrupt
 from langgraph.graph import END, START, MessagesState, StateGraph, add_messages
 from langgraph.pregel import Pregel
@@ -1360,6 +1360,7 @@ def test_sanitize_config():
             "checkpoint_map": {"key": "value"},  # Should be dropped
             "checkpoint_id": "123",  # Should be dropped
             "checkpoint_ns": "ns",  # Should be dropped
+            CONFIG_KEY_STRICT_RESUME: True,  # Should be dropped
         }
     }
     sanitized = remote._sanitize_config(config_with_drops)

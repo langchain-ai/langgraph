@@ -9,7 +9,7 @@ import re
 from collections.abc import Mapping
 from datetime import tzinfo
 from typing import TYPE_CHECKING, Any, cast
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urlparse, urlsplit, urlunsplit
 
 import httpx
 
@@ -193,6 +193,25 @@ def _validate_reconnect_location(base_url: httpx.URL, location: str) -> str:
             f"(origin {loc_origin}) does not match base URL origin {base_origin}"
         )
     return location
+
+
+_RUN_STREAM_PATH = re.compile(r"(.*/threads/[^/]+/runs/[^/]+)/stream")
+
+
+def _run_url_from_stream_location(location: str) -> str | None:
+    url = urlsplit(location)
+    if match := _RUN_STREAM_PATH.fullmatch(url.path):
+        return urlunsplit((url.scheme, url.netloc, match[1], "", ""))
+    return None
+
+
+def _run_check_headers(reconnect_headers: Mapping[str, str]) -> dict[str, str]:
+    headers = {
+        key: value
+        for key, value in reconnect_headers.items()
+        if key.lower() not in ("accept", "last-event-id")
+    }
+    return {**headers, "Accept": "application/json"}
 
 
 def _reconnect_delay(attempt: int, *, base: float, cap: float) -> float:

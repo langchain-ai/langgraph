@@ -58,6 +58,8 @@ StreamMode = Literal[
     "debug",
     "custom",
     "messages-tuple",
+    "tools",
+    "lifecycle",
 ]
 """
 Defines the mode of streaming:
@@ -69,6 +71,8 @@ Defines the mode of streaming:
 - "tasks": Stream task start and finish events.
 - "debug": Stream detailed debug information.
 - "custom": Stream custom events.
+- "tools": Stream tool events: `on_tool_start`, `on_tool_event`, `on_tool_end` and `on_tool_error`.
+- "lifecycle": Stream an event when each subgraph starts and ends, with the id of the tool call that started it.
 """
 
 DisconnectMode = Literal["cancel", "continue"]
@@ -380,6 +384,8 @@ class Run(TypedDict):
     """The run metadata."""
     multitask_strategy: MultitaskStrategy
     """Strategy to handle concurrent runs on the same thread."""
+    cancel_reason: NotRequired[str | None]
+    """Why the run was cancelled, if it was. Omitted by older servers."""
 
 
 class Cron(TypedDict):
@@ -480,6 +486,21 @@ ThreadSelectField = Literal[
     "interrupts",
 ]
 
+ThreadStateSelectField = (
+    Literal[
+        "values",
+        "next",
+        "tasks",
+        "checkpoint",
+        "metadata",
+        "created_at",
+        "parent_checkpoint",
+        "interrupts",
+    ]
+    | str
+)
+"""Also accepts `values.<key>` for a single state key, e.g. `values.messages`."""
+
 RunSelectField = Literal[
     "run_id",
     "thread_id",
@@ -490,6 +511,7 @@ RunSelectField = Literal[
     "metadata",
     "kwargs",
     "multitask_strategy",
+    "cancel_reason",
 ]
 
 CronSelectField = Literal[
