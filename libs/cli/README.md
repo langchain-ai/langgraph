@@ -86,6 +86,15 @@ langgraph dockerfile SAVE_PATH [OPTIONS]
   -c, --config FILE       Config file path
 ```
 
+### `langgraph deploy`
+
+Build and deploy an Agent Server image to LangSmith. Use `--agent-server-id` to
+update an existing Agent Server and `--agent-server-type` to select its type.
+The legacy `--deployment-id` and `--deployment-type` spellings remain supported
+as hidden compatibility aliases, with no removal scheduled. Older Python CLI
+versions and the JavaScript CLI may still require the legacy spellings; check
+command help for your installed version.
+
 ### `langgraph deploy metrics`
 
 Fetch Agent Server monitoring time series as JSON through the LangSmith control plane.

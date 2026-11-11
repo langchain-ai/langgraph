@@ -187,7 +187,7 @@ class TestValidatePrebuiltImage:
 
         monkeypatch.setattr(deploy_mod, "subp_exec", fake_subp_exec)
 
-        with pytest.raises(click.ClickException, match="require linux/amd64"):
+        with pytest.raises(click.ClickException, match="hosting requires linux/amd64"):
             _validate_prebuilt_image(_FakeRunner(), "repo/app:arm", verbose=False)
 
 
@@ -328,7 +328,7 @@ class TestCallHostBackendWithOptionalTenant:
         assert exc_info.value.status_code == 403
         assert "smith.langchain.com" in exc_info.value.message
         assert exc_info.value.message.startswith(
-            "LangSmith Agent Servers are not enabled for this organization."
+            "LangSmith Agent Server hosting is not enabled for this organization."
         )
 
     def test_403_not_enabled_eu_url(self):

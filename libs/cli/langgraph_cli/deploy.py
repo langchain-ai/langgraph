@@ -571,8 +571,8 @@ def _validate_prebuilt_image(
     if image_platform != _DEPLOYMENT_PLATFORM:
         detected = image_platform or "unknown"
         raise click.ClickException(
-            f"Docker image '{image}' targets {detected}, but LangSmith Agent Servers "
-            f"require {_DEPLOYMENT_PLATFORM}. Rebuild or pull the image for "
+            f"Docker image '{image}' targets {detected}, but LangSmith Agent Server "
+            f"hosting requires {_DEPLOYMENT_PLATFORM}. Rebuild or pull the image for "
             f"{_DEPLOYMENT_PLATFORM} before deploying with --image."
         )
     _get_emitter().info(f"Image is available for {_DEPLOYMENT_PLATFORM}")
@@ -2052,8 +2052,8 @@ def _call_host_backend_with_optional_tenant(
             if err.status_code == 403 and "not enabled" in err.message.lower():
                 smith_base = client.endpoints.dashboard_url
                 raise HostBackendError(
-                    "LangSmith Agent Servers are not enabled for this organization. "
-                    f"Enable them at {smith_base}/host/deployments"
+                    "LangSmith Agent Server hosting is not enabled for this organization. "
+                    f"Enable it at {smith_base}/host/deployments"
                     " (ensure this matches the organization for your API key).",
                     status_code=403,
                 ) from None
@@ -2369,7 +2369,7 @@ def _deploy_base_options(
 @click.group(
     cls=DeployGroup,
     help=(
-        "[Beta] Build and deploy an Agent Server image to LangSmith Agent Servers.\n\n"
+        "[Beta] Build and deploy an Agent Server image to LangSmith.\n\n"
         "This command is in beta and under active development. "
         "Expect frequent updates and improvements.\n\n"
         "Run from the root of your LangGraph project (where langgraph.json "

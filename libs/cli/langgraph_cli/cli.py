@@ -294,7 +294,7 @@ def up(
 ):
     click.secho("Starting Agent Server...", fg="green")
     click.secho(
-        """For local dev, requires env var LANGSMITH_API_KEY with access to LangSmith Agent Servers.
+        """For local dev, requires env var LANGSMITH_API_KEY with access to LangSmith Agent Server.
 For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KEY.""",
     )
     with Runner() as runner, Progress(message="Pulling...") as set:
