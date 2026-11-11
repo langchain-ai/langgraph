@@ -129,8 +129,9 @@ The top level includes `deployment_id`, `start_time`, `end_time`, and
 point bounds. The CLI resolves omitted bounds once: end defaults to now (UTC),
 and start defaults to 15 minutes before the resolved end. With only `--end-time`,
 start is 15 minutes before that value; with only `--start-time`, end is now. Both
-values are sent explicitly to the backend and output, even when there are no points. `step_seconds` is the most common gap between consecutive
-timestamps within series, with ties broken by the smallest gap. Whole seconds
+values are sent explicitly to the backend and included in default compact output,
+even when there are no points. `step_seconds` is the most common gap between
+consecutive timestamps within series, with ties broken by the smallest gap. Whole seconds
 are integers; fractional seconds are preserved. It is `null` only when every
 series has fewer than two timestamps. UI metadata and repeated series IDs are
 omitted. The host-backend response itself is unchanged.
@@ -140,16 +141,20 @@ langgraph deploy metrics DEPLOYMENT_ID --summary
 langgraph deploy metrics DEPLOYMENT_ID --raw
 ```
 
-`--summary` returns the same shape without `points`. `--raw` returns the original
-UI chart schema without reshaping or rounding. These flags are mutually exclusive.
-Neither mode returns traces.
+`--summary` requests server-side aggregation with `summary=true` and prints the
+response without reshaping or rounding. It includes `deployment_id`,
+`step_seconds`, and `sections`, but no `start_time`, `end_time`, or `points`.
+Series contain `metric`, `unit`, `latest`, `min`, `max`, and `avg`; units include
+`percent`, `count`, `milliseconds`, and `responses_per_second`.
+`--raw` returns the original UI chart schema without reshaping or rounding.
+These flags are mutually exclusive. Neither mode returns traces.
 
 Size comparison using the realistic synthetic unit-test fixture (compact JSON
-serialization for all modes; not a live deployment benchmark):
+serialization; not a live deployment benchmark):
 
-| Before: raw UI schema | After: default | After: summary |
-| --- | --- | --- |
-| 4,302 bytes | 1,226 bytes (72% smaller) | 806 bytes (81% smaller) |
+| Before: raw UI schema | After: default |
+| --- | --- |
+| 4,302 bytes | 1,226 bytes (72% smaller) |
 
 ## Configuration
 

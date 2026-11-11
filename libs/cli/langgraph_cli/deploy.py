@@ -2694,19 +2694,20 @@ def deploy_metrics(
         }.items()
         if value is not None
     }
+    if summary:
+        params["summary"] = "true"
     client = _create_host_backend_client(host_url, api_key, no_input=True)
     result = _call_host_backend_with_optional_tenant(
         client,
         lambda c: c.get_deployment_metrics(str(deployment_id), params),
         no_input=True,
     )
-    if not raw:
+    if not raw and not summary:
         result = compact_deployment_metrics(
             result,
             str(deployment_id),
             start_time=start_time,
             end_time=end_time,
-            summary=summary,
         )
     click.echo(json_mod.dumps(result, separators=(",", ":")))
 

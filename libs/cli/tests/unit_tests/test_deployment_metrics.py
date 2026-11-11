@@ -53,22 +53,15 @@ def test_compact_metrics(deployment_metrics_response):
     assert result["sections"]["API"]["Latency"]["P95 Latency"]["unit"] is None
 
 
-def test_summary_and_requested_bounds(deployment_metrics_response):
+def test_requested_bounds(deployment_metrics_response):
     result = reshape(
         deployment_metrics_response,
         "id",
         start_time="2026-10-27T23:00:00Z",
         end_time="2026-10-28T01:00:00Z",
-        summary=True,
     )
     assert result["start_time"] == "2026-10-27T23:00:00Z"
     assert result["end_time"] == "2026-10-28T01:00:00Z"
-    for section in result["sections"].values():
-        if section == {"_empty": True}:
-            continue
-        for chart in section.values():
-            for series in chart.values():
-                assert set(series) == {"metric", "unit", "latest", "min", "max", "avg"}
 
 
 @pytest.mark.parametrize("values", [[], [None], [float("nan"), float("inf")]])
