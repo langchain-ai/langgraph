@@ -1,7 +1,7 @@
 {
   "$id": "https://github.com/langchain-ai/langgraph/libs/cli/schemas/version.schema.json",
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "LangGraph Platform configuration (when building via the langgraph-cli).",
+  "title": "Agent Server configuration (when building via the langgraph-cli).",
   "type": "object",
   "oneOf": [
     {

@@ -1,4 +1,4 @@
-"""CLI entrypoint for LangGraph API server."""
+"""CLI entrypoint for Agent Server."""
 
 import os
 import pathlib
@@ -45,7 +45,7 @@ OPT_CONFIG = click.option(
 
     \b
     Config file must be a JSON file that has the following keys:
-    - "dependencies": array of dependencies for langgraph API server. Dependencies can be one of the following:
+    - "dependencies": array of dependencies for the Agent Server. Dependencies can be one of the following:
       - ".", which would look for local python packages, as well as pyproject.toml, setup.py or requirements.txt in the app directory
       - "./local_package"
       - "<package_name>
@@ -160,7 +160,7 @@ OPT_API_VERSION = click.option(
     "--api-version",
     type=str,
     help=(
-        "API server version to use for the base image. If unspecified, the "
+        "Agent Server version to use for the base image. If unspecified, the "
         "latest stable version will be used. Compatible ranges like "
         "~=0.11.0.dev5 stay on 0.11.0.dev5 while only newer dev builds exist, "
         "then resolve to the newest matching rc or stable release, for example "
@@ -264,7 +264,7 @@ cli.add_command(deploy)
 @click.option(
     "--base-image",
     default=None,
-    help="Base image to use for the LangGraph API server. Pin to specific versions using version tags. Defaults to langchain/langgraph-api or langchain/langgraphjs-api."
+    help="Base image to use for the Agent Server. Pin to specific versions using version tags. Defaults to langchain/langgraph-api or langchain/langgraphjs-api."
     "\n\n    \b\nExamples:\n    --base-image langchain/langgraph-server:0.2.18  # Pin to a specific patch version"
     "\n    --base-image langchain/langgraph-server:0.2  # Pin to a minor version (Python)",
 )
@@ -273,7 +273,7 @@ cli.add_command(deploy)
     is_flag=True,
     help="Wait for services to start before returning. Implies --detach",
 )
-@cli.command(help="🚀 Launch LangGraph API server.")
+@cli.command(help="🚀 Launch Agent Server.")
 @log_command
 def up(
     config: pathlib.Path,
@@ -292,9 +292,9 @@ def up(
     image: str | None,
     base_image: str | None,
 ):
-    click.secho("Starting LangGraph API server...", fg="green")
+    click.secho("Starting Agent Server...", fg="green")
     click.secho(
-        """For local dev, requires env var LANGSMITH_API_KEY with access to LangSmith Deployment.
+        """For local dev, requires env var LANGSMITH_API_KEY with access to LangSmith Agent Servers.
 For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KEY.""",
     )
     with Runner() as runner, Progress(message="Pulling...") as set:
@@ -394,7 +394,7 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
 )
 @click.option(
     "--base-image",
-    help="Base image to use for the LangGraph API server. Pin to specific versions using version tags. Defaults to langchain/langgraph-api or langchain/langgraphjs-api."
+    help="Base image to use for the Agent Server. Pin to specific versions using version tags. Defaults to langchain/langgraph-api or langchain/langgraphjs-api."
     "\n\n    \b\nExamples:\n    --base-image langchain/langgraph-server:0.2.18  # Pin to a specific patch version"
     "\n    --base-image langchain/langgraph-server:0.2  # Pin to a minor version (Python)",
 )
@@ -410,7 +410,7 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
 )
 @click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
 @cli.command(
-    help="📦 Build LangGraph API server Docker image.",
+    help="📦 Build Agent Server Docker image.",
     context_settings=dict(
         ignore_unknown_options=True,
     ),
@@ -527,12 +527,12 @@ tests
 @OPT_CONFIG
 @click.argument("save_path", type=click.Path(resolve_path=True))
 @cli.command(
-    help="🐳 Generate a Dockerfile for the LangGraph API server, with Docker Compose options."
+    help="🐳 Generate a Dockerfile for the Agent Server, with Docker Compose options."
 )
 @click.option(
     "--add-docker-compose",
     help=(
-        "Add additional files for running the LangGraph API server with "
+        "Add additional files for running the Agent Server with "
         "docker-compose. These files include a docker-compose.yml, .env file, "
         "and a .dockerignore file."
     ),
@@ -540,7 +540,7 @@ tests
 )
 @click.option(
     "--base-image",
-    help="Base image to use for the LangGraph API server. Pin to specific versions using version tags. Defaults to langchain/langgraph-api or langchain/langgraphjs-api."
+    help="Base image to use for the Agent Server. Pin to specific versions using version tags. Defaults to langchain/langgraph-api or langchain/langgraphjs-api."
     "\n\n    \b\nExamples:\n    --base-image langchain/langgraph-server:0.2.18  # Pin to a specific patch version"
     "\n    --base-image langchain/langgraph-server:0.2  # Pin to a minor version (Python)",
 )
@@ -632,7 +632,7 @@ def dockerfile(
                         "\n",
                         "# LANGSMITH_API_KEY=your-api-key",
                         "\n",
-                        "# Or if you have a LangSmith Deployment license key, "
+                        "# Or if you have an Agent Server license key, "
                         "then uncomment the following line: ",
                         "\n",
                         "# LANGGRAPH_CLOUD_LICENSE_KEY=your-license-key",
@@ -729,7 +729,7 @@ def dockerfile(
     "--server-log-level",
     type=str,
     default="WARNING",
-    help="Set the log level for the API server.",
+    help="Set the log level for the Agent Server.",
 )
 @click.option(
     "--ssl-certfile",
@@ -757,7 +757,7 @@ def dockerfile(
 )
 @cli.command(
     "dev",
-    help="🏃‍♀️‍➡️ Run LangGraph API server in development mode with hot reloading and debugging support",
+    help="🏃‍♀️‍➡️ Run Agent Server in development mode with hot reloading and debugging support",
 )
 @log_command
 def dev(
@@ -776,7 +776,7 @@ def dev(
     ssl_certfile: pathlib.Path | None,
     ssl_keyfile: pathlib.Path | None,
 ):
-    """CLI entrypoint for running the LangGraph API server."""
+    """CLI entrypoint for running the Agent Server."""
     if (ssl_certfile is None) != (ssl_keyfile is None):
         raise click.UsageError(
             "Both --ssl-certfile and --ssl-keyfile must be provided to enable HTTPS."
@@ -998,7 +998,7 @@ def prepare(
     image: str | None = None,
     base_image: str | None = None,
 ) -> tuple[list[str], str]:
-    """Prepare the arguments and stdin for running the LangGraph API server."""
+    """Prepare the arguments and stdin for running the Agent Server."""
     config_json = langgraph_cli.config.validate_config_file(config_path)
     warn_non_wolfi_distro(config_json)
     # pull latest images

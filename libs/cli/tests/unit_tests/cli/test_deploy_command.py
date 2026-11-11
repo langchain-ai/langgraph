@@ -415,7 +415,7 @@ def test_first_local_deploy_creates_then_builds_pushes_and_updates_in_order(
         "docker inspect-digest",
         _patch(CREATED_ID),
     ]
-    assert "Deployment updated" in result.output
+    assert "Agent Server updated" in result.output
 
 
 @pytest.mark.parametrize(
@@ -770,7 +770,7 @@ def test_push_to_builds_pushes_then_creates_an_external_deployment(
         "source_revision_config": {"image_uri": EXTERNAL_DIGEST},
         "secrets": [],
     }
-    assert "Deployment created" in result.output
+    assert "Agent Server created" in result.output
 
 
 def test_push_to_builds_directly_with_the_push_reference(
@@ -1159,7 +1159,7 @@ def test_image_pull_secret_without_push_to_or_image_uri_is_refused(
     result = deploy_project.run("--image-pull-secret", "regcred")
 
     assert result.exit_code != 0
-    assert "only apply when creating a deployment with --push-to" in result.output
+    assert "only apply when creating an Agent Server with --push-to" in result.output
     assert deploy_project.timeline == []
 
 
@@ -1241,7 +1241,7 @@ def test_listener_flags_are_refused_for_a_deployment_id_without_any_call(
     )
 
     assert result.exit_code != 0
-    assert "fixed when a deployment is created" in result.output
+    assert "fixed when an Agent Server is created" in result.output
     assert deploy_project.timeline == []
 
 
@@ -1262,7 +1262,7 @@ def test_listener_flags_are_refused_on_an_existing_deployment(
     )
 
     assert result.exit_code != 0
-    assert "fixed when a deployment is created" in result.output
+    assert "fixed when an Agent Server is created" in result.output
     assert deploy_project.docker.verbs() == []
 
 

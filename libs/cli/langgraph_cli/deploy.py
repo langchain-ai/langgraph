@@ -138,7 +138,7 @@ class BuildResult:
     progress_message: str = ""
     timeout_seconds: int = 300
     poll_interval_seconds: int = 1
-    no_result_message: str = "Deployment updated"
+    no_result_message: str = "Agent Server updated"
     on_poll: Callable[[str, str, Callable[[str], None]], None] | None = None
     on_interrupt: Callable[[str], None] | None = None
     show_build_logs_on_failure: bool = False
@@ -513,9 +513,9 @@ def find_deployment_by_name(
 
 
 def normalize_name(value: str | None) -> str:
-    """Sanitize a deployment/directory name into a valid deployment name.
+    """Sanitize an Agent Server/directory name into a valid Agent Server name.
 
-    LangSmith Deployment names only allow lowercase
+    Agent Server names only allow lowercase
     alphanumeric characters and hyphens ([a-z0-9-]).
     Invalid characters are replaced with hyphens.
     """
@@ -571,8 +571,8 @@ def _validate_prebuilt_image(
     if image_platform != _DEPLOYMENT_PLATFORM:
         detected = image_platform or "unknown"
         raise click.ClickException(
-            f"Docker image '{image}' targets {detected}, but LangSmith Deployment "
-            f"requires {_DEPLOYMENT_PLATFORM}. Rebuild or pull the image for "
+            f"Docker image '{image}' targets {detected}, but LangSmith Agent Servers "
+            f"require {_DEPLOYMENT_PLATFORM}. Rebuild or pull the image for "
             f"{_DEPLOYMENT_PLATFORM} before deploying with --image."
         )
     _get_emitter().info(f"Image is available for {_DEPLOYMENT_PLATFORM}")
@@ -643,7 +643,7 @@ class DeploymentRow:
         identifier = _text(deployment, "id")
         if identifier is None:
             raise HostBackendError(
-                "The control plane returned a deployment without an id."
+                "The control plane returned an Agent Server without an id."
             )
         return cls(identifier, _text(deployment, "name"), _deployment_url(deployment))
 
@@ -655,7 +655,7 @@ class DeploymentRow:
 
 
 DEPLOYMENTS_TABLE = Table(
-    ("Deployment ID", "Deployment Name", "Deployment URL"), DeploymentRow.cells
+    ("Agent Server ID", "Agent Server Name", "Agent Server URL"), DeploymentRow.cells
 )
 
 LISTENERS_TABLE = Table(("Listener ID", "Compute ID", "Namespaces"), Listener.cells)
@@ -806,7 +806,7 @@ def _log_deploy_step(step: int, message: str, **extra: object) -> None:
 def _fetch_deployment(
     client: HostBackendClient, step: int, selector: ById
 ) -> tuple[ExistingDeployment, int]:
-    _log_deploy_step(step, f"Using deployment {selector.deployment_id}")
+    _log_deploy_step(step, f"Using Agent Server {selector.deployment_id}")
     resource = _call_host_backend_with_optional_tenant(
         client, lambda c: c.get_deployment(selector.deployment_id)
     )
@@ -833,7 +833,7 @@ def _find_deployment(
         )
         if len(existing) > 1:
             raise click.ClickException(
-                "This control plane does not filter deployments by agent, so the "
+                "This control plane does not filter Agent Servers by agent, so the "
                 f"CLI cannot tell which one belongs to '{selector.agent_id}' in "
                 f"{selector.environment}. Deploy by --name instead."
             )
@@ -846,7 +846,7 @@ def _find_deployment(
             None,
         )
     else:
-        _log_deploy_step(step, f"Looking up deployment '{selector.name}'")
+        _log_deploy_step(step, f"Looking up Agent Server '{selector.name}'")
         found = _call_host_backend_with_optional_tenant(
             client, lambda c: find_deployment_by_name(c, selector.name)
         )
@@ -854,7 +854,7 @@ def _find_deployment(
     if found is None:
         em.warn(not_found_message)
     else:
-        em.info(f"Found existing deployment (ID: {found.id})")
+        em.info(f"Found existing Agent Server (ID: {found.id})")
     return found, step + 1
 
 
@@ -877,9 +877,9 @@ def _create_deployment(
 ) -> tuple[CreatedDeployment, int]:
     _log_deploy_step(
         step,
-        f"Creating deployment for agent '{agent['agent_id']}' in {agent['environment']}"
+        f"Creating Agent Server for agent '{agent['agent_id']}' in {agent['environment']}"
         if agent is not None
-        else f"Creating deployment '{name}'",
+        else f"Creating Agent Server '{name}'",
     )
     try:
         created = client.create_deployment(
@@ -893,7 +893,7 @@ def _create_deployment(
     except HostBackendError as err:
         if agent is not None and err.status_code == 409:
             raise HostBackendError(
-                "This agent already has a deployment in this environment.",
+                "This agent already has an Agent Server in this environment.",
                 status_code=409,
             ) from None
         raise
@@ -903,8 +903,8 @@ def _create_deployment(
             "POST /v2/deployments succeeded but response missing a valid 'id'"
         )
     if agent is not None:
-        _get_emitter().info(f"Deployment name: {created.get('name')}")
-    _get_emitter().info(f"Deployment ID: {created_id}", deployment_id=created_id)
+        _get_emitter().info(f"Agent Server name: {created.get('name')}")
+    _get_emitter().info(f"Agent Server ID: {created_id}", deployment_id=created_id)
     return CreatedDeployment(created_id, created), step + 1
 
 
@@ -1324,9 +1324,9 @@ def _run_local_build(
                 in err.message
             ):
                 raise click.ClickException(
-                    f"Deployment '{deployment_id}' was not created by 'langgraph deploy' "
+                    f"Agent Server '{deployment_id}' was not created by 'langgraph deploy' "
                     "and cannot be updated with this command.\n"
-                    "Please create a new deployment by running 'langgraph deploy' "
+                    "Please create a new Agent Server by running 'langgraph deploy' "
                     "without --deployment-id, or use a different --name."
                 ) from None
             raise
@@ -1391,7 +1391,7 @@ def _run_local_build(
             verbose=verbose,
         )
 
-        _log_deploy_step(step, f"Updating deployment {deployment_id}")
+        _log_deploy_step(step, f"Updating Agent Server {deployment_id}")
         updated = client.update_deployment(
             deployment_id,
             resolved_image,
@@ -1400,7 +1400,7 @@ def _run_local_build(
             tracked_packages=tracked_packages,
         )
 
-    return _image_revision_result(updated, "Deployment updated")
+    return _image_revision_result(updated, "Agent Server updated")
 
 
 def _run_remote_build(
@@ -1488,7 +1488,7 @@ def _run_remote_build(
 
     def _handle_interrupt(revision_id: str) -> None:
         em.warn(
-            f"\nInterrupted. Deployment ID: {deployment_id}, Revision ID: {revision_id}"
+            f"\nInterrupted. Agent Server ID: {deployment_id}, Revision ID: {revision_id}"
         )
         em.warn("The build will continue remotely.")
 
@@ -1613,10 +1613,10 @@ def _available_listeners(client: HostBackendClient) -> tuple[Listener, ...]:
 def _ensure_customer_registry_source(existing: ExistingDeployment) -> None:
     if existing.source != _CUSTOMER_REGISTRY_SOURCE:
         raise click.UsageError(
-            f"Deployment {existing.id} was not created from an external image "
+            f"Agent Server {existing.id} was not created from an external image "
             "and cannot be updated with --push-to or --image-uri. Run without "
             "either flag to keep its current build mode, or use a different "
-            "--name to create a new deployment."
+            "--name to create a new Agent Server."
         )
 
 
@@ -1630,7 +1630,7 @@ class ManagedRegistrySource:
         deployment_id, step = _resolve_or_create(
             ctx,
             source="internal_docker",
-            not_found_message="No deployment found. Will create after build.",
+            not_found_message="No Agent Server found. Will create after build.",
         )
         build_result = _run_local_build(
             client=ctx.client,
@@ -1654,7 +1654,7 @@ class RemoteBuildSource:
         deployment_id, step = _resolve_or_create(
             ctx,
             source="internal_source",
-            not_found_message="No deployment found. Will create.",
+            not_found_message="No Agent Server found. Will create.",
         )
         build_result = _run_remote_build(
             client=ctx.client,
@@ -1723,24 +1723,24 @@ class CreateOnlySettings:
         if push_to is None and image_uri is None and self.requested:
             raise click.UsageError(
                 "--listener-id, --k8s-namespace, and --image-pull-secret only "
-                "apply when creating a deployment with --push-to or --image-uri."
+                "apply when creating an Agent Server with --push-to or --image-uri."
             )
 
     def ensure_not_existing(self, deployment_id: str) -> None:
         if self.placement.requested:
             raise click.UsageError(
-                "Listener and namespace are fixed when a deployment is "
-                f"created. Deployment {deployment_id} already exists, so "
+                "Listener and namespace are fixed when an Agent Server is "
+                f"created. Agent Server {deployment_id} already exists, so "
                 "drop --listener-id and --k8s-namespace, or create a new "
-                "deployment with a different --name."
+                "Agent Server with a different --name."
             )
         if self.image_pull_secrets:
             raise click.UsageError(
                 "langgraph deploy does not update image pull secrets on an "
-                f"existing deployment. Deployment {deployment_id} already "
+                f"existing Agent Server. Agent Server {deployment_id} already "
                 "exists, so drop --image-pull-secret and update resource_spec "
                 "through the API or the LangSmith UI instead, or create a "
-                "new deployment with a different --name."
+                "new Agent Server with a different --name."
             )
 
 
@@ -1757,7 +1757,7 @@ class CustomerRegistrySource:
             ctx.client,
             1,
             ctx.selector,
-            not_found_message="No deployment found. Will create after push.",
+            not_found_message="No Agent Server found. Will create after push.",
         )
         if found is not None:
             return self._update(ctx, found, step)
@@ -1771,7 +1771,7 @@ class CustomerRegistrySource:
         _ensure_customer_registry_source(existing)
         self.create_only.ensure_not_existing(existing.id)
         image_uri, step = self._publish(ctx, step)
-        _log_deploy_step(step, f"Updating deployment {existing.id}")
+        _log_deploy_step(step, f"Updating Agent Server {existing.id}")
         updated = ctx.client.update_deployment(
             existing.id,
             image_uri,
@@ -1780,7 +1780,7 @@ class CustomerRegistrySource:
             tracked_packages=ctx.tracked_packages,
         )
         return DeployOutcome(
-            existing.id, _image_revision_result(updated, "Deployment updated")
+            existing.id, _image_revision_result(updated, "Agent Server updated")
         )
 
     def _resolve_placement(self, ctx: DeployContext) -> Placement:
@@ -1829,7 +1829,7 @@ class CustomerRegistrySource:
                 ) from None
             raise
         return DeployOutcome(
-            created.id, _image_revision_result(created.resource, "Deployment created")
+            created.id, _image_revision_result(created.resource, "Agent Server created")
         )
 
     def _publish(self, ctx: DeployContext, step: int) -> tuple[str, int]:
@@ -2052,8 +2052,8 @@ def _call_host_backend_with_optional_tenant(
             if err.status_code == 403 and "not enabled" in err.message.lower():
                 smith_base = client.endpoints.dashboard_url
                 raise HostBackendError(
-                    "LangSmith Deployment is not enabled for this organization. "
-                    f"Enable it at {smith_base}/host/deployments"
+                    "LangSmith Agent Servers are not enabled for this organization. "
+                    f"Enable them at {smith_base}/host/deployments"
                     " (ensure this matches the organization for your API key).",
                     status_code=403,
                 ) from None
@@ -2077,7 +2077,7 @@ OPT_HOST_DEPLOYMENT_NAME = click.option(
     "--name",
     envvar=_DEPLOYMENT_NAME_ENV,
     help=(
-        "Deployment name. Can also be set via LANGSMITH_DEPLOYMENT_NAME "
+        "Agent Server name. Can also be set via LANGSMITH_DEPLOYMENT_NAME "
         "environment variable or .env file. Defaults to current directory name "
         "if --deployment-id is not provided."
     ),
@@ -2209,8 +2209,8 @@ def _deploy_base_options(
             click.option(
                 "--deployment-id",
                 help=(
-                    "ID of an existing deployment to update. If omitted, "
-                    "--name is used to find or create the deployment."
+                    "ID of an existing Agent Server to update. If omitted, "
+                    "--name is used to find or create the Agent Server."
                 ),
             ),
             click.option(
@@ -2219,7 +2219,7 @@ def _deploy_base_options(
                 default="serverless",
                 show_default=True,
                 help=(
-                    "Deployment type (used when creating a new deployment): "
+                    "Agent Server type (used when creating a new Agent Server): "
                     "serverless (scale to zero) or dedicated (prod); "
                     "legacy dev and prod are also accepted. "
                     "Ignored with --push-to."
@@ -2238,7 +2238,7 @@ def _deploy_base_options(
                 "--tag",
                 "-t",
                 default=None,
-                help="Tag to use for the pushed deployment image. [default: latest]",
+                help="Tag to use for the pushed Agent Server image. [default: latest]",
             ),
             click.option(
                 "--image",
@@ -2271,16 +2271,16 @@ def _deploy_base_options(
             click.option(
                 "--listener-id",
                 help=(
-                    "Listener that will run the deployment, for workspaces that "
+                    "Listener that will run the Agent Server, for workspaces that "
                     "deploy through a listener in your own cluster. Only used when "
-                    "creating a deployment with --push-to or --image-uri."
+                    "creating an Agent Server with --push-to or --image-uri."
                 ),
             ),
             click.option(
                 "--k8s-namespace",
                 help=(
                     "Kubernetes namespace the listener deploys into. Only used when "
-                    "creating a deployment with --push-to or --image-uri."
+                    "creating an Agent Server with --push-to or --image-uri."
                 ),
             ),
             click.option(
@@ -2289,9 +2289,9 @@ def _deploy_base_options(
                 multiple=True,
                 help=(
                     "Name of a Kubernetes secret (type kubernetes.io/"
-                    "dockerconfigjson) in the deployment's namespace to use for "
+                    "dockerconfigjson) in the Agent Server's namespace to use for "
                     "pulling the image from a private registry. Repeat to give "
-                    "more than one. Only used when creating a deployment with "
+                    "more than one. Only used when creating an Agent Server with "
                     "--push-to or --image-uri."
                 ),
             ),
@@ -2358,7 +2358,7 @@ def _deploy_base_options(
 @click.group(
     cls=DeployGroup,
     help=(
-        "[Beta] Build and deploy a LangGraph image to LangSmith Deployment.\n\n"
+        "[Beta] Build and deploy a LangGraph image to LangSmith Agent Servers.\n\n"
         "This command is in beta and under active development. "
         "Expect frequent updates and improvements.\n\n"
         "Run from the root of your LangGraph project (where langgraph.json "
@@ -2445,7 +2445,7 @@ def _deploy_cmd(
     if not config.exists():
         message = (
             "We couldn't find a langgraph.json file. Run `langgraph deploy` from "
-            "the root of a LangSmith Deployment project. To get started, visit "
+            "the root of your LangGraph project. To get started, visit "
             "https://docs.langchain.com/langsmith/deployment-quickstart."
         )
         if json_output:
@@ -2464,14 +2464,14 @@ def _deploy_cmd(
         if no_input:
             name = default_name
         else:
-            name = click.prompt("Deployment name", default=default_name)
+            name = click.prompt("Agent Server name", default=default_name)
     if name and not deployment_id:
         name = normalize_name(name)
         if not no_input:
             env_path = _resolve_env_path(config_json, config)
             if env_path is not None:
                 set_key(str(env_path), _DEPLOYMENT_NAME_ENV, name)
-                em.info(f"Saved deployment name to {env_path}")
+                em.info(f"Saved Agent Server name to {env_path}")
 
     secrets = _secrets_from_env(_env_without_deployment_name(env_vars))
 
@@ -2568,7 +2568,7 @@ def _deploy_cmd(
         client,
         outcome.deployment_id,
         last_status,
-        dashboard_label="Deployment dashboard",
+        dashboard_label="Agent Server dashboard",
         status_url=dep_status_url,
     )
 
@@ -2585,16 +2585,16 @@ def _deploy_cmd(
 @click.option(
     "--name-contains",
     default="",
-    help="Only show deployments whose names contain this value.",
+    help="Only show Agent Servers whose names contain this value.",
 )
 @click.option(
     "--json",
     "json_output",
     is_flag=True,
     default=False,
-    help="Print the deployments as a JSON array of {id, name} instead of a table.",
+    help="Print the Agent Servers as a JSON array of {id, name} instead of a table.",
 )
-@deploy.command("list", help="[Beta] List LangSmith Deployments.")
+@deploy.command("list", help="[Beta] List Agent Servers.")
 def deploy_list(
     api_key: str | None,
     host_url: str | None,
@@ -2626,7 +2626,7 @@ def deploy_list(
     if json_output:
         click.echo(json_mod.dumps([deployment.as_json() for deployment in deployments]))
     elif not deployments:
-        click.echo("No deployments found.")
+        click.echo("No Agent Servers found.")
     else:
         click.echo(DEPLOYMENTS_TABLE.render(deployments))
 
@@ -2638,7 +2638,7 @@ def deploy_list(
 
 @OPT_HOST_API_KEY
 @OPT_HOST_URL
-@click.argument("deployment_id", type=click.UUID)
+@click.argument("deployment_id", type=click.UUID, metavar="AGENT_SERVER_ID")
 @click.option(
     "--start-time",
     help="ISO8601 start time. Defaults to 15 minutes before --end-time.",
@@ -2651,7 +2651,7 @@ def deploy_list(
         "memory_usage, cpu_usage, disk_usage, restart_count, replica_count, "
         "worker_count, lg_run_count, responses_per_second, "
         "error_responses_per_second, p95_latency, run_queue_wait_time. "
-        "Availability depends on the deployment and platform."
+        "Availability depends on the Agent Server and platform."
     ),
 )
 @click.option(
@@ -2661,7 +2661,7 @@ def deploy_list(
     "--raw", is_flag=True, help="Print the original host-backend chart schema."
 )
 @deploy.command(
-    "metrics", help="[Beta] Fetch deployment monitoring time series as compact JSON."
+    "metrics", help="[Beta] Fetch Agent Server monitoring time series as compact JSON."
 )
 def deploy_metrics(
     api_key: str | None,
@@ -2762,7 +2762,7 @@ def deploy_listeners_list(
 
 
 @deploy.group(
-    "revisions", cls=NestedHelpGroup, help="[Beta] Manage deployment revisions."
+    "revisions", cls=NestedHelpGroup, help="[Beta] Manage Agent Server revisions."
 )
 def deploy_revisions() -> None:
     pass
@@ -2777,12 +2777,12 @@ def deploy_revisions() -> None:
     show_default=True,
     help="Maximum number of revisions to return.",
 )
-@click.argument("deployment_id")
+@click.argument("deployment_id", metavar="AGENT_SERVER_ID")
 @deploy_revisions.command(
     "list",
     help=(
-        "[Beta] List revisions for a LangSmith Deployment.\n\n"
-        "Use the `deploy list` command to list deployment IDs."
+        "[Beta] List revisions for an Agent Server.\n\n"
+        "Use the `deploy list` command to list Agent Server IDs."
     ),
 )
 def deploy_revisions_list(
@@ -2794,7 +2794,7 @@ def deploy_revisions_list(
         lambda c: c.list_revisions(deployment_id, limit=limit),
     )
     if not revisions:
-        click.echo(f"No revisions found for deployment {deployment_id}.")
+        click.echo(f"No revisions found for Agent Server {deployment_id}.")
         return
     click.echo(REVISIONS_TABLE.render(_with_replaced_status(revisions)))
 
@@ -2812,12 +2812,12 @@ def deploy_revisions_list(
     default=False,
     help="Delete without prompting for confirmation.",
 )
-@click.argument("deployment_id")
+@click.argument("deployment_id", metavar="AGENT_SERVER_ID")
 @deploy.command(
     "delete",
     help=(
-        "[Beta] Delete a LangSmith Deployment.\n\n"
-        "Use the `deploy list` command to list deployment IDs."
+        "[Beta] Delete an Agent Server.\n\n"
+        "Use the `deploy list` command to list Agent Server IDs."
     ),
 )
 def deploy_delete(
@@ -2826,7 +2826,7 @@ def deploy_delete(
     if not force:
         response = click.prompt(
             click.style(
-                f"Are you sure you want to delete deployment ID {deployment_id}? (Y/n)",
+                f"Are you sure you want to delete Agent Server ID {deployment_id}? (Y/n)",
                 fg="yellow",
             ),
             default="Y",
@@ -2839,7 +2839,7 @@ def deploy_delete(
         client,
         lambda c: c.delete_deployment(deployment_id),
     )
-    click.secho(f"Deleted deployment {deployment_id}.", fg="green")
+    click.secho(f"Deleted Agent Server {deployment_id}.", fg="green")
 
 
 # ---------------------------------------------------------------------------
@@ -2851,7 +2851,7 @@ def deploy_delete(
 @OPT_HOST_DEPLOYMENT_NAME
 @click.option(
     "--deployment-id",
-    help="Deployment ID. If omitted, --name is used to find the deployment.",
+    help="Agent Server ID. If omitted, --name is used to find the Agent Server.",
 )
 @click.option(
     "--type",
@@ -2860,8 +2860,8 @@ def deploy_delete(
     default="deploy",
     show_default=True,
     help=(
-        "Log stream to fetch: 'deploy' shows agent server runtime logs; "
-        "'build' shows build logs (for deployments built remotely)."
+        "Log stream to fetch: 'deploy' shows Agent Server runtime logs; "
+        "'build' shows build logs (for Agent Servers built remotely)."
     ),
 )
 @click.option(
@@ -2906,7 +2906,7 @@ def deploy_delete(
 @deploy.command(
     "logs",
     help=(
-        "[Beta] Fetch LangSmith Deployment logs. Use 'deploy' for agent runtime "
+        "[Beta] Fetch Agent Server logs. Use 'deploy' for Agent Server runtime "
         "logs, or 'build' for remote build logs."
     ),
 )
@@ -2938,14 +2938,14 @@ def deploy_logs(
             client, lambda c: find_deployment_by_name(c, name_to_find)
         )
         if found is None:
-            raise click.ClickException(f"Deployment '{name_to_find}' not found.")
+            raise click.ClickException(f"Agent Server '{name_to_find}' not found.")
         dep_id = found.id
 
     if log_type == "build" and not revision_id:
         revisions = client.list_revisions(dep_id, limit=1)
         if not revisions:
             raise click.ClickException(
-                "No revisions found for this deployment. Cannot fetch build logs."
+                "No revisions found for this Agent Server. Cannot fetch build logs."
             )
         revision_id = str(revisions[0]["id"])
         click.secho(f"Using latest revision: {revision_id}", fg="cyan")

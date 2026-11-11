@@ -12,7 +12,7 @@
           "properties": {
             "python_version": {
               "type": "string",
-              "description": "Optional. Python version in 'major.minor' format (e.g. '3.11').\nMust be at least 3.11 or greater for this deployment to function properly.\n",
+              "description": "Optional. Python version in 'major.minor' format (e.g. '3.11').\nMust be at least 3.11 or greater for this Agent Server to function properly.\n",
               "enum": [
                 "3.11",
                 "3.12",
@@ -50,7 +50,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Which semantic version of the LangGraph API server to use.\n\nDefaults to latest. Check the\nfor more information.\n"
+              "description": "Optional. Which semantic version of the Agent Server to use.\n\nDefaults to latest. Check the\nfor more information.\n"
             },
             "auth": {
               "anyOf": [
@@ -72,7 +72,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Base image to use for the LangGraph API server.\n\nDefaults to langchain/langgraph-api or langchain/langgraphjs-api.\n"
+              "description": "Optional. Base image to use for the Agent Server.\n\nDefaults to langchain/langgraph-api or langchain/langgraphjs-api.\n"
             },
             "checkpointer": {
               "anyOf": [
@@ -122,7 +122,7 @@
                   "type": "string"
                 }
               ],
-              "description": "Optional. Environment variables to set for your deployment.\n\n- If given as a dict, keys are variable names and values are their values.\n- If given as a string, it must be a path to a file containing lines in KEY=VALUE format.\n\nenv=\".env\n"
+              "description": "Optional. Environment variables to set for your Agent Server.\n\n- If given as a dict, keys are variable names and values are their values.\n- If given as a string, it must be a path to a file containing lines in KEY=VALUE format.\n\nenv=\".env\n"
             },
             "graphs": {
               "type": "object",
@@ -265,7 +265,7 @@
           "properties": {
             "python_version": {
               "type": "string",
-              "description": "Optional. Python version in 'major.minor' format (e.g. '3.11').\nMust be at least 3.11 or greater for this deployment to function properly.\n",
+              "description": "Optional. Python version in 'major.minor' format (e.g. '3.11').\nMust be at least 3.11 or greater for this Agent Server to function properly.\n",
               "enum": [
                 "3.11",
                 "3.12",
@@ -303,7 +303,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Which semantic version of the LangGraph API server to use.\n\nDefaults to latest. Check the\nfor more information.\n"
+              "description": "Optional. Which semantic version of the Agent Server to use.\n\nDefaults to latest. Check the\nfor more information.\n"
             },
             "auth": {
               "anyOf": [
@@ -325,7 +325,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Base image to use for the LangGraph API server.\n\nDefaults to langchain/langgraph-api or langchain/langgraphjs-api.\n"
+              "description": "Optional. Base image to use for the Agent Server.\n\nDefaults to langchain/langgraph-api or langchain/langgraphjs-api.\n"
             },
             "checkpointer": {
               "anyOf": [
@@ -375,7 +375,7 @@
                   "type": "string"
                 }
               ],
-              "description": "Optional. Environment variables to set for your deployment.\n\n- If given as a dict, keys are variable names and values are their values.\n- If given as a string, it must be a path to a file containing lines in KEY=VALUE format.\n\nenv=\".env\n"
+              "description": "Optional. Environment variables to set for your Agent Server.\n\n- If given as a dict, keys are variable names and values are their values.\n- If given as a string, it must be a path to a file containing lines in KEY=VALUE format.\n\nenv=\".env\n"
             },
             "graphs": {
               "type": "object",
@@ -520,7 +520,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Node.js version as a major version (e.g. '20'), if your deployment needs Node.\nMust be >= 20 if provided.\n"
+              "description": "Optional. Node.js version as a major version (e.g. '20'), if your Agent Server needs Node.\nMust be >= 20 if provided.\n"
             },
             "_INTERNAL_docker_tag": {
               "anyOf": [
@@ -542,7 +542,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Which semantic version of the LangGraph API server to use.\n\nDefaults to latest. Check the\nfor more information.\n"
+              "description": "Optional. Which semantic version of the Agent Server to use.\n\nDefaults to latest. Check the\nfor more information.\n"
             },
             "auth": {
               "anyOf": [
@@ -564,7 +564,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Base image to use for the LangGraph API server.\n\nDefaults to langchain/langgraph-api or langchain/langgraphjs-api.\n"
+              "description": "Optional. Base image to use for the Agent Server.\n\nDefaults to langchain/langgraph-api or langchain/langgraphjs-api.\n"
             },
             "checkpointer": {
               "anyOf": [
@@ -614,7 +614,7 @@
                   "type": "string"
                 }
               ],
-              "description": "Optional. Environment variables to set for your deployment.\n\n- If given as a dict, keys are variable names and values are their values.\n- If given as a string, it must be a path to a file containing lines in KEY=VALUE format.\n\nenv=\".env\n"
+              "description": "Optional. Environment variables to set for your Agent Server.\n\n- If given as a dict, keys are variable names and values are their values.\n- If given as a string, it must be a path to a file containing lines in KEY=VALUE format.\n\nenv=\".env\n"
             },
             "graphs": {
               "type": "object",
@@ -765,7 +765,7 @@
         },
         "disable_studio_auth": {
           "type": "boolean",
-          "description": "Optional. Whether to disable LangSmith API-key authentication for requests originating the Studio.\n\nDefaults to False, meaning that if a particular header is set, the server will verify the `x-api-key` header\nvalue is a valid API key for the deployment's workspace. If `True`, all requests will go through your custom\nauthentication logic, regardless of origin of the request.\n"
+          "description": "Optional. Whether to disable LangSmith API-key authentication for requests originating the Studio.\n\nDefaults to False, meaning that if a particular header is set, the server will verify the `x-api-key` header\nvalue is a valid API key for the Agent Server's workspace. If `True`, all requests will go through your custom\nauthentication logic, regardless of origin of the request.\n"
         },
         "openapi": {
           "$ref": "#/$defs/SecurityConfig",
@@ -984,7 +984,7 @@
     },
     "EncryptionConfig": {
       "title": "EncryptionConfig",
-      "description": "Configuration for custom at-rest encryption logic.\n\nAllows you to implement custom encryption for sensitive data stored in the database,\nincluding metadata fields and checkpoint blobs.",
+      "description": "Configuration for custom at-rest encryption logic.\n\n    Allows you to implement custom encryption for sensitive data stored in the database,\n    including metadata fields and checkpoint blobs.",
       "type": "object",
       "properties": {
         "path": {
@@ -1018,7 +1018,7 @@
     },
     "HttpConfig": {
       "title": "HttpConfig",
-      "description": "Configuration for the built-in HTTP server that powers your deployment's routes and endpoints.",
+      "description": "Configuration for the built-in HTTP server that powers your Agent Server's routes and endpoints.",
       "type": "object",
       "properties": {
         "app": {
@@ -1049,7 +1049,7 @@
         },
         "disable_a2a": {
           "type": "boolean",
-          "description": "Optional. If `True`, /a2a routes are removed, disabling default support to expose the deployment as an agent-to-agent (A2A) server.\n\nDefault is False.\n"
+          "description": "Optional. If `True`, /a2a routes are removed, disabling default support to expose the Agent Server as an agent-to-agent (A2A) server.\n\nDefault is False.\n"
         },
         "disable_assistants": {
           "type": "boolean",
@@ -1057,7 +1057,7 @@
         },
         "disable_mcp": {
           "type": "boolean",
-          "description": "Optional. If `True`, /mcp routes are removed, disabling default support to expose the deployment as an MCP server.\n\nDefault is False.\n"
+          "description": "Optional. If `True`, /mcp routes are removed, disabling default support to expose the Agent Server as an MCP server.\n\nDefault is False.\n"
         },
         "disable_meta": {
           "type": "boolean",
