@@ -100,6 +100,7 @@ class SyncRunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
+        strict_resume: bool | None = None,
         version: Literal["v1"] = "v1",
     ) -> Iterator[StreamPart]: ...
 
@@ -133,6 +134,7 @@ class SyncRunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
+        strict_resume: bool | None = None,
         version: Literal["v2"],
     ) -> Iterator[StreamPartV2]: ...
 
@@ -228,6 +230,7 @@ class SyncRunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
+        strict_resume: bool | None = None,
         version: StreamVersion = "v1",
     ) -> Iterator[StreamPart | StreamPartV2]:
         """Create a run and stream the results.
@@ -271,6 +274,10 @@ class SyncRunsClient:
                 "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
                 "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
                 "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
+            strict_resume: Refuse a resume that answers an interrupt that isn't waiting,
+                instead of ignoring the answer: the run fails with `UnknownInterruptError`
+                and the thread stays as it was. Takes effect on servers whose `/info`
+                reports `strict_resume`.
             version: Stream format version. "v1" (default) returns raw SSE StreamPart
                 NamedTuples. "v2" returns typed dicts with `type`, `ns`, and `data` keys.
 
@@ -336,6 +343,7 @@ class SyncRunsClient:
             "on_completion": on_completion,
             "after_seconds": after_seconds,
             "durability": durability,
+            "strict_resume": strict_resume,
             "langsmith_tracer": langsmith_tracing,
         }
         endpoint = (
@@ -417,6 +425,7 @@ class SyncRunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
+        strict_resume: bool | None = None,
     ) -> Run: ...
 
     def create(
@@ -447,6 +456,7 @@ class SyncRunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
+        strict_resume: bool | None = None,
     ) -> Run:
         """Create a background run.
 
@@ -486,6 +496,10 @@ class SyncRunsClient:
                 "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
                 "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
                 "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
+            strict_resume: Refuse a resume that answers an interrupt that isn't waiting,
+                instead of ignoring the answer: the run fails with `UnknownInterruptError`
+                and the thread stays as it was. Takes effect on servers whose `/info`
+                reports `strict_resume`.
 
         Returns:
             The created background `Run`.
@@ -590,6 +604,7 @@ class SyncRunsClient:
             "on_completion": on_completion,
             "after_seconds": after_seconds,
             "durability": durability,
+            "strict_resume": strict_resume,
             "langsmith_tracer": langsmith_tracing,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
@@ -651,6 +666,7 @@ class SyncRunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
+        strict_resume: bool | None = None,
     ) -> builtins.list[dict] | dict[str, Any]: ...
 
     @overload
@@ -707,6 +723,7 @@ class SyncRunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
+        strict_resume: bool | None = None,
     ) -> builtins.list[dict] | dict[str, Any]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -745,6 +762,10 @@ class SyncRunsClient:
                 "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
                 "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
                 "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
+            strict_resume: Refuse a resume that answers an interrupt that isn't waiting,
+                instead of ignoring the answer: the run fails with `UnknownInterruptError`
+                and the thread stays as it was. Takes effect on servers whose `/info`
+                reports `strict_resume`.
 
         Returns:
             The output of the `Run`.
@@ -826,6 +847,7 @@ class SyncRunsClient:
             "on_completion": on_completion,
             "after_seconds": after_seconds,
             "durability": durability,
+            "strict_resume": strict_resume,
             "langsmith_tracer": langsmith_tracing,
         }
 
