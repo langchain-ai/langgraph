@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import binascii
 import concurrent.futures
+import threading
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import (
@@ -337,6 +338,8 @@ class PregelLoop:
         has_graph_lifecycle_callbacks: bool = False,
     ) -> None:
         self.stream = stream
+        # Tasks finish on worker threads and call `put_writes` from there.
+        self._pending_writes_lock = threading.Lock()
         self.config = config
         self.store = store
         self.step = 0
@@ -474,26 +477,31 @@ class PregelLoop:
         # applied, so all of them hold the same message ids.
         ensure_message_ids(self.specs, writes)
         if task_id == NULL_TASK_ID:
-            # writes for the null task are accumulated
-            self.checkpoint_pending_writes = [
-                w
-                for w in self.checkpoint_pending_writes
-                if w[0] != task_id or w[1] not in WRITES_IDX_MAP
-            ]
             # Savers key a regular write by its position in the list, and the
-            # special ones dropped above won't be there next time, so they go
+            # special ones dropped below won't be there next time, so they go
             # last: a resume saved ahead of an update would move it to a new
             # slot once the list is saved again, and it would apply twice.
             writes = sorted(writes, key=lambda w: w[0] in WRITES_IDX_MAP)
-            writes_to_save: WritesT = [
-                w[1:] for w in self.checkpoint_pending_writes if w[0] == task_id
-            ] + list(writes)
-        else:
-            # remove existing writes for this task
-            self.checkpoint_pending_writes = [
-                w for w in self.checkpoint_pending_writes if w[0] != task_id
-            ]
-            writes_to_save = writes
+        # Parallel tasks call this from their own threads. Replacing the list
+        # and adding to it is one step, or one task drops another's writes.
+        with self._pending_writes_lock:
+            if task_id == NULL_TASK_ID:
+                # writes for the null task are accumulated
+                self.checkpoint_pending_writes = [
+                    w
+                    for w in self.checkpoint_pending_writes
+                    if w[0] != task_id or w[1] not in WRITES_IDX_MAP
+                ]
+                writes_to_save: WritesT = [
+                    w[1:] for w in self.checkpoint_pending_writes if w[0] == task_id
+                ] + list(writes)
+            else:
+                # remove existing writes for this task
+                self.checkpoint_pending_writes = [
+                    w for w in self.checkpoint_pending_writes if w[0] != task_id
+                ]
+                writes_to_save = writes
+            self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
 
         # check if any writes are to an UntrackedValue channel
         if any(
@@ -513,7 +521,6 @@ class PregelLoop:
             ]
 
         # save writes
-        self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
         if self.durability != "exit" and self.checkpointer_put_writes is not None:
             config = patch_configurable(
                 self.checkpoint_config,
