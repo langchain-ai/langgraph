@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from collections import defaultdict
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Generator, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any, cast
 
@@ -68,7 +68,7 @@ class PostgresSaver(BasePostgresSaver):
     @contextmanager
     def from_conn_string(
         cls, conn_string: str, *, pipeline: bool = False
-    ) -> Iterator[PostgresSaver]:
+    ) -> Generator[PostgresSaver, None, None]:
         """Create a new PostgresSaver instance from a connection string.
 
         Args:
@@ -474,7 +474,9 @@ class PostgresSaver(BasePostgresSaver):
                     _execute(cur, _keep_latest(thread_id))
 
     @contextmanager
-    def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
+    def _cursor(
+        self, *, pipeline: bool = False
+    ) -> Generator[Cursor[DictRow], None, None]:
         """Create a database cursor as a context manager.
 
         Args:
