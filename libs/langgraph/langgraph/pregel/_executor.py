@@ -202,14 +202,14 @@ class AsyncBackgroundExecutor(AbstractAsyncContextManager):
                 try:
                     await asyncio.wait(tasks)
                     break
-                except asyncio.CancelledError as exc:
+                except asyncio.CancelledError as cancel_exc:
                     if cancelled_error is not None:
                         raise
                     # Finish waiting for child cleanup before propagating the
                     # outer cancellation. A subsequent wait is still required
                     # because the first one may have been interrupted while
                     # children were pending.
-                    cancelled_error = exc
+                    cancelled_error = cancel_exc
         if cancelled_error is not None:
             raise cancelled_error
         # if there's already an exception being raised, don't raise another one
