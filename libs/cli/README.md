@@ -40,7 +40,7 @@ langgraph new [PATH] --template TEMPLATE_NAME
 
 ### `langgraph dev` 🏃‍♀️
 
-Run LangGraph API server in development mode with hot reloading.
+Run Agent Server in development mode with hot reloading.
 
 ```bash
 langgraph dev [OPTIONS]
@@ -54,7 +54,7 @@ langgraph dev [OPTIONS]
 
 ### `langgraph up` 🚀
 
-Launch LangGraph API server in Docker.
+Launch Agent Server in Docker.
 
 ```bash
 langgraph up [OPTIONS]
@@ -86,14 +86,23 @@ langgraph dockerfile SAVE_PATH [OPTIONS]
   -c, --config FILE       Config file path
 ```
 
+### `langgraph deploy`
+
+Build and deploy an Agent Server image to LangSmith. Use `--agent-server-id` to
+update an existing Agent Server and `--agent-server-type` to select its type.
+The legacy `--deployment-id` and `--deployment-type` spellings remain supported
+as hidden compatibility aliases, with no removal scheduled. Older Python CLI
+versions and the JavaScript CLI may still require the legacy spellings; check
+command help for your installed version.
+
 ### `langgraph deploy metrics`
 
-Fetch deployment monitoring time series as JSON through the LangSmith control plane.
-Use `langgraph deploy list` to find the deployment ID. Authentication uses the same
-API key and workspace configuration as the other deployment commands.
+Fetch Agent Server monitoring time series as JSON through the LangSmith control plane.
+Use `langgraph deploy list` to find the Agent Server ID. Authentication uses the same
+API key and workspace configuration as the other `deploy` commands.
 
 ```bash
-langgraph deploy metrics DEPLOYMENT_ID \
+langgraph deploy metrics AGENT_SERVER_ID \
   --start-time 2026-10-28T00:00:00Z \
   --end-time 2026-10-28T01:00:00Z \
   --metrics cpu_usage,memory_usage,worker_count
@@ -108,8 +117,8 @@ langgraph deploy metrics DEPLOYMENT_ID \
 - Queue: `run_queue_wait_time`
 
 These are exact metric names, not free-text search terms. Availability depends on
-the deployment and platform; a supported metric may have no data. Use
-`lg_run_count` for deployment runs, not the UI schema's placeholder `run_count`.
+the Agent Server and platform; a supported metric may have no data. Use
+`lg_run_count` for Agent Server runs, not the UI schema's placeholder `run_count`.
 
 Omit `--metrics` to fetch all available metrics. Time bounds default to the last
 15 minutes, and the backend picks the resolution from the time
@@ -136,8 +145,8 @@ series has fewer than two timestamps. UI metadata and repeated series IDs are
 omitted. The host-backend response itself is unchanged.
 
 ```bash
-langgraph deploy metrics DEPLOYMENT_ID --summary
-langgraph deploy metrics DEPLOYMENT_ID --raw
+langgraph deploy metrics AGENT_SERVER_ID --summary
+langgraph deploy metrics AGENT_SERVER_ID --raw
 ```
 
 `--summary` returns the same shape without `points`. `--raw` returns the original
@@ -145,7 +154,7 @@ UI chart schema without reshaping or rounding. These flags are mutually exclusiv
 Neither mode returns traces.
 
 Size comparison using the realistic synthetic unit-test fixture (compact JSON
-serialization for all modes; not a live deployment benchmark):
+serialization for all modes; not a live Agent Server benchmark):
 
 | Before: raw UI schema | After: default | After: summary |
 | --- | --- | --- |

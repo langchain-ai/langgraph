@@ -352,7 +352,7 @@ def test_top_level_help_shows_deploy_subcommands() -> None:
     assert "deploy delete" in result.output
     assert "deploy revisions" in result.output
     assert "deploy revisions list" in result.output
-    assert "[Beta] List LangSmith Deployments." in result.output
+    assert "[Beta] List Agent Servers." in result.output
 
 
 def test_top_level_help_truncates_command_descriptions_to_single_line() -> None:
@@ -369,7 +369,7 @@ def test_top_level_help_truncates_command_descriptions_to_single_line() -> None:
 
     assert not lines[lines.index(deploy_line) + 1].startswith("               ")
     assert "..." in deploy_line
-    assert "[Beta] List LangSmith Deployments." in deploy_list_line
+    assert "[Beta] List Agent Servers." in deploy_list_line
 
 
 def test_deploy_missing_config_shows_actionable_error(tmp_path, monkeypatch) -> None:
@@ -496,9 +496,9 @@ def test_deploy_list_command(monkeypatch) -> None:
         "tenant_id": "",
         "name_contains": "alp",
     }
-    assert "Deployment ID" in result.output
-    assert "Deployment Name" in result.output
-    assert "Deployment URL" in result.output
+    assert "Agent Server ID" in result.output
+    assert "Agent Server Name" in result.output
+    assert "Agent Server URL" in result.output
     assert "dep-123" in result.output
     assert "https://beta.example.com" in result.output
 
@@ -528,7 +528,7 @@ def test_deploy_list_command_no_results(monkeypatch) -> None:
     )
 
     assert result.exit_code == 0, result.output
-    assert result.output.strip() == "No deployments found."
+    assert result.output.strip() == "No Agent Servers found."
 
 
 def test_deploy_list_prints_an_aligned_table(monkeypatch) -> None:
@@ -562,10 +562,10 @@ def test_deploy_list_prints_an_aligned_table(monkeypatch) -> None:
 
     assert result.exit_code == 0, result.output
     assert result.output.splitlines() == [
-        "Deployment ID  Deployment Name  Deployment URL           ",
-        "-------------  ---------------  -------------------------",
-        "dep-123        alpha            https://alpha.example.com",
-        "dep-4567       beta-agent       -                        ",
+        "Agent Server ID  Agent Server Name  Agent Server URL         ",
+        "---------------  -----------------  -------------------------",
+        "dep-123          alpha              https://alpha.example.com",
+        "dep-4567         beta-agent         -                        ",
     ]
 
 
@@ -649,7 +649,7 @@ def test_deploy_list_rejects_a_deployment_without_an_id(monkeypatch) -> None:
     result = _deploy_list_json(monkeypatch, [{"name": "alpha"}])
 
     assert result.exit_code != 0
-    assert "deployment without an id" in result.output
+    assert "Agent Server without an id" in result.output
 
 
 def test_deploy_list_json_keeps_the_agent_note_off_stdout(monkeypatch) -> None:
@@ -1061,7 +1061,7 @@ def test_deploy_revisions_list_command_no_results(monkeypatch) -> None:
     )
 
     assert result.exit_code == 0, result.output
-    assert result.output.strip() == "No revisions found for deployment dep-123."
+    assert result.output.strip() == "No revisions found for Agent Server dep-123."
 
 
 def test_deploy_revisions_list_marks_older_deployed_revisions_as_replaced(
@@ -1145,7 +1145,7 @@ def test_deploy_revisions_list_command_with_explicit_limit(monkeypatch) -> None:
 
     assert result.exit_code == 0, result.output
     assert captured == {"deployment_id": "dep-123", "limit": "25"}
-    assert result.output.strip() == "No revisions found for deployment dep-123."
+    assert result.output.strip() == "No revisions found for Agent Server dep-123."
 
 
 def test_deploy_revisions_list_missing_deployment_id_shows_usage() -> None:
@@ -1154,7 +1154,7 @@ def test_deploy_revisions_list_missing_deployment_id_shows_usage() -> None:
     result = runner.invoke(cli, ["deploy", "revisions", "list"])
 
     assert result.exit_code == 2, result.output
-    assert "Missing argument 'DEPLOYMENT_ID'" in result.output
+    assert "Missing argument 'AGENT_SERVER_ID'" in result.output
 
 
 def test_deploy_delete_command(monkeypatch) -> None:
@@ -1195,10 +1195,10 @@ def test_deploy_delete_command(monkeypatch) -> None:
         "deployment_id": "dep-123",
     }
     assert (
-        "Are you sure you want to delete deployment ID dep-123? (Y/n):"
+        "Are you sure you want to delete Agent Server ID dep-123? (Y/n):"
         in click.unstyle(result.output)
     )
-    assert result.output.strip().endswith("Deleted deployment dep-123.")
+    assert result.output.strip().endswith("Deleted Agent Server dep-123.")
 
 
 def test_deploy_delete_command_cancelled(monkeypatch) -> None:
@@ -1266,14 +1266,16 @@ def test_deploy_delete_command_force(monkeypatch) -> None:
     )
 
     assert result.exit_code == 0, result.output
-    assert "Are you sure you want to delete deployment ID dep-123?" not in result.output
+    assert (
+        "Are you sure you want to delete Agent Server ID dep-123?" not in result.output
+    )
     assert captured == {
         "host_url": "https://api.example.com",
         "api_key": "test-key",
         "tenant_id": "",
         "deployment_id": "dep-123",
     }
-    assert result.output.strip() == "Deleted deployment dep-123."
+    assert result.output.strip() == "Deleted Agent Server dep-123."
 
 
 def test_dockerfile_command_basic() -> None:

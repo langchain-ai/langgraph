@@ -359,6 +359,68 @@ def deploy_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DeployPro
     return DeployProject(control_plane, docker, timeline, uploads)
 
 
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ([], ["--agent-server-id", "--agent-server-type"]),
+        (["logs"], ["--agent-server-id"]),
+        (["delete"], ["AGENT_SERVER_ID"]),
+        (["revisions", "list"], ["AGENT_SERVER_ID"]),
+        (["metrics"], ["AGENT_SERVER_ID"]),
+    ],
+)
+def test_deploy_help_uses_agent_server_names(command: list[str], expected: list[str]):
+    result = CliRunner().invoke(cli, ["deploy", *command, "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert all(name in result.output for name in expected)
+    assert "Agent Server" in result.output
+    assert "--deployment-" not in result.output
+    assert "DEPLOYMENT_ID" not in result.output
+
+
+@pytest.mark.parametrize("command", [[], ["logs"]])
+@pytest.mark.parametrize("option", ["--agent-server-id", "--deployment-id"])
+def test_missing_agent_server_id_uses_public_option_name(
+    command: list[str], option: str
+):
+    result = CliRunner().invoke(cli, ["deploy", *command, option])
+
+    assert result.exit_code == 2, result.output
+    assert "Option '--agent-server-id' requires an argument" in result.output
+    assert "--deployment-id" not in result.output
+
+
+@pytest.mark.parametrize("option", ["--agent-server-type", "--deployment-type"])
+@pytest.mark.parametrize("values", [[], ["invalid"]])
+def test_invalid_agent_server_type_uses_public_option_name(
+    option: str, values: list[str]
+):
+    result = CliRunner().invoke(cli, ["deploy", option, *values])
+
+    assert result.exit_code == 2, result.output
+    assert "'--agent-server-type'" in result.output
+    assert "--deployment-type" not in result.output
+
+
+@pytest.mark.parametrize("option", ["--agent-server-id", "--deployment-id"])
+def test_deploy_logs_accepts_agent_server_id_aliases(
+    deploy_project, mocker, option: str
+):
+    fetch_logs = mocker.patch.object(
+        HostBackendClient, "get_deploy_logs", return_value={"logs": []}
+    )
+
+    result = CliRunner().invoke(
+        cli, ["deploy", "logs", "--api-key", "test-key", option, "dep-existing"]
+    )
+
+    assert result.exit_code == 0, result.output
+    fetch_logs.assert_called_once_with(
+        "dep-existing", {"limit": 100, "order": "desc"}, None
+    )
+
+
 @pytest.mark.parametrize("build_mode", ["--no-remote", "--remote"])
 @pytest.mark.parametrize(
     ("detail", "expects_dev_hint"),
@@ -376,7 +438,7 @@ def test_create_failure_preserves_backend_error_and_only_hints_for_aws_rejection
 
     assert result.exit_code == 1, result.output
     assert detail in result.output
-    assert ("Use --deployment-type dev instead." in result.output) is expects_dev_hint
+    assert ("Use --agent-server-type dev instead." in result.output) is expects_dev_hint
     assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
         "deployment_type": "dev_zero"
     }
@@ -415,7 +477,7 @@ def test_first_local_deploy_creates_then_builds_pushes_and_updates_in_order(
         "docker inspect-digest",
         _patch(CREATED_ID),
     ]
-    assert "Deployment updated" in result.output
+    assert "Agent Server updated" in result.output
 
 
 @pytest.mark.parametrize(
@@ -428,10 +490,15 @@ def test_first_local_deploy_creates_then_builds_pushes_and_updates_in_order(
     ],
 )
 @pytest.mark.parametrize("build_mode", ["--no-remote", "--remote"])
+@pytest.mark.parametrize("option", ["--agent-server-type", "--deployment-type"])
 def test_deployment_type_aliases(
-    deploy_project: DeployProject, deployment_type: str, wire_type: str, build_mode: str
+    deploy_project: DeployProject,
+    deployment_type: str,
+    wire_type: str,
+    build_mode: str,
+    option: str,
 ) -> None:
-    result = deploy_project.run(build_mode, "--deployment-type", deployment_type)
+    result = deploy_project.run(build_mode, option, deployment_type)
 
     assert result.exit_code == 0, result.output
     assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
@@ -770,7 +837,7 @@ def test_push_to_builds_pushes_then_creates_an_external_deployment(
         "source_revision_config": {"image_uri": EXTERNAL_DIGEST},
         "secrets": [],
     }
-    assert "Deployment created" in result.output
+    assert "Agent Server created" in result.output
 
 
 def test_push_to_builds_directly_with_the_push_reference(
@@ -873,16 +940,17 @@ def test_push_to_rejects_a_non_external_deployment_before_any_docker_work(
     assert deploy_project.docker.verbs() == []
 
 
+@pytest.mark.parametrize("option", ["--agent-server-id", "--deployment-id"])
+@pytest.mark.parametrize("equals", [False, True])
 def test_push_to_with_deployment_id_fetches_the_deployment_once(
-    deploy_project: DeployProject,
+    deploy_project: DeployProject, option: str, equals: bool
 ) -> None:
     deploy_project.control_plane.existing_deployments = [
         {"id": "dep-ext", "name": "another-name", "source": "external_docker"}
     ]
 
-    result = deploy_project.run(
-        "--deployment-id", "dep-ext", "--push-to", PUSH_REPOSITORY
-    )
+    id_args = [f"{option}=dep-ext"] if equals else [option, "dep-ext"]
+    result = deploy_project.run(*id_args, "--push-to", PUSH_REPOSITORY)
 
     assert result.exit_code == 0, result.output
     assert deploy_project.timeline == [
@@ -1159,7 +1227,7 @@ def test_image_pull_secret_without_push_to_or_image_uri_is_refused(
     result = deploy_project.run("--image-pull-secret", "regcred")
 
     assert result.exit_code != 0
-    assert "only apply when creating a deployment with --push-to" in result.output
+    assert "only apply when creating an Agent Server with --push-to" in result.output
     assert deploy_project.timeline == []
 
 
@@ -1241,7 +1309,7 @@ def test_listener_flags_are_refused_for_a_deployment_id_without_any_call(
     )
 
     assert result.exit_code != 0
-    assert "fixed when a deployment is created" in result.output
+    assert "fixed when an Agent Server is created" in result.output
     assert deploy_project.timeline == []
 
 
@@ -1262,7 +1330,7 @@ def test_listener_flags_are_refused_on_an_existing_deployment(
     )
 
     assert result.exit_code != 0
-    assert "fixed when a deployment is created" in result.output
+    assert "fixed when an Agent Server is created" in result.output
     assert deploy_project.docker.verbs() == []
 
 

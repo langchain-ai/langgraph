@@ -317,7 +317,7 @@ class AuthConfig(TypedDict, total=False):
     """Optional. Whether to disable LangSmith API-key authentication for requests originating the Studio.
 
     Defaults to False, meaning that if a particular header is set, the server will verify the `x-api-key` header
-    value is a valid API key for the deployment's workspace. If `True`, all requests will go through your custom
+    value is a valid API key for the Agent Server's workspace. If `True`, all requests will go through your custom
     authentication logic, regardless of origin of the request.
     """
     openapi: SecurityConfig
@@ -461,7 +461,7 @@ class ConfigurableHeaderConfig(TypedDict, total=False):
 
 
 class HttpConfig(TypedDict, total=False):
-    """Configuration for the built-in HTTP server that powers your deployment's routes and endpoints."""
+    """Configuration for the built-in HTTP server that powers your Agent Server's routes and endpoints."""
 
     app: str
     """Optional. Import path to a custom Starlette/FastAPI application to mount.
@@ -490,12 +490,12 @@ class HttpConfig(TypedDict, total=False):
     Default is False.
     """
     disable_mcp: bool
-    """Optional. If `True`, /mcp routes are removed, disabling default support to expose the deployment as an MCP server.
+    """Optional. If `True`, /mcp routes are removed, disabling default support to expose the Agent Server as an MCP server.
 
     Default is False.
     """
     disable_a2a: bool
-    """Optional. If `True`, /a2a routes are removed, disabling default support to expose the deployment as an agent-to-agent (A2A) server.
+    """Optional. If `True`, /a2a routes are removed, disabling default support to expose the Agent Server as an agent-to-agent (A2A) server.
 
     Default is False.
     """
@@ -638,16 +638,16 @@ class Config(TypedDict, total=False):
 
     python_version: str
     """Optional. Python version in 'major.minor' format (e.g. '3.11').
-    Must be at least 3.11 or greater for this deployment to function properly.
+    Must be at least 3.11 or greater for this Agent Server to function properly.
     """
 
     node_version: str | None
-    """Optional. Node.js version as a major version (e.g. '20'), if your deployment needs Node.
+    """Optional. Node.js version as a major version (e.g. '20'), if your Agent Server needs Node.
     Must be >= 20 if provided.
     """
 
     api_version: str | None
-    """Optional. Which semantic version of the LangGraph API server to use.
+    """Optional. Which semantic version of the Agent Server to use.
 
     Defaults to latest. Check the
     [changelog](https://docs.langchain.com/langgraph-platform/langgraph-server-changelog)
@@ -658,7 +658,7 @@ class Config(TypedDict, total=False):
     """
 
     base_image: str | None
-    """Optional. Base image to use for the LangGraph API server.
+    """Optional. Base image to use for the Agent Server.
 
     Defaults to langchain/langgraph-api or langchain/langgraphjs-api."""
 
@@ -740,7 +740,7 @@ class Config(TypedDict, total=False):
     """
 
     env: dict[str, str] | str
-    """Optional. Environment variables to set for your deployment.
+    """Optional. Environment variables to set for your Agent Server.
 
     - If given as a dict, keys are variable names and values are their values.
     - If given as a string, it must be a path to a file containing lines in KEY=VALUE format.

@@ -187,7 +187,7 @@ class TestValidatePrebuiltImage:
 
         monkeypatch.setattr(deploy_mod, "subp_exec", fake_subp_exec)
 
-        with pytest.raises(click.ClickException, match="requires linux/amd64"):
+        with pytest.raises(click.ClickException, match="hosting requires linux/amd64"):
             _validate_prebuilt_image(_FakeRunner(), "repo/app:arm", verbose=False)
 
 
@@ -327,6 +327,9 @@ class TestCallHostBackendWithOptionalTenant:
             )
         assert exc_info.value.status_code == 403
         assert "smith.langchain.com" in exc_info.value.message
+        assert exc_info.value.message.startswith(
+            "LangSmith Agent Server hosting is not enabled for this organization."
+        )
 
     def test_403_not_enabled_eu_url(self):
         detail = (
@@ -871,17 +874,17 @@ class TestSelectSource:
             ),
             pytest.param(
                 {"placement": RequestedPlacement(listener_id="listener-1")},
-                "only apply when creating a deployment with --push-to",
+                "only apply when creating an Agent Server with --push-to",
                 id="listener_without_push_to",
             ),
             pytest.param(
                 {"placement": RequestedPlacement(k8s_namespace="agents")},
-                "only apply when creating a deployment with --push-to",
+                "only apply when creating an Agent Server with --push-to",
                 id="namespace_without_push_to",
             ),
             pytest.param(
                 {"image_pull_secrets": ("regcred",)},
-                "only apply when creating a deployment with --push-to",
+                "only apply when creating an Agent Server with --push-to",
                 id="image_pull_secret_without_push_to",
             ),
             pytest.param(
@@ -1406,7 +1409,7 @@ class TestCreateOnlySettings:
         settings = CreateOnlySettings(RequestedPlacement(listener_id="listener-1"))
         with pytest.raises(
             click.UsageError,
-            match="Listener and namespace are fixed when a deployment is created",
+            match="Listener and namespace are fixed when an Agent Server is created",
         ):
             settings.ensure_not_existing("dep-1")
 

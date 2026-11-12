@@ -172,7 +172,7 @@ def compose_as_dict(
     postgres_uri: str | None = None,
     # If you are running against an already-built image, you can pass it here
     image: str | None = None,
-    # Base image to use for the LangGraph API server
+    # Base image to use for the Agent Server
     base_image: str | None = None,
     # API version of the base image
     api_version: str | None = None,
