@@ -2156,6 +2156,161 @@ async def test_tool_node_inject_runtime_dynamic_tool_via_wrap_tool_call_async() 
     assert tool_message.tool_call_id == "call_dynamic_2"
 
 
+def test_wrap_tool_call_override_state_reaches_the_tool() -> None:
+    """A wrapper that overrides the request state should be what the tool sees.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/9681.
+    `InjectedState` args and `ToolRuntime.state` are both read off the runtime a
+    call carries, so an overridden state has to reach that runtime too.
+    """
+
+    class State(MessagesState):
+        topic: str
+
+    @dec_tool
+    def read_topic(
+        topic: Annotated[str, InjectedState("topic")],
+        runtime: ToolRuntime,
+    ) -> str:
+        """Report the topic supplied to the tool."""
+        return f"injected={topic}, runtime={runtime.state['topic']}"
+
+    def wrap_tool_call(request, execute):
+        return execute(request.override(state={**request.state, "topic": "filtered"}))
+
+    graph = (
+        StateGraph(State)
+        .add_node("tools", ToolNode([read_topic], wrap_tool_call=wrap_tool_call))
+        .add_edge(START, "tools")
+        .compile()
+    )
+    result = graph.invoke(
+        {
+            "topic": "original",
+            "messages": [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {
+                            "name": "read_topic",
+                            "args": {},
+                            "id": "tool-1",
+                            "type": "tool_call",
+                        }
+                    ],
+                )
+            ],
+        }
+    )
+
+    assert result["messages"][-1].content == "injected=filtered, runtime=filtered"
+    # the wrapper only replaced what its own call sees
+    assert result["topic"] == "original"
+
+
+async def test_awrap_tool_call_override_state_reaches_the_tool() -> None:
+    """Async variant of the overridden-state regression test."""
+
+    class State(MessagesState):
+        topic: str
+
+    @dec_tool
+    async def read_topic(
+        topic: Annotated[str, InjectedState("topic")],
+        runtime: ToolRuntime,
+    ) -> str:
+        """Report the topic supplied to the tool."""
+        return f"injected={topic}, runtime={runtime.state['topic']}"
+
+    async def awrap_tool_call(request, execute):
+        return await execute(
+            request.override(state={**request.state, "topic": "filtered"})
+        )
+
+    graph = (
+        StateGraph(State)
+        .add_node("tools", ToolNode([read_topic], awrap_tool_call=awrap_tool_call))
+        .add_edge(START, "tools")
+        .compile()
+    )
+    result = await graph.ainvoke(
+        {
+            "topic": "original",
+            "messages": [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {
+                            "name": "read_topic",
+                            "args": {},
+                            "id": "tool-1",
+                            "type": "tool_call",
+                        }
+                    ],
+                )
+            ],
+        }
+    )
+
+    assert result["messages"][-1].content == "injected=filtered, runtime=filtered"
+    assert result["topic"] == "original"
+
+
+def test_wrap_tool_call_override_state_stays_per_call() -> None:
+    """Parallel calls with different overrides must not share one state."""
+
+    class State(MessagesState):
+        topic: str
+
+    @dec_tool
+    def read_topic(
+        topic: Annotated[str, InjectedState("topic")],
+        runtime: ToolRuntime,
+    ) -> str:
+        """Report the topic supplied to the tool."""
+        return f"{topic}/{runtime.state['topic']}"
+
+    def wrap_tool_call(request, execute):
+        topic = f"filtered-{request.tool_call['id']}"
+        return execute(request.override(state={**request.state, "topic": topic}))
+
+    graph = (
+        StateGraph(State)
+        .add_node("tools", ToolNode([read_topic], wrap_tool_call=wrap_tool_call))
+        .add_edge(START, "tools")
+        .compile()
+    )
+    result = graph.invoke(
+        {
+            "topic": "original",
+            "messages": [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {
+                            "name": "read_topic",
+                            "args": {},
+                            "id": "tool-1",
+                            "type": "tool_call",
+                        },
+                        {
+                            "name": "read_topic",
+                            "args": {},
+                            "id": "tool-2",
+                            "type": "tool_call",
+                        },
+                    ],
+                )
+            ],
+        }
+    )
+
+    assert [message.content for message in result["messages"][-2:]] == [
+        "filtered-tool-1/filtered-tool-1",
+        "filtered-tool-2/filtered-tool-2",
+    ]
+
+
 def test_tool_runtime_defaults_tools_to_empty_list() -> None:
     runtime = ToolRuntime(
         state={},

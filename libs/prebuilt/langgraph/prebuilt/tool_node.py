@@ -207,6 +207,23 @@ class ToolCallRequest:
         return replace(self, **overrides)
 
 
+def _runtime_of(request: ToolCallRequest) -> ToolRuntime:
+    """The runtime a call should see, carrying the request's current state.
+
+    A wrapper can hand `execute()` a request whose state it replaced through
+    `override(state=...)`, and the request keeps the runtime it was built with.
+    Tools read the state off that runtime, both through a `ToolRuntime`
+    parameter and through `InjectedState` args, so they would see the graph's
+    state while `request.state` holds the replacement. Give the call a copy of
+    the runtime that carries the replaced state; the graph state itself is
+    untouched.
+    """
+    runtime = request.runtime
+    if request.state is runtime.state:
+        return runtime
+    return replace(runtime, state=request.state)
+
+
 ToolCallWrapper = Callable[
     [ToolCallRequest, Callable[[ToolCallRequest], ToolMessage | Command]],
     ToolMessage | Command,
@@ -958,7 +975,7 @@ class ToolNode(RunnableCallable):
             raise TypeError(msg)
 
         # Inject state, store, and runtime right before invocation
-        injected_call = self._inject_tool_args(call, request.runtime, tool)
+        injected_call = self._inject_tool_args(call, _runtime_of(request), tool)
         call_args = {**injected_call, "type": "tool_call"}
 
         try:
@@ -1118,7 +1135,7 @@ class ToolNode(RunnableCallable):
             raise TypeError(msg)
 
         # Inject state, store, and runtime right before invocation
-        injected_call = self._inject_tool_args(call, request.runtime, tool)
+        injected_call = self._inject_tool_args(call, _runtime_of(request), tool)
         call_args = {**injected_call, "type": "tool_call"}
 
         try:
