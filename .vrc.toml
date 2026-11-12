@@ -1,0 +1,8 @@
+# verifiable-contributions policy for langchain-ai/langgraph
+# langgraph is a monorepo: the package lives in libs/langgraph and tests must run
+# from there (they do `from tests.any_str import ...`). `command` cd's into the
+# package dir. Adjust `test_paths` to the file your PR changes.
+command = ["bash", "-lc", "cd libs/langgraph && python -m pytest tests/test_interruption.py -q"]
+test_paths = ["libs/langgraph/tests/test_interruption.py"]
+timeout_seconds = 900
+protected_paths = [".github/workflows/verify.yml", ".vrc.toml"]

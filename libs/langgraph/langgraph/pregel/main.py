@@ -817,8 +817,19 @@ class Pregel(
         self.stream_eager = stream_eager
         self.output_channels = output_channels
         self.stream_channels = stream_channels
-        self.interrupt_after_nodes = interrupt_after_nodes
-        self.interrupt_before_nodes = interrupt_before_nodes
+        # A single node name passed as a string is accepted for convenience.
+        # Normalize it to a 1-element tuple (unless it is the "*" wildcard) so
+        # downstream membership tests are exact, not substring matches.
+        self.interrupt_after_nodes = (
+            (interrupt_after_nodes,)
+            if interrupt_after_nodes != "*" and isinstance(interrupt_after_nodes, str)
+            else interrupt_after_nodes
+        )
+        self.interrupt_before_nodes = (
+            (interrupt_before_nodes,)
+            if interrupt_before_nodes != "*" and isinstance(interrupt_before_nodes, str)
+            else interrupt_before_nodes
+        )
         self.input_channels = input_channels
         self.step_timeout = step_timeout
         self.debug = debug if debug is not None else get_debug()
@@ -2689,6 +2700,11 @@ class Pregel(
             validate_keys(output_keys, self.channels)
         interrupt_before = interrupt_before or self.interrupt_before_nodes
         interrupt_after = interrupt_after or self.interrupt_after_nodes
+        # normalize a lone string (other than "*") to a 1-element list
+        if interrupt_before != "*" and isinstance(interrupt_before, str):
+            interrupt_before = [interrupt_before]
+        if interrupt_after != "*" and isinstance(interrupt_after, str):
+            interrupt_after = [interrupt_after]
         if isinstance(stream_mode, str):
             stream_modes = {stream_mode}
         else:

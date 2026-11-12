@@ -1256,6 +1256,15 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         # assign default values
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
+        # A single node name passed as a string is accepted for convenience.
+        # Normalize it to a 1-element list so that (1) the `validate()` join
+        # below never concatenates a str onto a list, and (2) should_interrupt()
+        # does an exact membership test instead of a substring test.
+        # (the wildcard "*" must stay a string)
+        if interrupt_before != "*" and isinstance(interrupt_before, str):
+            interrupt_before = [interrupt_before]
+        if interrupt_after != "*" and isinstance(interrupt_after, str):
+            interrupt_after = [interrupt_after]
 
         # validate the graph
         self.validate(

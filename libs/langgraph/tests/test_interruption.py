@@ -312,3 +312,83 @@ async def test_invalid_resume_lets_other_answered_tasks_finish(
         Command(resume={ids["check?"]: {"approved": True}}), config
     )
     assert (sorted(result["log"]), sent) == (["checked", "sent"], ["email"])
+
+
+def test_interrupt_after_single_string_does_not_substring_match(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Regression test for #9277.
+
+    A single string interrupt name must match the node name *exactly*, not as a
+    substring. ``interrupt_after="node_one"`` must pause after the node literally
+    named ``node_one`` -- never after a node whose name is a substring of it (here
+    ``no``). It must also compile without a TypeError (a lone string used to be
+    stored as-is, so ``[] + "node_one"`` blew up in ``validate()``).
+    """
+
+    class State(TypedDict):
+        value: int
+
+    def no(state: State) -> State:
+        return {"value": state["value"] + 1}
+
+    def node_one(state: State) -> State:
+        return {"value": state["value"] + 1}
+
+    def node_two(state: State) -> State:
+        return {"value": state["value"] + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("no", no)
+    builder.add_node("node_one", node_one)
+    builder.add_node("node_two", node_two)
+    builder.add_edge(START, "no")
+    builder.add_edge("no", "node_one")
+    builder.add_edge("node_one", "node_two")
+    builder.add_edge("node_two", END)
+
+    # must not raise TypeError when given a single string
+    graph = builder.compile(
+        checkpointer=sync_checkpointer, interrupt_after="node_one"
+    )
+
+    thread = {"configurable": {"thread_id": "9277-sync"}}
+    graph.invoke({"value": 0}, thread)
+    # pauses AFTER node_one -> the next pending task is node_two, NOT node_one
+    # (which would indicate the buggy substring match where "no" matched "node_one")
+    assert graph.get_state(thread).next == ("node_two",)
+
+
+async def test_interrupt_after_single_string_does_not_substring_match_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Async variant of the #9277 regression test."""
+
+    class State(TypedDict):
+        value: int
+
+    async def no(state: State) -> State:
+        return {"value": state["value"] + 1}
+
+    async def node_one(state: State) -> State:
+        return {"value": state["value"] + 1}
+
+    async def node_two(state: State) -> State:
+        return {"value": state["value"] + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("no", no)
+    builder.add_node("node_one", node_one)
+    builder.add_node("node_two", node_two)
+    builder.add_edge(START, "no")
+    builder.add_edge("no", "node_one")
+    builder.add_edge("node_one", "node_two")
+    builder.add_edge("node_two", END)
+
+    graph = builder.compile(
+        checkpointer=async_checkpointer, interrupt_after="node_one"
+    )
+
+    thread = {"configurable": {"thread_id": "9277-async"}}
+    await graph.ainvoke({"value": 0}, thread)
+    assert (await graph.aget_state(thread)).next == ("node_two",)

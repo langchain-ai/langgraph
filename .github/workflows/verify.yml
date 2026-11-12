@@ -1,0 +1,37 @@
+name: verify
+
+# verifiable-contributions on langchain-ai/langgraph. Runs on the PR's own ref with a
+# read-only token (never pull_request_target), so untrusted PR code cannot reach a
+# writable token or secrets. Report-only (fail-on empty) until proven stable here.
+#
+# langgraph is a monorepo; the setup/command are configured in .vrc.toml.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout with full history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Produce verification receipt
+        uses: AaronG18/verifiable-contributions@v0.3.1
+        with:
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+          repository: ${{ github.repository }}
+          setup-command: >-
+            python -m pip install --upgrade pip pytest anyio pytest-mock
+            syrupy langchain-core langgraph-checkpoint langgraph-checkpoint-sqlite
+            langgraph-sdk langgraph-prebuilt
+            && python -m pip install -e ./libs/langgraph
+          fail-on: ""
