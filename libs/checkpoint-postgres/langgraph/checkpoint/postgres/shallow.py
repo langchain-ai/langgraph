@@ -1,7 +1,7 @@
 import asyncio
 import threading
 import warnings
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncGenerator, AsyncIterator, Generator, Iterator, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from typing import Any
 
@@ -210,7 +210,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
     @contextmanager
     def from_conn_string(
         cls, conn_string: str, *, pipeline: bool = False
-    ) -> Iterator["ShallowPostgresSaver"]:
+    ) -> Generator["ShallowPostgresSaver", None, None]:
         """Create a new ShallowPostgresSaver instance from a connection string.
 
         Args:
@@ -484,7 +484,9 @@ class ShallowPostgresSaver(BasePostgresSaver):
             )
 
     @contextmanager
-    def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
+    def _cursor(
+        self, *, pipeline: bool = False
+    ) -> Generator[Cursor[DictRow], None, None]:
         """Create a database cursor as a context manager.
 
         Args:
@@ -574,7 +576,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         *,
         pipeline: bool = False,
         serde: SerializerProtocol | None = None,
-    ) -> AsyncIterator["AsyncShallowPostgresSaver"]:
+    ) -> AsyncGenerator["AsyncShallowPostgresSaver", None]:
         """Create a new AsyncShallowPostgresSaver instance from a connection string.
 
         Args:
@@ -823,7 +825,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
     @asynccontextmanager
     async def _cursor(
         self, *, pipeline: bool = False
-    ) -> AsyncIterator[AsyncCursor[DictRow]]:
+    ) -> AsyncGenerator[AsyncCursor[DictRow], None]:
         """Create a database cursor as a context manager.
 
         Args:

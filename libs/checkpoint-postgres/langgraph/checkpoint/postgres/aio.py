@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import AsyncGenerator, AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
@@ -73,7 +73,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         *,
         pipeline: bool = False,
         serde: SerializerProtocol | None = None,
-    ) -> AsyncIterator[AsyncPostgresSaver]:
+    ) -> AsyncGenerator[AsyncPostgresSaver, None]:
         """Create a new AsyncPostgresSaver instance from a connection string.
 
         Args:
@@ -417,7 +417,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
     @asynccontextmanager
     async def _cursor(
         self, *, pipeline: bool = False
-    ) -> AsyncIterator[AsyncCursor[DictRow]]:
+    ) -> AsyncGenerator[AsyncCursor[DictRow], None]:
         """Create a database cursor as a context manager.
 
         Args:

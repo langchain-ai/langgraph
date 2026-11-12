@@ -1,6 +1,6 @@
 """Shared utility functions for the Postgres checkpoint & storage classes."""
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 
 from psycopg import Connection
@@ -11,7 +11,7 @@ Conn = Connection[DictRow] | ConnectionPool[Connection[DictRow]]
 
 
 @contextmanager
-def get_connection(conn: Conn) -> Iterator[Connection[DictRow]]:
+def get_connection(conn: Conn) -> Generator[Connection[DictRow], None, None]:
     if isinstance(conn, Connection):
         yield conn
     elif isinstance(conn, ConnectionPool):
