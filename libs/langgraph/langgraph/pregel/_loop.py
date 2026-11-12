@@ -846,10 +846,12 @@ class PregelLoop:
         Unfinished (failed or interrupted) tasks keep empty writes, so the
         runner re-executes them or routes them to error handlers.
         """
-        for tid, status in read_task_statuses(self.checkpoint_pending_writes).items():
-            if task := tasks.get(tid):
-                task.writes.extend(status.output)
-                self._reapplied_task_ids.add(tid)
+        # Filter first: this runs once per task call, and reading the status of
+        # every task that wrote would make runs with many task calls quadratic.
+        writes = (w for w in self.checkpoint_pending_writes if w[0] in tasks)
+        for tid, status in read_task_statuses(writes).items():
+            tasks[tid].writes.extend(status.output)
+            self._reapplied_task_ids.add(tid)
 
     def _resume_error_handlers_if_applicable(self) -> None:
         """On resume, schedule error handlers for tasks that failed in a prior run.
