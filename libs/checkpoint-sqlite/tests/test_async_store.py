@@ -2,7 +2,7 @@ import asyncio
 import os
 import tempfile
 import uuid
-from collections.abc import AsyncIterator, Generator, Iterable
+from collections.abc import AsyncGenerator, AsyncIterator, Generator, Iterable
 from contextlib import asynccontextmanager
 from typing import cast
 
@@ -53,7 +53,7 @@ async def create_vector_store(
     fake_embeddings: CharacterEmbeddings,
     conn_string: str = ":memory:",
     text_fields: list[str] | None = None,
-) -> AsyncIterator[AsyncSqliteStore]:
+) -> AsyncGenerator[AsyncSqliteStore, None]:
     """Create an AsyncSqliteStore with vector search capabilities."""
     index_config: SqliteIndexConfig = {
         "dims": fake_embeddings.dims,

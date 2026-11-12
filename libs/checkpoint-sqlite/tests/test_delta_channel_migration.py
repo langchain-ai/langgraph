@@ -29,7 +29,7 @@ pytest.importorskip("langgraph.channels.delta", reason="langgraph core not insta
 pytest.importorskip("langgraph.channels.binop", reason="langgraph core not installed")
 pytest.importorskip("langgraph.graph", reason="langgraph core not installed")
 
-from langgraph.channels.binop import BinaryOperatorAggregate  # type: ignore[import-untyped]  # noqa: I001
+from langgraph.channels.binop import BinaryOperatorAggregate  # type: ignore[import-untyped]
 from langgraph.channels.delta import DeltaChannel  # type: ignore[import-untyped]
 from langgraph.graph import END, START, StateGraph  # type: ignore[import-untyped]
 from typing_extensions import TypedDict
