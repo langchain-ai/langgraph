@@ -2859,6 +2859,9 @@ class Pregel(
 
         stream = SyncQueue()
 
+        if output_keys is None and config is not None and CONFIG_KEY_TASK_ID in config.get(CONF, {}):
+            output_keys = self.output_channels
+
         config = ensure_config(self.config, config)
         run_manager = None
         try:
@@ -3275,6 +3278,9 @@ class Pregel(
             Callable[[StreamChunk], None],
             partial(aioloop.call_soon_threadsafe, stream.put_nowait),
         )
+
+        if output_keys is None and config is not None and CONFIG_KEY_TASK_ID in config.get(CONF, {}):
+            output_keys = self.output_channels
 
         config = ensure_config(self.config, config)
         run_manager = None
