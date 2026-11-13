@@ -1,6 +1,7 @@
 """Test tool node interceptor handling of unregistered tools."""
 
 from collections.abc import Awaitable, Callable
+from typing import Annotated
 from unittest.mock import Mock
 
 import pytest
@@ -10,7 +11,7 @@ from langchain_core.tools import tool as dec_tool
 from langgraph.store.base import BaseStore
 from langgraph.types import Command
 
-from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt import InjectedState, ToolNode
 from langgraph.prebuilt.tool_node import ToolCallRequest
 
 pytestmark = pytest.mark.anyio
@@ -802,3 +803,49 @@ async def test_graceful_failure_even_when_handle_errors_disabled_async() -> None
         result[0].content
         == "Error: missing is not a valid tool, try one of [registered_tool]."
     )
+
+
+@pytest.mark.parametrize("async_mode", [False, True])
+async def test_interceptor_injects_state_for_same_name_replacement(async_mode: bool):
+    @dec_tool("lookup")
+    def original() -> str:
+        """Return the original value."""
+        return "original"
+
+    @dec_tool("lookup")
+    def replacement(topic: Annotated[str, InjectedState("topic")]) -> str:
+        """Return the current topic."""
+        return topic
+
+    def select(request: ToolCallRequest) -> ToolCallRequest:
+        if request.tool_call["id"] == "replace":
+            return request.override(tool=replacement)
+        return request
+
+    def wrap(request, execute):
+        return execute(select(request))
+
+    async def awrap(request, execute):
+        return await execute(select(request))
+
+    node = ToolNode([original], wrap_tool_call=wrap, awrap_tool_call=awrap)
+    state = {
+        "topic": "from state",
+        "messages": [
+            AIMessage(
+                "",
+                tool_calls=[
+                    {"name": "lookup", "args": {}, "id": "replace"},
+                    {"name": "lookup", "args": {}, "id": "original"},
+                ],
+            )
+        ],
+    }
+    config = _create_config_with_runtime()
+    result = (
+        await node.ainvoke(state, config) if async_mode else node.invoke(state, config)
+    )
+    assert [(m.tool_call_id, m.content) for m in result["messages"]] == [
+        ("replace", "from state"),
+        ("original", "original"),
+    ]
