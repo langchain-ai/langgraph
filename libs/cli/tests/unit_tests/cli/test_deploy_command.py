@@ -1862,20 +1862,24 @@ def test_failed_discovery_says_it_falls_back_to_the_default_control_plane(
     assert "using the default LangSmith control plane" in result.stderr
 
 
-def test_host_url_on_a_data_plane_sizes_the_agent_server_by_resource_spec(
+def test_host_url_on_a_data_plane_gets_the_drop_host_url_hint(
     byoc_project: DeployProject,
 ) -> None:
+    detail = (
+        "'source_config.resource_spec' is required for 'external_docker' source, "
+        "and for every source on BYOC data planes, and must be 'null' for all "
+        "other sources."
+    )
+    byoc_project.control_plane.create_error = detail
+
     result = byoc_project.run(
         "--no-remote", host_url=f"{DATA_PLANE_URL}{CONTROL_PLANE_PATH}"
     )
 
-    assert result.exit_code == 0, result.output
-    assert DISCOVER_WORKSPACES not in byoc_project.timeline
-    assert DATA_PLANE_INFO in byoc_project.timeline
-    assert byoc_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
-        "resource_spec": {},
-        "deployment_type": "dev_zero",
-    }
+    assert result.exit_code == 1, result.output
+    assert DATA_PLANE_INFO not in byoc_project.timeline
+    assert detail in result.output
+    assert "drop it so 'langgraph deploy' finds the data plane" in result.output
 
 
 def test_host_url_overrides_discovery(byoc_project: DeployProject) -> None:

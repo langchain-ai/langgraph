@@ -116,6 +116,11 @@ _LISTENERS_DOCS_URL = "https://docs.langchain.com/langsmith/control-plane#listen
 _DEFAULT_AGENT_SERVER_TYPE = "serverless"
 _WIRE_DEPLOYMENT_TYPES = {"serverless": "dev_zero", "dedicated": "prod"}
 _SOURCE_REJECTED_PREFIX = "'source' must be"
+_RESOURCE_SPEC_REQUIRED_MARKER = "'source_config.resource_spec' is required"
+_HOST_URL_ON_A_DATA_PLANE = (
+    "If --host-url or LANGGRAPH_HOST_URL points at a BYOC data plane, drop it so "
+    "'langgraph deploy' finds the data plane from your API key."
+)
 _CLI_BUILDS_UNSUPPORTED = (
     "This LangSmith data plane does not build images for 'langgraph deploy'. "
     "Push the image to a registry you manage with --push-to "
@@ -1628,6 +1633,10 @@ def _resolve_or_create(
             _SOURCE_REJECTED_PREFIX
         ):
             raise _with_hint(err, _CLI_BUILDS_UNSUPPORTED) from None
+        if err.status_code == 400 and _RESOURCE_SPEC_REQUIRED_MARKER in (
+            err.detail or ""
+        ):
+            raise _with_hint(err, _HOST_URL_ON_A_DATA_PLANE) from None
         if _needs_a_listener(err):
             raise ListenerRequiredError(
                 "The image has to come from a registry you manage, so re-run with "

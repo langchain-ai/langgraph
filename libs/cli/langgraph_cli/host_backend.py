@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any, Literal
 from urllib.parse import urlparse
 from uuid import UUID
@@ -55,8 +55,9 @@ class ControlPlaneEndpoints:
         control_plane_url = url.rstrip("/")
         hostname = urlparse(control_plane_url).hostname or ""
         if control_plane_url.endswith(CONTROL_PLANE_PATH):
-            root = control_plane_url.removesuffix(CONTROL_PLANE_PATH)
-            return cls(control_plane_url, root, f"{root}{INFO_PATH}")
+            return cls(
+                control_plane_url, control_plane_url.removesuffix(CONTROL_PLANE_PATH)
+            )
         if hostname in LOCAL_HOSTNAMES:
             return cls(control_plane_url, control_plane_url)
         return cls(control_plane_url, _cloud_dashboard_for(hostname))
@@ -84,10 +85,8 @@ class ControlPlaneEndpoints:
         dashboard_url = cls.resolve(
             None, None if endpoint_is_the_data_plane else langsmith_endpoint
         ).dashboard_url
-        endpoints = cls.from_control_plane_url(
-            f"{data_plane_url.rstrip('/')}{CONTROL_PLANE_PATH}"
-        )
-        return replace(endpoints, dashboard_url=dashboard_url)
+        root = data_plane_url.rstrip("/")
+        return cls(f"{root}{CONTROL_PLANE_PATH}", dashboard_url, f"{root}{INFO_PATH}")
 
     @classmethod
     def for_workspace(

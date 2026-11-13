@@ -861,24 +861,25 @@ def test_local_data_plane_may_use_http(data_plane_url):
 
 
 @pytest.mark.parametrize(
-    ("host_url", "langsmith_endpoint", "info_url"),
+    ("host_url", "langsmith_endpoint"),
     [
         pytest.param(
-            "https://langsmith.customer.example/api-host",
-            None,
-            "https://langsmith.customer.example/api/v1/info",
-            id="host_url_on_a_data_plane",
+            "https://langsmith.customer.example/api-host", None, id="api_host_url"
         ),
-        pytest.param(None, "https://smith.example.com/api/v1", None, id="self_hosted"),
-        pytest.param("https://api.host.langchain.com", None, None, id="cloud"),
+        pytest.param(None, "https://smith.example.com/api/v1", id="self_hosted"),
+        pytest.param("https://api.host.langchain.com", None, id="cloud"),
     ],
 )
-def test_only_an_api_host_url_reads_instance_flags(
-    host_url, langsmith_endpoint, info_url
+def test_only_a_discovered_data_plane_reads_instance_flags(
+    host_url, langsmith_endpoint
 ):
-    endpoints = ControlPlaneEndpoints.resolve(host_url, langsmith_endpoint)
-
-    assert endpoints.info_url == info_url
+    assert ControlPlaneEndpoints.resolve(host_url, langsmith_endpoint).info_url is None
+    assert (
+        ControlPlaneEndpoints.on_data_plane(
+            "https://langsmith.customer.example", None
+        ).info_url
+        == "https://langsmith.customer.example/api/v1/info"
+    )
 
 
 def test_workspace_ids_match_as_uuids():
