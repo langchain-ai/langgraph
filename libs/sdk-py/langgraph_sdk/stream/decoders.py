@@ -131,9 +131,11 @@ class DataDecoder:
         params = event.get("params") or {}
         if self._namespace is not None and _event_namespace(params) != self._namespace:
             return
-        data = params.get("data")
-        if data is not None:
-            yield data
+        # A JSON null is a valid payload (for example, clearing a UI field).
+        # Check for the key rather than the value so we still ignore malformed
+        # events with no data field, but preserve an explicit null.
+        if "data" in params:
+            yield params["data"]
 
 
 class MessagesDecoder:
