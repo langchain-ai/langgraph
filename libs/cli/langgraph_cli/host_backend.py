@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -130,17 +130,18 @@ class HostBackendClient:
     def __init__(
         self,
         base_url: str,
-        api_key: str,
+        api_key: str | None,
         tenant_id: str | None = None,
         *,
+        access_token: Callable[[], str] | None = None,
         transport: httpx.BaseTransport | None = None,
     ):
         if not base_url:
             raise click.UsageError("Host backend URL is required")
-        headers: dict[str, str] = {
-            "X-Api-Key": api_key,
-            "Accept": "application/json",
-        }
+        self._access_token = access_token
+        headers: dict[str, str] = {"Accept": "application/json"}
+        if api_key:
+            headers["X-Api-Key"] = api_key
         if tenant_id:
             headers["X-Tenant-ID"] = tenant_id
         self._endpoints = ControlPlaneEndpoints.from_control_plane_url(base_url)
@@ -170,8 +171,15 @@ class HostBackendClient:
         payload: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
     ) -> Any:
+        headers = (
+            {"Authorization": f"Bearer {self._access_token()}"}
+            if self._access_token
+            else None
+        )
         try:
-            resp = self._client.request(method, path, json=payload, params=params)
+            resp = self._client.request(
+                method, path, json=payload, params=params, headers=headers
+            )
             resp.raise_for_status()
         except httpx.HTTPStatusError as err:
             detail = _error_detail(err.response)
