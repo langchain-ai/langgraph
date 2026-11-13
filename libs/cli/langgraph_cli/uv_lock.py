@@ -955,6 +955,8 @@ def python_config_to_docker_uv_lock(
         docker_plan.add_blank()
 
     docker_plan.add_instruction("FROM", image_str)
+    # BuildKit secrets do not invalidate RUN caches; hosted builds supply this hash.
+    docker_plan.add_instruction("ARG", "USER_ENV_VARS_HASH")
     docker_plan.add_blank()
     docker_plan.extend_nonempty(config["dockerfile_lines"])
     if config["dockerfile_lines"]:
