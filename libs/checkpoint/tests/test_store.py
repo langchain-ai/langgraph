@@ -463,6 +463,17 @@ def test_search_pages_match_full_listing() -> None:
     )
 
 
+def test_vector_search_scores_every_item(fake_embeddings: CharacterEmbeddings) -> None:
+    store = InMemoryStore(
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
+    )
+    for i in range(4):
+        store.put(("test",), f"other{i}", {"text": f"zzz qqq {i}"})
+    store.put(("test",), "match", {"text": "apple pie"})
+    results = store.search(("test",), query="apple pie", limit=1)
+    assert [r.key for r in results] == ["match"]
+
+
 def test_list_namespaces_empty_store() -> None:
     store = InMemoryStore()
 
