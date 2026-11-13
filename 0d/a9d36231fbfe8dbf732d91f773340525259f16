@@ -1,0 +1,23 @@
+libs/cli/langgraph_cli/host_backend.py
+  s_9929d82d7a093b::t_f85e41d002b313 148-150,231-232,235-239
+libs/cli/tests/unit_tests/cli/test_deploy_command.py
+  s_9929d82d7a093b::t_0246d844fabcfc 79,144
+libs/cli/tests/unit_tests/test_host_backend.py
+  s_9929d82d7a093b::t_aa29c5b9a54dc4 800
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0da9d36231fbfe8dbf732d91f773340525259f16",
+  "prompts": {},
+  "sessions": {
+    "s_9929d82d7a093b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "eea50cb2-d32f-4abf-98b0-ea2c15e7cc89",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  }
+}
