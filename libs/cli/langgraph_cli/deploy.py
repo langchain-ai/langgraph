@@ -1551,11 +1551,16 @@ def _unsupported_agent_server_type(label: str) -> click.UsageError:
     )
 
 
+def _require_cli_builds(client: HostBackendClient) -> InstanceFlags | None:
+    flags = client.instance_flags()
+    if flags is not None and not flags.cli_builds:
+        raise click.UsageError(_CLI_BUILDS_UNSUPPORTED)
+    return flags
+
+
 def _data_plane_source_config(
     flags: InstanceFlags, agent_server_type: str | None
 ) -> dict[str, object]:
-    if not flags.cli_builds:
-        raise click.UsageError(_CLI_BUILDS_UNSUPPORTED)
     requested = agent_server_type or (
         _DEFAULT_AGENT_SERVER_TYPE if flags.scale_to_zero else "dev"
     )
@@ -1573,10 +1578,9 @@ def _data_plane_source_config(
     return {"resource_spec": None, "deployment_type": "prod"}
 
 
-def _internal_source_config(
-    client: HostBackendClient, agent_server_type: str | None
+def _new_deployment_source_config(
+    flags: InstanceFlags | None, agent_server_type: str | None
 ) -> dict[str, object]:
-    flags = client.instance_flags()
     if flags is not None:
         return _data_plane_source_config(flags, agent_server_type)
     requested = agent_server_type or _DEFAULT_AGENT_SERVER_TYPE
@@ -1592,7 +1596,7 @@ def _with_hint(err: HostBackendError, hint: str) -> HostBackendError:
 def _resolve_or_create(
     ctx: DeployContext, *, source: SourceName, not_found_message: str
 ) -> tuple[str, int]:
-    source_config = _internal_source_config(ctx.client, ctx.agent_server_type)
+    flags = _require_cli_builds(ctx.client)
     if isinstance(ctx.selector, ById):
         existing, step = _fetch_deployment(ctx.client, 1, ctx.selector)
         return existing.id, step
@@ -1608,7 +1612,7 @@ def _resolve_or_create(
             name=ctx.selector.name if isinstance(ctx.selector, ByName) else None,
             agent=asdict(ctx.selector) if isinstance(ctx.selector, ByAgent) else None,
             source=source,
-            source_config=source_config,
+            source_config=_new_deployment_source_config(flags, ctx.agent_server_type),
             source_revision_config={},
             secrets=ctx.secrets,
         )

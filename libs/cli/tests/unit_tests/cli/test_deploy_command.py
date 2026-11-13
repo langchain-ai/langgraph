@@ -1754,7 +1754,24 @@ def test_byoc_refuses_unsupported_deploys_before_creating_anything(
 
     assert result.exit_code == 2, result.output
     assert expected in result.output
-    assert byoc_project.timeline == [DISCOVER_WORKSPACES, DATA_PLANE_INFO]
+    assert CREATE_DEPLOYMENT not in byoc_project.timeline
+
+
+@pytest.mark.parametrize("build_mode", ["--no-remote", "--remote"])
+def test_byoc_redeploys_an_existing_dedicated_agent_server_without_dedicated_support(
+    byoc_project: DeployProject, build_mode: str
+) -> None:
+    byoc_project.control_plane.instance_flags = {CLI_BUILDS: True}
+    byoc_project.control_plane.existing_deployments = [
+        {"id": "dep-existing", "name": "my-app"}
+    ]
+
+    result = byoc_project.run(
+        build_mode, "--agent-server-type", "dedicated", host_url=None
+    )
+
+    assert result.exit_code == 0, result.output
+    assert CREATE_DEPLOYMENT not in byoc_project.timeline
 
 
 def test_byoc_without_cli_builds_names_both_external_image_flags(
