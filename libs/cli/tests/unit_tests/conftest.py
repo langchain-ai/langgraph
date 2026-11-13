@@ -1,9 +1,14 @@
 import json
 import os
+from functools import partial
 from pathlib import Path
 from unittest.mock import patch
 
+import httpx
 import pytest
+
+import langgraph_cli.deploy as deploy_module
+from langgraph_cli.host_backend import LangSmithApiClient
 
 
 @pytest.fixture
@@ -21,3 +26,14 @@ def disable_analytics_env() -> None:
 
     with patch.dict(os.environ, {"LANGGRAPH_CLI_NO_ANALYTICS": "1"}):
         yield
+
+
+@pytest.fixture(autouse=True)
+def no_discovered_workspaces(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep unit tests off the LangSmith API: discovery finds no workspaces."""
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=[]))
+    monkeypatch.setattr(
+        deploy_module,
+        "LangSmithApiClient",
+        partial(LangSmithApiClient, transport=transport),
+    )

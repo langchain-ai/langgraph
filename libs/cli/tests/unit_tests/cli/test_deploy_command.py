@@ -4,6 +4,7 @@ import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 
 import click.exceptions
@@ -14,7 +15,12 @@ from click.testing import CliRunner, Result
 import langgraph_cli.archive as archive_module
 import langgraph_cli.deploy as deploy_module
 from langgraph_cli.cli import cli
-from langgraph_cli.host_backend import HostBackendClient
+from langgraph_cli.host_backend import (
+    CONTROL_PLANE_PATH,
+    DataPlaneClient,
+    HostBackendClient,
+    LangSmithApiClient,
+)
 from langgraph_cli.image_reference import ImageReference
 
 CONTROL_PLANE_URL = "https://control-plane.example.com"
@@ -61,6 +67,17 @@ LISTENER_REQUIRED = (
     "Source configuration error: 'source_config.listener_id' is required "
     f"for workspace with available listener IDs: ['{LISTENER_ID}']"
 )
+DATA_PLANE_URL = "https://langsmith.customer.example"
+WORKSPACE_ID = "workspace-1"
+BYOC_WORKSPACE = {"id": WORKSPACE_ID, "data_plane_url": DATA_PLANE_URL}
+SAAS_WORKSPACE = {"id": WORKSPACE_ID, "data_plane_url": None}
+SCALE_TO_ZERO = "deployments_scale_to_zero_supported"
+DEDICATED = "deployments_dedicated_supported"
+CLI_BUILDS = "deployments_cli_builds_supported"
+BYOC_FLAGS = {CLI_BUILDS: True, SCALE_TO_ZERO: True, DEDICATED: True}
+REVISION_ID = "rev-1"
+DISCOVER_WORKSPACES = "GET /api/v1/tenants"
+DATA_PLANE_INFO = "GET /api/v1/info"
 LIST_DEPLOYMENTS = "GET /v2/deployments"
 LIST_LISTENERS = "GET /v2/listeners"
 CREATE_DEPLOYMENT = "POST /v2/deployments"
@@ -100,17 +117,37 @@ class ControlPlaneDouble:
     create_error: str | None = None
     listeners: list[dict] = field(default_factory=list)
     listeners_by_id: dict[str, dict] = field(default_factory=dict)
+    workspaces: list[dict] = field(default_factory=list)
+    workspaces_status: int = 200
+    instance_flags: dict[str, bool] = field(default_factory=dict)
     bodies: dict[str, dict] = field(default_factory=dict)
+    requests: list[httpx.Request] = field(default_factory=list)
 
     def handle(self, request: httpx.Request) -> httpx.Response:
-        route = f"{request.method} {request.url.path}"
+        route = f"{request.method} {self._path(request)}"
         self.timeline.append(route)
+        self.requests.append(request)
         if request.content:
             self.bodies[route] = json.loads(request.content)
         return self._respond(request)
 
+    def host_backend_requests(self) -> list[httpx.Request]:
+        return [r for r in self.requests if not r.url.path.startswith("/api/v1/")]
+
+    @staticmethod
+    def _path(request: httpx.Request) -> str:
+        return request.url.path.removeprefix(CONTROL_PLANE_PATH)
+
     def _respond(self, request: httpx.Request) -> httpx.Response:
-        method, path = request.method, request.url.path
+        method, path = request.method, self._path(request)
+        if (method, path) == ("GET", "/api/v1/tenants"):
+            return httpx.Response(self.workspaces_status, json=self.workspaces)
+        if (method, path) == ("GET", "/api/v1/info"):
+            return httpx.Response(200, json={"instance_flags": self.instance_flags})
+        if path.endswith("/revisions"):
+            return httpx.Response(200, json={"resources": [{"id": REVISION_ID}]})
+        if path.endswith("/build_logs"):
+            return httpx.Response(200, json={"logs": []})
         if (method, path) == ("GET", "/v2/listeners"):
             offset = int(request.url.params.get("offset", 0))
             limit = int(request.url.params.get("limit", 20))
@@ -183,15 +220,14 @@ class ControlPlaneDouble:
             )
         raise AssertionError(f"unexpected control plane call: {method} {path}")
 
-    def client_factory(self) -> Callable[..., HostBackendClient]:
+    def install(self, monkeypatch: pytest.MonkeyPatch) -> None:
         transport = httpx.MockTransport(self.handle)
-
-        def make(
-            host_url: str, api_key: str, tenant_id: str | None = None
-        ) -> HostBackendClient:
-            return HostBackendClient(host_url, api_key, tenant_id, transport=transport)
-
-        return make
+        for client_class in (HostBackendClient, DataPlaneClient, LangSmithApiClient):
+            monkeypatch.setattr(
+                deploy_module,
+                client_class.__name__,
+                partial(client_class, transport=transport),
+            )
 
 
 @dataclass
@@ -288,15 +324,15 @@ class DeployProject:
     timeline: list[str]
     uploads: list[tuple[str, str, int, dict[str, str] | None]]
 
-    def run(self, *args: str, host_url: str = CONTROL_PLANE_URL) -> Result:
+    def run(self, *args: str, host_url: str | None = CONTROL_PLANE_URL) -> Result:
+        host_args = ("--host-url", host_url) if host_url else ()
         return CliRunner().invoke(
             cli,
             [
                 "deploy",
                 "--api-key",
                 "test-key",
-                "--host-url",
-                host_url,
+                *host_args,
                 "--name",
                 "my-app",
                 "--no-input",
@@ -341,9 +377,7 @@ def deploy_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DeployPro
 
     monkeypatch.setattr(deploy_module, "_no_input", False)
     monkeypatch.setattr(deploy_module, "_emitter", None)
-    monkeypatch.setattr(
-        deploy_module, "HostBackendClient", control_plane.client_factory()
-    )
+    control_plane.install(monkeypatch)
     monkeypatch.setattr(deploy_module, "build_docker_image", docker.build_docker_image)
     monkeypatch.setattr(deploy_module, "subp_exec", docker.subp_exec)
     monkeypatch.setattr(deploy_module, "Runner", _fake_runner)
@@ -1578,3 +1612,264 @@ def test_a_listener_id_that_is_not_an_identifier_still_names_the_real_ones(
     assert "was not found" in result.output
     assert LISTENER_ID in result.output
     assert "uuid_parsing" not in result.output
+
+
+@pytest.fixture
+def byoc_project(deploy_project: DeployProject) -> DeployProject:
+    deploy_project.control_plane.workspaces = [BYOC_WORKSPACE]
+    deploy_project.control_plane.instance_flags = dict(BYOC_FLAGS)
+    return deploy_project
+
+
+@pytest.mark.parametrize("build_mode", ["--no-remote", "--remote"])
+def test_byoc_deploy_runs_on_the_discovered_data_plane_and_workspace(
+    byoc_project: DeployProject, build_mode: str
+) -> None:
+    result = byoc_project.run(build_mode, host_url=None)
+
+    assert result.exit_code == 0, result.output
+    assert byoc_project.timeline[:4] == [
+        DISCOVER_WORKSPACES,
+        DATA_PLANE_INFO,
+        LIST_DEPLOYMENTS,
+        CREATE_DEPLOYMENT,
+    ]
+    host_backend_requests = byoc_project.control_plane.host_backend_requests()
+    assert host_backend_requests
+    assert all(
+        str(r.url).startswith(f"{DATA_PLANE_URL}/api-host/v2/")
+        and r.headers["X-Tenant-ID"] == WORKSPACE_ID
+        for r in host_backend_requests
+    )
+
+
+def test_byoc_status_link_points_at_langsmith_not_the_data_plane(
+    byoc_project: DeployProject,
+) -> None:
+    result = byoc_project.run("--no-remote", host_url=None)
+
+    assert (
+        "View status: https://smith.langchain.com/o/tenant-1/host/deployments/dep-created"
+        in result.output
+    )
+
+
+@pytest.mark.parametrize(
+    ("instance_flags", "type_args", "source_config"),
+    [
+        pytest.param(
+            BYOC_FLAGS,
+            [],
+            {"resource_spec": {}, "deployment_type": "dev_zero"},
+            id="default_is_serverless_with_scale_to_zero",
+        ),
+        pytest.param(
+            {CLI_BUILDS: True},
+            [],
+            {"resource_spec": {}},
+            id="default_is_dev_without_scale_to_zero",
+        ),
+        pytest.param(
+            BYOC_FLAGS,
+            ["--agent-server-type", "dev"],
+            {"resource_spec": {}},
+            id="dev",
+        ),
+        pytest.param(
+            BYOC_FLAGS,
+            ["--agent-server-type", "dedicated"],
+            {"resource_spec": None, "deployment_type": "prod"},
+            id="dedicated",
+        ),
+        pytest.param(
+            BYOC_FLAGS,
+            ["--agent-server-type", "prod"],
+            {"resource_spec": None, "deployment_type": "prod"},
+            id="legacy_prod_is_dedicated",
+        ),
+    ],
+)
+@pytest.mark.parametrize("build_mode", ["--no-remote", "--remote"])
+def test_byoc_create_sizes_the_agent_server_by_resource_spec(
+    byoc_project: DeployProject,
+    build_mode: str,
+    instance_flags: dict[str, bool],
+    type_args: list[str],
+    source_config: dict,
+) -> None:
+    byoc_project.control_plane.instance_flags = instance_flags
+
+    result = byoc_project.run(build_mode, *type_args, host_url=None)
+
+    assert result.exit_code == 0, result.output
+    assert (
+        byoc_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"]
+        == source_config
+    )
+
+
+@pytest.mark.parametrize(
+    ("instance_flags", "type_args", "expected"),
+    [
+        pytest.param(
+            {CLI_BUILDS: True},
+            ["--agent-server-type", "serverless"],
+            "does not support serverless (scale to zero) Agent Servers",
+            id="serverless_without_scale_to_zero",
+        ),
+        pytest.param(
+            {CLI_BUILDS: True},
+            ["--agent-server-type", "dedicated"],
+            "does not support dedicated Agent Servers",
+            id="dedicated_without_dedicated",
+        ),
+        pytest.param(
+            {CLI_BUILDS: True},
+            ["--agent-server-type", "prod"],
+            "does not support dedicated Agent Servers",
+            id="prod_without_dedicated",
+        ),
+        pytest.param(
+            {SCALE_TO_ZERO: True, DEDICATED: True},
+            [],
+            "--push-to <registry>/<repository>",
+            id="no_cli_builds",
+        ),
+    ],
+)
+@pytest.mark.parametrize("build_mode", ["--no-remote", "--remote"])
+def test_byoc_refuses_unsupported_deploys_before_creating_anything(
+    byoc_project: DeployProject,
+    build_mode: str,
+    instance_flags: dict[str, bool],
+    type_args: list[str],
+    expected: str,
+) -> None:
+    byoc_project.control_plane.instance_flags = instance_flags
+
+    result = byoc_project.run(build_mode, *type_args, host_url=None)
+
+    assert result.exit_code == 2, result.output
+    assert expected in result.output
+    assert byoc_project.timeline == [DISCOVER_WORKSPACES, DATA_PLANE_INFO]
+
+
+def test_byoc_without_cli_builds_names_both_external_image_flags(
+    byoc_project: DeployProject,
+) -> None:
+    byoc_project.control_plane.instance_flags = {}
+
+    result = byoc_project.run("--no-remote", host_url=None)
+
+    assert "--push-to" in result.output
+    assert "--image-uri" in result.output
+
+
+def test_byoc_without_cli_builds_still_deploys_an_external_image(
+    byoc_project: DeployProject,
+) -> None:
+    byoc_project.control_plane.instance_flags = {}
+
+    result = byoc_project.run("--image-uri", EXTERNAL_DIGEST, host_url=None)
+
+    assert result.exit_code == 0, result.output
+    assert byoc_project.timeline == [
+        DISCOVER_WORKSPACES,
+        LIST_DEPLOYMENTS,
+        CREATE_DEPLOYMENT,
+    ]
+    assert byoc_project.control_plane.bodies[CREATE_DEPLOYMENT]["source"] == (
+        "external_docker"
+    )
+
+
+@pytest.mark.parametrize(
+    ("workspaces", "workspaces_status"),
+    [
+        pytest.param([SAAS_WORKSPACE], 200, id="workspace_without_a_data_plane"),
+        pytest.param([], 500, id="discovery_fails"),
+    ],
+)
+def test_saas_deploy_pays_one_discovery_call_and_is_otherwise_unchanged(
+    deploy_project: DeployProject, workspaces: list[dict], workspaces_status: int
+) -> None:
+    deploy_project.control_plane.workspaces = workspaces
+    deploy_project.control_plane.workspaces_status = workspaces_status
+
+    result = deploy_project.run("--no-remote", host_url=None)
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.timeline[:3] == [
+        DISCOVER_WORKSPACES,
+        LIST_DEPLOYMENTS,
+        CREATE_DEPLOYMENT,
+    ]
+    assert DATA_PLANE_INFO not in deploy_project.timeline
+    assert all(
+        str(r.url).startswith(f"{CLOUD_CONTROL_PLANE_URL}/v2/")
+        and "X-Tenant-ID" not in r.headers
+        for r in deploy_project.control_plane.host_backend_requests()
+    )
+    assert deploy_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "deployment_type": "dev_zero"
+    }
+
+
+def test_host_url_overrides_discovery(byoc_project: DeployProject) -> None:
+    result = byoc_project.run("--no-remote")
+
+    assert result.exit_code == 0, result.output
+    assert DISCOVER_WORKSPACES not in byoc_project.timeline
+    assert all(
+        str(r.url).startswith(CONTROL_PLANE_URL)
+        for r in byoc_project.control_plane.requests
+    )
+
+
+@pytest.mark.parametrize("build_mode", ["--no-remote", "--remote"])
+def test_an_older_data_plane_rejecting_the_source_gets_the_external_image_hint(
+    deploy_project: DeployProject, build_mode: str
+) -> None:
+    detail = "'source' must be one of ['github', 'external_docker']"
+    deploy_project.control_plane.create_error = detail
+
+    result = deploy_project.run(build_mode)
+
+    assert result.exit_code == 1, result.output
+    assert detail in result.output
+    assert "--push-to <registry>/<repository>" in result.output
+    assert "--image-uri" in result.output
+
+
+def test_byoc_build_logs_use_the_discovered_data_plane_and_workspace(
+    byoc_project: DeployProject,
+) -> None:
+    result = CliRunner().invoke(
+        cli,
+        [
+            "deploy",
+            "logs",
+            "--api-key",
+            "test-key",
+            "--type",
+            "build",
+            "--agent-server-id",
+            "dep-existing",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert [
+        (str(r.url).split("?")[0], r.headers["X-Tenant-ID"])
+        for r in byoc_project.control_plane.host_backend_requests()
+    ] == [
+        (
+            f"{DATA_PLANE_URL}/api-host/v2/deployments/dep-existing/revisions",
+            WORKSPACE_ID,
+        ),
+        (
+            f"{DATA_PLANE_URL}/api-host/v1/projects/dep-existing/revisions/"
+            f"{REVISION_ID}/build_logs",
+            WORKSPACE_ID,
+        ),
+    ]
