@@ -248,13 +248,20 @@ class InMemoryStore(BaseStore):
                 for key, filter_value in op.filter.items()
             )
 
+        # Without a filter or a query embedding, the caller keeps only
+        # filtered[offset:offset + limit], so stop collecting there. Negative
+        # bounds keep the full scan, since a slice counts them from the end.
+        stop = (
+            op.offset + op.limit
+            if not op.filter
+            and not (op.query and self.embeddings)
+            and min(op.offset, op.limit) >= 0
+            else None
+        )
+        n = len(namespace_prefix)
         filtered = []
         for namespace in self._data:
-            if not (
-                namespace[: len(namespace_prefix)] == namespace_prefix
-                if len(namespace) >= len(namespace_prefix)
-                else False
-            ):
+            if namespace[:n] != namespace_prefix:
                 continue
 
             for key, item in self._data[namespace].items():
@@ -263,6 +270,8 @@ class InMemoryStore(BaseStore):
                         filtered.append((item, list(embeddings.values())))
                     else:
                         filtered.append((item, []))
+                    if len(filtered) == stop:
+                        return filtered
         return filtered
 
     def _embed_search_queries(
