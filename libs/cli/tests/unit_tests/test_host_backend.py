@@ -1,16 +1,17 @@
 import json
 
+import click
 import httpx
 import pytest
 
 from langgraph_cli.host_backend import (
     ControlPlaneEndpoints,
-    DataPlaneClient,
     HostBackendClient,
     HostBackendError,
     InstanceFlags,
     LangSmithApiClient,
     Workspace,
+    WorkspaceRouter,
     langsmith_api_url,
 )
 
@@ -816,23 +817,108 @@ def test_list_workspaces_reads_the_api_keys_live_workspaces():
             "https://smith.example.com",
             id="self_hosted",
         ),
+        pytest.param(
+            "https://langsmith.customer.example/api/v1",
+            "https://smith.langchain.com",
+            id="endpoint_is_the_data_plane",
+        ),
     ],
 )
-@pytest.mark.parametrize(
-    "data_plane_url",
-    ["https://langsmith.customer.example", "https://byoc.langchain.com"],
-)
 def test_data_plane_endpoints_keep_the_data_plane_host_and_link_to_langsmith(
-    data_plane_url, langsmith_endpoint, dashboard_url
+    langsmith_endpoint, dashboard_url
 ):
     endpoints = ControlPlaneEndpoints.on_data_plane(
-        f"{data_plane_url}/", langsmith_endpoint
+        "https://langsmith.customer.example/", langsmith_endpoint
     )
 
     assert endpoints == ControlPlaneEndpoints(
-        f"{data_plane_url}/api-host", dashboard_url
+        "https://langsmith.customer.example/api-host",
+        dashboard_url,
+        "https://langsmith.customer.example/api/v1/info",
     )
     assert not endpoints.is_cloud
+
+
+@pytest.mark.parametrize(
+    "data_plane_url",
+    [
+        pytest.param("http://langsmith.customer.example", id="http"),
+        pytest.param("ftp://localhost", id="other_scheme"),
+    ],
+)
+def test_data_plane_without_https_is_refused(data_plane_url):
+    with pytest.raises(click.ClickException, match="must use https"):
+        ControlPlaneEndpoints.on_data_plane(data_plane_url, None)
+
+
+@pytest.mark.parametrize(
+    "data_plane_url", ["http://localhost:1980", "http://127.0.0.1:1980"]
+)
+def test_local_data_plane_may_use_http(data_plane_url):
+    endpoints = ControlPlaneEndpoints.on_data_plane(data_plane_url, None)
+
+    assert endpoints.control_plane_url == f"{data_plane_url}/api-host"
+
+
+@pytest.mark.parametrize(
+    ("host_url", "langsmith_endpoint", "info_url"),
+    [
+        pytest.param(
+            "https://langsmith.customer.example/api-host",
+            None,
+            "https://langsmith.customer.example/api/v1/info",
+            id="host_url_on_a_data_plane",
+        ),
+        pytest.param(None, "https://smith.example.com/api/v1", None, id="self_hosted"),
+        pytest.param("https://api.host.langchain.com", None, None, id="cloud"),
+    ],
+)
+def test_only_an_api_host_url_reads_instance_flags(
+    host_url, langsmith_endpoint, info_url
+):
+    endpoints = ControlPlaneEndpoints.resolve(host_url, langsmith_endpoint)
+
+    assert endpoints.info_url == info_url
+
+
+def test_workspace_ids_match_as_uuids():
+    workspace = Workspace("6f1c2a9e-0b7d-4c3e-9a51-2d8f4e6b7c10", None)
+
+    assert workspace.has_id("6F1C2A9E-0B7D-4C3E-9A51-2D8F4E6B7C10")
+    assert not workspace.has_id("ws-1")
+
+
+def test_setting_a_routed_workspace_moves_the_client_to_its_data_plane():
+    seen: list[tuple[str, str | None]] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append((str(req.url).split("?")[0], req.headers.get("X-Tenant-ID")))
+        return httpx.Response(200, json={"resources": []})
+
+    router = WorkspaceRouter(
+        [
+            Workspace("saas-ws", None),
+            Workspace("byoc-ws", "https://langsmith.customer.example"),
+        ],
+        None,
+    )
+    client = HostBackendClient(
+        ControlPlaneEndpoints.resolve(None, None),
+        "key",
+        router=router,
+        transport=httpx.MockTransport(handler),
+    )
+
+    client.set_tenant("byoc-ws")
+    client.list_deployments()
+    client.set_tenant("unknown-ws")
+    client.list_deployments()
+
+    assert seen == [
+        ("https://langsmith.customer.example/api-host/v2/deployments", "byoc-ws"),
+        ("https://langsmith.customer.example/api-host/v2/deployments", "unknown-ws"),
+    ]
+    assert client.endpoints.dashboard_url == "https://smith.langchain.com"
 
 
 def test_data_plane_client_targets_the_data_plane_host_backend():
@@ -842,11 +928,12 @@ def test_data_plane_client_targets_the_data_plane_host_backend():
         seen.append(str(req.url))
         return httpx.Response(200, json={"resources": []})
 
-    client = DataPlaneClient(
-        "https://byoc.langchain.com",
+    client = HostBackendClient(
+        ControlPlaneEndpoints.on_data_plane(
+            "https://byoc.langchain.com", "https://eu.api.smith.langchain.com"
+        ),
         "key",
         "ws-1",
-        langsmith_endpoint="https://eu.api.smith.langchain.com",
         transport=httpx.MockTransport(handler),
     )
     client.list_deployments()
@@ -888,8 +975,10 @@ def test_data_plane_client_reads_instance_flags_from_info(info, expected):
         seen.append(str(req.url))
         return httpx.Response(200, json=info)
 
-    client = DataPlaneClient(
-        "https://dp.example.com/", "key", transport=httpx.MockTransport(handler)
+    client = HostBackendClient(
+        ControlPlaneEndpoints.on_data_plane("https://dp.example.com/", None),
+        "key",
+        transport=httpx.MockTransport(handler),
     )
 
     assert client.instance_flags() == expected

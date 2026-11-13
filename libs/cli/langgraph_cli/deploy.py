@@ -29,12 +29,13 @@ from langgraph_cli.docker import build_docker_image, can_build_locally
 from langgraph_cli.exec import CommandRunner, Runner, subp_exec
 from langgraph_cli.host_backend import (
     ControlPlaneEndpoints,
-    DataPlaneClient,
     HostBackendClient,
     HostBackendError,
     InstanceFlags,
     LangSmithApiClient,
     SourceName,
+    Workspace,
+    WorkspaceRouter,
     langsmith_api_url,
 )
 from langgraph_cli.image_reference import DIGEST_SEPARATOR, ImageReference
@@ -1525,7 +1526,6 @@ def _run_remote_build(
 @dataclass(frozen=True, slots=True)
 class DeployContext:
     client: HostBackendClient
-    endpoints: ControlPlaneEndpoints
     spec: BuildSpec
     verbose: bool
     selector: DeploymentSelector
@@ -1571,11 +1571,14 @@ def _data_plane_source_config(
             raise _unsupported_agent_server_type("serverless (scale to zero)")
         return {
             "resource_spec": _OPERATOR_DEFAULT_RESOURCE_SPEC,
-            "deployment_type": "dev_zero",
+            "deployment_type": _WIRE_DEPLOYMENT_TYPES["serverless"],
         }
     if not flags.dedicated:
         raise _unsupported_agent_server_type("dedicated")
-    return {"resource_spec": None, "deployment_type": "prod"}
+    return {
+        "resource_spec": None,
+        "deployment_type": _WIRE_DEPLOYMENT_TYPES["dedicated"],
+    }
 
 
 def _new_deployment_source_config(
@@ -1596,15 +1599,15 @@ def _with_hint(err: HostBackendError, hint: str) -> HostBackendError:
 def _resolve_or_create(
     ctx: DeployContext, *, source: SourceName, not_found_message: str
 ) -> tuple[str, int]:
-    flags = _require_cli_builds(ctx.client)
     if isinstance(ctx.selector, ById):
         existing, step = _fetch_deployment(ctx.client, 1, ctx.selector)
+    else:
+        existing, step = _find_deployment(
+            ctx.client, 1, ctx.selector, not_found_message=not_found_message
+        )
+    flags = _require_cli_builds(ctx.client)
+    if existing is not None:
         return existing.id, step
-    found, step = _find_deployment(
-        ctx.client, 1, ctx.selector, not_found_message=not_found_message
-    )
-    if found is not None:
-        return found.id, step
     try:
         created, step = _create_deployment(
             ctx.client,
@@ -1850,7 +1853,7 @@ class CustomerRegistrySource:
         requested = self.create_only.placement
         if requested.listener_id is not None:
             return requested.on(_requested_listener(ctx.client, requested.listener_id))
-        if not (ctx.endpoints.is_cloud or requested.requested):
+        if not (ctx.client.endpoints.is_cloud or requested.requested):
             return Unplaced()
         return requested.among(_available_listeners(ctx.client))
 
@@ -2058,30 +2061,25 @@ def _create_host_backend_client(
             fg="yellow",
         )
         resolved_api_key = click.prompt("Enter LangSmith API key", hide_input=True)
-    tenant_id = env_vars.get("LANGSMITH_TENANT_ID") or os.environ.get(
-        "LANGSMITH_TENANT_ID"
+    tenant_id = (
+        env_vars.get("LANGSMITH_TENANT_ID")
+        or os.environ.get("LANGSMITH_TENANT_ID")
+        or None
     )
     langsmith_endpoint = env_vars.get("LANGSMITH_ENDPOINT") or os.environ.get(
         "LANGSMITH_ENDPOINT"
     )
-    target = (
-        HostTarget(tenant_id)
-        if host_url
-        else _discover_target(
-            LangSmithApiClient(langsmith_api_url(langsmith_endpoint), resolved_api_key),
-            tenant_id,
-        )
+    if host_url:
+        return HostBackendClient(host_url, resolved_api_key, tenant_id)
+    workspaces = _list_workspaces(
+        LangSmithApiClient(langsmith_api_url(langsmith_endpoint), resolved_api_key)
     )
-    if target.data_plane_url:
-        return DataPlaneClient(
-            target.data_plane_url,
-            resolved_api_key,
-            target.tenant_id,
-            langsmith_endpoint=langsmith_endpoint,
-        )
-    endpoints = ControlPlaneEndpoints.resolve(host_url, langsmith_endpoint)
+    target = _discover_target(workspaces, tenant_id)
     return HostBackendClient(
-        endpoints.control_plane_url, resolved_api_key, tenant_id=target.tenant_id
+        ControlPlaneEndpoints.for_workspace(target.data_plane_url, langsmith_endpoint),
+        resolved_api_key,
+        target.tenant_id,
+        router=WorkspaceRouter(workspaces, langsmith_endpoint),
     )
 
 
@@ -2091,15 +2089,22 @@ class HostTarget:
     data_plane_url: str | None = None
 
 
-def _discover_target(
-    langsmith: LangSmithApiClient, tenant_id: str | None
-) -> HostTarget:
+def _list_workspaces(langsmith: LangSmithApiClient) -> list[Workspace]:
     try:
-        workspaces = langsmith.list_workspaces()
+        return langsmith.list_workspaces()
     except HostBackendError:
-        return HostTarget(tenant_id)
+        click.secho(
+            "Could not look up this API key's LangSmith workspaces; "
+            "using the default LangSmith control plane.",
+            fg="yellow",
+            err=True,
+        )
+        return []
+
+
+def _discover_target(workspaces: list[Workspace], tenant_id: str | None) -> HostTarget:
     if tenant_id is not None and workspaces:
-        workspaces = [w for w in workspaces if w.id == tenant_id]
+        workspaces = [w for w in workspaces if w.has_id(tenant_id)]
         if not workspaces:
             raise click.ClickException(
                 f"This API key has no access to workspace {tenant_id}. "
@@ -2623,7 +2628,6 @@ def _deploy_cmd(
     outcome = source.run(
         DeployContext(
             client=client,
-            endpoints=client.endpoints,
             spec=BuildSpec(
                 config=config,
                 config_json=config_json,

@@ -17,7 +17,6 @@ import langgraph_cli.deploy as deploy_module
 from langgraph_cli.cli import cli
 from langgraph_cli.host_backend import (
     CONTROL_PLANE_PATH,
-    DataPlaneClient,
     HostBackendClient,
     LangSmithApiClient,
 )
@@ -70,7 +69,7 @@ LISTENER_REQUIRED = (
 DATA_PLANE_URL = "https://langsmith.customer.example"
 WORKSPACE_ID = "workspace-1"
 BYOC_WORKSPACE = {"id": WORKSPACE_ID, "data_plane_url": DATA_PLANE_URL}
-SAAS_WORKSPACE = {"id": WORKSPACE_ID, "data_plane_url": None}
+SAAS_WORKSPACE = {"id": "saas-workspace", "data_plane_url": None}
 SCALE_TO_ZERO = "deployments_scale_to_zero_supported"
 DEDICATED = "deployments_dedicated_supported"
 CLI_BUILDS = "deployments_cli_builds_supported"
@@ -120,6 +119,7 @@ class ControlPlaneDouble:
     listeners_by_id: dict[str, dict] = field(default_factory=dict)
     workspaces: list[dict] = field(default_factory=list)
     workspaces_status: int = 200
+    requires_workspace: bool = False
     instance_flags: dict[str, bool] = field(default_factory=dict)
     bodies: dict[str, dict] = field(default_factory=dict)
     requests: list[httpx.Request] = field(default_factory=list)
@@ -145,6 +145,10 @@ class ControlPlaneDouble:
             return httpx.Response(self.workspaces_status, json=self.workspaces)
         if (method, path) == ("GET", "/api/v1/info"):
             return httpx.Response(200, json={"instance_flags": self.instance_flags})
+        if self.requires_workspace and "X-Tenant-ID" not in request.headers:
+            return httpx.Response(
+                403, json={"detail": "This API key requires workspace specification"}
+            )
         if path.endswith("/revisions"):
             return httpx.Response(200, json={"resources": [{"id": REVISION_ID}]})
         if path.endswith("/build_logs"):
@@ -225,7 +229,7 @@ class ControlPlaneDouble:
 
     def install(self, monkeypatch: pytest.MonkeyPatch) -> None:
         transport = httpx.MockTransport(self.handle)
-        for client_class in (HostBackendClient, DataPlaneClient, LangSmithApiClient):
+        for client_class in (HostBackendClient, LangSmithApiClient):
             monkeypatch.setattr(
                 deploy_module,
                 client_class.__name__,
@@ -1633,8 +1637,8 @@ def test_byoc_deploy_runs_on_the_discovered_data_plane_and_workspace(
     assert result.exit_code == 0, result.output
     assert byoc_project.timeline[:4] == [
         DISCOVER_WORKSPACES,
-        DATA_PLANE_INFO,
         LIST_DEPLOYMENTS,
+        DATA_PLANE_INFO,
         CREATE_DEPLOYMENT,
     ]
     host_backend_requests = byoc_project.control_plane.host_backend_requests()
@@ -1646,9 +1650,21 @@ def test_byoc_deploy_runs_on_the_discovered_data_plane_and_workspace(
     )
 
 
+@pytest.mark.parametrize(
+    "langsmith_endpoint",
+    [
+        pytest.param(None, id="default_endpoint"),
+        pytest.param(DATA_PLANE_URL, id="endpoint_is_the_data_plane"),
+    ],
+)
 def test_byoc_status_link_points_at_langsmith_not_the_data_plane(
     byoc_project: DeployProject,
+    monkeypatch: pytest.MonkeyPatch,
+    langsmith_endpoint: str | None,
 ) -> None:
+    if langsmith_endpoint:
+        monkeypatch.setenv("LANGSMITH_ENDPOINT", langsmith_endpoint)
+
     result = byoc_project.run("--no-remote", host_url=None)
 
     assert (
@@ -1835,6 +1851,33 @@ def test_saas_deploy_pays_one_discovery_call_and_is_otherwise_unchanged(
     }
 
 
+def test_failed_discovery_says_it_falls_back_to_the_default_control_plane(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.workspaces_status = 500
+
+    result = deploy_project.run("--no-remote", host_url=None)
+
+    assert result.exit_code == 0, result.output
+    assert "using the default LangSmith control plane" in result.stderr
+
+
+def test_host_url_on_a_data_plane_sizes_the_agent_server_by_resource_spec(
+    byoc_project: DeployProject,
+) -> None:
+    result = byoc_project.run(
+        "--no-remote", host_url=f"{DATA_PLANE_URL}{CONTROL_PLANE_PATH}"
+    )
+
+    assert result.exit_code == 0, result.output
+    assert DISCOVER_WORKSPACES not in byoc_project.timeline
+    assert DATA_PLANE_INFO in byoc_project.timeline
+    assert byoc_project.control_plane.bodies[CREATE_DEPLOYMENT]["source_config"] == {
+        "resource_spec": {},
+        "deployment_type": "dev_zero",
+    }
+
+
 def test_host_url_overrides_discovery(byoc_project: DeployProject) -> None:
     result = byoc_project.run("--no-remote")
 
@@ -1910,6 +1953,54 @@ def test_mixed_data_planes_without_a_tenant_id_list_through_saas(
         str(r.url).split("?")[0]
         for r in deploy_project.control_plane.host_backend_requests()
     ] == [f"{CLOUD_CONTROL_PLANE_URL}/v2/deployments"]
+
+
+def test_a_prompted_byoc_workspace_is_sent_to_its_data_plane(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.workspaces = [SAAS_WORKSPACE, BYOC_WORKSPACE]
+    deploy_project.control_plane.requires_workspace = True
+
+    result = CliRunner().invoke(
+        cli, ["deploy", "list", "--api-key", "test-key"], input=f"{WORKSPACE_ID}\n"
+    )
+
+    assert result.exit_code == 0, result.output
+    assert [
+        (str(r.url).split("?")[0], r.headers.get("X-Tenant-ID"))
+        for r in deploy_project.control_plane.host_backend_requests()
+    ] == [
+        (f"{CLOUD_CONTROL_PLANE_URL}/v2/deployments", None),
+        (f"{DATA_PLANE_URL}/api-host/v2/deployments", WORKSPACE_ID),
+    ]
+
+
+def test_an_empty_tenant_id_is_treated_as_unset(
+    byoc_project: DeployProject, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LANGSMITH_TENANT_ID", "")
+
+    result = byoc_project.run("--no-remote", host_url=None)
+
+    assert result.exit_code == 0, result.output
+    assert all(
+        r.headers["X-Tenant-ID"] == WORKSPACE_ID
+        for r in byoc_project.control_plane.host_backend_requests()
+    )
+
+
+def test_a_data_plane_without_https_never_gets_the_api_key(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.workspaces = [
+        {"id": WORKSPACE_ID, "data_plane_url": "http://langsmith.customer.example"}
+    ]
+
+    result = deploy_project.run("--no-remote", host_url=None)
+
+    assert result.exit_code == 1, result.output
+    assert "must use https" in result.output
+    assert deploy_project.timeline == [DISCOVER_WORKSPACES]
 
 
 def test_a_tenant_id_outside_the_keys_workspaces_fails_before_any_host_call(
