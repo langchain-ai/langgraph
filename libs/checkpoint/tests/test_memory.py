@@ -294,6 +294,57 @@ def test_memory_saver_strict_blocks_unregistered(
     assert result.checkpoint["channel_values"]["foo"] == expected
 
 
+def test_get_tuple_returns_last_written_checkpoint_by_insertion_order() -> None:
+    """Regression test: get_tuple() must use insertion order, not lexicographic max.
+
+    IDs like "2" and "10" are non-lexicographically sortable ("2" > "10"),
+    so max() would return the wrong checkpoint.
+    """
+    saver = InMemorySaver()
+    config: RunnableConfig = {"configurable": {"thread_id": "t1", "checkpoint_ns": ""}}
+
+    # Checkpoint IDs are set on the checkpoint object itself (the storage key).
+    # Write "2" first, then "10": lexicographic max("2", "10") == "2" (wrong),
+    # but insertion order correctly yields "10" as the latest.
+    chkpnt_a = empty_checkpoint()
+    chkpnt_a["id"] = "2"
+    chkpnt_b = empty_checkpoint()
+    chkpnt_b["id"] = "10"
+
+    saver.put(config, chkpnt_a, {}, chkpnt_a["channel_versions"])
+    saver.put(config, chkpnt_b, {}, chkpnt_b["channel_versions"])
+
+    result = saver.get_tuple(config)
+    assert result is not None
+    assert result.config["configurable"]["checkpoint_id"] == "10", (
+        "get_tuple() returned the lexicographically larger ID ('2') instead of "
+        "the last written checkpoint ('10')"
+    )
+
+
+def test_list_returns_checkpoints_in_insertion_order() -> None:
+    """Regression test: list() must iterate in reverse insertion order, not lexicographic."""
+    saver = InMemorySaver()
+    config: RunnableConfig = {"configurable": {"thread_id": "t2", "checkpoint_ns": ""}}
+
+    chkpnt_a = empty_checkpoint()
+    chkpnt_a["id"] = "2"
+    chkpnt_b = empty_checkpoint()
+    chkpnt_b["id"] = "10"
+    chkpnt_c = empty_checkpoint()
+    chkpnt_c["id"] = "3"
+
+    saver.put(config, chkpnt_a, {}, chkpnt_a["channel_versions"])
+    saver.put(config, chkpnt_b, {}, chkpnt_b["channel_versions"])
+    saver.put(config, chkpnt_c, {}, chkpnt_c["channel_versions"])
+
+    results = list(saver.list(config))
+    ids = [r.config["configurable"]["checkpoint_id"] for r in results]
+    assert ids == ["3", "10", "2"], (
+        f"Expected insertion-order-reversed ['3', '10', '2'], got {ids}"
+    )
+
+
 def test_memory_saver_with_allowlist_proxy_isolated() -> None:
     serde = JsonPlusSerializer(allowed_msgpack_modules=None)
     memory_saver = InMemorySaver(serde=serde)
