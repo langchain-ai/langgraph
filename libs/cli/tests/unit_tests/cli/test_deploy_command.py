@@ -115,6 +115,7 @@ class ControlPlaneDouble:
     push_token_extra: dict = field(default_factory=dict)
     upload_url_extra: dict = field(default_factory=dict)
     create_error: str | None = None
+    create_status: int = 400
     listeners: list[dict] = field(default_factory=list)
     listeners_by_id: dict[str, dict] = field(default_factory=dict)
     workspaces: list[dict] = field(default_factory=list)
@@ -186,7 +187,9 @@ class ControlPlaneDouble:
             )
         if (method, path) == ("POST", "/v2/deployments"):
             if self.create_error is not None:
-                return httpx.Response(400, json={"detail": self.create_error})
+                return httpx.Response(
+                    self.create_status, json={"detail": self.create_error}
+                )
             return httpx.Response(201, json={"id": CREATED_ID, "tenant_id": "tenant-1"})
         if path.endswith("/push-token"):
             if self.push_token_status != 200:
@@ -1873,3 +1876,45 @@ def test_byoc_build_logs_use_the_discovered_data_plane_and_workspace(
             WORKSPACE_ID,
         ),
     ]
+
+
+def test_mixed_data_planes_without_a_tenant_id_list_through_saas(
+    deploy_project: DeployProject,
+) -> None:
+    deploy_project.control_plane.workspaces = [BYOC_WORKSPACE, SAAS_WORKSPACE]
+
+    result = CliRunner().invoke(
+        cli, ["deploy", "list", "--json", "--api-key", "test-key"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert deploy_project.timeline == [DISCOVER_WORKSPACES, LIST_DEPLOYMENTS]
+    assert [
+        str(r.url).split("?")[0]
+        for r in deploy_project.control_plane.host_backend_requests()
+    ] == [f"{CLOUD_CONTROL_PLANE_URL}/v2/deployments"]
+
+
+def test_a_tenant_id_outside_the_keys_workspaces_fails_before_any_host_call(
+    byoc_project: DeployProject, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LANGSMITH_TENANT_ID", "unknown-ws")
+
+    result = byoc_project.run("--no-remote", host_url=None)
+
+    assert result.exit_code == 1, result.output
+    assert "unknown-ws" in result.output
+    assert byoc_project.timeline == [DISCOVER_WORKSPACES]
+
+
+def test_a_data_plane_refusing_local_pushes_shows_its_hint(
+    byoc_project: DeployProject,
+) -> None:
+    hint = "Local image pushes are not supported on this data plane; use --remote."
+    byoc_project.control_plane.create_status = 501
+    byoc_project.control_plane.create_error = hint
+
+    result = byoc_project.run("--no-remote", host_url=None)
+
+    assert result.exit_code == 1, result.output
+    assert hint in result.output

@@ -103,8 +103,9 @@ by default) which workspaces the key can use. If the workspace runs on a
 LangSmith data plane in your own cloud (BYOC on AWS, Azure, or GCP), the CLI
 talks to that data plane's host API and sets the workspace for you. Status links
 still point at the LangSmith UI. If the key's workspaces sit on different data
-planes, set `LANGSMITH_TENANT_ID` to the workspace ID (the CLI prompts for it
-otherwise).
+planes, set `LANGSMITH_TENANT_ID` to the workspace ID to reach its data plane;
+without it, the CLI uses the LangSmith control plane as before. A
+`LANGSMITH_TENANT_ID` the key can't use is an error.
 
 `--host-url` (or `LANGGRAPH_HOST_URL`) sends every request to the given host
 backend URL instead and skips this lookup.

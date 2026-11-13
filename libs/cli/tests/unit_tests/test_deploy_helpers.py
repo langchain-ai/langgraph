@@ -717,15 +717,27 @@ class TestDiscoverTarget:
                 id="saas_workspace_keeps_todays_headers",
             ),
             pytest.param(
-                [{"id": "ws-1", "data_plane_url": DATA_PLANE}],
-                "unknown-ws",
-                HostTarget("unknown-ws"),
-                id="unknown_tenant_id_keeps_todays_behavior",
+                [
+                    {"id": "ws-1", "data_plane_url": DATA_PLANE},
+                    {"id": "ws-2", "data_plane_url": None},
+                ],
+                None,
+                HostTarget(None),
+                id="mixed_data_planes_leave_the_workspace_to_the_backend",
+            ),
+            pytest.param(
+                [
+                    {"id": "ws-1", "data_plane_url": DATA_PLANE},
+                    {"id": "ws-2", "data_plane_url": OTHER_DATA_PLANE},
+                ],
+                None,
+                HostTarget(None),
+                id="different_data_planes_leave_the_workspace_to_the_backend",
             ),
         ],
     )
     def test_picks_the_workspace(self, workspaces, tenant_id, expected):
-        target = _discover_target(_workspaces(*workspaces), tenant_id, no_input=True)
+        target = _discover_target(_workspaces(*workspaces), tenant_id)
 
         assert target == expected
 
@@ -736,27 +748,13 @@ class TestDiscoverTarget:
             transport=httpx.MockTransport(lambda req: httpx.Response(401)),
         )
 
-        assert _discover_target(langsmith, "ws-1", no_input=True) == HostTarget("ws-1")
+        assert _discover_target(langsmith, "ws-1") == HostTarget("ws-1")
 
-    def test_workspaces_on_different_data_planes_need_a_tenant_id(self):
-        langsmith = _workspaces(
-            {"id": "ws-1", "data_plane_url": DATA_PLANE},
-            {"id": "ws-2", "data_plane_url": None},
-        )
+    def test_a_tenant_id_outside_the_keys_workspaces_is_named(self):
+        langsmith = _workspaces({"id": "ws-1", "data_plane_url": DATA_PLANE})
 
-        with pytest.raises(click.ClickException, match="LANGSMITH_TENANT_ID"):
-            _discover_target(langsmith, None, no_input=True)
-
-    def test_workspaces_on_different_data_planes_prompt_for_one(self, monkeypatch):
-        monkeypatch.setattr(click, "prompt", lambda _text: "ws-1")
-        langsmith = _workspaces(
-            {"id": "ws-1", "data_plane_url": DATA_PLANE},
-            {"id": "ws-2", "data_plane_url": None},
-        )
-
-        assert _discover_target(langsmith, None, no_input=False) == HostTarget(
-            "ws-1", DATA_PLANE
-        )
+        with pytest.raises(click.ClickException, match="workspace unknown-ws"):
+            _discover_target(langsmith, "unknown-ws")
 
 
 class TestDockerBuildCommand:

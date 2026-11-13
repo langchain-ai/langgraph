@@ -2066,7 +2066,6 @@ def _create_host_backend_client(
         else _discover_target(
             LangSmithApiClient(langsmith_api_url(langsmith_endpoint), resolved_api_key),
             tenant_id,
-            no_input=effective_no_input,
         )
     )
     if target.data_plane_url:
@@ -2089,39 +2088,24 @@ class HostTarget:
 
 
 def _discover_target(
-    langsmith: LangSmithApiClient, tenant_id: str | None, *, no_input: bool
+    langsmith: LangSmithApiClient, tenant_id: str | None
 ) -> HostTarget:
     try:
         workspaces = langsmith.list_workspaces()
     except HostBackendError:
         return HostTarget(tenant_id)
-    if tenant_id is None and len({w.data_plane_url for w in workspaces}) > 1:
-        tenant_id = _prompt_for_workspace_id(no_input)
-    if tenant_id is not None:
+    if tenant_id is not None and workspaces:
         workspaces = [w for w in workspaces if w.id == tenant_id]
-    data_plane_url = workspaces[0].data_plane_url if workspaces else None
-    if data_plane_url is None:
+        if not workspaces:
+            raise click.ClickException(
+                f"This API key has no access to workspace {tenant_id}. "
+                "Check LANGSMITH_TENANT_ID."
+            )
+    data_plane_urls = {w.data_plane_url for w in workspaces}
+    if len(data_plane_urls) != 1 or None in data_plane_urls:
         return HostTarget(tenant_id)
     only_workspace_id = workspaces[0].id if len(workspaces) == 1 else None
-    return HostTarget(only_workspace_id, data_plane_url)
-
-
-def _prompt_for_workspace_id(no_input: bool) -> str:
-    if no_input:
-        raise click.ClickException(
-            "API key is org-scoped and requires a workspace ID. "
-            "Set LANGSMITH_TENANT_ID in your .env file or "
-            "use a workspace-scoped API key."
-        )
-    click.secho(
-        "Your API key is org-scoped and requires a workspace ID.",
-        fg="yellow",
-    )
-    click.secho(
-        "Find your workspace ID in LangSmith under Settings > Workspaces.",
-        fg="yellow",
-    )
-    return click.prompt("Workspace ID")
+    return HostTarget(only_workspace_id, data_plane_urls.pop())
 
 
 def _call_host_backend_with_optional_tenant(
@@ -2149,7 +2133,21 @@ def _call_host_backend_with_optional_tenant(
                 and err.status_code == 403
                 and "requires workspace specification" in err.message
             ):
-                client.set_tenant(_prompt_for_workspace_id(effective_no_input))
+                if effective_no_input:
+                    raise click.ClickException(
+                        "API key is org-scoped and requires a workspace ID. "
+                        "Set LANGSMITH_TENANT_ID in your .env file or "
+                        "use a workspace-scoped API key."
+                    ) from None
+                click.secho(
+                    "Your API key is org-scoped and requires a workspace ID.",
+                    fg="yellow",
+                )
+                click.secho(
+                    "Find your workspace ID in LangSmith under Settings > Workspaces.",
+                    fg="yellow",
+                )
+                client.set_tenant(click.prompt("Workspace ID"))
                 prompted_for_tenant = True
                 continue
             if err.status_code == 403 and "not enabled" in err.message.lower():
