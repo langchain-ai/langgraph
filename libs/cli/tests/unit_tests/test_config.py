@@ -1231,7 +1231,6 @@ ENV LANGGRAPH_AUTH='{"path": "./graphs/auth.mts:auth"}'
 ENV LANGGRAPH_UI='{"agent": "./graphs/agent.ui.jsx"}'
 ENV LANGGRAPH_UI_CONFIG='{"shared": ["nuqs"]}'
 ENV LANGSERVE_GRAPHS='{"agent": "./graphs/agent.js:graph"}'
-WORKDIR /deps/unit_tests
 RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts"""
 
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
@@ -1422,7 +1421,6 @@ ENV LANGGRAPH_AUTH='{"path": "./graphs/auth.mts:auth"}'
 ENV LANGGRAPH_UI='{"agent": "./graphs/agent.ui.jsx"}'
 ENV LANGGRAPH_UI_CONFIG='{"shared": ["nuqs"]}'
 ENV LANGSERVE_GRAPHS='{"agent": "./graphs/agent.js:graph"}'
-WORKDIR /deps/unit_tests
 RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts"""
 
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
@@ -1550,8 +1548,7 @@ ENV NODE_VERSION=20
 WORKDIR /deps/outer-unit_tests/unit_tests
 RUN npm i && tsx /api/langgraph_api/js/build.mts
 # -- End of JS dependencies install --
-{FORMATTED_CLEANUP_LINES}
-WORKDIR /deps/outer-unit_tests/unit_tests"""
+{FORMATTED_CLEANUP_LINES}"""
 
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
     assert additional_contexts == {}
@@ -1595,8 +1592,7 @@ ENV NODE_VERSION=22
 WORKDIR /deps/outer-unit_tests/unit_tests
 RUN npm i && tsx /api/langgraph_api/js/build.mts
 # -- End of JS dependencies install --
-{FORMATTED_CLEANUP_LINES}
-WORKDIR /deps/outer-unit_tests/unit_tests"""
+{FORMATTED_CLEANUP_LINES}"""
 
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
     assert additional_contexts == {}
@@ -2152,7 +2148,8 @@ def test_config_to_docker_uv_lock_detects_js_pm_from_target_package_root():
             config_path, config, base_image="langchain/langgraph-api:0.2.47"
         )
 
-        assert "WORKDIR /deps/workspace/apps/agent" in docker
+        # Package install, JS install and runtime all share this dir: one WORKDIR.
+        assert docker.splitlines().count("WORKDIR /deps/workspace/apps/agent") == 1
         assert (
             "RUN pnpm i --frozen-lockfile && tsx /api/langgraph_api/js/build.mts"
             in docker
@@ -2803,7 +2800,7 @@ def test_config_retain_build_tools():
         "/usr/local/lib/python*/site-packages/" + pckg + "*" in docker_true
         for pckg in _BUILD_TOOLS
     )
-    assert "RUN pip uninstall -y pip setuptools wheel" not in docker_true
+    assert "(pip uninstall -y pip setuptools wheel)" not in docker_true
     config_false = validate_config(
         {**copy.deepcopy(base_config), "keep_pkg_tools": False}
     )
@@ -2814,7 +2811,7 @@ def test_config_retain_build_tools():
         "/usr/local/lib/python*/site-packages/" + pckg + "*" in docker_false
         for pckg in _BUILD_TOOLS
     )
-    assert "RUN pip uninstall -y pip setuptools wheel" in docker_false
+    assert "(pip uninstall -y pip setuptools wheel)" in docker_false
     config_list = validate_config(
         {**copy.deepcopy(base_config), "keep_pkg_tools": ["pip", "setuptools"]}
     )
@@ -2829,8 +2826,15 @@ def test_config_retain_build_tools():
         "/usr/local/lib/python*/site-packages/" + pckg + "*" in docker_list
         for pckg in ("pip", "setuptools")
     )
-    assert "RUN pip uninstall -y wheel" in docker_list
-    assert "RUN pip uninstall -y pip setuptools" not in docker_list
+    assert "(pip uninstall -y wheel)" in docker_list
+    assert "(pip uninstall -y pip setuptools)" not in docker_list
+
+
+def test_pip_cleanup_is_a_single_run_with_scoped_fallbacks():
+    cleanup = _get_pip_cleanup_lines("uv pip install --system", _BUILD_TOOLS, "uv")
+    assert cleanup.count("RUN ") == 1
+    # Each `|| true` must close its own subshell so it can't mask later steps.
+    assert cleanup.count("|| true)") == cleanup.count("|| true") == 2
 
 
 # config_to_compose
