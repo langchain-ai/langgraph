@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "python": "3.14.3",
+  "platform": "Linux-6.1.166-x86_64-with-glibc2.43",
+  "script_sha256": "3a3cb80dde575f1f008c9078e285cc2e8f8a3bb8648da4c3817cb33f9e9a4aed",
+  "revision": "eb066bd31a2bf01fc0cd58256df4800a3695c233",
+  "backend": "postgres",
+  "profiles": [
+    "mock700",
+    "tool_calls"
+  ],
+  "frequencies": [
+    25,
+    50,
+    75,
+    100,
+    125,
+    150,
+    175,
+    200,
+    225,
+    250,
+    275,
+    300,
+    325,
+    350,
+    375,
+    400,
+    425,
+    450,
+    475,
+    500
+  ],
+  "lengths": [
+    50,
+    200,
+    1000,
+    5000,
+    10000
+  ],
+  "script": "deterministic, no provider; IDs follow update index",
+  "read_sampling": "one get_state after every invocation, prefix distribution",
+  "write_sampling": "end-to-end graph.invoke including hydrate, scripted model and checkpoint I/O",
+  "storage": "postgres pg_column_size row estimate (not relation disk bytes); memory serialized payloads across all stores",
+  "max_supersteps_since_snapshot": "5000"
+}
