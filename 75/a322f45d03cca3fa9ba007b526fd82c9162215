@@ -1,0 +1,21 @@
+libs/cli/langgraph_cli/deploy.py
+  s_9929d82d7a093b::t_fc0deab7301df0 1554-1560,1581-1582,1599,1615
+libs/cli/tests/unit_tests/cli/test_deploy_command.py
+  s_9929d82d7a093b::t_5c673753a473d5 1757-1774
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "75a322f45d03cca3fa9ba007b526fd82c9162215",
+  "prompts": {},
+  "sessions": {
+    "s_9929d82d7a093b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "eea50cb2-d32f-4abf-98b0-ea2c15e7cc89",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  }
+}
