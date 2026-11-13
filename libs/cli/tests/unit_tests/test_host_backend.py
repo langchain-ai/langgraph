@@ -797,7 +797,7 @@ def test_list_workspaces_reads_the_api_keys_live_workspaces():
         Workspace("ws-3", None),
     ]
     assert seen == {
-        "url": "https://api.smith.langchain.com/api/v1/tenants?skip_create=true",
+        "url": "https://api.smith.langchain.com/api/v1/workspaces",
         "api_key": "key",
     }
 

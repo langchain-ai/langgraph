@@ -145,9 +145,9 @@ class Workspace:
     data_plane_url: str | None
 
     @classmethod
-    def from_tenant(cls, tenant: dict[str, Any]) -> Workspace:
-        data_plane_url = (tenant.get("data_plane_url") or "").rstrip("/")
-        return cls(tenant["id"], data_plane_url or None)
+    def from_api(cls, workspace: dict[str, Any]) -> Workspace:
+        data_plane_url = (workspace.get("data_plane_url") or "").rstrip("/")
+        return cls(workspace["id"], data_plane_url or None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,17 +228,15 @@ class LangSmithApiClient(_JsonClient):
         super().__init__(api_url.rstrip("/"), _api_key_headers(api_key), transport)
 
     def list_workspaces(self) -> list[Workspace]:
-        tenants = self._request(
-            "GET", "/api/v1/tenants", params={"skip_create": "true"}
-        )
-        if not isinstance(tenants, list):
+        workspaces = self._request("GET", "/api/v1/workspaces")
+        if not isinstance(workspaces, list):
             return []
         return [
-            Workspace.from_tenant(tenant)
-            for tenant in tenants
-            if isinstance(tenant, dict)
-            and isinstance(tenant.get("id"), str)
-            and not tenant.get("is_deleted")
+            Workspace.from_api(workspace)
+            for workspace in workspaces
+            if isinstance(workspace, dict)
+            and isinstance(workspace.get("id"), str)
+            and not workspace.get("is_deleted")
         ]
 
 

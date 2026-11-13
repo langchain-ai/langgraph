@@ -76,7 +76,7 @@ DEDICATED = "deployments_dedicated_supported"
 CLI_BUILDS = "deployments_cli_builds_supported"
 BYOC_FLAGS = {CLI_BUILDS: True, SCALE_TO_ZERO: True, DEDICATED: True}
 REVISION_ID = "rev-1"
-DISCOVER_WORKSPACES = "GET /api/v1/tenants"
+DISCOVER_WORKSPACES = "GET /api/v1/workspaces"
 DATA_PLANE_INFO = "GET /api/v1/info"
 LIST_DEPLOYMENTS = "GET /v2/deployments"
 LIST_LISTENERS = "GET /v2/listeners"
@@ -141,7 +141,7 @@ class ControlPlaneDouble:
 
     def _respond(self, request: httpx.Request) -> httpx.Response:
         method, path = request.method, self._path(request)
-        if (method, path) == ("GET", "/api/v1/tenants"):
+        if (method, path) == ("GET", "/api/v1/workspaces"):
             return httpx.Response(self.workspaces_status, json=self.workspaces)
         if (method, path) == ("GET", "/api/v1/info"):
             return httpx.Response(200, json={"instance_flags": self.instance_flags})
