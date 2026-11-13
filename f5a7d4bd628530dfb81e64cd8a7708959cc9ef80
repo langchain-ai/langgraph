@@ -1,0 +1,19 @@
+libs/sdk-py/langgraph_sdk/__init__.py
+  s_2e97b14210dcd3::t_6a74dc07490129 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f5a7d4bd628530dfb81e64cd8a7708959cc9ef80",
+  "prompts": {},
+  "sessions": {
+    "s_2e97b14210dcd3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d48e1739-4ecc-4111-a25a-d948488ef02b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "nick-hollon-lc <nick.hollon@langchain.dev>"
+    }
+  }
+}

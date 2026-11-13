@@ -1,0 +1,27 @@
+libs/cli/langgraph_cli/config.py
+  s_96c8859bc266c0::t_643b35eff90611 1592-1593,1684-1685
+libs/cli/langgraph_cli/uv_lock.py
+  s_96c8859bc266c0::t_bcce3467e2ed36 958-959
+libs/cli/tests/unit_tests/cli/test_cli.py
+  s_96c8859bc266c0::t_7882f080ffea74 151
+libs/cli/tests/unit_tests/test_config.py
+  s_96c8859bc266c0::t_85526587d206a6 913,978,1039,1103,1151,1185,1231,1423,1535,1583,2856,2898,2944,2983,3031
+libs/cli/tests/unit_tests/test_env_cache.py
+  s_96c8859bc266c0::t_0eda12bb592e6d 1-142
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bd5f14101c929ee26dd2b9fcf40ee13ad9ac0786",
+  "prompts": {},
+  "sessions": {
+    "s_96c8859bc266c0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a17855-fd43-7a22-bc90-33a181464bcf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "David Asamu <david.asamu@langchain.dev>"
+    }
+  }
+}
