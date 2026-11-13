@@ -413,7 +413,14 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
     ) -> None:
         # Keep `conn` for compatibility with subclasses overriding this private hook.
         # All database I/O goes through `_cursor()`, which owns connection acquisition.
-        async with self._cursor(pipeline=True) as cur:
+        # A lone read is one statement: outside a pipeline it costs one round
+        # trip instead of two (its fetch, then the Sync on leaving the pipeline).
+        lone_read = (
+            not self.pipe
+            and PutOp not in grouped_ops
+            and sum(map(len, grouped_ops.values())) == 1
+        )
+        async with self._cursor(pipeline=not lone_read) as cur:
             if GetOp in grouped_ops:
                 await self._batch_get_ops(
                     cast(Sequence[tuple[int, GetOp]], grouped_ops[GetOp]),

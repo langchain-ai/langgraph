@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import threading
 import time
 from contextlib import contextmanager
 from typing import Any
@@ -287,6 +288,30 @@ def test_basic_store_ops(store) -> None:
     store.delete(namespace, item_id)
     deleted_item = store.get(namespace, item_id)
     assert deleted_item is None
+
+
+def test_lone_reads_and_puts_share_a_connection(store: PostgresStore) -> None:
+    errors: list[BaseException] = []
+
+    def run(op: Any) -> None:
+        try:
+            for i in range(100):
+                op(i)
+        except BaseException as e:
+            errors.append(e)
+
+    def read(i: int) -> None:
+        store.get(("race",), f"k{i % 10}")
+
+    def write(i: int) -> None:
+        store.put(("race",), f"k{i % 10}", {"i": i})
+
+    threads = [threading.Thread(target=run, args=(op,)) for op in [read, write] * 4]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
 
 
 def test_list_namespaces(store) -> None:
