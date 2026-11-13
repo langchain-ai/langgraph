@@ -396,6 +396,21 @@ class RemoteGraph(PregelProtocol):
 
         return checkpoint if checkpoint else None
 
+    def _get_checkpoint_selector(
+        self, config: RunnableConfig | None
+    ) -> Checkpoint | None:
+        """Like `_get_checkpoint`, but only returns it when it selects a checkpoint.
+
+        The SDK posts to `/state/checkpoint` for any non-empty checkpoint dict, so
+        a thread-only selector would be sent as a checkpoint post without an id.
+        """
+        checkpoint = self._get_checkpoint(config)
+        if checkpoint is None:
+            return None
+        if "checkpoint_id" in checkpoint or "checkpoint_map" in checkpoint:
+            return checkpoint
+        return None
+
     def _get_config(self, checkpoint: Checkpoint) -> RunnableConfig:
         return {
             "configurable": {
@@ -464,7 +479,7 @@ class RemoteGraph(PregelProtocol):
 
         state = sync_client.threads.get_state(
             thread_id=merged_config["configurable"]["thread_id"],
-            checkpoint=self._get_checkpoint(merged_config),
+            checkpoint=self._get_checkpoint_selector(merged_config),
             subgraphs=subgraphs,
             headers=headers,
             params=params,
@@ -500,7 +515,7 @@ class RemoteGraph(PregelProtocol):
 
         state = await client.threads.get_state(
             thread_id=merged_config["configurable"]["thread_id"],
-            checkpoint=self._get_checkpoint(merged_config),
+            checkpoint=self._get_checkpoint_selector(merged_config),
             subgraphs=subgraphs,
             headers=headers,
             params=params,

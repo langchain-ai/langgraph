@@ -275,6 +275,67 @@ async def test_aget_state():
     )
 
 
+def test_get_state_latest_does_not_select_a_checkpoint():
+    mock_sync_client = MagicMock()
+    mock_sync_client.threads.get_state.return_value = {
+        "values": {"count": 1},
+        "next": [],
+        "checkpoint": {
+            "thread_id": "thread_1",
+            "checkpoint_ns": "",
+            "checkpoint_id": "checkpoint_1",
+        },
+        "metadata": {},
+        "created_at": None,
+        "parent_checkpoint": None,
+        "tasks": [],
+    }
+    remote_pregel = RemoteGraph("test_graph_id", sync_client=mock_sync_client)
+
+    # thread only: the SDK would post to /state/checkpoint for any non-empty
+    # checkpoint dict, so we must not pass one
+    remote_pregel.get_state({"configurable": {"thread_id": "thread_1"}})
+    assert mock_sync_client.threads.get_state.call_args.kwargs["checkpoint"] is None
+
+    # a namespace alone doesn't pick a checkpoint either
+    remote_pregel.get_state(
+        {"configurable": {"thread_id": "thread_1", "checkpoint_ns": "sub"}}
+    )
+    assert mock_sync_client.threads.get_state.call_args.kwargs["checkpoint"] is None
+
+    # but an explicit selector is still forwarded as is
+    selector = {"thread_id": "thread_1", "checkpoint_ns": "", "checkpoint_id": "c1"}
+    remote_pregel.get_state({"configurable": selector})
+    assert mock_sync_client.threads.get_state.call_args.kwargs["checkpoint"] == selector
+
+
+async def test_aget_state_latest_does_not_select_a_checkpoint():
+    mock_async_client = AsyncMock()
+    mock_async_client.threads.get_state.return_value = {
+        "values": {"count": 1},
+        "next": [],
+        "checkpoint": {
+            "thread_id": "thread_1",
+            "checkpoint_ns": "",
+            "checkpoint_id": "checkpoint_1",
+        },
+        "metadata": {},
+        "created_at": None,
+        "parent_checkpoint": None,
+        "tasks": [],
+    }
+    remote_pregel = RemoteGraph("test_graph_id", client=mock_async_client)
+
+    await remote_pregel.aget_state({"configurable": {"thread_id": "thread_1"}})
+    assert mock_async_client.threads.get_state.call_args.kwargs["checkpoint"] is None
+
+    selector = {"thread_id": "thread_1", "checkpoint_ns": "", "checkpoint_id": "c1"}
+    await remote_pregel.aget_state({"configurable": selector})
+    assert (
+        mock_async_client.threads.get_state.call_args.kwargs["checkpoint"] == selector
+    )
+
+
 def test_get_state_history():
     # set up test
     mock_sync_client = MagicMock()
