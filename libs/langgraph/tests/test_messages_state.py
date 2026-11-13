@@ -190,6 +190,13 @@ def test_message_likes_and_chunks_are_converted_on_both_sides():
     assert result[3].content == "Thanks"
 
 
+def test_chunk_only_lists_are_converted():
+    left = [AIMessageChunk(content="a", id="1")]
+    right = [AIMessageChunk(content="b", id="2")]
+    result = add_messages(left, right)
+    assert [type(m) for m in result] == [AIMessage, AIMessage]
+
+
 def test_result_is_a_new_list():
     left = [HumanMessage(content="Hello", id="1")]
     result = add_messages(left, [])
