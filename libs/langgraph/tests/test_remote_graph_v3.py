@@ -190,6 +190,48 @@ async def test_channel_projection_decodes_params_data_async():
     sdk.subscribe.assert_called_once_with(["checkpoints"])
 
 
+
+def test_remote_custom_sync_keeps_explicit_null_but_ignores_missing_payload():
+    adapter, _, sdk = _make_sync_adapter()
+    sdk.subscribe.return_value = iter([
+        {"method": "custom", "params": {"data": None}},
+        {"method": "custom", "params": {}},
+        {"method": "custom", "params": {"data": False}},
+        {"method": "custom", "params": {"data": 0}},
+        {"method": "updates", "params": {"data": "ignore"}},
+    ])
+
+    with adapter as stream:
+        assert list(stream.extensions["custom"]) == [None, False, 0]
+
+    sdk.subscribe.assert_called_once_with(["custom"])
+
+
+@pytest.mark.anyio
+async def test_remote_custom_async_keeps_explicit_null_but_ignores_missing_payload():
+    adapter, _, sdk = _make_async_adapter()
+
+    async def events():
+        for item in [
+            {"method": "custom", "params": {"data": None}},
+            {"method": "custom", "params": {}},
+            {"method": "custom", "params": {"data": False}},
+            {"method": "custom", "params": {"data": 0}},
+            {"method": "updates", "params": {"data": "ignore"}},
+        ]:
+            yield item
+
+    sdk.subscribe.return_value = events()
+    async with adapter as stream:
+        assert [item async for item in stream.extensions["custom"]] == [
+            None,
+            False,
+            0,
+        ]
+
+    sdk.subscribe.assert_called_once_with(["custom"])
+
+
 def test_sync_adapter_translates_command_input():
     sync_client = MagicMock()
     sdk_thread = MagicMock()
