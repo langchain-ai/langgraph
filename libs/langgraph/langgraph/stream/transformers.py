@@ -8,7 +8,7 @@ from langchain_core.language_models.chat_model_stream import (
     AsyncChatModelStream,
     ChatModelStream,
 )
-from langchain_core.messages import AIMessageChunk, BaseMessage, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_protocol.protocol import LifecycleCause, MessagesData
 from typing_extensions import NotRequired, TypedDict
 
@@ -277,11 +277,7 @@ class MessagesTransformer(StreamTransformer):
             self._route_protocol_event(
                 cast("MessagesData", payload), run_id=run_id, node=node
             )
-        elif (
-            isinstance(payload, BaseMessage)
-            and not isinstance(payload, AIMessageChunk)
-            and not isinstance(payload, ToolMessage)
-        ):
+        elif isinstance(payload, AIMessage) and not isinstance(payload, AIMessageChunk):
             self._route_whole_message(payload, node=node)
         # Legacy AIMessageChunk tuples (from on_llm_new_token) are ignored;
         # v1 streaming callers must switch to stream_events(version="v3") to populate this
