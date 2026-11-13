@@ -43,6 +43,35 @@ def test_data_decoder_yields_params_data():
     assert list(decoder.feed(values_event(seq=2, x=2, y=3))) == [{"x": 2, "y": 3}]
 
 
+
+@pytest.mark.parametrize("method", ["values", "updates", "checkpoints", "tasks", "custom"])
+def test_data_decoder_preserves_explicit_null_and_other_falsey_data(method):
+    decoder = DataDecoder(method)
+
+    # Null is a meaningful data payload, unlike an absent data key.
+    payloads = [None, False, 0, "", [], {}]
+    events = [
+        {"method": method, "params": {"data": value, "namespace": []}}
+        for value in payloads
+    ]
+    assert [item for event in events for item in decoder.feed(event)] == payloads
+
+    # A missing data key must not introduce a phantom null event.
+    assert list(decoder.feed({"method": method, "params": {"namespace": []}})) == []
+    assert list(decoder.feed({"method": method})) == []
+    assert list(decoder.feed({"method": "lifecycle", "params": {"data": None}})) == []
+
+
+def test_data_decoder_namespace_filter_preserves_null_only_in_matching_scope():
+    decoder = DataDecoder("custom", namespace=["child"])
+    assert list(decoder.feed({
+        "method": "custom", "params": {"namespace": ["child"], "data": None}
+    })) == [None]
+    assert list(decoder.feed({
+        "method": "custom", "params": {"namespace": [], "data": None}
+    })) == []
+
+
 def test_data_decoder_ignores_other_methods():
     decoder = DataDecoder("values")
     assert list(decoder.feed(lifecycle_completed_event(seq=1))) == []
