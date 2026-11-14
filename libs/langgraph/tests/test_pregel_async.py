@@ -84,6 +84,7 @@ from langgraph.types import (
     StateSnapshot,
     StateUpdate,
     StreamWriter,
+    TimeoutPolicy,
     interrupt,
 )
 from tests.any_str import AnyStr, AnyVersion, FloatBetween, UnsortedSequence
@@ -9916,3 +9917,84 @@ async def test_node_error_handler_handles_subgraph_internal_failure_async() -> N
     assert result["foo"] == "handled_async_subgraph"
     assert captured["from_node_name"] == "subgraph_node"
     assert isinstance(captured["from_node_error"], BaseException)
+
+
+@pytest.mark.parametrize(
+    ("node_timeout_enabled", "step_timeout_enabled"),
+    [
+        (True, True),
+        (False, True),
+        (True, False),
+    ],
+    ids=[
+        "both-timeouts-enabled",
+        "without-node-timeout",
+        "without-child-step-timeout",
+    ],
+)
+async def test_resume_subgraph_send_fanout_after_sibling_failure(
+    node_timeout_enabled: bool,
+    step_timeout_enabled: bool,
+) -> None:
+    """Ensure a resumed child graph completes its Send fan-out."""
+
+    class State(TypedDict, total=False):
+        x: int
+        parts: Annotated[list[str], operator.add]
+        total: str
+
+    async def item(state: State) -> dict:
+        await asyncio.sleep(0.01)
+        return {"parts": [str(state["x"])]}
+
+    child_builder = StateGraph(State)
+    child_builder.add_node("prepare", lambda state: {"x": state["x"]})
+    child_builder.add_node("item", item)
+    child_builder.add_node(
+        "combine",
+        lambda state: {"total": "+".join(state["parts"])},
+    )
+    child_builder.add_edge(START, "prepare")
+    child_builder.add_conditional_edges(
+        "prepare",
+        lambda state: [Send("item", {"x": state["x"]}) for _ in range(3)],
+        ["item"],
+    )
+    child_builder.add_edge("item", "combine")
+    child_builder.add_edge("combine", END)
+
+    child = child_builder.compile()
+    child.step_timeout = 3600 if step_timeout_enabled else None
+
+    async def run_child(state: State) -> dict:
+        result = await child.ainvoke({"x": state["x"]})
+        return {"total": result.get("total", f"<missing; child returned {result}>")}
+
+    failures = [True]
+
+    async def flaky(state: State) -> dict:
+        if failures:
+            failures.pop()
+            raise RuntimeError("service unavailable")
+        return {}
+
+    parent_builder = StateGraph(State)
+    parent_builder.add_node(
+        "run_child",
+        run_child,
+        timeout=(TimeoutPolicy(run_timeout=3600) if node_timeout_enabled else None),
+    )
+    parent_builder.add_node("flaky", flaky)
+    parent_builder.add_edge(START, "run_child")
+    parent_builder.add_edge(START, "flaky")
+    parent_builder.add_edge(["run_child", "flaky"], END)
+
+    app = parent_builder.compile(checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "timeout-send-fanout"}}
+
+    with pytest.raises(RuntimeError, match="service unavailable"):
+        await app.ainvoke({"x": 7}, config)
+
+    result = await app.ainvoke(None, config)
+
+    assert result["total"] == "7+7+7"
