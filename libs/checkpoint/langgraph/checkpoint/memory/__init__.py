@@ -666,6 +666,9 @@ class PersistentDict(defaultdict):
         try:
             self.dump(fileobj)
         except Exception:
+            # Windows cannot delete an open file; close first so the original
+            # error surfaces and the temp file is removed.
+            fileobj.close()
             os.remove(tempname)
             raise
         finally:

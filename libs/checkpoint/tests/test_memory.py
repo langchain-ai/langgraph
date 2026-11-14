@@ -1,5 +1,8 @@
 import asyncio
 import logging
+import pickle
+from pathlib import Path
+from threading import Lock
 from typing import Any
 
 import pytest
@@ -12,7 +15,7 @@ from langgraph.checkpoint.base import (
     create_checkpoint,
     empty_checkpoint,
 )
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemorySaver, PersistentDict
 from langgraph.checkpoint.serde.jsonplus import (
     JsonPlusSerializer,
     _warned_blocked_types,
@@ -720,3 +723,34 @@ class TestPreDeltaBlobTerminator:
         assert "PRE-DELTA-WRITE" in values
         # And the pending write at the target is never folded in.
         assert "PENDING-AT-TARGET" not in values
+
+
+def test_persistent_dict_sync_failure_raises_original_error(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "checkpoint.pkl"
+    store = PersistentDict(filename=str(path))
+    store["lock"] = Lock()
+
+    with pytest.raises(TypeError, match="cannot pickle"):
+        store.sync()
+
+    assert not Path(str(path) + ".tmp").exists()
+    assert not path.exists()
+
+
+def test_persistent_dict_failed_sync_preserves_previous_file(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "checkpoint.pkl"
+    store = PersistentDict(filename=str(path))
+    store["value"] = 1
+    store.sync()
+
+    store["lock"] = Lock()
+    with pytest.raises(TypeError, match="cannot pickle"):
+        store.sync()
+
+    assert not Path(str(path) + ".tmp").exists()
+    with path.open("rb") as fileobj:
+        assert pickle.load(fileobj) == {"value": 1}
