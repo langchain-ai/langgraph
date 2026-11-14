@@ -123,6 +123,12 @@ unresolved-attribute = "ignore"
 unsupported-base = "ignore"
 unsupported-operator = "ignore"
 
+[tool.mypy]
+exclude = [
+    'langgraph/typing\.py',
+    'langgraph/types\.py',
+]
+
 [tool.coverage.run]
 omit = ["tests/*"]
 

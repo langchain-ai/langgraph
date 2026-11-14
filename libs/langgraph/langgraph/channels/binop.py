@@ -75,7 +75,12 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
 
     __slots__ = ("value", "operator")
 
-    def __init__(self, typ: type[Value], operator: Callable[[Value, Value], Value]):
+    def __init__(
+        self,
+        typ: type[Value],
+        operator: Callable[[Value, Value], Value],
+        default: Any = MISSING,
+    ):
         super().__init__(typ)
         self.operator = operator
         # special forms from typing or collections.abc are not instantiable
@@ -87,10 +92,13 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
             typ = set
         if typ in (collections.abc.Mapping, collections.abc.MutableMapping):
             typ = dict
-        try:
-            self.value = typ()
-        except Exception:
-            self.value = MISSING
+        if default is not MISSING:
+            self.value = default() if callable(default) else default
+        else:
+            try:
+                self.value = typ()
+            except Exception:
+                self.value = MISSING
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, BinaryOperatorAggregate) and _operators_equal(

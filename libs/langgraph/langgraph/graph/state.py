@@ -1817,14 +1817,18 @@ def _get_channels(
 ) -> tuple[dict[str, BaseChannel], dict[str, ManagedValueSpec], dict[str, Any]]:
     if not hasattr(schema, "__annotations__"):
         return (
-            {"__root__": _get_channel("__root__", schema, allow_managed=False)},
+            {
+                "__root__": _get_channel(
+                    "__root__", schema, allow_managed=False, schema=schema
+                )
+            },
             {},
             {},
         )
 
     type_hints = get_type_hints(schema, include_extras=True)
     all_keys = {
-        name: _get_channel(name, typ)
+        name: _get_channel(name, typ, schema=schema)
         for name, typ in type_hints.items()
         if name != "__slots__"
     }
@@ -1848,7 +1852,11 @@ def _get_channel(
 
 
 def _get_channel(
-    name: str, annotation: Any, *, allow_managed: bool = True
+    name: str,
+    annotation: Any,
+    *,
+    allow_managed: bool = True,
+    schema: type[Any] | None = None,
 ) -> BaseChannel | ManagedValueSpec:
     # Strip out Required and NotRequired wrappers
     if hasattr(annotation, "__origin__") and annotation.__origin__ in (
@@ -1864,7 +1872,7 @@ def _get_channel(
     elif channel := _is_field_channel(annotation):
         channel.key = name
         return channel
-    elif channel := _is_field_binop(annotation):
+    elif channel := _is_field_binop(name, annotation, schema=schema):
         channel.key = name
         return channel
 
@@ -1901,9 +1909,11 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
     return None
 
 
-def _is_field_binop(typ: type[Any]) -> BinaryOperatorAggregate | None:
-    if hasattr(typ, "__metadata__"):
-        meta = typ.__metadata__
+def _is_field_binop(
+    name: str, annotation: Any, schema: type[Any] | None = None
+) -> BinaryOperatorAggregate | None:
+    if hasattr(annotation, "__metadata__"):
+        meta = annotation.__metadata__
         if len(meta) >= 1 and callable(meta[-1]):
             sig = signature(meta[-1])
             params = list(sig.parameters.values())
@@ -1914,7 +1924,12 @@ def _is_field_binop(typ: type[Any]) -> BinaryOperatorAggregate | None:
                 )
                 == 2
             ):
-                return BinaryOperatorAggregate(typ, meta[-1])
+                default = (
+                    get_field_default(name, annotation, schema)
+                    if schema is not None
+                    else MISSING
+                )
+                return BinaryOperatorAggregate(annotation, meta[-1], default=default)
             else:
                 raise ValueError(
                     f"Invalid reducer signature. Expected (a, b) -> c. Got {sig}"
