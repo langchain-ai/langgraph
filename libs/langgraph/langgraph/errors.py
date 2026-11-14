@@ -26,6 +26,7 @@ __all__ = (
     "NodeInterrupt",
     "NodeTimeoutError",
     "ParentCommand",
+    "RunCancelled",
     "EmptyInputError",
     "TaskNotFound",
     "UnknownInterruptError",
@@ -205,6 +206,25 @@ class NodeError:
 
     error: BaseException
     """Exception raised by the failed node."""
+
+
+class RunCancelled(Exception):
+    """Cancel message that asks the graph to run its cancel handler.
+
+    Pass an instance to `task.cancel()` on the task running the graph. A cancel
+    without one, such as `asyncio.timeout`, a task group stopping siblings, or a
+    process shutting down, skips the handler, so the run can be resumed as is.
+
+    Example:
+        ```python
+        run = asyncio.create_task(graph.ainvoke(inputs, config))
+        run.cancel(RunCancelled("user stop"))
+        ```
+    """
+
+    run_cancel_handler: bool = True
+    """Set to `False` in a subclass whose cancels should skip the handler, such as
+    a rollback that deletes the run."""
 
 
 class NodeCancelledError(Exception):
