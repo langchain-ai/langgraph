@@ -3463,10 +3463,13 @@ def test_stream_buffering_single_node(sync_checkpointer: BaseCheckpointSaver) ->
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
 
+    received = threading.Event()
+
     def node(state: State, writer: StreamWriter):
-        writer("Before sleep")
-        time.sleep(0.2)
-        writer("After sleep")
+        writer("Before wait")
+        if not received.wait(timeout=10):
+            raise TimeoutError("Custom event was not streamed before node completion")
+        writer("After wait")
         return {"my_key": "got here"}
 
     builder = StateGraph(State)
@@ -3475,16 +3478,15 @@ def test_stream_buffering_single_node(sync_checkpointer: BaseCheckpointSaver) ->
     builder.add_edge("node", END)
     graph = builder.compile(checkpointer=sync_checkpointer)
 
-    start = time.perf_counter()
-    chunks: list[tuple[float, Any]] = []
     config = {"configurable": {"thread_id": "2"}}
-    for c in graph.stream({"my_key": ""}, config, stream_mode="custom"):
-        chunks.append((round(time.perf_counter() - start, 1), c))
-
-    assert chunks == [
-        (FloatBetween(0.0, 0.1), "Before sleep"),
-        (FloatBetween(0.2, 0.3), "After sleep"),
-    ]
+    stream = graph.stream({"my_key": ""}, config, stream_mode="custom")
+    try:
+        assert next(stream) == "Before wait"
+        received.set()
+        assert list(stream) == ["After wait"]
+    finally:
+        received.set()
+        stream.close()
 
 
 def test_nested_graph_interrupts_parallel(
