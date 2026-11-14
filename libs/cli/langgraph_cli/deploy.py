@@ -31,7 +31,12 @@ from langgraph_cli.host_backend import (
     ControlPlaneEndpoints,
     HostBackendClient,
     HostBackendError,
+    InstanceFlags,
+    LangSmithApiClient,
     SourceName,
+    Workspace,
+    WorkspaceRouter,
+    langsmith_api_url,
 )
 from langgraph_cli.image_reference import DIGEST_SEPARATOR, ImageReference
 from langgraph_cli.progress import Progress
@@ -108,6 +113,20 @@ _LISTENER_REQUIRED_MARKER = "listener_id' is required"
 _LISTENERS_SHOWN = 10
 _LISTENER_NOT_FOUND_STATUSES = frozenset({404, 422})
 _LISTENERS_DOCS_URL = "https://docs.langchain.com/langsmith/control-plane#listeners"
+_DEFAULT_AGENT_SERVER_TYPE = "serverless"
+_WIRE_DEPLOYMENT_TYPES = {"serverless": "dev_zero", "dedicated": "prod"}
+_SOURCE_REJECTED_PREFIX = "'source' must be"
+_RESOURCE_SPEC_REQUIRED_MARKER = "'source_config.resource_spec' is required"
+_HOST_URL_ON_A_DATA_PLANE = (
+    "If --host-url or LANGGRAPH_HOST_URL points at a BYOC data plane, drop it so "
+    "'langgraph deploy' finds the data plane from your API key."
+)
+_CLI_BUILDS_UNSUPPORTED = (
+    "This LangSmith data plane does not build images for 'langgraph deploy'. "
+    "Push the image to a registry you manage with --push-to "
+    "<registry>/<repository>, or deploy an image that is already there with "
+    "--image-uri."
+)
 _NO_LISTENERS = (
     "This workspace has no listeners, so --listener-id and --k8s-namespace "
     "do not apply."
@@ -1512,11 +1531,10 @@ def _run_remote_build(
 @dataclass(frozen=True, slots=True)
 class DeployContext:
     client: HostBackendClient
-    endpoints: ControlPlaneEndpoints
     spec: BuildSpec
     verbose: bool
     selector: DeploymentSelector
-    deployment_type: str
+    agent_server_type: str | None
     secrets: list[dict[str, str]]
     tracked_packages: list[str] | None
 
@@ -1531,17 +1549,70 @@ class DeploymentSource(Protocol):
     def run(self, ctx: DeployContext) -> DeployOutcome: ...
 
 
+def _unsupported_agent_server_type(label: str) -> click.UsageError:
+    return click.UsageError(
+        f"This LangSmith data plane does not support {label} Agent Servers. "
+        "Use --agent-server-type dev instead."
+    )
+
+
+def _require_cli_builds(client: HostBackendClient) -> InstanceFlags | None:
+    flags = client.instance_flags()
+    if flags is not None and not flags.cli_builds:
+        raise click.UsageError(_CLI_BUILDS_UNSUPPORTED)
+    return flags
+
+
+def _data_plane_source_config(
+    flags: InstanceFlags, agent_server_type: str | None
+) -> dict[str, object]:
+    requested = agent_server_type or (
+        _DEFAULT_AGENT_SERVER_TYPE if flags.scale_to_zero else "dev"
+    )
+    if requested == "dev":
+        return {"resource_spec": _OPERATOR_DEFAULT_RESOURCE_SPEC}
+    if requested == "serverless":
+        if not flags.scale_to_zero:
+            raise _unsupported_agent_server_type("serverless (scale to zero)")
+        return {
+            "resource_spec": _OPERATOR_DEFAULT_RESOURCE_SPEC,
+            "deployment_type": _WIRE_DEPLOYMENT_TYPES["serverless"],
+        }
+    if not flags.dedicated:
+        raise _unsupported_agent_server_type("dedicated")
+    return {
+        "resource_spec": None,
+        "deployment_type": _WIRE_DEPLOYMENT_TYPES["dedicated"],
+    }
+
+
+def _new_deployment_source_config(
+    flags: InstanceFlags | None, agent_server_type: str | None
+) -> dict[str, object]:
+    if flags is not None:
+        return _data_plane_source_config(flags, agent_server_type)
+    requested = agent_server_type or _DEFAULT_AGENT_SERVER_TYPE
+    return {"deployment_type": _WIRE_DEPLOYMENT_TYPES.get(requested, requested)}
+
+
+def _with_hint(err: HostBackendError, hint: str) -> HostBackendError:
+    return HostBackendError(
+        f"{err.message}\n{hint}", status_code=err.status_code, detail=err.detail
+    )
+
+
 def _resolve_or_create(
     ctx: DeployContext, *, source: SourceName, not_found_message: str
 ) -> tuple[str, int]:
     if isinstance(ctx.selector, ById):
         existing, step = _fetch_deployment(ctx.client, 1, ctx.selector)
+    else:
+        existing, step = _find_deployment(
+            ctx.client, 1, ctx.selector, not_found_message=not_found_message
+        )
+    flags = _require_cli_builds(ctx.client)
+    if existing is not None:
         return existing.id, step
-    found, step = _find_deployment(
-        ctx.client, 1, ctx.selector, not_found_message=not_found_message
-    )
-    if found is not None:
-        return found.id, step
     try:
         created, step = _create_deployment(
             ctx.client,
@@ -1549,7 +1620,7 @@ def _resolve_or_create(
             name=ctx.selector.name if isinstance(ctx.selector, ByName) else None,
             agent=asdict(ctx.selector) if isinstance(ctx.selector, ByAgent) else None,
             source=source,
-            source_config={"deployment_type": ctx.deployment_type},
+            source_config=_new_deployment_source_config(flags, ctx.agent_server_type),
             source_revision_config={},
             secrets=ctx.secrets,
         )
@@ -1557,11 +1628,15 @@ def _resolve_or_create(
         if err.status_code == 400 and err.detail == (
             "Scale to zero deployments are not supported in AWS environments"
         ):
-            raise HostBackendError(
-                f"{err.message}\nUse --agent-server-type dev instead.",
-                status_code=err.status_code,
-                detail=err.detail,
-            ) from None
+            raise _with_hint(err, "Use --agent-server-type dev instead.") from None
+        if err.status_code == 400 and (err.detail or "").startswith(
+            _SOURCE_REJECTED_PREFIX
+        ):
+            raise _with_hint(err, _CLI_BUILDS_UNSUPPORTED) from None
+        if err.status_code == 400 and _RESOURCE_SPEC_REQUIRED_MARKER in (
+            err.detail or ""
+        ):
+            raise _with_hint(err, _HOST_URL_ON_A_DATA_PLANE) from None
         if _needs_a_listener(err):
             raise ListenerRequiredError(
                 "The image has to come from a registry you manage, so re-run with "
@@ -1787,7 +1862,7 @@ class CustomerRegistrySource:
         requested = self.create_only.placement
         if requested.listener_id is not None:
             return requested.on(_requested_listener(ctx.client, requested.listener_id))
-        if not (ctx.endpoints.is_cloud or requested.requested):
+        if not (ctx.client.endpoints.is_cloud or requested.requested):
             return Unplaced()
         return requested.among(_available_listeners(ctx.client))
 
@@ -1995,16 +2070,60 @@ def _create_host_backend_client(
             fg="yellow",
         )
         resolved_api_key = click.prompt("Enter LangSmith API key", hide_input=True)
-    tenant_id = env_vars.get("LANGSMITH_TENANT_ID") or os.environ.get(
-        "LANGSMITH_TENANT_ID"
+    tenant_id = (
+        env_vars.get("LANGSMITH_TENANT_ID")
+        or os.environ.get("LANGSMITH_TENANT_ID")
+        or None
     )
     langsmith_endpoint = env_vars.get("LANGSMITH_ENDPOINT") or os.environ.get(
         "LANGSMITH_ENDPOINT"
     )
-    endpoints = ControlPlaneEndpoints.resolve(host_url, langsmith_endpoint)
-    return HostBackendClient(
-        endpoints.control_plane_url, resolved_api_key, tenant_id=tenant_id
+    if host_url:
+        return HostBackendClient(host_url, resolved_api_key, tenant_id)
+    workspaces = _list_workspaces(
+        LangSmithApiClient(langsmith_api_url(langsmith_endpoint), resolved_api_key)
     )
+    target = _discover_target(workspaces, tenant_id)
+    return HostBackendClient(
+        ControlPlaneEndpoints.for_workspace(target.data_plane_url, langsmith_endpoint),
+        resolved_api_key,
+        target.tenant_id,
+        router=WorkspaceRouter(workspaces, langsmith_endpoint),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class HostTarget:
+    tenant_id: str | None
+    data_plane_url: str | None = None
+
+
+def _list_workspaces(langsmith: LangSmithApiClient) -> list[Workspace]:
+    try:
+        return langsmith.list_workspaces()
+    except HostBackendError:
+        click.secho(
+            "Could not look up this API key's LangSmith workspaces; "
+            "using the default LangSmith control plane.",
+            fg="yellow",
+            err=True,
+        )
+        return []
+
+
+def _discover_target(workspaces: list[Workspace], tenant_id: str | None) -> HostTarget:
+    if tenant_id is not None and workspaces:
+        workspaces = [w for w in workspaces if w.has_id(tenant_id)]
+        if not workspaces:
+            raise click.ClickException(
+                f"This API key has no access to workspace {tenant_id}. "
+                "Check LANGSMITH_TENANT_ID."
+            )
+    data_plane_urls = {w.data_plane_url for w in workspaces}
+    if len(data_plane_urls) != 1 or None in data_plane_urls:
+        return HostTarget(tenant_id)
+    only_workspace_id = workspaces[0].id if len(workspaces) == 1 else None
+    return HostTarget(only_workspace_id, data_plane_urls.pop())
 
 
 def _call_host_backend_with_optional_tenant(
@@ -2227,12 +2346,13 @@ def _deploy_base_options(
                 "--agent-server-type",
                 "deployment_type",
                 type=click.Choice(["serverless", "dedicated", "dev", "prod"]),
-                default="serverless",
-                show_default=True,
+                default=None,
+                show_default=_DEFAULT_AGENT_SERVER_TYPE,
                 help=(
                     "Agent Server type (used when creating a new Agent Server): "
                     "serverless (scale to zero) or dedicated (prod); "
-                    "legacy dev and prod are also accepted. "
+                    "legacy dev and prod are also accepted. Defaults to dev on "
+                    "a LangSmith data plane without scale to zero. "
                     "Ignored with --push-to."
                 ),
             ),
@@ -2417,7 +2537,7 @@ def _deploy_cmd(
     host_url: str | None,
     api_key: str | None,
     deployment_id: str | None,
-    deployment_type: str,
+    deployment_type: str | None,
     name: str | None,
     agent_id: str | None,
     environment: str | None,
@@ -2517,7 +2637,6 @@ def _deploy_cmd(
     outcome = source.run(
         DeployContext(
             client=client,
-            endpoints=client.endpoints,
             spec=BuildSpec(
                 config=config,
                 config_json=config_json,
@@ -2530,9 +2649,7 @@ def _deploy_cmd(
             ),
             verbose=verbose,
             selector=selector,
-            deployment_type={"serverless": "dev_zero", "dedicated": "prod"}.get(
-                deployment_type, deployment_type
-            ),
+            agent_server_type=deployment_type,
             secrets=secrets,
             tracked_packages=tracked_packages,
         )

@@ -20,6 +20,7 @@ from langgraph_cli.deploy import (
     CustomerRegistrySource,
     DockerBuildCommand,
     ExistingDeployment,
+    HostTarget,
     Listener,
     ManagedRegistrySource,
     OnListener,
@@ -29,9 +30,11 @@ from langgraph_cli.deploy import (
     Unplaced,
     _call_host_backend_with_optional_tenant,
     _create_host_backend_client,
+    _discover_target,
     _docker_config_for_token,
     _Emitter,
     _env_without_deployment_name,
+    _list_workspaces,
     _parse_env_from_config,
     _print_deployment_result,
     _resolve_env_path,
@@ -43,7 +46,12 @@ from langgraph_cli.deploy import (
     normalize_image_tag,
     normalize_name,
 )
-from langgraph_cli.host_backend import HostBackendClient, HostBackendError
+from langgraph_cli.host_backend import (
+    ControlPlaneEndpoints,
+    HostBackendClient,
+    HostBackendError,
+    LangSmithApiClient,
+)
 from langgraph_cli.image_reference import ImageReference
 
 
@@ -369,6 +377,24 @@ class TestCallHostBackendWithOptionalTenant:
         assert "smith.langchain.com" in exc_info.value.message
         assert seen_tenant_ids == [None, "workspace-123"]
 
+    def test_403_not_enabled_on_a_data_plane_links_langsmith(self):
+        detail = (
+            '{"detail":"LangSmith Deployment is not enabled for this organization"}'
+        )
+        client = HostBackendClient(
+            ControlPlaneEndpoints.on_data_plane(
+                "https://langsmith.customer.example", None
+            ),
+            "test-key",
+            transport=httpx.MockTransport(lambda req: httpx.Response(403, text=detail)),
+        )
+        with pytest.raises(HostBackendError, match="not enabled") as exc_info:
+            _call_host_backend_with_optional_tenant(
+                client, lambda c: c.list_deployments()
+            )
+        assert "https://smith.langchain.com/host/deployments" in exc_info.value.message
+        assert "customer.example" not in exc_info.value.message
+
     def test_other_403_re_raises_original(self):
         client = self._make_client(
             lambda req: httpx.Response(403, text='{"detail":"some other error"}')
@@ -630,6 +656,120 @@ class TestCreateHostBackendClientEndpoint:
         )
 
         assert client.base_url == "https://custom.host.com"
+
+
+DATA_PLANE = "https://langsmith.customer.example"
+OTHER_DATA_PLANE = "https://other.customer.example"
+WORKSPACE_UUID = "6f1c2a9e-0b7d-4c3e-9a51-2d8f4e6b7c10"
+
+
+def _workspaces(*workspaces: dict) -> LangSmithApiClient:
+    return LangSmithApiClient(
+        "https://api.smith.langchain.com",
+        "key",
+        transport=httpx.MockTransport(
+            lambda req: httpx.Response(200, json=list(workspaces))
+        ),
+    )
+
+
+class TestDiscoverTarget:
+    @pytest.mark.parametrize(
+        ("workspaces", "tenant_id", "expected"),
+        [
+            pytest.param(
+                [{"id": "ws-1", "data_plane_url": DATA_PLANE}],
+                None,
+                HostTarget("ws-1", DATA_PLANE),
+                id="only_workspace",
+            ),
+            pytest.param(
+                [
+                    {"id": "ws-1", "data_plane_url": DATA_PLANE},
+                    {"id": "ws-2", "data_plane_url": OTHER_DATA_PLANE},
+                ],
+                "ws-2",
+                HostTarget("ws-2", OTHER_DATA_PLANE),
+                id="tenant_id_picks_its_workspace",
+            ),
+            pytest.param(
+                [
+                    {"id": "ws-1", "data_plane_url": DATA_PLANE},
+                    {"id": WORKSPACE_UUID, "data_plane_url": OTHER_DATA_PLANE},
+                ],
+                WORKSPACE_UUID.upper(),
+                HostTarget(WORKSPACE_UUID, OTHER_DATA_PLANE),
+                id="tenant_id_matches_the_workspace_uuid_in_any_case",
+            ),
+            pytest.param(
+                [
+                    {"id": "ws-1", "data_plane_url": DATA_PLANE},
+                    {
+                        "id": "ws-2",
+                        "data_plane_url": OTHER_DATA_PLANE,
+                        "is_deleted": True,
+                    },
+                ],
+                None,
+                HostTarget("ws-1", DATA_PLANE),
+                id="only_non_deleted_workspace",
+            ),
+            pytest.param(
+                [
+                    {"id": "ws-1", "data_plane_url": DATA_PLANE},
+                    {"id": "ws-2", "data_plane_url": DATA_PLANE},
+                ],
+                None,
+                HostTarget(None, DATA_PLANE),
+                id="shared_data_plane_leaves_the_workspace_to_the_backend",
+            ),
+            pytest.param(
+                [{"id": "ws-1", "data_plane_url": None}],
+                None,
+                HostTarget(None),
+                id="saas_workspace_keeps_todays_headers",
+            ),
+            pytest.param(
+                [
+                    {"id": "ws-1", "data_plane_url": DATA_PLANE},
+                    {"id": "ws-2", "data_plane_url": None},
+                ],
+                None,
+                HostTarget(None),
+                id="mixed_data_planes_leave_the_workspace_to_the_backend",
+            ),
+            pytest.param(
+                [
+                    {"id": "ws-1", "data_plane_url": DATA_PLANE},
+                    {"id": "ws-2", "data_plane_url": OTHER_DATA_PLANE},
+                ],
+                None,
+                HostTarget(None),
+                id="different_data_planes_leave_the_workspace_to_the_backend",
+            ),
+        ],
+    )
+    def test_picks_the_workspace(self, workspaces, tenant_id, expected):
+        target = _discover_target(_workspaces(*workspaces).list_workspaces(), tenant_id)
+
+        assert target == expected
+
+    def test_failed_discovery_keeps_todays_behavior(self):
+        langsmith = LangSmithApiClient(
+            "https://api.smith.langchain.com",
+            "key",
+            transport=httpx.MockTransport(lambda req: httpx.Response(401)),
+        )
+
+        assert _discover_target(_list_workspaces(langsmith), "ws-1") == HostTarget(
+            "ws-1"
+        )
+
+    def test_a_tenant_id_outside_the_keys_workspaces_is_named(self):
+        langsmith = _workspaces({"id": "ws-1", "data_plane_url": DATA_PLANE})
+
+        with pytest.raises(click.ClickException, match="workspace unknown-ws"):
+            _discover_target(langsmith.list_workspaces(), "unknown-ws")
 
 
 class TestDockerBuildCommand:
@@ -1496,6 +1636,11 @@ DEFAULT_UPLOAD_HEADERS = {
                 "content-length": "7",
             },
             id="returned_headers_keep_a_content_type",
+        ),
+        pytest.param(
+            {"Content-Type": "application/gzip"},
+            {"content-type": "application/gzip", "content-length": "7"},
+            id="s3_signs_only_the_content_type",
         ),
     ],
 )

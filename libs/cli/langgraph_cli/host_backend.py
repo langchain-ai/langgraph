@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 from urllib.parse import urlparse
+from uuid import UUID
 
 import click
 import httpx
@@ -16,10 +17,13 @@ CLOUD_DOMAIN = "langchain.com"
 CLOUD_API_HOST = "api.smith.langchain.com"
 CLOUD_CONTROL_PLANE_HOST = "api.host.langchain.com"
 CLOUD_DASHBOARD_HOST = "smith.langchain.com"
+CLOUD_LANGSMITH_API_URL = f"https://{CLOUD_API_HOST}"
 CONTROL_PLANE_PATH = "/api-host"
+INFO_PATH = "/api/v1/info"
 LANGSMITH_API_PATHS = ("/api/v1", "/api")
 LOCAL_HOSTNAMES = ("localhost", "127.0.0.1")
 MAX_PAGE_SIZE = 100
+WORKSPACE_LOOKUP_TIMEOUT_SECONDS = 5
 SourceName = Literal["internal_docker", "internal_source", "external_docker"]
 
 
@@ -27,6 +31,7 @@ SourceName = Literal["internal_docker", "internal_source", "external_docker"]
 class ControlPlaneEndpoints:
     control_plane_url: str
     dashboard_url: str
+    info_url: str | None = None
 
     @classmethod
     def resolve(
@@ -50,21 +55,65 @@ class ControlPlaneEndpoints:
         control_plane_url = url.rstrip("/")
         hostname = urlparse(control_plane_url).hostname or ""
         if control_plane_url.endswith(CONTROL_PLANE_PATH):
-            return cls(control_plane_url, control_plane_url[: -len(CONTROL_PLANE_PATH)])
+            return cls(
+                control_plane_url, control_plane_url.removesuffix(CONTROL_PLANE_PATH)
+            )
         if hostname in LOCAL_HOSTNAMES:
             return cls(control_plane_url, control_plane_url)
         return cls(control_plane_url, _cloud_dashboard_for(hostname))
 
     @classmethod
     def from_langsmith_endpoint(cls, endpoint: str) -> ControlPlaneEndpoints:
-        parsed = urlparse(endpoint.rstrip("/"))
-        hostname = parsed.hostname or ""
+        hostname = urlparse(endpoint).hostname or ""
         if _is_cloud_host(hostname):
             return cls.from_control_plane_url(
                 f"https://{_cloud_control_plane_host_for(hostname)}"
             )
-        root = f"{parsed.scheme}://{parsed.netloc}{_without_api_path(parsed.path)}"
+        root = langsmith_api_url(endpoint)
         return cls(f"{root}{CONTROL_PLANE_PATH}", root)
+
+    @classmethod
+    def on_data_plane(
+        cls, data_plane_url: str, langsmith_endpoint: str | None
+    ) -> ControlPlaneEndpoints:
+        _require_https(data_plane_url)
+        endpoint_is_the_data_plane = (
+            langsmith_endpoint is not None
+            and urlparse(langsmith_endpoint).hostname
+            == urlparse(data_plane_url).hostname
+        )
+        dashboard_url = cls.resolve(
+            None, None if endpoint_is_the_data_plane else langsmith_endpoint
+        ).dashboard_url
+        root = data_plane_url.rstrip("/")
+        return cls(f"{root}{CONTROL_PLANE_PATH}", dashboard_url, f"{root}{INFO_PATH}")
+
+    @classmethod
+    def for_workspace(
+        cls, data_plane_url: str | None, langsmith_endpoint: str | None
+    ) -> ControlPlaneEndpoints:
+        if data_plane_url:
+            return cls.on_data_plane(data_plane_url, langsmith_endpoint)
+        return cls.resolve(None, langsmith_endpoint)
+
+
+def _require_https(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme == "https" or (
+        parsed.scheme == "http" and parsed.hostname in LOCAL_HOSTNAMES
+    ):
+        return
+    raise click.ClickException(
+        f"Refusing to send your API key to the data plane at {url}: "
+        "data plane URLs must use https."
+    )
+
+
+def langsmith_api_url(langsmith_endpoint: str | None) -> str:
+    if not langsmith_endpoint:
+        return CLOUD_LANGSMITH_API_URL
+    parsed = urlparse(langsmith_endpoint.rstrip("/"))
+    return f"{parsed.scheme}://{parsed.netloc}{_without_api_path(parsed.path)}"
 
 
 def _is_cloud_host(hostname: str) -> bool:
@@ -124,44 +173,79 @@ def _error_detail(response: httpx.Response) -> str | None:
     return detail if isinstance(detail, str) else None
 
 
-class HostBackendClient:
-    """Minimal JSON HTTP client for the host backend deployment service."""
+@dataclass(frozen=True, slots=True)
+class Workspace:
+    id: str
+    data_plane_url: str | None
 
+    @classmethod
+    def from_api(cls, workspace: dict[str, Any]) -> Workspace:
+        data_plane_url = (workspace.get("data_plane_url") or "").rstrip("/")
+        return cls(workspace["id"], data_plane_url or None)
+
+    def has_id(self, workspace_id: str) -> bool:
+        return _as_uuid(self.id) == _as_uuid(workspace_id)
+
+
+def _as_uuid(workspace_id: str) -> UUID | str:
+    try:
+        return UUID(workspace_id)
+    except ValueError:
+        return workspace_id
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceRouter:
+    workspaces: Sequence[Workspace]
+    langsmith_endpoint: str | None
+
+    def endpoints_for(self, workspace_id: str) -> ControlPlaneEndpoints | None:
+        workspace = next((w for w in self.workspaces if w.has_id(workspace_id)), None)
+        if workspace is None:
+            return None
+        return ControlPlaneEndpoints.for_workspace(
+            workspace.data_plane_url, self.langsmith_endpoint
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class InstanceFlags:
+    scale_to_zero: bool
+    dedicated: bool
+    cli_builds: bool
+
+    @classmethod
+    def from_info(cls, info: object) -> InstanceFlags:
+        flags = info.get("instance_flags") if isinstance(info, dict) else None
+        if not isinstance(flags, dict):
+            flags = {}
+        return cls(
+            scale_to_zero=flags.get("deployments_scale_to_zero_supported") is True,
+            dedicated=flags.get("deployments_dedicated_supported") is True,
+            cli_builds=flags.get("deployments_cli_builds_supported") is True,
+        )
+
+
+def _api_key_headers(api_key: str) -> dict[str, str]:
+    return {"X-Api-Key": api_key, "Accept": "application/json"}
+
+
+class _JsonClient:
     def __init__(
         self,
         base_url: str,
-        api_key: str,
-        tenant_id: str | None = None,
+        headers: dict[str, str],
+        transport: httpx.BaseTransport | None,
         *,
-        transport: httpx.BaseTransport | None = None,
+        timeout: float = 30,
+        retries: int = 3,
     ):
-        if not base_url:
-            raise click.UsageError("Host backend URL is required")
-        headers: dict[str, str] = {
-            "X-Api-Key": api_key,
-            "Accept": "application/json",
-        }
-        if tenant_id:
-            headers["X-Tenant-ID"] = tenant_id
-        self._endpoints = ControlPlaneEndpoints.from_control_plane_url(base_url)
-        self._base_url = self._endpoints.control_plane_url
         self._client = httpx.Client(
-            base_url=self._base_url,
+            base_url=base_url,
             headers=headers,
-            transport=transport or httpx.HTTPTransport(retries=3),
-            timeout=30,
+            transport=transport or httpx.HTTPTransport(retries=retries),
+            timeout=timeout,
         )
-
-    @property
-    def base_url(self) -> str:
-        return self._base_url
-
-    @property
-    def endpoints(self) -> ControlPlaneEndpoints:
-        return self._endpoints
-
-    def set_tenant(self, tenant_id: str) -> None:
-        self._client.headers["X-Tenant-ID"] = tenant_id
 
     def _request(
         self,
@@ -192,6 +276,82 @@ class HostBackendClient:
             raise HostBackendError(
                 f"Failed to decode response from {path}: {err}"
             ) from None
+
+
+class LangSmithApiClient(_JsonClient):
+    def __init__(
+        self,
+        api_url: str,
+        api_key: str,
+        *,
+        transport: httpx.BaseTransport | None = None,
+    ):
+        super().__init__(
+            api_url.rstrip("/"),
+            _api_key_headers(api_key),
+            transport,
+            timeout=WORKSPACE_LOOKUP_TIMEOUT_SECONDS,
+            retries=0,
+        )
+
+    def list_workspaces(self) -> list[Workspace]:
+        workspaces = self._request("GET", "/api/v1/workspaces")
+        if not isinstance(workspaces, list):
+            return []
+        return [
+            Workspace.from_api(workspace)
+            for workspace in workspaces
+            if isinstance(workspace, dict)
+            and isinstance(workspace.get("id"), str)
+            and not workspace.get("is_deleted")
+        ]
+
+
+class HostBackendClient(_JsonClient):
+    """Minimal JSON HTTP client for the host backend deployment service."""
+
+    def __init__(
+        self,
+        control_plane: str | ControlPlaneEndpoints,
+        api_key: str,
+        tenant_id: str | None = None,
+        *,
+        router: WorkspaceRouter | None = None,
+        transport: httpx.BaseTransport | None = None,
+    ):
+        if not control_plane:
+            raise click.UsageError("Host backend URL is required")
+        headers = _api_key_headers(api_key)
+        if tenant_id:
+            headers["X-Tenant-ID"] = tenant_id
+        self._endpoints = (
+            control_plane
+            if isinstance(control_plane, ControlPlaneEndpoints)
+            else ControlPlaneEndpoints.from_control_plane_url(control_plane)
+        )
+        self._router = router or WorkspaceRouter((), None)
+        super().__init__(self._endpoints.control_plane_url, headers, transport)
+
+    @property
+    def base_url(self) -> str:
+        return self._endpoints.control_plane_url
+
+    @property
+    def endpoints(self) -> ControlPlaneEndpoints:
+        return self._endpoints
+
+    def set_tenant(self, tenant_id: str) -> None:
+        endpoints = self._router.endpoints_for(tenant_id)
+        if endpoints is not None:
+            self._endpoints = endpoints
+            self._client.base_url = endpoints.control_plane_url
+        self._client.headers["X-Tenant-ID"] = tenant_id
+
+    def instance_flags(self) -> InstanceFlags | None:
+        """Data plane capabilities, or None when the host backend is not on one."""
+        if self._endpoints.info_url is None:
+            return None
+        return InstanceFlags.from_info(self._request("GET", self._endpoints.info_url))
 
     def create_deployment(
         self,
