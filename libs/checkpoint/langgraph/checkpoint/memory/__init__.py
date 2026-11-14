@@ -7,7 +7,12 @@ import random
 import shutil
 from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
-from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
+from contextlib import (
+    AbstractAsyncContextManager,
+    AbstractContextManager,
+    ExitStack,
+    suppress,
+)
 from types import TracebackType
 from typing import Any
 
@@ -662,14 +667,16 @@ class PersistentDict(defaultdict):
         if self.flag == "r":
             return
         tempname = self.filename + ".tmp"
-        fileobj = open(tempname, "wb" if self.format == "pickle" else "w")
         try:
-            self.dump(fileobj)
+            with open(tempname, "wb" if self.format == "pickle" else "w") as fileobj:
+                self.dump(fileobj)
         except Exception:
-            os.remove(tempname)
+            # Close the handle first (via the `with` block) so Windows can
+            # delete the temp file. Suppress cleanup errors so the original
+            # serialization exception is what the caller sees.
+            with suppress(OSError):
+                os.remove(tempname)
             raise
-        finally:
-            fileobj.close()
         shutil.move(tempname, self.filename)  # atomic commit
         if self.mode is not None:
             os.chmod(self.filename, self.mode)

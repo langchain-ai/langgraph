@@ -1,5 +1,8 @@
 import asyncio
 import logging
+import os
+from pathlib import Path
+from threading import Lock
 from typing import Any
 
 import pytest
@@ -12,7 +15,7 @@ from langgraph.checkpoint.base import (
     create_checkpoint,
     empty_checkpoint,
 )
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemorySaver, PersistentDict
 from langgraph.checkpoint.serde.jsonplus import (
     JsonPlusSerializer,
     _warned_blocked_types,
@@ -720,3 +723,75 @@ class TestPreDeltaBlobTerminator:
         assert "PRE-DELTA-WRITE" in values
         # And the pending write at the target is never folded in.
         assert "PENDING-AT-TARGET" not in values
+
+
+def _remove_only_if_closed(handles: list[Any], real_remove: Any) -> Any:
+    """Mimic Windows: deleting a still-open temp file raises PermissionError."""
+
+    def _remove(name: str, *args: Any, **kwargs: Any) -> None:
+        if any(
+            getattr(handle, "name", None) == name and not handle.closed
+            for handle in handles
+        ):
+            raise PermissionError(
+                32,
+                "The process cannot access the file because it is being used by another process",
+            )
+        real_remove(name)
+
+    return _remove
+
+
+def test_persistent_dict_sync_raises_original_error_and_removes_tempfile(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    path = tmp_path / "checkpoint.pkl"
+    store = PersistentDict(filename=str(path))
+    store["lock"] = Lock()
+
+    handles: list[Any] = []
+    real_open = open
+
+    def tracking_open(*args: Any, **kwargs: Any) -> Any:
+        fileobj = real_open(*args, **kwargs)
+        handles.append(fileobj)
+        return fileobj
+
+    monkeypatch.setattr("builtins.open", tracking_open)
+    monkeypatch.setattr(os, "remove", _remove_only_if_closed(handles, os.remove))
+
+    with pytest.raises(TypeError, match="cannot pickle"):
+        store.sync()
+
+    assert not path.exists()
+    assert not Path(str(path) + ".tmp").exists()
+
+
+def test_persistent_dict_sync_failure_preserves_existing_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    path = tmp_path / "checkpoint.pkl"
+    store = PersistentDict(filename=str(path))
+    store["ok"] = 1
+    store.sync()
+
+    store["lock"] = Lock()
+    handles: list[Any] = []
+    real_open = open
+
+    def tracking_open(*args: Any, **kwargs: Any) -> Any:
+        fileobj = real_open(*args, **kwargs)
+        handles.append(fileobj)
+        return fileobj
+
+    monkeypatch.setattr("builtins.open", tracking_open)
+    monkeypatch.setattr(os, "remove", _remove_only_if_closed(handles, os.remove))
+
+    with pytest.raises(TypeError, match="cannot pickle"):
+        store.sync()
+
+    assert not Path(str(path) + ".tmp").exists()
+    restored = PersistentDict(filename=str(path))
+    restored.load()
+    assert restored["ok"] == 1
+    assert "lock" not in restored
