@@ -2,6 +2,7 @@ import os
 import pathlib
 import re
 import shlex
+import tarfile
 from dataclasses import dataclass
 
 try:
@@ -13,6 +14,7 @@ import click
 import pathspec
 
 from langgraph_cli._ignore import (
+    _ALWAYS_EXCLUDE_NAMES,
     _build_dockerignore_negation_hints,
     _build_ignore_spec,
     _is_always_excluded,
@@ -517,6 +519,56 @@ def _uv_lock_package_copy_items(
     return iter_entries(plan.project_root)
 
 
+_COMPRESSION_MAGIC = (b"\x1f\x8b", b"BZh", b"\xfd7zXZ\x00", b"\x28\xb5\x2f\xfd")
+
+
+def _is_local_archive(path: pathlib.Path) -> bool:
+    """Whether Docker's `ADD` would auto-extract this local file."""
+    with path.open("rb") as f:
+        # Match gzip/bzip2/xz/zstd by magic, since tarfile skips codecs Python lacks.
+        if f.read(6).startswith(_COMPRESSION_MAGIC):
+            return True
+        f.seek(0)
+        return tarfile.is_tarfile(f)
+
+
+def _root_copy_is_equivalent(
+    plan: UvLockPlan,
+    config_root: pathlib.Path,
+    config: Config,
+    copy_items: tuple[tuple[pathlib.PurePosixPath, pathlib.PurePosixPath], ...],
+) -> bool:
+    """Whether one `ADD .` produces the same files as the per-entry ADDs."""
+    root = plan.project_root
+    # Only the build context's .dockerignore applies, and nested members need the walk.
+    if root != config_root or any(root in m.parents for m in plan.all_workspace_roots):
+        return False
+
+    ignore_file = root / ".dockerignore"
+    text = ignore_file.read_text(encoding="utf-8") if ignore_file.is_file() else ""
+    patterns = {s for line in text.splitlines() if (s := line.strip()) and s[0] != "#"}
+    # Negations need the walk; Docker reads `[...]` and inner `**` differently.
+    if any(
+        p.startswith("!") or "[" in p or "**" in p.removeprefix("**/") for p in patterns
+    ):
+        return False
+    literals = {p.lstrip("/").removeprefix("./").rstrip("/") for p in patterns}
+    # Docker doesn't apply the CLI's built-in exclusions, so .dockerignore must.
+    if any(
+        c.name in _ALWAYS_EXCLUDE_NAMES
+        and c.is_dir()
+        and not {c.name, f"**/{c.name}"} & literals
+        for c in root.iterdir()
+    ):
+        return False
+    # Per-entry ADD follows symlinks and extracts archives; `ADD .` does neither.
+    paths = [root / source for source, _ in copy_items]
+    if any(p.is_symlink() or (p.is_file() and _is_local_archive(p)) for p in paths):
+        return False
+    # Custom lines that touch /deps could make the destination merge differ.
+    return not any("/deps" in line for line in config["dockerfile_lines"])
+
+
 def _resolve_uv_lock_container_path(
     host_path: pathlib.Path, plan: UvLockPlan
 ) -> pathlib.PurePosixPath | None:
@@ -872,6 +924,7 @@ def python_config_to_docker_uv_lock(
     api_version: str | None = None,
     *,
     build_tools_to_uninstall: tuple[str, ...] | None,
+    single_root_copy: bool = False,
 ) -> tuple[str, dict[str, str]]:
     from langgraph_cli.config import (
         DEFAULT_NODE_VERSION,
@@ -1023,9 +1076,17 @@ def python_config_to_docker_uv_lock(
     for package in plan.install_order:
         package_label = package.root.relative_to(plan.project_root).as_posix() or "."
         docker_plan.add_raw(f"# -- Adding workspace package {package_label} --")
-        for source, destination in _uv_lock_package_copy_items(
-            package, plan, ignore_spec
+        copy_items = _uv_lock_package_copy_items(package, plan, ignore_spec)
+        # Only for immediate builds: `ADD .` copies the tree as it is at build time.
+        if (
+            single_root_copy
+            and package.root == plan.project_root
+            and _root_copy_is_equivalent(plan, config_root, config, copy_items)
         ):
+            copy_items = (
+                (pathlib.PurePosixPath("."), plan.container_roots[package.root]),
+            )
+        for source, destination in copy_items:
             docker_plan.add_raw(copy_from_project_root(source, destination.as_posix()))
         docker_plan.add_instruction(
             "WORKDIR", plan.container_roots[package.root].as_posix()
