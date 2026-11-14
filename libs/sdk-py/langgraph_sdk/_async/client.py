@@ -15,6 +15,7 @@ from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.runs import RunsClient
 from langgraph_sdk._async.store import StoreClient
 from langgraph_sdk._async.threads import ThreadsClient
+from langgraph_sdk._shared.retry import AsyncRetryTransport
 from langgraph_sdk._shared.types import TimeoutTypes
 from langgraph_sdk._shared.utilities import (
     NOT_PROVIDED,
@@ -126,7 +127,7 @@ def get_client(
                 _registered_transports.append(transport)
 
     if transport is None:
-        transport = httpx.AsyncHTTPTransport(retries=5)
+        transport = AsyncRetryTransport(httpx.AsyncHTTPTransport(retries=5))
     client = httpx.AsyncClient(
         base_url=url,
         transport=transport,
