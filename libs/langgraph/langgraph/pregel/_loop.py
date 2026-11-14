@@ -1063,7 +1063,8 @@ class PregelLoop:
                             )
                     self.config[CONF][CONFIG_KEY_RESUME_MAP] = resume
                 else:
-                    if len(pending := self._pending_interrupts()) > 1:
+                    pending = self._pending_interrupts()
+                    if len(pending) > 1:
                         message = (
                             "When there are multiple pending interrupts, you must specify the interrupt id when resuming. "
                             "Docs: https://docs.langchain.com/oss/python/langgraph/interrupts#handling-multiple-interrupts."
@@ -1073,6 +1074,29 @@ class PregelLoop:
                                 message, reason="ambiguous", pending_ids=sorted(pending)
                             )
                         raise RuntimeError(message)
+                    if (
+                        strict
+                        and not pending
+                        and not cast(Command, self.input).goto
+                        and (
+                            not self.checkpoint["channel_versions"]
+                            or not prepare_next_tasks(
+                                self.checkpoint,
+                                self.checkpoint_pending_writes,
+                                self.nodes,
+                                self.channels,
+                                self.managed,
+                                self.config,
+                                self.step,
+                                self.stop,
+                                for_execution=False,
+                            )
+                        )
+                    ):
+                        raise UnknownInterruptError(
+                            "No interrupt or breakpoint is pending",
+                            reason="not_pending",
+                        )
 
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
             # group writes by task ID

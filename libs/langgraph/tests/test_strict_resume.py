@@ -203,6 +203,83 @@ def test_one_value_resumes_a_static_breakpoint(
     assert graph.invoke(Command(resume="go"), config) == {"log": ["a"]}
 
 
+def test_one_value_is_refused_for_a_thread_that_never_started(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = (
+        StateGraph(State)
+        .add_node("ask", lambda state: {"log": [interrupt("approve?")]})
+        .add_edge(START, "ask")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = _config()
+
+    with pytest.raises(
+        UnknownInterruptError, match="No interrupt or breakpoint is pending"
+    ) as refused:
+        graph.invoke(Command(resume="rejected"), config)
+
+    assert (
+        refused.value.reason,
+        refused.value.interrupt_ids,
+        refused.value.pending_ids,
+    ) == ("not_pending", (), ())
+    assert list(sync_checkpointer.list(config)) == []
+    state = graph.get_state(config)
+    assert (state.values, state.next, state.interrupts) == ({}, (), ())
+
+
+def test_one_value_is_refused_after_the_thread_has_finished(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = (
+        StateGraph(State)
+        .add_node("ask", lambda state: {"log": [interrupt("approve?")]})
+        .add_edge(START, "ask")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = _config()
+    graph.invoke({"log": []}, config)
+    graph.invoke(Command(resume="approved"), config)
+    before = graph.get_state(config)
+    checkpoints = len(list(sync_checkpointer.list(config)))
+
+    with pytest.raises(
+        UnknownInterruptError, match="No interrupt or breakpoint is pending"
+    ) as refused:
+        graph.invoke(Command(resume="rejected"), config)
+
+    assert (
+        refused.value.reason,
+        refused.value.interrupt_ids,
+        refused.value.pending_ids,
+    ) == ("not_pending", (), ())
+    assert len(list(sync_checkpointer.list(config))) == checkpoints
+    after = graph.get_state(config)
+    assert (after.values, after.next, after.interrupts) == (
+        before.values,
+        before.next,
+        before.interrupts,
+    )
+
+
+def test_one_value_with_goto_is_allowed_when_nothing_is_pending(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    graph = (
+        StateGraph(State)
+        .add_node("a", lambda state: {"log": ["a"]})
+        .add_node("b", lambda state: {"log": ["b"]})
+        .add_edge(START, "a")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = _config()
+    graph.invoke({"log": []}, config)
+
+    result = graph.invoke(Command(resume="go", goto="b"), config)
+    assert result["log"] == ["a", "b"]
+
+
 def test_without_strict_mode_nothing_changes(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:

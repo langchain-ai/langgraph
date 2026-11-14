@@ -161,8 +161,10 @@ class UnknownInterruptError(Exception):
     `pending_ids` lists the interrupts still waiting for an answer. The error is
     raised before anything is written, so they can still be answered.
 
-    A single value with no interrupt pending is accepted, because it resumes a
-    graph paused at a static breakpoint (`interrupt_before` or `interrupt_after`).
+    A single value with no interrupt pending is accepted only when the graph has
+    pending next tasks (such as a static breakpoint via `interrupt_before` or
+    `interrupt_after`); otherwise `UnknownInterruptError` with
+    `reason="not_pending"` is raised.
 
     Each `interrupt()` call in a task has its own id, so an answer retried after
     the task asked its next question is refused instead of answering that
