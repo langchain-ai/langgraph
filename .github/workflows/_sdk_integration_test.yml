@@ -28,7 +28,7 @@ jobs:
       - name: Set up Python
         uses: ./.github/actions/uv_setup
         with:
-          python-version: "3.13"
+          python-version: "3.14"
           cache-suffix: sdk-py-integration
           working-directory: libs/sdk-py
 
