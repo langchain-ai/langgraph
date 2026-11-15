@@ -6,10 +6,14 @@ import re
 import sys
 import typing
 import uuid
+import warnings
+from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
+from threading import Event
 from typing import Annotated, Literal, Optional
 
 import pydantic
+import pytest
 import typing_extensions
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from pydantic import (
@@ -25,12 +29,130 @@ from pydantic import (
     model_validator,
 )
 
-from langgraph._internal._pydantic import is_supported_by_pydantic
+from langgraph._internal._pydantic import create_model, is_supported_by_pydantic
 from langgraph.constants import END, START
 from langgraph.func import entrypoint, task
 from langgraph.graph.state import StateGraph
 from langgraph.types import Command, Interrupt, interrupt
 from tests.any_str import AnyStr
+
+
+@pytest.mark.parametrize("root_model", [False, True], ids=["fields", "root"])
+@pytest.mark.parametrize("default", [None, []], ids=["cached", "uncached"])
+def test_create_model_preserves_concurrent_warnings(root_model, default) -> None:
+    schema_started = Event()
+    warning_emitted = Event()
+
+    class PausedSchema:
+        @classmethod
+        def __get_pydantic_core_schema__(cls, source, handler):
+            schema_started.set()
+            assert warning_emitted.wait(timeout=10)
+            return handler(source)
+
+    type_ = Annotated[list[int] | None, PausedSchema]
+    kwargs = (
+        {"root": (type_, default)}
+        if root_model
+        else {"field_definitions": {"model_values": (type_, default)}}
+    )
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(create_model, "ConcurrentSchema", **kwargs)
+            try:
+                assert schema_started.wait(timeout=10)
+                warnings.warn("unrelated concurrent warning", UserWarning)
+                warnings.simplefilter("error", DeprecationWarning)
+            finally:
+                warning_emitted.set()
+            model = future.result(timeout=10)
+
+        assert [str(warning.message) for warning in captured] == [
+            "unrelated concurrent warning"
+        ]
+        with pytest.raises(DeprecationWarning, match="retained warning filter"):
+            warnings.warn("retained warning filter", DeprecationWarning)
+
+    instance = model.model_validate(["1"] if root_model else {"model_values": ["1"]})
+    assert instance.model_dump() == ([1] if root_model else {"model_values": [1]})
+
+
+@pytest.mark.parametrize("default", [0, []], ids=["cached", "uncached"])
+def test_create_model_model_fields(default) -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        model = create_model(
+            "ModelFields",
+            field_definitions={
+                "model_id": (int, ...),
+                "model_name": (str, "default"),
+                "model_dump": (str, ...),
+                "_private": (int, 0),
+                "model_value": (int | list[int], default),
+            },
+        )
+
+    instance = model.model_validate(
+        {"model_id": "1", "model_dump": "data", "_private": "2"}
+    )
+    assert model.__name__ == "ModelFields"
+    assert instance.model_dump(by_alias=True) == {
+        "model_id": 1,
+        "model_name": "default",
+        "model_dump": "data",
+        "_private": 2,
+        "model_value": default,
+    }
+    with pytest.raises(pydantic.ValidationError, match="model_id"):
+        model.model_validate({"model_id": "invalid", "model_dump": "data"})
+    with pytest.raises(pydantic.ValidationError, match="frozen_instance"):
+        instance.model_id = 2
+
+    schema = model.model_json_schema()
+    assert schema["title"] == "ModelFields"
+    assert schema["required"] == ["model_id", "model_dump"]
+    assert set(schema["properties"]) == {
+        "model_id",
+        "model_name",
+        "model_dump",
+        "_private",
+        "model_value",
+    }
+    assert schema["properties"]["model_dump"] == {
+        "title": "Model Dump",
+        "type": "string",
+    }
+    assert schema["properties"]["model_value"]["default"] == default
+
+
+@pytest.mark.parametrize("default", [0, []], ids=["cached", "uncached"])
+def test_create_root_model_defaults(default) -> None:
+    model = create_model("RootSchema", root=(int | list[int], default))
+    assert model.__name__ == "RootSchema"
+    assert model().model_dump() == default
+    assert model.model_validate("2").model_dump() == 2
+    schema = model.model_json_schema()
+    assert schema == {
+        "anyOf": [{"type": "integer"}, {"items": {"type": "integer"}, "type": "array"}],
+        "default": default,
+        "title": "RootSchema",
+    }
+    with pytest.warns(pydantic.PydanticDeprecatedSince20, match="deprecated"):
+        assert model.schema() == schema
+
+
+def test_create_model_preserves_schema_warnings() -> None:
+    class WarningSchema:
+        @classmethod
+        def __get_pydantic_core_schema__(cls, source, handler):
+            warnings.warn("custom schema warning", UserWarning)
+            return handler(source)
+
+    with pytest.warns(UserWarning, match="custom schema warning"):
+        create_model(
+            "WarningSchema", field_definitions={"model_value": (WarningSchema, ...)}
+        )
 
 
 def test_is_supported_by_pydantic() -> None:
