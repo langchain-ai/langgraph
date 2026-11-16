@@ -522,13 +522,8 @@ def _uv_lock_root_copy_is_whole_context(
     config_root: pathlib.Path,
     copy_items: tuple[tuple[pathlib.PurePosixPath, pathlib.PurePosixPath], ...],
 ) -> bool:
-    """Whether a single `ADD .` copies exactly the entries in `copy_items`.
-
-    Each ADD is its own image layer, and layer count dominates build time on
-    remote BuildKit. One ADD is only equivalent when the project root is the
-    build context, it has no other workspace members, and every top-level
-    entry the walk skipped is also dropped by the context's `.dockerignore`.
-    """
+    """Each ADD is a layer, and layer count dominates remote BuildKit build time.
+    One ADD is only safe when everything the walk skipped is also outside the build context."""
     if plan.project_root.resolve() != config_root or (
         plan.all_workspace_roots - {plan.project_root}
     ):
