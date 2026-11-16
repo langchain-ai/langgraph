@@ -1,0 +1,29 @@
+libs/cli/README.md
+  s_9929d82d7a093b::t_810426aeb6f0ce 104-111,130-134
+libs/cli/langgraph_cli/deploy.py
+  s_9929d82d7a093b::t_b5e79a182143b9 37-38,1574,1578-1581,1604-1609,1856,2064-2067,2072-2075,2077,2079-2082,2092,2094,2096-2105,2107
+libs/cli/langgraph_cli/host_backend.py
+  s_9929d82d7a093b::t_8f82f02e448b77 5-6,9,26,34,58-59,78-110,187-210,240-242,247-248,290-296,316,320,323,328-334,338,345-348,353-355
+libs/cli/tests/unit_tests/cli/test_deploy_command.py
+  s_9929d82d7a093b::t_e8c79425dbba19 72,122,148-151,232,1641,1653-1659,1662-1663,1665-1667,1854-1880,1958-2005
+libs/cli/tests/unit_tests/test_deploy_helpers.py
+  s_9929d82d7a093b::t_eb34a7b8cf3416 37,50,384-387,663,695-703,753,764-766,772
+libs/cli/tests/unit_tests/test_host_backend.py
+  s_9929d82d7a093b::t_3796f5667486d2 3,14,820-824,828,831,835-837,842-923,931-934,978-981
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "efa01490e285221b79fe5cb62dd2e3e507e6d299",
+  "prompts": {},
+  "sessions": {
+    "s_9929d82d7a093b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "eea50cb2-d32f-4abf-98b0-ea2c15e7cc89",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+libs/cli/README.md
+  s_9929d82d7a093b::t_f609e658cad420 106-108
+libs/cli/langgraph_cli/deploy.py
+  s_9929d82d7a093b::t_f88c9408f7b72f 2091,2097,2099-2105,2108,2136-2150
+libs/cli/tests/unit_tests/cli/test_deploy_command.py
+  s_9929d82d7a093b::t_a2f43394f5b14e 118,190-192,1879-1920
+libs/cli/tests/unit_tests/test_deploy_helpers.py
+  s_9929d82d7a093b::t_0bca484069672f 720-735,740,751,753-754,756-757
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "52be12d986937465f71b2a42c53ee09004de30dd",
+  "prompts": {},
+  "sessions": {
+    "s_9929d82d7a093b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "eea50cb2-d32f-4abf-98b0-ea2c15e7cc89",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  }
+}

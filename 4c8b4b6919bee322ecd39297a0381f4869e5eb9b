@@ -1,0 +1,25 @@
+libs/cli/langgraph_cli/deploy.py
+  s_9929d82d7a093b::t_72d2c50514c31c 119-123,1636-1639
+libs/cli/langgraph_cli/host_backend.py
+  s_9929d82d7a093b::t_b103168fc5155d 6,58-60,88-89
+libs/cli/tests/unit_tests/cli/test_deploy_command.py
+  s_9929d82d7a093b::t_b7617902e2d8a3 1865,1868-1874,1879-1882
+libs/cli/tests/unit_tests/test_host_backend.py
+  s_9929d82d7a093b::t_4d49c70d6e95ec 864,867,869-870,873-874,876-882
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4c8b4b6919bee322ecd39297a0381f4869e5eb9b",
+  "prompts": {},
+  "sessions": {
+    "s_9929d82d7a093b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "eea50cb2-d32f-4abf-98b0-ea2c15e7cc89",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  }
+}
