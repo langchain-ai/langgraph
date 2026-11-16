@@ -89,6 +89,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         subgraphs: bool,
         *,
         parent_ns: tuple[str, ...] | None = None,
+        allowed_keys: Sequence[str] | None = None,
     ) -> None:
         """Configure the handler to stream messages from LLMs and nodes.
 
@@ -119,6 +120,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         self.metadata: dict[UUID, Meta] = {}
         self.seen: set[int | str] = set()
         self.parent_ns = parent_ns
+        self.allowed_keys = allowed_keys
 
     def _emit(self, meta: Meta, message: BaseMessage, *, dedupe: bool = False) -> None:
         if dedupe and message.id in self.seen:
@@ -132,10 +134,18 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
     def _find_and_emit_messages(self, meta: Meta, response: Any) -> None:
         if isinstance(response, BaseMessage):
             self._emit(meta, response, dedupe=True)
+        elif isinstance(response, Mapping) and self.allowed_keys:
+            for k, v in response.items():
+                if k in self.allowed_keys:
+                    self._find_and_emit_messages(meta, v)
         elif isinstance(response, Sequence):
             for value in response:
                 if isinstance(value, BaseMessage):
                     self._emit(meta, value, dedupe=True)
+                elif isinstance(value, Mapping) and self.allowed_keys:
+                    self._find_and_emit_messages(meta, value)
+                elif not isinstance(value, BaseMessage):
+                    self._find_and_emit_messages(meta, value)
         else:
             for value in _state_values(response):
                 if isinstance(value, BaseMessage):
@@ -322,6 +332,7 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
         subgraphs: bool,
         *,
         parent_ns: tuple[str, ...] | None = None,
+        allowed_keys: Sequence[str] | None = None,
     ) -> None:
         super().__init__(stream, subgraphs, parent_ns=parent_ns)
         self._streamed_run_ids: set[UUID] = set()

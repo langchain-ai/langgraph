@@ -2732,6 +2732,7 @@ class Pregel(
         *,
         context: ContextT | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        stream_messages_keys: Sequence[str] | None = None,
         print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -2752,6 +2753,7 @@ class Pregel(
         *,
         context: ContextT | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        stream_messages_keys: Sequence[str] | None = None,
         print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -2771,6 +2773,7 @@ class Pregel(
         *,
         context: ContextT | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        stream_messages_keys: Sequence[str] | None = None,
         print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -2943,7 +2946,7 @@ class Pregel(
                     if use_stream_messages_v2
                     else StreamMessagesHandler
                 )
-                stream_handlers.append(messages_handler_cls(stream.put, subgraphs))
+                stream_handlers.append(messages_handler_cls(stream.put, subgraphs, allowed_keys=stream_messages_keys))
 
             # set up tools stream mode
             if "tools" in stream_modes:
@@ -3145,6 +3148,7 @@ class Pregel(
         *,
         context: ContextT | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        stream_messages_keys: Sequence[str] | None = None,
         print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -3165,6 +3169,7 @@ class Pregel(
         *,
         context: ContextT | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        stream_messages_keys: Sequence[str] | None = None,
         print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -3184,6 +3189,7 @@ class Pregel(
         *,
         context: ContextT | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        stream_messages_keys: Sequence[str] | None = None,
         print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -3367,7 +3373,7 @@ class Pregel(
                     if use_stream_messages_v2
                     else StreamMessagesHandler
                 )
-                stream_handlers.append(messages_handler_cls(stream_put, subgraphs))
+                stream_handlers.append(messages_handler_cls(stream_put, subgraphs, allowed_keys=stream_messages_keys))
 
             # set up tools stream mode
             if "tools" in stream_modes:
