@@ -517,6 +517,35 @@ def _uv_lock_package_copy_items(
     return iter_entries(plan.project_root)
 
 
+def _uv_lock_root_copy_is_whole_context(
+    plan: UvLockPlan,
+    config_root: pathlib.Path,
+    copy_items: tuple[tuple[pathlib.PurePosixPath, pathlib.PurePosixPath], ...],
+) -> bool:
+    """Whether a single `ADD .` copies exactly the entries in `copy_items`.
+
+    Each ADD is its own image layer, and layer count dominates build time on
+    remote BuildKit. One ADD is only equivalent when the project root is the
+    build context, it has no other workspace members, and every top-level
+    entry the walk skipped is also dropped by the context's `.dockerignore`.
+    """
+    if plan.project_root.resolve() != config_root or (
+        plan.all_workspace_roots - {plan.project_root}
+    ):
+        return False
+    if not copy_items or any(len(source.parts) != 1 for source, _ in copy_items):
+        return False
+    copied = {source.as_posix() for source, _ in copy_items}
+    context_ignore = _build_ignore_spec(
+        plan.project_root, include_gitignore=False, include_always_excluded=False
+    )
+    return all(
+        context_ignore.match_file(f"{child.name}/" if child.is_dir() else child.name)
+        for child in plan.project_root.iterdir()
+        if child.name not in copied
+    )
+
+
 def _resolve_uv_lock_container_path(
     host_path: pathlib.Path, plan: UvLockPlan
 ) -> pathlib.PurePosixPath | None:
@@ -1023,9 +1052,14 @@ def python_config_to_docker_uv_lock(
     for package in plan.install_order:
         package_label = package.root.relative_to(plan.project_root).as_posix() or "."
         docker_plan.add_raw(f"# -- Adding workspace package {package_label} --")
-        for source, destination in _uv_lock_package_copy_items(
-            package, plan, ignore_spec
+        copy_items = _uv_lock_package_copy_items(package, plan, ignore_spec)
+        if package.root == plan.project_root and _uv_lock_root_copy_is_whole_context(
+            plan, config_root, copy_items
         ):
+            copy_items = (
+                (pathlib.PurePosixPath("."), plan.container_roots[package.root]),
+            )
+        for source, destination in copy_items:
             docker_plan.add_raw(copy_from_project_root(source, destination.as_posix()))
         docker_plan.add_instruction(
             "WORKDIR", plan.container_roots[package.root].as_posix()

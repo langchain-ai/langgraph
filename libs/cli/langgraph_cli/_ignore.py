@@ -36,16 +36,21 @@ class _NegatedDockerignoreHints:
 
 
 def _build_ignore_spec(
-    directory: pathlib.Path, *, include_gitignore: bool = True
+    directory: pathlib.Path,
+    *,
+    include_gitignore: bool = True,
+    include_always_excluded: bool = True,
 ) -> pathspec.PathSpec:
     """Build a PathSpec combining built-in exclusions with ignore files.
 
-    Always excludes common non-source directories (`_ALWAYS_EXCLUDE`). On top
-    of that, patterns from `.dockerignore` are merged in. `.gitignore` patterns
-    are optional because some callers need Docker build-context semantics,
-    while archive creation wants both files.
+    Excludes common non-source directories (`_ALWAYS_EXCLUDE`) unless
+    `include_always_excluded` is False, which leaves only what Docker itself
+    drops from the build context. On top of that, patterns from
+    `.dockerignore` are merged in. `.gitignore` patterns are optional because
+    some callers need Docker build-context semantics, while archive creation
+    wants both files.
     """
-    lines: list[str] = list(_ALWAYS_EXCLUDE)
+    lines: list[str] = list(_ALWAYS_EXCLUDE) if include_always_excluded else []
     ignore_files = [".dockerignore"]
     if include_gitignore:
         ignore_files.append(".gitignore")
