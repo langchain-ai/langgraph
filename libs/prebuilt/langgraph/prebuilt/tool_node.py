@@ -971,7 +971,7 @@ class ToolNode(RunnableCallable):
                     # tool argument: fail the run so the interrupt can be answered again.
                     raise
                 # Filter out errors for injected arguments
-                injected = self._injected_args.get(call["name"])
+                injected = self._get_injected_args(call["name"], tool)
                 filtered_errors = _filter_validation_errors(exc, injected)
                 # Use original call["args"] without injected values for error reporting
                 raise ToolInvocationError(
@@ -1131,7 +1131,7 @@ class ToolNode(RunnableCallable):
                     # tool argument: fail the run so the interrupt can be answered again.
                     raise
                 # Filter out errors for injected arguments
-                injected = self._injected_args.get(call["name"])
+                injected = self._get_injected_args(call["name"], tool)
                 filtered_errors = _filter_validation_errors(exc, injected)
                 # Use original call["args"] without injected values for error reporting
                 raise ToolInvocationError(
@@ -1346,6 +1346,17 @@ class ToolNode(RunnableCallable):
             return cast("dict[str, Any]", read(list(channels), True))
         return input
 
+    def _get_injected_args(
+        self, name: str, tool: BaseTool | None = None
+    ) -> _InjectedArgs | None:
+        registered_tool = self._tools_by_name.get(name)
+        if tool is not None and tool is not registered_tool:
+            return _get_all_injected_args(tool)
+        injected = self._injected_args.get(name)
+        if not injected and tool is not None:
+            injected = _get_all_injected_args(tool)
+        return injected
+
     def _inject_tool_args(
         self,
         tool_call: ToolCall,
@@ -1385,12 +1396,7 @@ class ToolNode(RunnableCallable):
             This method is called automatically during tool execution. It should not
             be called from outside the `ToolNode`.
         """
-        injected = self._injected_args.get(tool_call["name"])
-        if not injected and tool is not None:
-            # For dynamically registered tools (e.g., added via middleware's
-            # wrap_tool_call), compute injected args on-the-fly since they
-            # were not present during ToolNode initialization.
-            injected = _get_all_injected_args(tool)
+        injected = self._get_injected_args(tool_call["name"], tool)
         if not injected:
             return tool_call
 

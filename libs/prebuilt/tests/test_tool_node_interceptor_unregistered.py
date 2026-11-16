@@ -1,16 +1,18 @@
 """Test tool node interceptor handling of unregistered tools."""
 
 from collections.abc import Awaitable, Callable
+from typing import Annotated, Any
 from unittest.mock import Mock
 
 import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.tools import tool as dec_tool
+from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.store.base import BaseStore
 from langgraph.types import Command
 
-from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt import InjectedState, ToolNode
 from langgraph.prebuilt.tool_node import ToolCallRequest
 
 pytestmark = pytest.mark.anyio
@@ -802,3 +804,71 @@ async def test_graceful_failure_even_when_handle_errors_disabled_async() -> None
         result[0].content
         == "Error: missing is not a valid tool, try one of [registered_tool]."
     )
+
+
+def test_replacement_tool_same_name_injected_state_sync() -> None:
+    """Test that replacing a registered tool with same-name tool uses replacement's injected args in sync execution."""
+
+    class State(MessagesState):
+        topic: str
+
+    @dec_tool("lookup")
+    def original() -> str:
+        """Original tool implementation."""
+        return "original"
+
+    @dec_tool("lookup")
+    def replacement(topic: Annotated[str, InjectedState("topic")]) -> str:
+        """Replacement tool implementation."""
+        return topic
+
+    def wrap(request: ToolCallRequest, execute: Any) -> Any:
+        return execute(request.override(tool=replacement))
+
+    node = ToolNode([original], wrap_tool_call=wrap)
+    graph = StateGraph(State).add_node("tools", node).add_edge(START, "tools").compile()
+
+    call = {"name": "lookup", "args": {}, "id": "lookup-1"}
+    result = graph.invoke(
+        {
+            "topic": "graph topic",
+            "messages": [AIMessage(content="", tool_calls=[call])],
+        }
+    )
+    msg = result["messages"][-1]
+    assert msg.status == "success"
+    assert msg.content == "graph topic"
+
+
+async def test_replacement_tool_same_name_injected_state_async() -> None:
+    """Test that replacing a registered tool with same-name tool uses replacement's injected args in async execution."""
+
+    class State(MessagesState):
+        topic: str
+
+    @dec_tool("lookup")
+    def original() -> str:
+        """Original tool implementation."""
+        return "original"
+
+    @dec_tool("lookup")
+    def replacement(topic: Annotated[str, InjectedState("topic")]) -> str:
+        """Replacement tool implementation."""
+        return topic
+
+    async def awrap(request: ToolCallRequest, execute: Any) -> Any:
+        return await execute(request.override(tool=replacement))
+
+    node = ToolNode([original], awrap_tool_call=awrap)
+    graph = StateGraph(State).add_node("tools", node).add_edge(START, "tools").compile()
+
+    call = {"name": "lookup", "args": {}, "id": "lookup-1"}
+    result = await graph.ainvoke(
+        {
+            "topic": "graph topic",
+            "messages": [AIMessage(content="", tool_calls=[call])],
+        }
+    )
+    msg = result["messages"][-1]
+    assert msg.status == "success"
+    assert msg.content == "graph topic"
