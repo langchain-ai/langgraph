@@ -386,6 +386,7 @@ def prepare_next_tasks(
     updated_channels: set[str] | None = None,
     retry_policy: Sequence[RetryPolicy] = (),
     cache_policy: CachePolicy | None = None,
+    compute_cache_key: bool = True,
 ) -> dict[str, PregelExecutableTask]: ...
 
 
@@ -407,6 +408,7 @@ def prepare_next_tasks(
     updated_channels: set[str] | None = None,
     retry_policy: Sequence[RetryPolicy] = (),
     cache_policy: CachePolicy | None = None,
+    compute_cache_key: bool = True,
 ) -> dict[str, PregelTask] | dict[str, PregelExecutableTask]:
     """Prepare the set of tasks that will make up the next Pregel step.
 
@@ -462,6 +464,7 @@ def prepare_next_tasks(
                 input_cache=input_cache,
                 cache_policy=cache_policy,
                 retry_policy=retry_policy,
+                compute_cache_key=compute_cache_key,
             ):
                 tasks.append(task)
 
@@ -508,6 +511,7 @@ def prepare_next_tasks(
             input_cache=input_cache,
             cache_policy=cache_policy,
             retry_policy=retry_policy,
+            compute_cache_key=compute_cache_key,
         ):
             tasks.append(task)
     return {t.id: t for t in tasks}
@@ -542,6 +546,7 @@ def prepare_single_task(
     input_cache: dict[INPUT_CACHE_KEY_TYPE, Any] | None = None,
     cache_policy: CachePolicy | None = None,
     retry_policy: Sequence[RetryPolicy] = (),
+    compute_cache_key: bool = True,
 ) -> None | PregelTask | PregelExecutableTask:
     """Prepares a single task for the next Pregel step, given a task path, which
     uniquely identifies a PUSH or PULL task within the graph."""
@@ -569,6 +574,7 @@ def prepare_single_task(
             retry_policy=retry_policy,
             parent_ns=parent_ns,
             task_id_func=task_id_func,
+            compute_cache_key=compute_cache_key,
         )
 
     elif task_path[0] == PUSH:
@@ -592,6 +598,7 @@ def prepare_single_task(
             retry_policy=retry_policy,
             parent_ns=parent_ns,
             task_id_func=task_id_func,
+            compute_cache_key=compute_cache_key,
         )
 
     elif task_path[0] == PULL:
@@ -665,7 +672,11 @@ def prepare_single_task(
                     if proc.metadata:
                         metadata.update(proc.metadata)
                     writes: deque[tuple[str, Any]] = deque()
-                    cache_policy = proc.cache_policy or cache_policy
+                    cache_policy = (
+                        (proc.cache_policy or cache_policy)
+                        if compute_cache_key
+                        else None
+                    )
                     if cache_policy:
                         args_key = cache_policy.key_func(val)
                         cache_key = CacheKey(
@@ -819,6 +830,7 @@ def prepare_push_task_functional(
     parent_ns: str,
     # namespace: bytes, *parts: str | bytes
     task_id_func: _TaskIDFn,
+    compute_cache_key: bool = True,
 ) -> PregelTask | PregelExecutableTask:
     """Prepare a push task with an attached caller. Used for the functional API."""
     configurable = config.get(CONF, {})
@@ -855,7 +867,9 @@ def prepare_push_task_functional(
         assert task_id == task_id_checksum, f"{task_id} != {task_id_checksum}"
     if for_execution:
         writes: deque[tuple[str, Any]] = deque()
-        cache_policy = call.cache_policy or cache_policy
+        cache_policy = (
+            (call.cache_policy or cache_policy) if compute_cache_key else None
+        )
         if cache_policy:
             args_key = cache_policy.key_func(*call.input[0], **call.input[1])
             cache_key: CacheKey | None = CacheKey(
@@ -957,6 +971,7 @@ def prepare_push_task_send(
     parent_ns: str,
     task_id_func: _TaskIDFn,
     processes: Mapping[str, PregelNode],
+    compute_cache_key: bool = True,
 ) -> PregelTask | PregelExecutableTask | None:
     if len(task_path) == 2:
         # SEND tasks, executed in superstep n+1
@@ -1016,7 +1031,9 @@ def prepare_push_task_send(
         if proc.metadata:
             metadata.update(proc.metadata)
         writes: deque[tuple[str, Any]] = deque()
-        cache_policy = proc.cache_policy or cache_policy
+        cache_policy = (
+            (proc.cache_policy or cache_policy) if compute_cache_key else None
+        )
         if cache_policy:
             args_key = cache_policy.key_func(packet.arg)
             cache_key = CacheKey(

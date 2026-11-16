@@ -1279,6 +1279,7 @@ class Pregel(
             store=self.store,
             checkpointer=saver,
             manager=None,
+            compute_cache_key=False,
         )
         # get the subgraphs
         subgraphs = dict(self.get_subgraphs())
@@ -1404,6 +1405,7 @@ class Pregel(
             store=self.store,
             checkpointer=saver,
             manager=None,
+            compute_cache_key=False,
         )
         # get the subgraphs
         subgraphs = {n: g async for n, g in self.aget_subgraphs()}

@@ -120,3 +120,73 @@ async def test_a_node_that_fails_is_not_cached_async() -> None:
             await graph.ainvoke(INPUT, {"configurable": {"thread_id": thread}})
 
     assert runs == ["b", "b"]
+
+
+def test_state_inspection_skips_cache_key_func() -> None:
+    key_calls: list[Any] = []
+    fail_key = False
+
+    def cache_key(state: _State) -> str:
+        key_calls.append(state)
+        if fail_key:
+            raise RuntimeError("cache key unavailable")
+        return str(state)
+
+    builder = StateGraph(_State)
+    builder.add_node("worker", lambda state: {"plain": ["done"]}, cache_policy=CachePolicy(key_func=cache_key))
+    builder.add_edge(START, "worker")
+    graph = builder.compile(
+        cache=InMemoryCache(),
+        checkpointer=InMemorySaver(),
+        interrupt_before=["worker"],
+    )
+    config = {"configurable": {"thread_id": "lookup"}}
+    graph.invoke(INPUT, config)
+
+    key_calls.clear()
+    fail_key = True
+    snapshot = graph.get_state(config)
+    history = list(graph.get_state_history(config))
+    assert snapshot.next == ("worker",)
+    assert [s.next for s in history] == [("worker",), ("__start__",)]
+    assert key_calls == []
+
+    fail_key = False
+    resumed = graph.invoke(None, config)
+    assert resumed["plain"] == ["done"]
+    assert len(key_calls) == 1
+
+
+async def test_state_inspection_skips_cache_key_func_async() -> None:
+    key_calls: list[Any] = []
+    fail_key = False
+
+    def cache_key(state: _State) -> str:
+        key_calls.append(state)
+        if fail_key:
+            raise RuntimeError("cache key unavailable")
+        return str(state)
+
+    builder = StateGraph(_State)
+    builder.add_node("worker", lambda state: {"plain": ["done"]}, cache_policy=CachePolicy(key_func=cache_key))
+    builder.add_edge(START, "worker")
+    graph = builder.compile(
+        cache=InMemoryCache(),
+        checkpointer=InMemorySaver(),
+        interrupt_before=["worker"],
+    )
+    config = {"configurable": {"thread_id": "lookup-async"}}
+    await graph.ainvoke(INPUT, config)
+
+    key_calls.clear()
+    fail_key = True
+    snapshot = await graph.aget_state(config)
+    history = [s async for s in graph.aget_state_history(config)]
+    assert snapshot.next == ("worker",)
+    assert [s.next for s in history] == [("worker",), ("__start__",)]
+    assert key_calls == []
+
+    fail_key = False
+    resumed = await graph.ainvoke(None, config)
+    assert resumed["plain"] == ["done"]
+    assert len(key_calls) == 1
