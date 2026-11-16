@@ -153,13 +153,14 @@ def _get_pip_cleanup_lines(
     to_uninstall: tuple[str] | None,
     pip_installer: Literal["uv", "pip"],
 ) -> str:
+    # One RUN, so BuildKit takes one snapshot for the whole tail instead of one
+    # per step. Commands keep their order and are chained with `&&`; each
+    # `rm -rf ... || true` group is wrapped in a subshell so its `|| true`
+    # only covers that group, exactly as when it was its own RUN.
     commands = [
-        f"""# -- Ensure user deps didn't inadvertently overwrite langgraph-api
-RUN mkdir -p /api/langgraph_api /api/langgraph_runtime /api/langgraph_license && \
-touch /api/langgraph_api/__init__.py /api/langgraph_runtime/__init__.py /api/langgraph_license/__init__.py
-RUN PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir --no-deps -e /api
-# -- End of ensuring user deps didn't inadvertently overwrite langgraph-api --
-# -- Removing build deps from the final image ~<:===~~~ --"""
+        "mkdir -p /api/langgraph_api /api/langgraph_runtime /api/langgraph_license",
+        "touch /api/langgraph_api/__init__.py /api/langgraph_runtime/__init__.py /api/langgraph_license/__init__.py",
+        f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir --no-deps -e /api",
     ]
     if to_uninstall:
         for pack in to_uninstall:
@@ -168,30 +169,29 @@ RUN PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir --no-deps -e /api
                     f"Invalid build tool: {pack}; must be one of {', '.join(_BUILD_TOOLS)}"
                 )
         packs_str = " ".join(sorted(to_uninstall))
-        commands.append(f"RUN pip uninstall -y {packs_str}")
+        commands.append(f"pip uninstall -y {packs_str}")
         # Ensure the directories are removed entirely
         packages_rm = " ".join(
             f"/usr/local/lib/python*/site-packages/{pack}*" for pack in to_uninstall
         )
         if "pip" in to_uninstall:
             packages_rm += ' && find /usr/local/bin -name "pip*" -delete || true'
-        commands.append(f"RUN rm -rf {packages_rm}")
+        commands.append(f"(rm -rf {packages_rm})")
         wolfi_packages_rm = " ".join(
             f"/usr/lib/python*/site-packages/{pack}*" for pack in to_uninstall
         )
         if "pip" in to_uninstall:
             wolfi_packages_rm += ' && find /usr/bin -name "pip*" -delete || true'
-        commands.append(f"RUN rm -rf {wolfi_packages_rm}")
+        commands.append(f"(rm -rf {wolfi_packages_rm})")
         if pip_installer == "uv":
-            commands.append(
-                f"RUN uv pip uninstall --system {packs_str} && rm /usr/bin/uv /usr/bin/uvx"
-            )
-    else:
-        if pip_installer == "uv":
-            commands.append(
-                "RUN rm /usr/bin/uv /usr/bin/uvx\n# -- End of build deps removal --"
-            )
-    return "\n".join(commands)
+            commands.append(f"uv pip uninstall --system {packs_str}")
+    if pip_installer == "uv":
+        commands.append("rm /usr/bin/uv /usr/bin/uvx")
+    return (
+        "# -- Ensure user deps didn't inadvertently overwrite langgraph-api, "
+        "then remove build deps from the final image --\n"
+        "RUN " + " && \\\n    ".join(commands)
+    )
 
 
 def _parse_version(version_str: str) -> tuple[int, int]:
@@ -1541,8 +1541,18 @@ ADD {relpath} /deps/{name}
         else ""
     )
 
-    install_steps = [install_node_str, pip_config_file_str, pip_pkgs_str, pip_reqs_str]
-    install_steps.extend([local_pkgs_str, faux_pkgs_str])
+    # Set WORKDIR before the first source-dependent step so it stays cached
+    # across source-only changes, instead of re-running after every one.
+    workdir_str = f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else ""
+    install_steps = [
+        install_node_str,
+        pip_config_file_str,
+        pip_pkgs_str,
+        workdir_str,
+        pip_reqs_str,
+        local_pkgs_str,
+        faux_pkgs_str,
+    ]
     installs = f"{os.linesep}{os.linesep}".join(
         filter(
             None,
@@ -1558,7 +1568,6 @@ ADD {relpath} /deps/{name}
             [
                 "# -- Installing JS dependencies --",
                 f"ENV NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}",
-                f"WORKDIR {local_deps.working_dir}",
                 f"RUN {_get_node_pm_install_cmd(config_path.parent)} && tsx /api/langgraph_api/js/build.mts",
                 "# -- End of JS dependencies install --",
             ]
@@ -1607,8 +1616,6 @@ ADD {relpath} /deps/{name}
                 to_uninstall=build_tools_to_uninstall,
                 pip_installer=pip_installer,
             ),
-            "",
-            f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
         ]
     )
 

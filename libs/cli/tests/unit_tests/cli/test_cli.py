@@ -135,6 +135,7 @@ services:
             dockerfile_inline: |
                 # syntax=docker/dockerfile:1.4
                 FROM langchain/langgraph-api:3.11
+                WORKDIR /deps/cli
                 # -- Adding local package . --
                 ADD . /deps/cli
                 # -- End of local package . --
@@ -146,7 +147,6 @@ services:
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
-                WORKDIR /deps/cli
         
         develop:
             watch:
