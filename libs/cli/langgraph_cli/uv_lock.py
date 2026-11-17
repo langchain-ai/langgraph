@@ -85,6 +85,9 @@ class DockerBuildPlan:
         return os.linesep.join(self.lines)
 
 
+_PYPI_SIMPLE = "https://pypi.org/simple"
+
+
 def _normalize_package_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
@@ -235,6 +238,18 @@ def _validate_uv_lock_source_entry(
             )
         )
     return workspace_dependencies
+
+
+def _locks_non_pypi_registry(uv_lock_path: pathlib.Path) -> bool:
+    """Whether uv.lock installs any package from a registry other than PyPI."""
+    with uv_lock_path.open("rb") as lock_file:
+        packages = tomllib.load(lock_file).get("package", [])
+    return any(
+        str(package.get("source", {}).get("registry", _PYPI_SIMPLE)).rstrip("/")
+        != _PYPI_SIMPLE
+        for package in packages
+        if isinstance(package, dict)
+    )
 
 
 def _get_uv_lock_package_enabled(package: UvLockPackage) -> bool:
@@ -947,11 +962,7 @@ def python_config_to_docker_uv_lock(
         return f"ADD {relative_source} {destination}"
 
     uv_export_project_dir = "/tmp/uv_export/project"
-    root_uv_config = _load_pyproject(plan.pyproject_path).get("tool", {}).get("uv", {})
-    has_indexes = root_uv_config.get("index") or any(
-        isinstance(package.raw_uv_tool, dict) and package.raw_uv_tool.get("index")
-        for package in plan.install_order
-    )
+    has_indexes = _locks_non_pypi_registry(plan.uv_lock_path)
     env_vars = _build_runtime_env_vars(config)
 
     image_str = docker_tag(config, base_image, api_version)

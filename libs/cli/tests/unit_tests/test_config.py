@@ -40,6 +40,7 @@ def _write_uv_lock_workspace(
     agent_sources: str = "",
     shared_uv_config: str = "",
     agent_dependencies: list[str] | None = None,
+    lock_text: str = "# uv lock file\n",
 ) -> tuple[pathlib.Path, pathlib.Path]:
     project_root = tmpdir_path / "workspace"
     config_dir = project_root / config_relative_dir
@@ -52,7 +53,7 @@ def _write_uv_lock_workspace(
     extra_dir.mkdir(parents=True)
     deploy_dir.mkdir(parents=True)
 
-    (project_root / "uv.lock").write_text("# uv lock file\n")
+    (project_root / "uv.lock").write_text(lock_text)
     (project_root / "pyproject.toml").write_text(
         textwrap.dedent(
             f"""
@@ -1961,6 +1962,43 @@ def test_config_to_docker_uv_lock():
         assert "rm /usr/bin/uv /usr/bin/uvx" in docker
 
 
+_PRIVATE_REGISTRY_LOCK = textwrap.dedent(
+    """
+    version = 1
+
+    [[package]]
+    name = "private-dep"
+    version = "1.0"
+    source = { registry = "https://packages.example.com/simple/" }
+
+    [[package]]
+    name = "httpx"
+    version = "0.28.1"
+    source = { registry = "https://pypi.org/simple" }
+    """
+)
+
+
+def test_private_registry_in_lock_uses_pylock_without_pyproject_index(
+    tmp_path: pathlib.Path,
+):
+    _, config_path = _write_uv_lock_workspace(
+        tmp_path,
+        agent_sources="[tool.uv.sources]\nshared = { workspace = true }\n",
+        agent_dependencies=["shared", "private-dep==1.0"],
+        lock_text=_PRIVATE_REGISTRY_LOCK,
+    )
+    config = {
+        "graphs": {"agent": "../../apps/agent/src/agent/graph.py:graph"},
+        "source": {"kind": "uv", "root": "../..", "package": "agent"},
+    }
+
+    docker, _ = config_to_docker(config_path, validate_config(config))
+
+    assert "--format pylock.toml -o pylock.toml" in docker
+    assert "-r pylock.toml" in docker
+
+
 @pytest.mark.parametrize("index_location", ["root", "member"])
 @pytest.mark.parametrize("pip_config", [False, True])
 def test_uv_index_sources_use_pylock_without_index_fallback(
@@ -1983,6 +2021,7 @@ def test_uv_index_sources_use_pylock_without_index_fallback(
         root_sources=index_config if index_location == "root" else "",
         agent_sources=sources + (index_config if index_location == "member" else ""),
         agent_dependencies=["shared", "private-dep==1.0", "httpx>=0.28"],
+        lock_text=_PRIVATE_REGISTRY_LOCK,
     )
     pyproject_path = (
         project_root if index_location == "root" else project_root / "apps" / "agent"
