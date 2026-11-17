@@ -13,7 +13,11 @@ import click
 import httpx
 
 from langgraph_cli.schemas import Config, Distros
-from langgraph_cli.uv_lock import python_config_to_docker_uv_lock
+from langgraph_cli.uv_lock import (
+    _load_pyproject,
+    _normalize_package_name,
+    python_config_to_docker_uv_lock,
+)
 
 MIN_NODE_VERSION = "20"
 DEFAULT_NODE_VERSION = "20"
@@ -1393,6 +1397,149 @@ def get_build_tools_to_uninstall(config: Config) -> tuple[str]:
         )
 
 
+_SAFE_MOUNT_PATH = re.compile(r"^[A-Za-z0-9._/+-]+$")
+_UNSAFE_REQUIREMENT_CHARS = re.compile(r"[\x00-\x1f\x7f\\$`]")
+_REQUIREMENT_NAME = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*(.*)$", re.DOTALL)
+
+
+def _static_project_dependencies(
+    pkg_dir: pathlib.Path,
+) -> tuple[str, list[str]] | None:
+    """Return a local package's (normalized name, dependencies) if both are static.
+
+    Returns None whenever the dependencies installed by `pip install -e .` might
+    differ from `[project].dependencies`: setup.py/setup.cfg, dynamic metadata,
+    uv sources/workspaces, or Poetry dependency tables.
+    """
+    if (pkg_dir / "setup.py").exists() or (pkg_dir / "setup.cfg").exists():
+        return None
+    try:
+        pyproject = _load_pyproject(pkg_dir / "pyproject.toml")
+    except (OSError, ValueError):
+        return None
+    project = pyproject.get("project")
+    tool = pyproject.get("tool", {})
+    if not isinstance(project, dict) or not isinstance(tool, dict):
+        return None
+    name = project.get("name")
+    dependencies = project.get("dependencies", [])
+    dynamic = project.get("dynamic", [])
+    uv = tool.get("uv", {})
+    poetry = tool.get("poetry", {})
+    if (
+        not isinstance(name, str)
+        or not isinstance(dependencies, list)
+        or not all(isinstance(dep, str) for dep in dependencies)
+        or not isinstance(dynamic, list)
+        or "dependencies" in dynamic
+        or not isinstance(uv, dict)
+        or "sources" in uv
+        or "workspace" in uv
+        or not isinstance(poetry, dict)
+        or "dependencies" in poetry
+    ):
+        return None
+    return _normalize_package_name(name), dependencies
+
+
+def _local_deps_preinstall_str(
+    config_path: pathlib.Path, local_deps: LocalDeps, install_cmd: str
+) -> str:
+    """Pre-install the third-party dependencies of local packages before their source.
+
+    Only `pyproject.toml` (and `uv.toml`) are bind-mounted, so this layer stays
+    cached when only source files change. Packages are processed in the same
+    order as the `/deps/*` install loop, and that loop still runs unchanged
+    afterwards and remains authoritative: this step only installs what it
+    would install anyway, and if it fails the loop does all the work as before.
+
+    Returns "" (today's layout) unless every local package has static metadata.
+    A dependency on another local package is replaced by that package's own
+    third-party dependencies, so each resolution sees the same requirements.
+    """
+    if not local_deps.real_pkgs:
+        return ""
+    # Faux packages are local too; their generated pyproject has no dependencies.
+    declared: dict[str, list[str]] = {
+        _normalize_package_name(path.name): [] for path in local_deps.faux_pkgs
+    }
+    packages: list[tuple[str, str, pathlib.Path]] = []
+    for path, (_, container_name) in local_deps.real_pkgs.items():
+        static = _static_project_dependencies(path)
+        if static is None or static[0] in declared:
+            return ""
+        declared[static[0]] = static[1]
+        packages.append((container_name, static[0], path))
+    third_party: dict[str, list[str]] = {name: [] for name in declared}
+    siblings: dict[str, list[str]] = {name: [] for name in declared}
+    for name, dependencies in declared.items():
+        for requirement in dependencies:
+            match = _REQUIREMENT_NAME.match(requirement)
+            if (
+                match is None
+                or _UNSAFE_REQUIREMENT_CHARS.search(requirement)
+                or "@" in requirement.split(";", 1)[0]
+            ):
+                return ""
+            dep_name, rest = _normalize_package_name(match.group(1)), match.group(2)
+            if dep_name == name:
+                return ""
+            if dep_name in declared:
+                # A version specifier is fine (the install loop still checks it);
+                # extras or markers would change which sibling deps apply.
+                if rest.startswith("[") or ";" in rest:
+                    return ""
+                siblings[name].append(dep_name)
+            else:
+                third_party[name].append(requirement)
+
+    def flatten(name: str, seen: set[str]) -> list[str]:
+        requirements = list(third_party[name])
+        for sibling in siblings[name]:
+            if sibling not in seen:
+                seen.add(sibling)
+                requirements.extend(flatten(sibling, seen))
+        return requirements
+
+    mounts: list[str] = []
+    steps: list[str] = []
+    # Same order as the `/deps/*` glob in the install loop (C collation in both images).
+    for container_name, name, path in sorted(packages, key=lambda p: p[0].encode()):
+        requirements = list(dict.fromkeys(flatten(name, {name})))
+        if not requirements:
+            continue
+        for manifest in ("pyproject.toml", "uv.toml"):
+            if not (path / manifest).exists():
+                continue
+            target = f"/deps/{container_name}/{manifest}"
+            if path in local_deps.additional_contexts:
+                values = [container_name, target]
+                source = f"from={container_name},source={manifest}"
+            else:
+                relative = (path.relative_to(config_path.parent) / manifest).as_posix()
+                values = [relative, target]
+                source = f"source={relative}"
+            # Mount options are comma-separated and unquoted; also guards `cd`.
+            if not all(_SAFE_MOUNT_PATH.match(value) for value in values):
+                return ""
+            mounts.append(f"--mount=type=bind,{source},target={target}")
+        steps.append(
+            f"(cd /deps/{container_name} && {install_cmd} "
+            + " ".join(shlex.quote(r) for r in requirements)
+            + ")"
+        )
+    if not steps:
+        return ""
+    joined_steps = " && \\\n    ".join(steps)
+    return (
+        "# -- Pre-installing local package dependencies --\n"
+        "RUN " + " \\\n    ".join(mounts) + " \\\n"
+        f"    ({joined_steps}) || \\\n"
+        "    echo 'Dependency pre-install failed; the install below resolves them.'\n"
+        "# -- End of pre-installing local package dependencies --"
+    )
+
+
 def python_config_to_docker(
     config_path: pathlib.Path,
     config: Config,
@@ -1550,6 +1697,7 @@ ADD {relpath} /deps/{name}
         pip_pkgs_str,
         workdir_str,
         pip_reqs_str,
+        _local_deps_preinstall_str(config_path, local_deps, global_reqs_pip_install),
         local_pkgs_str,
         faux_pkgs_str,
     ]

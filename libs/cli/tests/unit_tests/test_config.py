@@ -1141,6 +1141,11 @@ dependencies = ["langchain"]"""
     expected_docker_stdin = (
         """FROM langchain/langgraph-api:3.11
 WORKDIR /deps/unit_tests
+# -- Pre-installing local package dependencies --
+RUN --mount=type=bind,source=pyproject.toml,target=/deps/unit_tests/pyproject.toml \\
+    ((cd /deps/unit_tests && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt langchain)) || \\
+    echo 'Dependency pre-install failed; the install below resolves them.'
+# -- End of pre-installing local package dependencies --
 # -- Adding local package . --
 ADD . /deps/unit_tests
 # -- End of local package . --
@@ -3875,3 +3880,183 @@ class TestHasDisallowedBuildCommandContent:
     )
     def test_valid_commands_allowed(self, cmd: str) -> None:
         assert not has_disallowed_build_command_content(cmd)
+
+
+def _write_local_package(root: pathlib.Path, dirname: str, pyproject: str) -> None:
+    (root / dirname).mkdir(parents=True, exist_ok=True)
+    (root / dirname / "pyproject.toml").write_text(textwrap.dedent(pyproject))
+
+
+def _monorepo_docker(tmp_path: pathlib.Path, **config) -> str:
+    """Project `proj` depending on sibling local packages `b_lib` and `A_lib`."""
+    _write_local_package(
+        tmp_path,
+        "A_lib",
+        """
+        [project]
+        name = "a-lib"
+        version = "0.1"
+        dependencies = ["httpx>=0.28", "tomli>=2 ; python_version < '3.11'"]
+        """,
+    )
+    _write_local_package(
+        tmp_path,
+        "b_lib",
+        """
+        [project]
+        name = "b_lib"
+        version = "0.1"
+        dependencies = ["structlog", "A-Lib"]
+        """,
+    )
+    _write_local_package(
+        tmp_path,
+        "proj",
+        """
+        [project]
+        name = "proj"
+        version = "0.1"
+        dependencies = ["tenacity", "b-lib>=0.1", "a_lib"]
+        [tool.uv]
+        default-groups = ["dev"]
+        """,
+    )
+    (tmp_path / "proj" / "uv.toml").write_text("")
+    (tmp_path / "proj" / "agent.py").write_text("graph = None\n")
+    docker, _ = config_to_docker(
+        tmp_path / "proj" / "langgraph.json",
+        validate_config(
+            {
+                "dependencies": [".", "../b_lib", "../A_lib"],
+                "graphs": {"agent": "./agent.py:graph"},
+                **config,
+            }
+        ),
+        base_image="langchain/langgraph-api",
+    )
+    return docker
+
+
+def test_config_to_docker_preinstalls_local_package_deps(tmp_path):
+    docker = _monorepo_docker(tmp_path)
+    install = "PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt"
+    a_deps = "'httpx>=0.28' 'tomli>=2 ; python_version < '\"'\"'3.11'\"'\"''"
+    # `/deps/*` glob order (A_lib < b_lib < proj); a dependency on a sibling is
+    # replaced by the sibling's own third-party deps.
+    expected = f"""\
+WORKDIR /deps/proj
+# -- Pre-installing local package dependencies --
+RUN --mount=type=bind,from=A_lib,source=pyproject.toml,target=/deps/A_lib/pyproject.toml \\
+    --mount=type=bind,from=b_lib,source=pyproject.toml,target=/deps/b_lib/pyproject.toml \\
+    --mount=type=bind,source=pyproject.toml,target=/deps/proj/pyproject.toml \\
+    --mount=type=bind,source=uv.toml,target=/deps/proj/uv.toml \\
+    ((cd /deps/A_lib && {install} {a_deps}) && \\
+    (cd /deps/b_lib && {install} structlog {a_deps}) && \\
+    (cd /deps/proj && {install} tenacity structlog {a_deps})) || \\
+    echo 'Dependency pre-install failed; the install below resolves them.'
+# -- End of pre-installing local package dependencies --
+# -- Adding local package . --
+ADD . /deps/proj
+"""
+    assert expected in clean_empty_lines(docker)
+    # The install loop that follows the source copy is unchanged.
+    assert '(cd "$dep" && ' + install + " -e .)" in docker
+
+
+def test_config_to_docker_preinstall_respects_pip_installer(tmp_path):
+    docker = _monorepo_docker(tmp_path, pip_installer="pip")
+    assert (
+        "(cd /deps/A_lib && PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir "
+        "-c /api/constraints.txt 'httpx>=0.28'"
+    ) in docker
+
+
+@pytest.mark.parametrize(
+    ("dirname", "filename", "content"),
+    [
+        ("proj", "setup.py", "from setuptools import setup; setup()"),
+        ("proj", "setup.cfg", "[options]\ninstall_requires = six"),
+        (
+            "b_lib",
+            "pyproject.toml",
+            '[project]\nname = "b_lib"\ndynamic = ["dependencies"]',
+        ),
+        ("b_lib", "pyproject.toml", '[tool.poetry]\nname = "b_lib"'),
+        (
+            "b_lib",
+            "pyproject.toml",
+            '[project]\nname = "b_lib"\n[tool.uv.sources]\nx = { path = "../x" }',
+        ),
+        (
+            "b_lib",
+            "pyproject.toml",
+            '[project]\nname = "b_lib"\n[tool.uv.workspace]\nmembers = []',
+        ),
+        (
+            "b_lib",
+            "pyproject.toml",
+            '[project]\nname = "b_lib"\n[tool.poetry.dependencies]\nsix = "*"',
+        ),
+        (
+            "b_lib",
+            "pyproject.toml",
+            '[project]\nname = "b_lib"\ndependencies = ["x @ file:///deps/x"]',
+        ),
+        (
+            "b_lib",
+            "pyproject.toml",
+            '[project]\nname = "b_lib"\ndependencies = ["a-lib[extra]"]',
+        ),
+        (
+            "b_lib",
+            "pyproject.toml",
+            '[project]\nname = "b_lib"\ndependencies = ["a-lib ; sys_platform == \'linux\'"]',
+        ),
+        (
+            "b_lib",
+            "pyproject.toml",
+            '[project]\nname = "b_lib"\ndependencies = ["b-lib"]',
+        ),
+        (
+            "b_lib",
+            "pyproject.toml",
+            '[project]\nname = "b_lib"\ndependencies = ["x$(id)"]',
+        ),
+        ("b_lib", "pyproject.toml", '[project]\nname = "a_lib"'),
+        ("b_lib", "pyproject.toml", "not toml ["),
+    ],
+)
+def test_config_to_docker_preinstall_falls_back(tmp_path, dirname, filename, content):
+    """Any local package whose installed deps might differ from its static
+    `[project].dependencies` keeps today's layout for the whole config."""
+    original_write = _write_local_package
+
+    def write(root, name, pyproject):
+        original_write(root, name, pyproject)
+        if name == dirname:
+            (root / name / filename).write_text(content)
+
+    with patch(f"{__name__}._write_local_package", write):
+        docker = _monorepo_docker(tmp_path)
+    assert "Pre-installing" not in docker
+    assert "--mount" not in docker
+
+
+@pytest.mark.parametrize("dirname", ["my lib", "a,b"])
+def test_config_to_docker_preinstall_skips_unsafe_paths(tmp_path, dirname):
+    _write_local_package(tmp_path, "proj", '[project]\nname = "x"')
+    _write_local_package(
+        tmp_path, dirname, '[project]\nname = "y"\ndependencies = ["six"]'
+    )
+    (tmp_path / "proj" / "agent.py").write_text("graph = None\n")
+    docker, _ = config_to_docker(
+        tmp_path / "proj" / "langgraph.json",
+        validate_config(
+            {
+                "dependencies": [".", f"../{dirname}"],
+                "graphs": {"agent": "./agent.py:graph"},
+            }
+        ),
+        base_image="langchain/langgraph-api",
+    )
+    assert "--mount" not in docker
