@@ -75,6 +75,7 @@ def test_agent_create(deployment_api, tmp_path, monkeypatch):
         "agent_id": "customer-support",
         "agent_environment": "staging",
         "limit": "100",
+        "offset": "0",
     }
     payload = json.loads(requests[1].content)
     assert payload["agent"] == {
@@ -84,6 +85,8 @@ def test_agent_create(deployment_api, tmp_path, monkeypatch):
     assert "name" not in payload
     assert build.call_args.kwargs["deployment_id"] == "runtime-id"
     assert "server-name" in result.output
+    assert "'langgraph deploy' is in beta" in result.output
+    assert "private beta" not in result.output
     assert (tmp_path / ".env").read_text() == "LANGSMITH_DEPLOYMENT_NAME=legacy\n"
 
 
@@ -115,5 +118,5 @@ def test_agent_lookup_refuses_a_control_plane_that_ignores_the_filter(deployment
     result = CliRunner().invoke(cli, AGENT_ARGS)
 
     assert result.exit_code != 0
-    assert "does not filter deployments by agent" in result.output
+    assert "does not filter Agent Servers by agent" in result.output
     assert len(requests) == 1

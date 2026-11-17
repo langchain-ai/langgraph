@@ -1,0 +1,215 @@
+{
+  "id": "019a0000-0000-7000-8000-000000000001-metrics",
+  "title": "Metrics for deployment",
+  "charts": [],
+  "sub_sections": [
+    {
+      "id": "019a0000-0000-7000-8000-000000000001-queue",
+      "title": "Queue",
+      "description": "Queue metrics",
+      "index": 0,
+      "charts": [
+        {
+          "id": "019a0000-0000-7000-8000-000000000001-Memory Usage %",
+          "title": "Memory Usage %",
+          "description": "Resource usage over time",
+          "index": 0,
+          "chart_type": "line",
+          "series": [
+            {
+              "id": "019a0000-0000-7000-8000-000000000001-Avg Memory Usage %",
+              "name": "Avg Memory Usage %",
+              "metric": "run_count",
+              "project_metric": "memory_usage",
+              "metadata": null,
+              "filters": null,
+              "feedback_key": null,
+              "workspace_id": null,
+              "metric_definition": null,
+              "group_by_definitions": null,
+              "filter_definition": null,
+              "group_by": null
+            },
+            {
+              "id": "019a0000-0000-7000-8000-000000000001-Max Memory Usage %",
+              "name": "Max Memory Usage %",
+              "metric": "run_count",
+              "project_metric": "memory_usage",
+              "metadata": null,
+              "filters": null,
+              "feedback_key": null,
+              "workspace_id": null,
+              "metric_definition": null,
+              "group_by_definitions": null,
+              "filter_definition": null,
+              "group_by": null
+            }
+          ],
+          "data": [
+            {
+              "series_id": "019a0000-0000-7000-8000-000000000001-Max Memory Usage %",
+              "timestamp": "2026-10-28T00:02:00+00:00",
+              "value": 50.33333,
+              "group": null
+            },
+            {
+              "series_id": "019a0000-0000-7000-8000-000000000001-Max Memory Usage %",
+              "timestamp": "2026-10-28T00:01:00+00:00",
+              "value": 40.22222,
+              "group": null
+            },
+            {
+              "series_id": "019a0000-0000-7000-8000-000000000001-Max Memory Usage %",
+              "timestamp": "2026-10-28T00:00:00+00:00",
+              "value": 30.11111,
+              "group": null
+            },
+            {
+              "series_id": "019a0000-0000-7000-8000-000000000001-Avg Memory Usage %",
+              "timestamp": "2026-10-28T00:02:00+00:00",
+              "value": null,
+              "group": null
+            },
+            {
+              "series_id": "019a0000-0000-7000-8000-000000000001-Avg Memory Usage %",
+              "timestamp": "2026-10-28T00:01:00+00:00",
+              "value": 20.23456,
+              "group": null
+            },
+            {
+              "series_id": "019a0000-0000-7000-8000-000000000001-Avg Memory Usage %",
+              "timestamp": "2026-10-28T00:00:00+00:00",
+              "value": 10.12345,
+              "group": null
+            }
+          ]
+        },
+        {
+          "id": "019a0000-0000-7000-8000-000000000001-Restarts",
+          "title": "Restarts",
+          "description": "Resource usage over time",
+          "index": 0,
+          "chart_type": "line",
+          "series": [
+            {
+              "id": "019a0000-0000-7000-8000-000000000001-Restarts",
+              "name": "Restarts",
+              "metric": "run_count",
+              "project_metric": "restart_count",
+              "metadata": null,
+              "filters": null,
+              "feedback_key": null,
+              "workspace_id": null,
+              "metric_definition": null,
+              "group_by_definitions": null,
+              "filter_definition": null,
+              "group_by": null
+            }
+          ],
+          "data": [
+            {
+              "series_id": "019a0000-0000-7000-8000-000000000001-Restarts",
+              "timestamp": "2026-10-28T00:02:00+00:00",
+              "value": 2,
+              "group": null
+            },
+            {
+              "series_id": "019a0000-0000-7000-8000-000000000001-Restarts",
+              "timestamp": "2026-10-28T00:01:00+00:00",
+              "value": 1,
+              "group": null
+            },
+            {
+              "series_id": "019a0000-0000-7000-8000-000000000001-Restarts",
+              "timestamp": "2026-10-28T00:00:00+00:00",
+              "value": 0,
+              "group": null
+            }
+          ]
+        },
+        {
+          "id": "019a0000-0000-7000-8000-000000000001-Queue wait time",
+          "title": "Queue wait time",
+          "description": "Resource usage over time",
+          "index": 0,
+          "chart_type": "line",
+          "series": [
+            {
+              "id": "019a0000-0000-7000-8000-000000000001-Queue wait time",
+              "name": "Queue wait time",
+              "metric": "run_count",
+              "project_metric": "run_queue_wait_time",
+              "metadata": null,
+              "filters": null,
+              "feedback_key": null,
+              "workspace_id": null,
+              "metric_definition": null,
+              "group_by_definitions": null,
+              "filter_definition": null,
+              "group_by": null
+            }
+          ],
+          "data": []
+        }
+      ]
+    },
+    {
+      "id": "019a0000-0000-7000-8000-000000000001-api",
+      "title": "API",
+      "description": "API metrics",
+      "index": 1,
+      "charts": [
+        {
+          "id": "019a0000-0000-7000-8000-000000000001-Latency",
+          "title": "Latency",
+          "description": "Resource usage over time",
+          "index": 0,
+          "chart_type": "line",
+          "series": [
+            {
+              "id": "019a0000-0000-7000-8000-000000000001-P95 Latency",
+              "name": "P95 Latency",
+              "metric": "run_count",
+              "project_metric": "p95_latency",
+              "metadata": null,
+              "filters": null,
+              "feedback_key": null,
+              "workspace_id": null,
+              "metric_definition": null,
+              "group_by_definitions": null,
+              "filter_definition": null,
+              "group_by": null
+            }
+          ],
+          "data": [
+            {
+              "series_id": "019a0000-0000-7000-8000-000000000001-P95 Latency",
+              "timestamp": "2026-10-28T00:02:00+00:00",
+              "value": 0.34567,
+              "group": null
+            },
+            {
+              "series_id": "019a0000-0000-7000-8000-000000000001-P95 Latency",
+              "timestamp": "2026-10-28T00:01:00+00:00",
+              "value": 0.23456,
+              "group": null
+            },
+            {
+              "series_id": "019a0000-0000-7000-8000-000000000001-P95 Latency",
+              "timestamp": "2026-10-28T00:00:00+00:00",
+              "value": 0.12345,
+              "group": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "019a0000-0000-7000-8000-000000000001-pg",
+      "title": "Postgres",
+      "description": "Postgres metrics",
+      "index": 2,
+      "charts": []
+    }
+  ]
+}

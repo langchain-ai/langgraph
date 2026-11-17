@@ -1,11 +1,6 @@
 from unittest.mock import patch
 
-from langgraph_cli.deploy import (
-    _extract_deployment_url,
-    format_deployments_table,
-    format_listeners_table,
-    format_revisions_table,
-)
+from langgraph_cli.deploy import Table
 from langgraph_cli.util import clean_empty_lines, warn_non_wolfi_distro
 
 
@@ -194,96 +189,7 @@ def test_warn_non_wolfi_distro_does_not_modify_config():
     assert config_copy == original_config  # Config should remain unchanged
 
 
-def test_extract_deployment_url_uses_custom_url():
-    deployment = {"source_config": {"custom_url": "https://example.com/custom"}}
-    assert _extract_deployment_url(deployment) == "https://example.com/custom"
+def test_a_table_without_rows_still_renders_its_headers():
+    table = Table(("Name", "Status"), lambda resource: (None, None))
 
-
-def test_extract_deployment_url_defaults_to_dash():
-    assert _extract_deployment_url({"id": "dep-123"}) == "-"
-
-
-def test_format_deployments_table():
-    output = format_deployments_table(
-        [
-            {
-                "id": "dep-123",
-                "name": "alpha",
-                "source_config": {"custom_url": "https://alpha.example.com"},
-            },
-            {
-                "id": "dep-456",
-                "name": "beta",
-                "url": "https://beta.example.com",
-            },
-        ]
-    )
-    assert "Deployment ID" in output
-    assert "Deployment Name" in output
-    assert "Deployment URL" in output
-    assert "dep-123" in output
-    assert "alpha" in output
-    assert "https://alpha.example.com" in output
-    assert "dep-456" in output
-
-
-def test_format_revisions_table():
-    output = format_revisions_table(
-        [
-            {
-                "id": "rev-123",
-                "status": "DEPLOYED",
-                "created_at": "2023-11-09T10:00:00Z",
-            },
-            {
-                "id": "rev-456",
-                "status": "CREATING",
-                "created_at": "2023-11-07T05:31:56Z",
-            },
-            {
-                "id": "rev-789",
-                "status": "DEPLOYED",
-                "created_at": "2023-11-08T10:00:00Z",
-            },
-        ]
-    )
-    assert "Revision ID" in output
-    assert "Status" in output
-    assert "Created At" in output
-    assert "rev-123" in output
-    assert "CREATING" in output
-    assert "2023-11-07T05:31:56Z" in output
-    assert "rev-456" in output
-    assert "rev-789" in output
-    assert "REPLACED" in output
-
-
-def test_format_listeners_table():
-    output = format_listeners_table(
-        [
-            {
-                "id": "listener-1",
-                "compute_id": "prod-cluster",
-                "compute_config": {"k8s_namespaces": ["agents"]},
-            },
-            {
-                "id": "listener-2",
-                "compute_id": "multi-cluster",
-                "compute_config": {"k8s_namespaces": ["agents", "agents-staging"]},
-            },
-            {
-                "id": "listener-3",
-                "compute_id": "broken-cluster",
-            },
-        ]
-    )
-    assert "Listener ID" in output
-    assert "Compute ID" in output
-    assert "Namespaces" in output
-    assert "listener-1" in output
-    assert "prod-cluster" in output
-    assert "agents" in output
-    assert "listener-2" in output
-    assert "agents, agents-staging" in output
-    assert "listener-3" in output
-    assert "broken-cluster" in output
+    assert table.render([]).splitlines() == ["Name  Status", "----  ------"]

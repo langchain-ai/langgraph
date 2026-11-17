@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 import httpx
 import orjson
@@ -106,31 +106,31 @@ class APITimeoutError(APIConnectionError):
 
 
 class BadRequestError(APIStatusError):
-    status_code: Literal[400] = 400
+    status_code: int = 400
 
 
 class AuthenticationError(APIStatusError):
-    status_code: Literal[401] = 401
+    status_code: int = 401
 
 
 class PermissionDeniedError(APIStatusError):
-    status_code: Literal[403] = 403
+    status_code: int = 403
 
 
 class NotFoundError(APIStatusError):
-    status_code: Literal[404] = 404
+    status_code: int = 404
 
 
 class ConflictError(APIStatusError):
-    status_code: Literal[409] = 409
+    status_code: int = 409
 
 
 class UnprocessableEntityError(APIStatusError):
-    status_code: Literal[422] = 422
+    status_code: int = 422
 
 
 class RateLimitError(APIStatusError):
-    status_code: Literal[429] = 429
+    status_code: int = 429
 
 
 class InternalServerError(APIStatusError):

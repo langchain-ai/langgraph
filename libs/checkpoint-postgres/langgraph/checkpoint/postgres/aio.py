@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
@@ -425,7 +425,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 Will be applied regardless of whether the AsyncPostgresSaver instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
-        async with self.lock, _ainternal.get_connection(self.conn) as conn:
+        # A pool hands each call its own connection, so only a shared one needs
+        # the lock.
+        lock = (
+            nullcontext() if isinstance(self.conn, AsyncConnectionPool) else self.lock
+        )
+        async with lock, _ainternal.get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
                 # in multiple threads/coroutines, but only one cursor can be
@@ -594,7 +599,11 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 if value["parent_checkpoint_id"]
                 else None
             ),
-            await asyncio.to_thread(self._load_writes, value["pending_writes"]),
+            (
+                await asyncio.to_thread(self._load_writes, value["pending_writes"])
+                if value["pending_writes"]
+                else []
+            ),
         )
 
     def list(

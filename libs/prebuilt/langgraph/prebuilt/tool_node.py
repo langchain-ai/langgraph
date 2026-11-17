@@ -746,7 +746,7 @@ class ToolNode(RunnableCallable):
         ```
     """
 
-    name: str = "tools"
+    name: str | None = "tools"
 
     def __init__(
         self,

@@ -7,7 +7,7 @@ import re
 import sqlite3
 import threading
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any, Literal, NamedTuple, cast
 
@@ -1017,7 +1017,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
         *,
         index: SqliteIndexConfig | None = None,
         ttl: TTLConfig | None = None,
-    ) -> Iterator[SqliteStore]:
+    ) -> Generator[SqliteStore, None, None]:
         """Create a new SqliteStore instance from a connection string.
 
         Args:
@@ -1039,7 +1039,9 @@ class SqliteStore(BaseSqliteStore, BaseStore):
             conn.close()
 
     @contextmanager
-    def _cursor(self, *, transaction: bool = True) -> Iterator[sqlite3.Cursor]:
+    def _cursor(
+        self, *, transaction: bool = True
+    ) -> Generator[sqlite3.Cursor, None, None]:
         """Create a database cursor as a context manager.
 
         Args:

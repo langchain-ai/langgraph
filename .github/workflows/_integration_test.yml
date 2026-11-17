@@ -115,21 +115,16 @@ jobs:
           echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
           timeout --kill-after=30 300 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-h
           echo "Finished starting up langgraph-test-h"
-          LANGGRAPH_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langgraph'); print(v);")
-          if [ "$LANGGRAPH_VERSION" != "1.2.6" ]; then
-            echo "LANGGRAPH_VERSION != 1.2.6; $LANGGRAPH_VERSION"
-            exit 1
-          fi
-          LANGCHAIN_OPENAI_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langchain-openai'); print(v);")
-          if [ "$LANGCHAIN_OPENAI_VERSION" != "1.1.14" ]; then
-            echo "LANGCHAIN_OPENAI_VERSION != 1.1.14; $LANGCHAIN_OPENAI_VERSION"
-            exit 1
-          fi
-          LANGCHAIN_ANTHROPIC_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langchain-anthropic'); print(v);")
-          if [ "$LANGCHAIN_ANTHROPIC_VERSION" != "1.4.6" ]; then
-            echo "LANGCHAIN_ANTHROPIC_VERSION != 1.4.6; $LANGCHAIN_ANTHROPIC_VERSION"
-            exit 1
-          fi
+          pins=$(grep -oE '"[a-z0-9-]+==[^"]+"' pyproject.toml | tr -d '"')
+          [ -n "$pins" ] || { echo "no == pins found in pyproject.toml"; exit 1; }
+          for pin in $pins; do
+            pkg=${pin%%==*}
+            installed=$(docker run --rm --entrypoint "" langgraph-test-h python -c "from importlib.metadata import version; print(version('$pkg'))")
+            if [ "$installed" != "${pin#*==}" ]; then
+              echo "$pkg $installed != pinned ${pin#*==}"
+              exit 1
+            fi
+          done
 
       - name: Build and test prerelease reqs fail service
         if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}

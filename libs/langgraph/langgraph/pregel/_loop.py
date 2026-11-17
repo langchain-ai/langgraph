@@ -48,6 +48,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_STREAM,
+    CONFIG_KEY_STRICT_RESUME,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
     ERROR,
@@ -77,6 +78,7 @@ from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import (
     EmptyInputError,
     GraphInterrupt,
+    UnknownInterruptError,
 )
 from langgraph.managed.base import (
     ManagedValueMapping,
@@ -356,6 +358,14 @@ class PregelLoop:
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.durability = durability
+        # Channel types are fixed for the run, so per-step code reads these
+        # instead of scanning every channel.
+        self._has_untracked_channels = any(
+            isinstance(spec, UntrackedValue) for spec in specs.values()
+        )
+        self._delta_channel_names = [
+            k for k, spec in specs.items() if isinstance(spec, DeltaChannel)
+        ]
         self._has_graph_lifecycle_callbacks = has_graph_lifecycle_callbacks
         self._graph_lifecycle_events = deque()
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
@@ -494,9 +504,7 @@ class PregelLoop:
             writes_to_save = writes
 
         # check if any writes are to an UntrackedValue channel
-        if any(
-            isinstance(channel, UntrackedValue) for channel in self.channels.values()
-        ):
+        if self._has_untracked_channels:
             # we do not persist untracked values in checkpoints
             writes_to_save = [
                 # sanitize UntrackedValues that are nested within Send packets
@@ -657,48 +665,11 @@ class PregelLoop:
         # check if iteration limit is reached
         if self.step > self.stop:
             self.status = "out_of_steps"
+            # stream the checkpoint the last step saved, as a tick that runs would
+            self._prepare_tasks_and_emit_checkpoint()
             return False
 
-        # prepare next tasks
-        self.tasks = prepare_next_tasks(
-            self.checkpoint,
-            self.checkpoint_pending_writes,
-            self.nodes,
-            self.channels,
-            self.managed,
-            self.config,
-            self.step,
-            self.stop,
-            for_execution=True,
-            manager=self.manager,
-            store=self.store,
-            checkpointer=self.checkpointer,
-            trigger_to_nodes=self.trigger_to_nodes,
-            updated_channels=self.updated_channels,
-            retry_policy=self.retry_policy,
-            cache_policy=self.cache_policy,
-        )
-
-        # produce debug output
-        if self._checkpointer_put_after_previous is not None:
-            self._emit(
-                "checkpoints",
-                map_debug_checkpoint,
-                {
-                    **self.checkpoint_config,
-                    CONF: {
-                        **self.checkpoint_config[CONF],
-                        CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
-                    },
-                },
-                self.channels,
-                self.stream_keys,
-                self.checkpoint_metadata,
-                self.tasks.values(),
-                self.checkpoint_pending_writes,
-                self.prev_checkpoint_config,
-                self.output_keys,
-            )
+        self._prepare_tasks_and_emit_checkpoint()
 
         # if no more tasks, we're done
         if not self.tasks:
@@ -806,9 +777,52 @@ class PregelLoop:
             self.checkpoint, self.interrupt_after, self.tasks.values()
         ):
             self.status = "interrupt_after"
+            # the next tick, which streams this checkpoint, never runs
+            self._prepare_tasks_and_emit_checkpoint()
             raise GraphInterrupt()
         # unset resuming flag
         self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
+
+    def _prepare_tasks_and_emit_checkpoint(self) -> None:
+        self.tasks = prepare_next_tasks(
+            self.checkpoint,
+            self.checkpoint_pending_writes,
+            self.nodes,
+            self.channels,
+            self.managed,
+            self.config,
+            self.step,
+            self.stop,
+            for_execution=True,
+            manager=self.manager,
+            store=self.store,
+            checkpointer=self.checkpointer,
+            trigger_to_nodes=self.trigger_to_nodes,
+            updated_channels=self.updated_channels,
+            retry_policy=self.retry_policy,
+            cache_policy=self.cache_policy,
+        )
+
+        # produce debug output
+        if self._checkpointer_put_after_previous is not None:
+            self._emit(
+                "checkpoints",
+                map_debug_checkpoint,
+                {
+                    **self.checkpoint_config,
+                    CONF: {
+                        **self.checkpoint_config[CONF],
+                        CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
+                    },
+                },
+                self.channels,
+                self.stream_keys,
+                self.checkpoint_metadata,
+                self.tasks.values(),
+                self.checkpoint_pending_writes,
+                self.prev_checkpoint_config,
+                self.output_keys,
+            )
 
     def match_cached_writes(self) -> Sequence[PregelExecutableTask]:
         raise NotImplementedError
@@ -832,10 +846,12 @@ class PregelLoop:
         Unfinished (failed or interrupted) tasks keep empty writes, so the
         runner re-executes them or routes them to error handlers.
         """
-        for tid, status in read_task_statuses(self.checkpoint_pending_writes).items():
-            if task := tasks.get(tid):
-                task.writes.extend(status.output)
-                self._reapplied_task_ids.add(tid)
+        # Filter first: this runs once per task call, and reading the status of
+        # every task that wrote would make runs with many task calls quadratic.
+        writes = (w for w in self.checkpoint_pending_writes if w[0] in tasks)
+        for tid, status in read_task_statuses(writes).items():
+            tasks[tid].writes.extend(status.output)
+            self._reapplied_task_ids.add(tid)
 
     def _resume_error_handlers_if_applicable(self) -> None:
         """On resume, schedule error handlers for tasks that failed in a prior run.
@@ -1018,17 +1034,45 @@ class PregelLoop:
                         "Cannot use Command(resume=...) without checkpointer"
                     )
 
+                strict = (
+                    self.config[CONF].get(CONFIG_KEY_STRICT_RESUME, False)
+                    # Nested calls inherit the parent's configurable.
+                    and not self.is_nested
+                    # A finished task can rerun and interrupt again on replay, while
+                    # its earlier output still makes its interrupt look answered.
+                    and not self._addressed_checkpoint_superseded
+                )
                 if resume_is_map := (
                     isinstance(resume, dict)
                     and all(is_xxh3_128_hexdigest(k) for k in resume)
                 ):
+                    if strict:
+                        pending = self._pending_interrupts()
+                        if not resume:
+                            raise UnknownInterruptError(
+                                "The resume map names no interrupt",
+                                reason="empty_map",
+                                pending_ids=sorted(pending),
+                            )
+                        if unknown := sorted(resume.keys() - pending):
+                            raise UnknownInterruptError(
+                                f"Unknown or already-consumed interrupt: {unknown[0]}",
+                                reason="not_pending",
+                                interrupt_ids=unknown,
+                                pending_ids=sorted(pending),
+                            )
                     self.config[CONF][CONFIG_KEY_RESUME_MAP] = resume
                 else:
-                    if len(self._pending_interrupts()) > 1:
-                        raise RuntimeError(
+                    if len(pending := self._pending_interrupts()) > 1:
+                        message = (
                             "When there are multiple pending interrupts, you must specify the interrupt id when resuming. "
-                            "Docs: https://docs.langchain.com/oss/python/langgraph/add-human-in-the-loop#resume-multiple-interrupts-with-one-invocation."
+                            "Docs: https://docs.langchain.com/oss/python/langgraph/interrupts#handling-multiple-interrupts."
                         )
+                        if strict:
+                            raise UnknownInterruptError(
+                                message, reason="ambiguous", pending_ids=sorted(pending)
+                            )
+                        raise RuntimeError(message)
 
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
             # group writes by task ID
@@ -1264,9 +1308,7 @@ class PregelLoop:
             )
             new_counters: dict[str, tuple[int, int]] = {}
             updated = self.updated_channels or set()
-            for ch_name, ch in self.channels.items():
-                if not isinstance(ch, DeltaChannel):
-                    continue
+            for ch_name in self._delta_channel_names:
                 u, s = prev_counters.get(ch_name, (0, 0))
                 s += 1
                 if ch_name in updated:
@@ -1286,7 +1328,9 @@ class PregelLoop:
         # create new checkpoint
         channels_to_snapshot = (
             delta_channels_to_snapshot(
-                self.channels, new_counters, self.checkpoint["channel_versions"]
+                {k: self.channels[k] for k in self._delta_channel_names},
+                new_counters,
+                self.checkpoint["channel_versions"],
             )
             | self._delta_channels_forced_snapshot
             if do_checkpoint
@@ -1315,9 +1359,7 @@ class PregelLoop:
         elif "counters_since_delta_snapshot" in self.checkpoint_metadata:
             del self.checkpoint_metadata["counters_since_delta_snapshot"]
         # sanitize TASK channel in the checkpoint before saving (durability=="exit")
-        if TASKS in self.checkpoint["channel_values"] and any(
-            isinstance(channel, UntrackedValue) for channel in self.channels.values()
-        ):
+        if TASKS in self.checkpoint["channel_values"] and self._has_untracked_channels:
             sanitized_tasks = [
                 sanitize_untracked_values_in_send(value, self.channels)
                 if isinstance(value, Send)

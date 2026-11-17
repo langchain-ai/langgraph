@@ -32,7 +32,7 @@ from langchain_core.runnables import RunnableConfig
 pytest.importorskip("langgraph.channels.delta", reason="langgraph core not installed")
 pytest.importorskip("langgraph.graph", reason="langgraph core not installed")
 
-from langgraph.channels.delta import DeltaChannel  # type: ignore[import-untyped]  # noqa: I001
+from langgraph.channels.delta import DeltaChannel  # type: ignore[import-untyped]
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from langgraph.graph import END, START, StateGraph  # type: ignore[import-untyped]
 from typing_extensions import TypedDict

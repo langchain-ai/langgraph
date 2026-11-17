@@ -40,7 +40,7 @@ langgraph new [PATH] --template TEMPLATE_NAME
 
 ### `langgraph dev` 🏃‍♀️
 
-Run LangGraph API server in development mode with hot reloading.
+Run Agent Server in development mode with hot reloading.
 
 ```bash
 langgraph dev [OPTIONS]
@@ -54,7 +54,7 @@ langgraph dev [OPTIONS]
 
 ### `langgraph up` 🚀
 
-Launch LangGraph API server in Docker.
+Launch Agent Server in Docker.
 
 ```bash
 langgraph up [OPTIONS]
@@ -85,6 +85,112 @@ Generate a Dockerfile for custom deployments.
 langgraph dockerfile SAVE_PATH [OPTIONS]
   -c, --config FILE       Config file path
 ```
+
+### `langgraph deploy`
+
+Build and deploy an Agent Server image to LangSmith. Use `--agent-server-id` to
+update an existing Agent Server and `--agent-server-type` to select its type.
+The legacy `--deployment-id` and `--deployment-type` spellings remain supported
+as hidden compatibility aliases, with no removal scheduled. Older Python CLI
+versions and the JavaScript CLI may still require the legacy spellings; check
+command help for your installed version.
+
+#### Where `deploy` sends requests
+
+All `deploy` commands need only a LangSmith API key (`LANGSMITH_API_KEY`). The CLI
+asks the LangSmith API (`LANGSMITH_ENDPOINT`, or `https://api.smith.langchain.com`
+by default) which workspaces the key can use. If the workspace runs on a
+LangSmith data plane in your own cloud (BYOC on AWS, Azure, or GCP), the CLI
+talks to that data plane's host API and sets the workspace for you. The data
+plane URL must use https, since the API key is sent there. Status links still
+point at the LangSmith UI. If the key's workspaces sit on different data planes,
+set `LANGSMITH_TENANT_ID` to the workspace ID to reach its data plane; without
+it, the CLI starts on the LangSmith control plane, and the workspace ID you
+enter when asked picks the data plane. A `LANGSMITH_TENANT_ID` the key can't
+use is an error. If the workspace lookup fails, the CLI says so and uses the
+LangSmith control plane.
+
+`--host-url` (or `LANGGRAPH_HOST_URL`) sends every request to the given host
+backend URL instead and skips this lookup.
+
+#### What a data plane supports
+
+On a BYOC data plane, the data plane decides which deployments `deploy` can make:
+
+- Building with `deploy` (a local Docker build, or `--remote`) needs a data plane
+  that supports CLI builds. Otherwise, push to a registry you manage with
+  `--push-to <registry>/<repository>`, or deploy an existing image with
+  `--image-uri`. Both work on every data plane.
+- `--agent-server-type` defaults to `serverless`, or to `dev` on a data plane
+  without scale to zero. Asking for `serverless` or `dedicated` on a data plane
+  that doesn't support it fails before anything is created.
+
+### `langgraph deploy metrics`
+
+Fetch Agent Server monitoring time series as JSON. Like the other `deploy`
+commands, it finds the API key's workspace and sends the request to that
+workspace's control plane or data plane (see
+[Where `deploy` sends requests](#where-deploy-sends-requests)). Use
+`langgraph deploy list` to find the Agent Server ID.
+
+```bash
+langgraph deploy metrics AGENT_SERVER_ID \
+  --start-time 2026-10-28T00:00:00Z \
+  --end-time 2026-10-28T01:00:00Z \
+  --metrics cpu_usage,memory_usage,worker_count
+```
+
+`--metrics` accepts a comma-separated list of these names (also listed in
+`langgraph deploy metrics --help`):
+
+- Resource usage: `memory_usage`, `cpu_usage`, `disk_usage`
+- Counts: `restart_count`, `replica_count`, `worker_count`, `lg_run_count`
+- HTTP traffic: `responses_per_second`, `error_responses_per_second`, `p95_latency`
+- Queue: `run_queue_wait_time`
+
+These are exact metric names, not free-text search terms. Availability depends on
+the Agent Server and platform; a supported metric may have no data. Use
+`lg_run_count` for Agent Server runs, not the UI schema's placeholder `run_count`.
+
+Omit `--metrics` to fetch all available metrics. Time bounds default to the last
+15 minutes, and the backend picks the resolution from the time
+range. This command never prompts; for an organization-scoped key, set
+`LANGSMITH_TENANT_ID` to the workspace ID.
+
+Default output is compact JSON grouped by section title, chart title, and series
+name. Each series contains its real `project_metric` as `metric`, inferred `unit`
+(`percent`, `count`, or `null`), `latest`, `min`, `max`, `avg`, and
+`points: [[iso_timestamp, value], ...]`. Values are rounded to three decimals;
+statistics use unrounded finite values and ignore missing samples. `latest` is
+the latest non-missing value. Missing samples remain `null` gaps, and series with
+no values have null statistics. Empty sections are marked `{"_empty":true}`.
+
+The top level includes `deployment_id`, `start_time`, `end_time`, and
+`step_seconds`. Bounds always describe the requested window, not the observed
+point bounds. The CLI resolves omitted bounds once: end defaults to now (UTC),
+and start defaults to 15 minutes before the resolved end. With only `--end-time`,
+start is 15 minutes before that value; with only `--start-time`, end is now. Both
+values are sent explicitly to the backend and output, even when there are no points. `step_seconds` is the most common gap between consecutive
+timestamps within series, with ties broken by the smallest gap. Whole seconds
+are integers; fractional seconds are preserved. It is `null` only when every
+series has fewer than two timestamps. UI metadata and repeated series IDs are
+omitted. The host-backend response itself is unchanged.
+
+```bash
+langgraph deploy metrics AGENT_SERVER_ID --summary
+langgraph deploy metrics AGENT_SERVER_ID --raw
+```
+
+`--summary` returns the same shape without `points`. `--raw` returns the original
+UI chart schema without reshaping or rounding. These flags are mutually exclusive.
+Neither mode returns traces.
+
+Size comparison using the realistic synthetic unit-test fixture (compact JSON
+serialization for all modes; not a live Agent Server benchmark):
+
+| Before: raw UI schema | After: default | After: summary |
+| --- | --- | --- |
+| 4,302 bytes | 1,226 bytes (72% smaller) | 806 bytes (81% smaller) |
 
 ## Configuration
 

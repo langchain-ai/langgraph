@@ -33,6 +33,7 @@ from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._cache import default_cache_key
 from langgraph._internal._constants import INTERRUPT as _INTERRUPT_KEY
+from langgraph._internal._constants import NS_SEP
 from langgraph._internal._fields import get_cached_annotated_keys, get_update_as_tuples
 from langgraph._internal._retry import default_retry_on
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
@@ -579,6 +580,15 @@ def omit_payload(_value: Any) -> dict[str, Any]:
 _DEFAULT_INTERRUPT_ID = "placeholder-id"
 
 
+def _interrupt_id(ns: str, answered: int) -> str:
+    # Keyed by how many answers the task already has, the slot this interrupt's
+    # answer fills; call order isn't stable across parallel calls in one task.
+    # With none it's the bare namespace hash older versions gave every
+    # interrupt, so saved ids still match. The suffix can't form another task's
+    # namespace, whose segments all contain ":".
+    return xxh3_128_hexdigest((f"{ns}{NS_SEP}{answered}" if answered else ns).encode())
+
+
 @final
 @dataclass(init=False, slots=True)
 class Interrupt(Generic[ResponseT]):
@@ -641,7 +651,7 @@ class Interrupt(Generic[ResponseT]):
     ) -> Interrupt[ResponseT]:
         return cls(
             value=value,
-            id=xxh3_128_hexdigest(ns.encode()),
+            id=_interrupt_id(ns, 0),
             response_schema=response_schema,
         )
 
@@ -1037,9 +1047,11 @@ def interrupt(
     # no resume value found
     raise GraphInterrupt(
         (
-            Interrupt.from_ns(
+            Interrupt(
                 value=value,
-                ns=conf[CONFIG_KEY_CHECKPOINT_NS],
+                id=_interrupt_id(
+                    conf[CONFIG_KEY_CHECKPOINT_NS], len(scratchpad.resume)
+                ),
                 response_schema=adapter.json_schema() if adapter else response_schema,
             ),
         )

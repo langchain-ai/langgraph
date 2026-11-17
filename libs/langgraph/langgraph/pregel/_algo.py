@@ -85,6 +85,7 @@ from langgraph.types import (
     RetryPolicy,
     Send,
     TimeoutPolicy,
+    _interrupt_id,
 )
 
 GetNextVersion = Callable[[V | None, None], V]
@@ -626,7 +627,7 @@ def prepare_single_task(
                 config[CONF].get(CONFIG_KEY_SCRATCHPAD),
                 pending_writes,
                 task_id,
-                xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+                task_checkpoint_ns,
                 config[CONF].get(CONFIG_KEY_RESUME_MAP),
                 step,
                 stop,
@@ -873,7 +874,7 @@ def prepare_push_task_functional(
             configurable.get(CONFIG_KEY_SCRATCHPAD),
             pending_writes,
             task_id,
-            xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+            task_checkpoint_ns,
             configurable.get(CONFIG_KEY_RESUME_MAP),
             step,
             stop,
@@ -1035,7 +1036,7 @@ def prepare_push_task_send(
             config[CONF].get(CONFIG_KEY_SCRATCHPAD),
             pending_writes,
             task_id,
-            xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+            task_checkpoint_ns,
             config[CONF].get(CONFIG_KEY_RESUME_MAP),
             step,
             stop,
@@ -1184,7 +1185,7 @@ def prepare_node_error_handler_task(
         config[CONF].get(CONFIG_KEY_SCRATCHPAD),
         pending_writes,
         task_id,
-        xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+        task_checkpoint_ns,
         config[CONF].get(CONFIG_KEY_RESUME_MAP),
         step,
         stop,
@@ -1280,7 +1281,7 @@ def _scratchpad(
     parent_scratchpad: PregelScratchpad | None,
     pending_writes: list[PendingWrite],
     task_id: str,
-    namespace_hash: str,
+    task_checkpoint_ns: str,
     resume_map: dict[str, Any] | None,
     step: int,
     stop: int,
@@ -1307,10 +1308,15 @@ def _scratchpad(
             task_resume_write = []
         del w
 
-        # find namespace and task-specific resume value
-        if resume_map and namespace_hash in resume_map:
-            mapped_resume_write = resume_map[namespace_hash]
-            task_resume_write.append(mapped_resume_write)
+        # find the resume value for the task's next interrupt
+        if resume_map:
+            next_id = _interrupt_id(task_checkpoint_ns, len(task_resume_write))
+            first_id = _interrupt_id(task_checkpoint_ns, 0)
+            if next_id in resume_map:
+                task_resume_write.append(resume_map[next_id])
+            # Older versions gave all of a task's interrupts the first id.
+            elif first_id in resume_map:
+                task_resume_write.append(resume_map[first_id])
 
     else:
         null_resume_write = None

@@ -1,5 +1,6 @@
 # type: ignore
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import Any
 from uuid import uuid4
@@ -417,3 +418,33 @@ async def test_delta_channel_chain_reconstruction(saver_name: str) -> None:
         assert msgs[1].content == "reply-1"
         assert msgs[2].content == "there"
         assert msgs[3].content == "reply-3"
+
+
+async def test_pool_saver_reads_while_a_list_is_open(test_data) -> None:
+    async with _pool_saver() as saver:
+        config = await saver.aput(
+            test_data["configs"][0],
+            test_data["checkpoints"][0],
+            test_data["metadata"][0],
+            {},
+        )
+        listing = saver.alist(None)
+        try:
+            assert await anext(listing) is not None
+            assert await asyncio.wait_for(saver.aget_tuple(config), timeout=5)
+        finally:
+            await listing.aclose()
+
+
+async def test_base_saver_serializes_concurrent_calls(test_data) -> None:
+    async with _base_saver() as saver:
+        config = await saver.aput(
+            test_data["configs"][0],
+            test_data["checkpoints"][0],
+            test_data["metadata"][0],
+            {},
+        )
+        await asyncio.gather(
+            *(saver.aput_writes(config, [("x", i)], str(uuid4())) for i in range(20)),
+            *(saver.aget_tuple(config) for _ in range(20)),
+        )

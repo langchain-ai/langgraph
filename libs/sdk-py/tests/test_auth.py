@@ -1,6 +1,47 @@
+import ast
+import inspect
+
 import pytest
 
 from langgraph_sdk import Auth
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [{}, {"actions": "read"}, {"resources": None}],
+)
+def test_global_handler_factory_accepts_optional_resources(kwargs) -> None:
+    auth = Auth()
+    tree = ast.parse(inspect.getsource(type(auth.on)))
+    cls = tree.body[0]
+    assert isinstance(cls, ast.ClassDef)
+    factory_overload = next(
+        node
+        for node in cls.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "__call__"
+        and node.decorator_list
+        and any(arg.arg == "resources" for arg in node.args.kwonlyargs)
+    )
+    resources = next(
+        arg for arg in factory_overload.args.kwonlyargs if arg.arg == "resources"
+    )
+    assert resources.annotation is not None
+    assert ast.unparse(resources.annotation) == "str | Sequence[str] | None"
+    default = factory_overload.args.kw_defaults[0]
+    assert isinstance(default, ast.Constant) and default.value is None
+
+    @auth.on(**kwargs)
+    async def handler(ctx, value):
+        del ctx, value
+        return None
+
+    if kwargs.get("actions"):
+        assert auth._handlers == {("*", "read"): [handler]}
+        assert auth._global_handlers == []
+    else:
+        assert auth._global_handlers == [handler]
+        assert auth._handlers == {}
 
 
 def test_handler_multiple_resources_and_actions() -> None:

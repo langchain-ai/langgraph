@@ -354,8 +354,6 @@ class _ResourceOn(
     Generic base class for resource-specific handlers.
     """
 
-    value: type[VCreate | VUpdate | VRead | VDelete | VSearch]
-
     Create: type[VCreate]
     Read: type[VRead]
     Update: type[VUpdate]
@@ -811,7 +809,7 @@ class _On:
     def __call__(
         self,
         *,
-        resources: str | Sequence[str],
+        resources: str | Sequence[str] | None = None,
         actions: str | Sequence[str] | None = None,
     ) -> Callable[[AHO], AHO]: ...
 

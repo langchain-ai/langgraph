@@ -4,7 +4,7 @@ import json
 import random
 import sqlite3
 import threading
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Generator, Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
 from typing import Any, cast
 
@@ -101,7 +101,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
 
     @classmethod
     @contextmanager
-    def from_conn_string(cls, conn_string: str) -> Iterator[SqliteSaver]:
+    def from_conn_string(cls, conn_string: str) -> Generator[SqliteSaver, None, None]:
         """Create a new SqliteSaver instance from a connection string.
 
         Args:
@@ -185,7 +185,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         self.is_setup = True
 
     @contextmanager
-    def cursor(self, transaction: bool = True) -> Iterator[sqlite3.Cursor]:
+    def cursor(self, transaction: bool = True) -> Generator[sqlite3.Cursor, None, None]:
         """Get a cursor for the SQLite database.
 
         This method returns a cursor for the SQLite database. It is used internally

@@ -977,14 +977,19 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                     ):
                         yield cur
             else:
-                with conn.cursor(binary=True, row_factory=dict_row) as cur:
+                # Lone reads land here, so take the lock like the pipeline branch:
+                # another thread may be holding this connection in a pipeline.
+                with self.lock, conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
     def batch(self, ops: Iterable[Op]) -> list[Result]:
         grouped_ops, num_ops = _group_ops(ops)
         results: list[Result] = [None] * num_ops
 
-        with self._cursor(pipeline=True) as cur:
+        # A lone read is one statement: outside a pipeline it costs one round
+        # trip instead of two (its fetch, then the Sync on leaving the pipeline).
+        lone_read = num_ops == 1 and PutOp not in grouped_ops and not self.pipe
+        with self._cursor(pipeline=not lone_read) as cur:
             if GetOp in grouped_ops:
                 self._batch_get_ops(
                     cast(Sequence[tuple[int, GetOp]], grouped_ops[GetOp]), results, cur

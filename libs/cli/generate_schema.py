@@ -23,6 +23,7 @@ from langgraph_cli.schemas import (
     GraphDef,
     HttpConfig,
     IndexConfig,
+    PriorityConfig,
     SecurityConfig,
     SerdeConfig,
     StoreConfig,
@@ -106,6 +107,10 @@ def add_descriptions_to_schema(schema, cls):
     # Recursively process nested definitions
     if "$defs" in schema:
         for def_name, def_schema in schema["$defs"].items():
+            # msgspec copies raw __doc__, which keeps indentation before Python
+            # 3.13, so clean it here too for classes not listed below.
+            if def_schema.get("description"):
+                def_schema["description"] = inspect.cleandoc(def_schema["description"])
             # Find the class that corresponds to this definition
             for potential_cls in [
                 Config,
@@ -113,6 +118,7 @@ def add_descriptions_to_schema(schema, cls):
                 StoreConfig,
                 IndexConfig,
                 AuthConfig,
+                PriorityConfig,
                 SecurityConfig,
                 HttpConfig,
                 CorsConfig,

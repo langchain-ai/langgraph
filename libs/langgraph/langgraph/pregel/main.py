@@ -97,6 +97,7 @@ from langgraph._internal._runnable import (
     Runnable,
     RunnableLike,
     RunnableSeq,
+    _is_stream_handler,
     coerce_to_runnable,
 )
 from langgraph._internal._timeout import coerce_timeout_policy
@@ -202,11 +203,6 @@ from langgraph.types import (
 )
 from langgraph.typing import ContextT, InputT, OutputT, StateT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
-
-try:
-    from langchain_core.tracers._streaming import _StreamingCallbackHandler
-except ImportError:
-    _StreamingCallbackHandler = None  # type: ignore
 
 __all__ = ("NodeBuilder", "Pregel")
 
@@ -888,11 +884,23 @@ class Pregel(
         )
 
     def _subgraph_for_namespace(
-        self, config: RunnableConfig, checkpointer: BaseCheckpointSaver
+        self,
+        config: RunnableConfig,
+        checkpointer: BaseCheckpointSaver,
+        *,
+        for_update: bool = False,
     ) -> tuple[PregelProtocol, RunnableConfig] | None:
         """The subgraph a state method's namespaced config addresses, and the
         config to call it with, lending it `checkpointer`. `None` when the
-        config is for this graph."""
+        config is for this graph, or names no subgraph this graph declares or
+        detects (such as one a tool invokes), so a read uses this graph's
+        channels.
+
+        Raises:
+            ValueError: If `for_update` and the namespace names no such
+                subgraph: this graph's nodes and channels would write the wrong
+                state into it.
+        """
         checkpoint_ns = config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         if not checkpoint_ns or CONFIG_KEY_CHECKPOINTER in config[CONF]:
             return None
@@ -901,7 +909,9 @@ class Pregel(
             return pregel, patch_configurable(
                 config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
             )
-        raise ValueError(f"Subgraph {recast} not found")
+        if for_update:
+            raise ValueError(f"Subgraph {recast} not found")
+        return None
 
     def _apply_checkpointer_allowlist(
         self, checkpointer: BaseCheckpointSaver | None
@@ -1147,7 +1157,9 @@ class Pregel(
         """Get the subgraphs of the graph.
 
         Args:
-            namespace: The namespace to filter the subgraphs by.
+            namespace: Yield only the subgraph at this exact namespace, such
+                as `parent|child` (without task IDs). A nested namespace needs
+                `recurse=True`.
             recurse: Whether to recurse into the subgraphs.
                 If `False`, only the immediate subgraphs will be returned.
 
@@ -1155,9 +1167,9 @@ class Pregel(
             An iterator of the `(namespace, subgraph)` pairs.
         """
         for name, node in self.nodes.items():
-            # filter by prefix
+            # filter by the namespace's first segment, matched whole
             if namespace is not None:
-                if not namespace.startswith(name):
+                if namespace != name and not namespace.startswith(name + NS_SEP):
                     continue
 
             # find the subgraph, if any
@@ -1171,12 +1183,13 @@ class Pregel(
                 if namespace is None:
                     yield name, graph
                 if recurse and isinstance(graph, Pregel):
-                    if namespace is not None:
-                        namespace = namespace[len(name) + 1 :]
+                    child_namespace = (
+                        None if namespace is None else namespace[len(name) + 1 :]
+                    )
                     yield from (
                         (f"{name}{NS_SEP}{n}", s)
                         for n, s in graph.get_subgraphs(
-                            namespace=namespace, recurse=recurse
+                            namespace=child_namespace, recurse=recurse
                         )
                     )
 
@@ -1186,7 +1199,9 @@ class Pregel(
         """Get the subgraphs of the graph.
 
         Args:
-            namespace: The namespace to filter the subgraphs by.
+            namespace: Yield only the subgraph at this exact namespace, such
+                as `parent|child` (without task IDs). A nested namespace needs
+                `recurse=True`.
             recurse: Whether to recurse into the subgraphs.
                 If `False`, only the immediate subgraphs will be returned.
 
@@ -1645,7 +1660,9 @@ class Pregel(
         if any(len(u) == 0 for u in supersteps):
             raise ValueError("No updates provided")
 
-        if subgraph := self._subgraph_for_namespace(config, checkpointer):
+        if subgraph := self._subgraph_for_namespace(
+            config, checkpointer, for_update=True
+        ):
             pregel, subgraph_config = subgraph
             return pregel.bulk_update_state(subgraph_config, supersteps)
 
@@ -2146,7 +2163,9 @@ class Pregel(
         if any(len(u) == 0 for u in supersteps):
             raise ValueError("No updates provided")
 
-        if subgraph := self._subgraph_for_namespace(config, checkpointer):
+        if subgraph := self._subgraph_for_namespace(
+            config, checkpointer, for_update=True
+        ):
             pregel, subgraph_config = subgraph
             return await pregel.abulk_update_state(subgraph_config, supersteps)
 
@@ -2880,6 +2899,21 @@ class Pregel(
                     for h in callback_manager.inheritable_handlers
                     if not isinstance(h, StreamMessagesHandlerV2)
                 ]
+            if CONFIG_KEY_TASK_ID not in config[CONF]:
+                # Not run as a task (a child invoked with its own thread, say),
+                # this graph's namespace starts at the root, so a caller's
+                # handler without `subgraphs` would take this graph's events
+                # for its own graph's. One with `subgraphs` asked for them.
+                callback_manager.handlers = [
+                    h
+                    for h in callback_manager.handlers
+                    if not _streams_only_its_graph(h)
+                ]
+                callback_manager.inheritable_handlers = [
+                    h
+                    for h in callback_manager.inheritable_handlers
+                    if not _streams_only_its_graph(h)
+                ]
             if "ls_integration" not in callback_manager.metadata:
                 callback_manager.add_metadata({"ls_integration": "langgraph"})
             run_manager = callback_manager.on_chain_start(
@@ -2898,9 +2932,9 @@ class Pregel(
                 )
             # set up subgraph checkpointing
             config = self._own_checkpoint_config(config)
+            stream_handlers: list[StreamMessagesHandler | StreamToolCallHandler] = []
             # set up messages stream mode
             if "messages" in stream_modes:
-                ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
                 use_stream_messages_v2 = bool(
                     version == "v2" and config[CONF].get(CONFIG_KEY_STREAM_MESSAGES_V2)
                 )
@@ -2909,24 +2943,12 @@ class Pregel(
                     if use_stream_messages_v2
                     else StreamMessagesHandler
                 )
-                run_manager.inheritable_handlers.append(
-                    messages_handler_cls(
-                        stream.put,
-                        subgraphs,
-                        parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
-                    )
-                )
+                stream_handlers.append(messages_handler_cls(stream.put, subgraphs))
 
             # set up tools stream mode
             if "tools" in stream_modes:
-                ns_tools = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
-                run_manager.inheritable_handlers.append(
-                    StreamToolCallHandler(
-                        stream.put,
-                        subgraphs,
-                        parent_ns=tuple(ns_tools.split(NS_SEP)) if ns_tools else None,
-                    )
-                )
+                stream_handlers.append(StreamToolCallHandler(stream.put, subgraphs))
+            run_manager.inheritable_handlers.extend(stream_handlers)
 
             # set up custom stream mode
             if "custom" in stream_modes:
@@ -3009,6 +3031,10 @@ class Pregel(
                 cache_policy=self.cache_policy,
                 has_graph_lifecycle_callbacks=bool(graph_callback_manager.handlers),
             ) as loop:
+                # Known only now: the loop numbers the namespace of every
+                # subgraph a task runs after its first.
+                for handler in stream_handlers:
+                    handler.parent_ns = loop.checkpoint_ns
                 emit_graph_lifecycle_events(loop)
                 # create runner
                 runner = PregelRunner(
@@ -3291,6 +3317,21 @@ class Pregel(
                     for h in callback_manager.inheritable_handlers
                     if not isinstance(h, StreamMessagesHandlerV2)
                 ]
+            if CONFIG_KEY_TASK_ID not in config[CONF]:
+                # Not run as a task (a child invoked with its own thread, say),
+                # this graph's namespace starts at the root, so a caller's
+                # handler without `subgraphs` would take this graph's events
+                # for its own graph's. One with `subgraphs` asked for them.
+                callback_manager.handlers = [
+                    h
+                    for h in callback_manager.handlers
+                    if not _streams_only_its_graph(h)
+                ]
+                callback_manager.inheritable_handlers = [
+                    h
+                    for h in callback_manager.inheritable_handlers
+                    if not _streams_only_its_graph(h)
+                ]
             if "ls_integration" not in callback_manager.metadata:
                 callback_manager.add_metadata({"ls_integration": "langgraph"})
             run_manager = await callback_manager.on_chain_start(
@@ -3304,18 +3345,10 @@ class Pregel(
                 run_id=run_manager.run_id,
             )
             # if running from astream_log() run each proc with streaming
-            do_stream = (
-                next(
-                    (
-                        True
-                        for h in run_manager.handlers
-                        if isinstance(h, _StreamingCallbackHandler)
-                        and not isinstance(h, StreamMessagesHandler)
-                    ),
-                    False,
-                )
-                if _StreamingCallbackHandler is not None
-                else False
+            do_stream = any(
+                _is_stream_handler(h)
+                and not isinstance(h, (StreamMessagesHandler, StreamToolCallHandler))
+                for h in run_manager.handlers
             )
             if checkpointer is None and durability is not None:
                 warnings.warn(
@@ -3323,10 +3356,9 @@ class Pregel(
                 )
             # set up subgraph checkpointing
             config = self._own_checkpoint_config(config)
+            stream_handlers: list[StreamMessagesHandler | StreamToolCallHandler] = []
             # set up messages stream mode
             if "messages" in stream_modes:
-                # namespace can be None in a root level graph?
-                ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
                 use_stream_messages_v2 = bool(
                     version == "v2" and config[CONF].get(CONFIG_KEY_STREAM_MESSAGES_V2)
                 )
@@ -3335,24 +3367,12 @@ class Pregel(
                     if use_stream_messages_v2
                     else StreamMessagesHandler
                 )
-                run_manager.inheritable_handlers.append(
-                    messages_handler_cls(
-                        stream_put,
-                        subgraphs,
-                        parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
-                    )
-                )
+                stream_handlers.append(messages_handler_cls(stream_put, subgraphs))
 
             # set up tools stream mode
             if "tools" in stream_modes:
-                ns_tools = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
-                run_manager.inheritable_handlers.append(
-                    StreamToolCallHandler(
-                        stream_put,
-                        subgraphs,
-                        parent_ns=tuple(ns_tools.split(NS_SEP)) if ns_tools else None,
-                    )
-                )
+                stream_handlers.append(StreamToolCallHandler(stream_put, subgraphs))
+            run_manager.inheritable_handlers.extend(stream_handlers)
 
             # set up custom stream mode
             def stream_writer(c: Any) -> None:
@@ -3461,6 +3481,10 @@ class Pregel(
                 cache_policy=self.cache_policy,
                 has_graph_lifecycle_callbacks=bool(graph_callback_manager.handlers),
             ) as loop:
+                # Known only now: the loop numbers the namespace of every
+                # subgraph a task runs after its first.
+                for handler in stream_handlers:
+                    handler.parent_ns = loop.checkpoint_ns
                 await aemit_graph_lifecycle_events(loop)
                 # create runner
                 runner = PregelRunner(
@@ -4456,6 +4480,13 @@ def _coerce_checkpoint_values(payload: Any, mapper: Callable[[Any], Any]) -> Non
         and _START not in payload.get("next", ())
     ):
         payload["values"] = mapper(payload["values"])
+
+
+def _streams_only_its_graph(handler: object) -> bool:
+    return (
+        isinstance(handler, (StreamMessagesHandler, StreamToolCallHandler))
+        and not handler.subgraphs
+    )
 
 
 def _resolve_parent_ns(
