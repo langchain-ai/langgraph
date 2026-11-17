@@ -146,6 +146,11 @@ DEFAULT_IMAGE_DISTRO = "debian"
 
 
 _BUILD_TOOLS = ("pip", "setuptools", "wheel")
+_PYTHON_INSTALL_RUN = "RUN --mount=type=secret,id=LANGSMITH_NETRC,target=/run/secrets/langsmith.netrc,required=false"
+_PYTHON_INSTALL_ENV = "NETRC=/run/secrets/langsmith.netrc PYTHONDONTWRITEBYTECODE=1"
+_NODE_INSTALL_RUN = (
+    "RUN --mount=type=secret,id=LANGSMITH_NPMRC,target=/root/.npmrc,required=false"
+)
 
 
 def _get_pip_cleanup_lines(
@@ -157,7 +162,7 @@ def _get_pip_cleanup_lines(
         f"""# -- Ensure user deps didn't inadvertently overwrite langgraph-api
 RUN mkdir -p /api/langgraph_api /api/langgraph_runtime /api/langgraph_license && \
 touch /api/langgraph_api/__init__.py /api/langgraph_runtime/__init__.py /api/langgraph_license/__init__.py
-RUN PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir --no-deps -e /api
+{_PYTHON_INSTALL_RUN} {_PYTHON_INSTALL_ENV} {install_cmd} --no-cache-dir --no-deps -e /api
 # -- End of ensuring user deps didn't inadvertently overwrite langgraph-api --
 # -- Removing build deps from the final image ~<:===~~~ --"""
     ]
@@ -1237,9 +1242,11 @@ def _update_http_app_path(
 
 
 def _build_python_install_commands(
-    config: Config, install_cmd: str
+    config: Config, install_cmd: str, *, constraints: bool = True
 ) -> tuple[str, str, str]:
-    base_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
+    base_install = f"{_PYTHON_INSTALL_ENV} {install_cmd} --no-cache-dir"
+    if constraints:
+        base_install += " -c /api/constraints.txt"
     local_reqs_pip_install = base_install
     global_reqs_pip_install = base_install
 
@@ -1449,7 +1456,9 @@ def python_config_to_docker(
     _update_http_app_path(config_path, config, local_deps)
 
     pip_pkgs_str = (
-        f"RUN {local_reqs_pip_install} {' '.join(pypi_deps)}" if pypi_deps else ""
+        f"{_PYTHON_INSTALL_RUN} {local_reqs_pip_install} {' '.join(pypi_deps)}"
+        if pypi_deps
+        else ""
     )
     if local_deps.pip_reqs:
         pip_reqs_str = os.linesep.join(
@@ -1460,7 +1469,7 @@ def python_config_to_docker(
             )
             for reqpath, destpath in local_deps.pip_reqs
         )
-        pip_reqs_str += f"{os.linesep}RUN {local_reqs_pip_install} {' '.join('-r ' + r for _, r in local_deps.pip_reqs)}"
+        pip_reqs_str += f"{os.linesep}{_PYTHON_INSTALL_RUN} {local_reqs_pip_install} {' '.join('-r ' + r for _, r in local_deps.pip_reqs)}"
         pip_reqs_str = f"""# -- Installing local requirements --
 {pip_reqs_str}
 # -- End of local requirements install --"""
@@ -1559,7 +1568,8 @@ ADD {relpath} /deps/{name}
                 "# -- Installing JS dependencies --",
                 f"ENV NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}",
                 f"WORKDIR {local_deps.working_dir}",
-                f"RUN {_get_node_pm_install_cmd(config_path.parent)} && tsx /api/langgraph_api/js/build.mts",
+                f"{_NODE_INSTALL_RUN} {_get_node_pm_install_cmd(config_path.parent)}",
+                "RUN tsx /api/langgraph_api/js/build.mts",
                 "# -- End of JS dependencies install --",
             ]
         )
@@ -1579,7 +1589,7 @@ ADD {relpath} /deps/{name}
 
     # Add main dockerfile content
     dep_vname = "$$dep" if escape_variables else "$dep"
-    local_deps_install_str = f"""RUN for dep in /deps/*; do \
+    local_deps_install_str = f"""{_PYTHON_INSTALL_RUN} for dep in /deps/*; do \
             echo "Installing {dep_vname}"; \
             if [ -d "{dep_vname}" ]; then \
                 echo "Installing {dep_vname}"; \
@@ -1660,7 +1670,7 @@ def node_config_to_docker(
         # Monorepo case: install from root, build from config directory
         container_root = f"/deps/{pathlib.Path(build_context).name}"
         install_workdir = container_root
-        install_step = f"RUN {install_cmd}"
+        install_step = f"{_NODE_INSTALL_RUN} {install_cmd}"
 
         if build_command:
             build_step = f"RUN {build_command}"
@@ -1669,7 +1679,7 @@ def node_config_to_docker(
     else:
         # Original behavior: everything happens in the same directory
         install_workdir = faux_path
-        install_step = f"RUN {install_cmd}"
+        install_step = f"{_NODE_INSTALL_RUN} {install_cmd}"
         build_step = 'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts'
 
     if build_context:

@@ -874,6 +874,8 @@ def python_config_to_docker_uv_lock(
     build_tools_to_uninstall: tuple[str, ...] | None,
 ) -> tuple[str, dict[str, str]]:
     from langgraph_cli.config import (
+        _NODE_INSTALL_RUN,
+        _PYTHON_INSTALL_RUN,
         DEFAULT_NODE_VERSION,
         _build_python_install_commands,
         _build_runtime_env_vars,
@@ -945,6 +947,11 @@ def python_config_to_docker_uv_lock(
         return f"ADD {relative_source} {destination}"
 
     uv_export_project_dir = "/tmp/uv_export/project"
+    root_uv_config = _load_pyproject(plan.pyproject_path).get("tool", {}).get("uv", {})
+    has_indexes = root_uv_config.get("index") or any(
+        isinstance(package.raw_uv_tool, dict) and package.raw_uv_tool.get("index")
+        for package in plan.install_order
+    )
     env_vars = _build_runtime_env_vars(config)
 
     image_str = docker_tag(config, base_image, api_version)
@@ -998,23 +1005,30 @@ def python_config_to_docker_uv_lock(
             )
         )
     docker_plan.add_instruction("WORKDIR", uv_export_project_dir)
-    docker_plan.add_instruction(
-        "RUN",
-        " ".join(
-            [
-                "uv export",
-                f"--package {shlex.quote(plan.target.name)}",
-                "--frozen",
-                "--no-hashes",
-                "--no-emit-project",
-                "--no-emit-workspace",
-                "-o uv_requirements.txt",
-            ]
-        ),
+    export_command = " ".join(
+        [
+            "uv export",
+            f"--package {shlex.quote(plan.target.name)}",
+            "--frozen",
+            "--no-hashes",
+            "--no-emit-project",
+            "--no-emit-workspace",
+        ]
     )
-    docker_plan.add_instruction(
-        "RUN", f"{global_reqs_pip_install} -r uv_requirements.txt"
-    )
+    docker_plan.add_instruction("RUN", f"{export_command} -o uv_requirements.txt")
+    dependency_install = f"{global_reqs_pip_install} -r uv_requirements.txt"
+    if has_indexes:
+        docker_plan.add_instruction(
+            "RUN", f"{export_command} --format pylock.toml -o pylock.toml"
+        )
+        _, pylock_install, _ = _build_python_install_commands(
+            config, install_cmd, constraints=False
+        )
+        dependency_install = (
+            f"{pylock_install} -r pylock.toml && "
+            f"{global_reqs_pip_install} --dry-run --offline --no-deps -r uv_requirements.txt"
+        )
+    docker_plan.add_raw(f"{_PYTHON_INSTALL_RUN} {dependency_install}")
     docker_plan.add_instruction("RUN", "rm -rf /tmp/uv_export")
     docker_plan.add_raw("# -- End of uv.lock dependencies install --")
     docker_plan.add_blank()
@@ -1030,7 +1044,9 @@ def python_config_to_docker_uv_lock(
         docker_plan.add_instruction(
             "WORKDIR", plan.container_roots[package.root].as_posix()
         )
-        docker_plan.add_instruction("RUN", f"{global_reqs_pip_install} --no-deps -e .")
+        docker_plan.add_raw(
+            f"{_PYTHON_INSTALL_RUN} {global_reqs_pip_install} --no-deps -e ."
+        )
         docker_plan.add_raw(f"# -- End of workspace package {package_label} --")
         docker_plan.add_blank()
 
@@ -1044,11 +1060,10 @@ def python_config_to_docker_uv_lock(
             "ENV", f"NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}"
         )
         docker_plan.add_instruction("WORKDIR", plan.working_dir)
-        docker_plan.add_instruction(
-            "RUN",
-            f"{_get_node_pm_install_cmd(plan.target_root)} && "
-            "tsx /api/langgraph_api/js/build.mts",
+        docker_plan.add_raw(
+            f"{_NODE_INSTALL_RUN} {_get_node_pm_install_cmd(plan.target_root)}"
         )
+        docker_plan.add_instruction("RUN", "tsx /api/langgraph_api/js/build.mts")
         docker_plan.add_raw("# -- End of JS dependencies install --")
         docker_plan.add_blank()
 
