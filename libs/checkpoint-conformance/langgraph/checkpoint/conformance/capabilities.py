@@ -24,6 +24,7 @@ class Capability(str, Enum):
     COPY_THREAD = "copy_thread"
     PRUNE = "prune"
     DELTA_CHANNEL_HISTORY = "delta_channel_history"
+    TRANSCRIPT = "transcript"
 
 
 # Capabilities that every checkpointer must support.
@@ -44,6 +45,7 @@ EXTENDED_CAPABILITIES = frozenset(
         Capability.COPY_THREAD,
         Capability.PRUNE,
         Capability.DELTA_CHANNEL_HISTORY,
+        Capability.TRANSCRIPT,
     }
 )
 
@@ -60,6 +62,7 @@ _CAPABILITY_METHOD_MAP: dict[Capability, str] = {
     Capability.COPY_THREAD: "acopy_thread",
     Capability.PRUNE: "aprune",
     Capability.DELTA_CHANNEL_HISTORY: "aget_delta_channel_history",
+    Capability.TRANSCRIPT: "aget_transcript",
 }
 
 

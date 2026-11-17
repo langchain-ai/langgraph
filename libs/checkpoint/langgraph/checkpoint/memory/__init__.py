@@ -23,9 +23,16 @@ from langgraph.checkpoint.base import (
     DeltaChannelHistory,
     PendingWrite,
     SerializerProtocol,
+    TranscriptConflictError,
     get_checkpoint_id,
     get_checkpoint_metadata,
     writes_sort_key,
+)
+from langgraph.checkpoint.serde.types import (
+    _Transcript,
+    _TranscriptEntry,
+    _TranscriptRef,
+    _TranscriptWrite,
 )
 
 logger = logging.getLogger(__name__)
@@ -82,6 +89,10 @@ class InMemorySaver(
         ],  # thread id, checkpoint ns, channel, version
         tuple[str, bytes],
     ]
+    # (thread ID, checkpoint NS, transcript ID) -> (parent transcript ID, fork seq)
+    transcripts: dict[tuple[str, str, str], tuple[str, int] | None]
+    # (thread ID, checkpoint NS, transcript ID) -> seq -> entry
+    transcript_entries: dict[tuple[str, str, str], dict[int, _TranscriptEntry]]
 
     def __init__(
         self,
@@ -93,6 +104,8 @@ class InMemorySaver(
         self.storage = factory(lambda: defaultdict(dict))
         self.writes = factory(dict)
         self.blobs = factory()
+        self.transcripts = {}
+        self.transcript_entries = {}
         self.stack = ExitStack()
         if factory is not defaultdict:
             self.stack.enter_context(self.storage)  # type: ignore[arg-type]
@@ -148,6 +161,66 @@ class InMemorySaver(
             stored[k]
             for k in sorted(stored, key=lambda k: writes_sort_key(stored[k][3], *k))
         ]
+
+    def _put_transcripts(
+        self, thread_id: str, checkpoint_ns: str, values: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Store the entries of each `_TranscriptWrite` and leave its pointer."""
+        writes = {k: v for k, v in values.items() if isinstance(v, _TranscriptWrite)}
+        for w in writes.values():
+            stored = self.transcript_entries.get(
+                (thread_id, checkpoint_ns, w.transcript_id), {}
+            )
+            for e in w.entries:
+                if e.seq in stored and stored[e.seq].hash != e.hash:
+                    raise TranscriptConflictError(
+                        f"transcript {w.transcript_id} has different content at seq {e.seq}"
+                    )
+        for w in writes.values():
+            key = (thread_id, checkpoint_ns, w.transcript_id)
+            if key not in self.transcripts:
+                self.transcripts[key] = (
+                    None
+                    if w.parent_transcript_id is None
+                    else (w.parent_transcript_id, w.fork_seq or 0)
+                )
+            self.transcript_entries.setdefault(key, {}).update(
+                {e.seq: e for e in w.entries}
+            )
+        return {
+            **values,
+            **{k: _TranscriptRef(w.transcript_id, w.head) for k, w in writes.items()},
+        }
+
+    def get_transcript(
+        self, *, config: RunnableConfig, ref: _TranscriptRef
+    ) -> _Transcript:
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        transcript_id: str | None = ref.transcript_id
+        head = ref.head
+        own = self.transcript_entries.get(
+            (thread_id, checkpoint_ns, ref.transcript_id), {}
+        )
+        entries: list[_TranscriptEntry] = []
+        while transcript_id is not None:
+            key = (thread_id, checkpoint_ns, transcript_id)
+            fork = self.transcripts.get(key)
+            floor = fork[1] if fork else 0
+            entries += [
+                e
+                for seq, e in self.transcript_entries.get(key, {}).items()
+                if floor < seq <= head
+            ]
+            transcript_id, head = (fork[0], min(head, fork[1])) if fork else (None, 0)
+        return _Transcript(
+            sorted(entries, key=lambda e: e.seq), any(seq > ref.head for seq in own)
+        )
+
+    async def aget_transcript(
+        self, *, config: RunnableConfig, ref: _TranscriptRef
+    ) -> _Transcript:
+        return self.get_transcript(config=config, ref=ref)
 
     def get_delta_channel_history(
         self, *, config: RunnableConfig, channels: Sequence[str]
@@ -452,6 +525,7 @@ class InMemorySaver(
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         values: dict[str, Any] = c.pop("channel_values")  # type: ignore[misc]
+        values = self._put_transcripts(thread_id, checkpoint_ns, values)
         for k, v in new_versions.items():
             self.blobs[(thread_id, checkpoint_ns, k, v)] = (
                 self.serde.dumps_typed(values[k]) if k in values else ("empty", b"")
@@ -528,6 +602,9 @@ class InMemorySaver(
         for k in list(self.blobs.keys()):
             if k[0] == thread_id:
                 del self.blobs[k]
+        for tk in [k for k in self.transcripts if k[0] == thread_id]:
+            del self.transcripts[tk]
+            self.transcript_entries.pop(tk, None)
 
     async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Asynchronous version of `get_tuple`.

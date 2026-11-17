@@ -26,7 +26,14 @@ from langgraph.checkpoint.serde.types import (
     RESUME,
     SCHEDULED,
     ChannelProtocol,
+    _Transcript,
+    _TranscriptRef,
 )
+
+
+class TranscriptConflictError(Exception):
+    """A transcript entry already exists at this seq with different content."""
+
 
 V = TypeVar("V", int, float, str)
 PendingWrite = tuple[str, str, Any]
@@ -602,6 +609,26 @@ class BaseCheckpointSaver(Generic[V]):
             sit between the kept checkpoint and the nearest `_DeltaSnapshot`
             ancestor, or delta channels will silently reconstruct as empty.
         """
+        raise NotImplementedError
+
+    def get_transcript(
+        self, *, config: RunnableConfig, ref: _TranscriptRef
+    ) -> _Transcript:
+        """Read a transcript up to `ref.head` in the thread and namespace of `config`.
+
+        !!! warning "Beta"
+
+            Part of transcript support; in beta. A saver that overrides this also
+            stores the entries of each `_TranscriptWrite` in `put`, in the same
+            transaction as the checkpoint, and raises `TranscriptConflictError`
+            when an entry exists at the same seq with a different hash.
+        """
+        raise NotImplementedError
+
+    async def aget_transcript(
+        self, *, config: RunnableConfig, ref: _TranscriptRef
+    ) -> _Transcript:
+        """Async version of `get_transcript`."""
         raise NotImplementedError
 
     def get_delta_channel_history(

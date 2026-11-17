@@ -31,6 +31,49 @@ class _DeltaSnapshot(NamedTuple):
     value: Any
 
 
+class _TranscriptEntry(NamedTuple):
+    """One immutable entry of a transcript. The writer assigns `seq` and `hash`."""
+
+    seq: int
+    hash: bytes
+    payload: bytes
+
+
+class _TranscriptRef(NamedTuple):
+    """Pointer to a transcript, stored as the checkpoint's value for a channel."""
+
+    transcript_id: str
+    head: int
+
+
+class _TranscriptWrite(NamedTuple):
+    """What a channel hands `put` for a transcript.
+
+    A saver that supports transcripts stores `entries` with the checkpoint and
+    keeps `_TranscriptRef(transcript_id, head)` as the channel's value.
+    `parent_transcript_id` and `fork_seq` are set only by a transcript forked
+    from another, and are the same on every write to it.
+    """
+
+    transcript_id: str
+    head: int
+    entries: Sequence[_TranscriptEntry] = ()
+    parent_transcript_id: str | None = None
+    fork_seq: int | None = None
+
+
+class _Transcript(NamedTuple):
+    """Entries `1..head` of a transcript, with ancestors' shared prefixes resolved.
+
+    `has_later_entries` is true when the transcript holds an entry of its own
+    above the requested head. A writer that loaded such a head forks instead of
+    appending.
+    """
+
+    entries: list[_TranscriptEntry]
+    has_later_entries: bool
+
+
 Value = TypeVar("Value", covariant=True)
 Update = TypeVar("Update", contravariant=True)
 C = TypeVar("C")
