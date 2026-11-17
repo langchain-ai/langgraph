@@ -1,0 +1,28 @@
+libs/cli/langgraph_cli/config.py
+  s_a33c35b453f032::t_b359978ba22335 1462-1463,1469,1471-1475
+  s_a33c35b453f032::t_4110374fcaf519 1516,1519-1523,1525
+  s_a33c35b453f032::t_ba7c97d22ecb7a 16-20,1400-1461,1464-1468,1470,1476-1486,1488-1515,1517-1518,1524,1526-1542,1700
+  s_a33c35b453f032::t_3ccf126ef647d6 1487
+libs/cli/tests/unit_tests/test_config.py
+  s_a33c35b453f032::t_2b8157a5b83db7 4049,4056
+  s_a33c35b453f032::t_90890e13114424 1144-1148
+  s_a33c35b453f032::t_98210309977302 3883-3978,3984,4025-4044,4051-4054,4059-4062
+  s_a33c35b453f032::t_a3f54a2ae1f526 3979-3983,3985-4024,4047-4048,4050,4055,4057-4058
+  s_a33c35b453f032::t_555b8aa8dbacbb 4045-4046
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "441a583d3f67c5314a675b741e7a7d7305762024",
+  "prompts": {},
+  "sessions": {
+    "s_a33c35b453f032": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "04d478c0-6493-4374-80c5-af81d6d603f6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "David Asamu <david.asamu@langchain.dev>"
+    }
+  }
+}
