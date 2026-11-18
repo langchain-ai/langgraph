@@ -16,7 +16,7 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the last value received, assumes that if multiple values are
     received, they are all equal."""
 
-    __slots__ = ("typ", "value")
+    __slots__ = ("value",)
 
     value: Value | Any
 
