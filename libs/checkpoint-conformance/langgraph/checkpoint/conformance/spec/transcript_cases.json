@@ -293,5 +293,13 @@
       {"read": {"thread": "t", "transcript": "T", "head": 1, "ns": "b"}, "expect": ["x"]},
       {"read": {"thread": "t", "transcript": "T", "head": 1, "ns": ""}, "expect": "invalid"}
     ]
+  },
+  {
+    "name": "replay_that_changes_the_pointer_is_invalid",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "text": "a"}], "head": 1}]}},
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 2, "text": "b"}], "head": 2}]}, "expect": "invalid"},
+      {"read": {"thread": "t", "transcript": "T", "head": 1}, "expect": ["a"], "expect_later": false}
+    ]
   }
 ]

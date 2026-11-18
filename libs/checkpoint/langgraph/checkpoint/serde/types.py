@@ -69,8 +69,9 @@ class _TranscriptWrite(NamedTuple):
       namespace with entries through `fork_seq`.
     - Only a channel in `new_versions` may carry entries, and one put writes each
       transcript at most once.
-    - A put whose checkpoint id is already stored is a replay: its entries are
-      not checked or stored.
+    - A put whose checkpoint id is already stored is a replay: its pointers must
+      equal the stored ones, and its entries are not checked or stored. A retry
+      resends the same put, with the same checkpoint id.
 
     Breaking any other rule raises `ValueError`. A rejected put stores nothing.
     A bare `_TranscriptRef` in a checkpoint is checked as a write with no entries.

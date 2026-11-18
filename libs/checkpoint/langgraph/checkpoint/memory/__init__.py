@@ -173,10 +173,22 @@ class InMemorySaver(
         self, config: RunnableConfig, channels: Iterable[str]
     ) -> dict[str, _TranscriptRef]:
         """The transcript pointers held by the checkpoint `config` points at."""
-        thread_id = config["configurable"]["thread_id"]
-        checkpoint_ns = config["configurable"]["checkpoint_ns"]
-        parent_id = config["configurable"].get("checkpoint_id")
-        saved = self.storage[thread_id][checkpoint_ns].get(parent_id or "")
+        return self._checkpoint_refs(
+            config["configurable"]["thread_id"],
+            config["configurable"]["checkpoint_ns"],
+            config["configurable"].get("checkpoint_id") or "",
+            channels,
+        )
+
+    def _checkpoint_refs(
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        checkpoint_id: str,
+        channels: Iterable[str],
+    ) -> dict[str, _TranscriptRef]:
+        """The transcript pointers a stored checkpoint holds on `channels`."""
+        saved = self.storage[thread_id][checkpoint_ns].get(checkpoint_id)
         if saved is None:
             return {}
         versions = self.serde.loads_typed(saved[0])["channel_versions"]
@@ -218,6 +230,14 @@ class InMemorySaver(
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         if checkpoint_id in self.storage[thread_id][checkpoint_ns]:
+            stored_refs = self._checkpoint_refs(
+                thread_id, checkpoint_ns, checkpoint_id, writes
+            )
+            for k, w in writes.items():
+                if stored_refs.get(k) != _TranscriptRef(w.transcript_id, w.head):
+                    raise ValueError(
+                        f"replay of checkpoint {checkpoint_id} changes the pointer on {k}"
+                    )
             return stored_values, lambda: None
         parent_heads = {
             r.transcript_id: r.head for r in self._parent_refs(config, writes).values()
