@@ -1,10 +1,6 @@
 <div align="center">
   <a href="https://www.langchain.com/langgraph">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset=".github/images/logo-dark.svg">
-      <source media="(prefers-color-scheme: light)" srcset=".github/images/logo-light.svg">
-      <img alt="LangGraph Logo" src=".github/images/logo-dark.svg" width="50%">
-    </picture>
+    <img alt="LangGraph" src=".github/images/banner.png" width="100%">
   </a>
 </div>
 
