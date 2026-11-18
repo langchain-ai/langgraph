@@ -1,7 +1,9 @@
 """Unit tests for tool call interceptor in ToolNode."""
 
 import functools
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
+from dataclasses import replace
+from typing import Annotated
 from unittest.mock import Mock
 
 import pytest
@@ -12,8 +14,10 @@ from langgraph.store.base import BaseStore
 from langgraph.types import Command
 
 from langgraph.prebuilt.tool_node import (
+    InjectedState,
     ToolCallRequest,
     ToolNode,
+    ToolRuntime,
 )
 
 pytestmark = pytest.mark.anyio
@@ -1471,3 +1475,54 @@ def test_tool_call_request_is_frozen() -> None:
     assert fresh_new_request.tool == add  # Other fields should remain the same
     assert fresh_new_request.state == state
     assert fresh_new_request.runtime is None
+
+
+@tool
+def read_note(note: Annotated[str, InjectedState("note")], runtime: ToolRuntime) -> str:
+    """Return the note from injected state and from the tool runtime."""
+    return f"InjectedState={note} ToolRuntime={runtime.state['note']}"
+
+
+def _override_state(request: ToolCallRequest) -> ToolCallRequest:
+    return request.override(state={**request.state, "note": "new"})
+
+
+def _override_state_and_stale_runtime(request: ToolCallRequest) -> ToolCallRequest:
+    stale = replace(request.runtime, state={**request.state, "note": "stale"})
+    return request.override(state={**request.state, "note": "new"}, runtime=stale)
+
+
+@pytest.mark.parametrize(
+    "override",
+    [_override_state, _override_state_and_stale_runtime],
+    ids=["state", "state_and_stale_runtime"],
+)
+async def test_wrapper_state_override_reaches_tool(
+    override: Callable[[ToolCallRequest], ToolCallRequest],
+) -> None:
+    def wrap(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> ToolMessage | Command:
+        return execute(override(request))
+
+    async def awrap(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
+    ) -> ToolMessage | Command:
+        return await execute(override(request))
+
+    tool_call: ToolCall = {"name": "read_note", "args": {}, "id": "call_1"}
+    state = {"messages": [AIMessage("", tool_calls=[tool_call])], "note": "old"}
+    config = _create_config_with_runtime()
+
+    sync_out = ToolNode([read_note], wrap_tool_call=wrap).invoke(state, config)
+    async_out = await ToolNode([read_note], awrap_tool_call=awrap).ainvoke(
+        state, config
+    )
+
+    expected = "InjectedState=new ToolRuntime=new"
+    assert {
+        "sync": sync_out["messages"][0].content,
+        "async": async_out["messages"][0].content,
+    } == {"sync": expected, "async": expected}
