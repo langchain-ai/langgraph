@@ -167,15 +167,16 @@ class InMemorySaver(
     ) -> dict[str, Any]:
         """Store the entries of each `_TranscriptWrite` and leave its pointer."""
         writes = {k: v for k, v in values.items() if isinstance(v, _TranscriptWrite)}
+        merged: dict[tuple[str, str, str], dict[int, _TranscriptEntry]] = {}
         for w in writes.values():
-            stored = self.transcript_entries.get(
-                (thread_id, checkpoint_ns, w.transcript_id), {}
-            )
+            key = (thread_id, checkpoint_ns, w.transcript_id)
+            entries = merged.setdefault(key, dict(self.transcript_entries.get(key, {})))
             for e in w.entries:
-                if e.seq in stored and stored[e.seq].hash != e.hash:
+                if e.seq in entries and entries[e.seq].hash != e.hash:
                     raise TranscriptConflictError(
                         f"transcript {w.transcript_id} has different content at seq {e.seq}"
                     )
+                entries[e.seq] = e
         for w in writes.values():
             key = (thread_id, checkpoint_ns, w.transcript_id)
             if key not in self.transcripts:
@@ -184,9 +185,7 @@ class InMemorySaver(
                     if w.parent_transcript_id is None
                     else (w.parent_transcript_id, w.fork_seq or 0)
                 )
-            self.transcript_entries.setdefault(key, {}).update(
-                {e.seq: e for e in w.entries}
-            )
+        self.transcript_entries.update(merged)
         return {
             **values,
             **{k: _TranscriptRef(w.transcript_id, w.head) for k, w in writes.items()},

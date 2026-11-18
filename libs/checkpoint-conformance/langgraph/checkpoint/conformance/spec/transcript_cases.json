@@ -143,5 +143,19 @@
       {"put": {"thread": "t1", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "text": "a"}], "head": 1}]}},
       {"read": {"thread": "t2", "transcript": "T", "head": 1}, "expect": []}
     ]
+  },
+  {
+    "name": "different_content_at_one_seq_in_one_put_is_conflict",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "head": 1, "entries": [{"seq": 1, "text": "a"}, {"seq": 1, "text": "b"}]}]}, "expect": "conflict"},
+      {"read": {"thread": "t", "transcript": "T", "head": 1}, "expect": [], "expect_later": false}
+    ]
+  },
+  {
+    "name": "same_content_at_one_seq_in_one_put_is_accepted",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "head": 1, "entries": [{"seq": 1, "text": "a"}, {"seq": 1, "text": "a"}]}]}},
+      {"read": {"thread": "t", "transcript": "T", "head": 1}, "expect": ["a"]}
+    ]
   }
 ]
