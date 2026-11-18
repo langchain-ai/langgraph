@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import pickle
@@ -93,10 +92,8 @@ class InMemorySaver(
     ]
     # (thread ID, checkpoint NS, transcript ID) -> (parent transcript ID, fork seq)
     transcripts: dict[tuple[str, str, str], tuple[str, int] | None]
-    # (thread ID, checkpoint NS, transcript ID) -> seq -> (plaintext hash, blob)
-    transcript_entries: dict[
-        tuple[str, str, str], dict[int, tuple[bytes, tuple[str, bytes]]]
-    ]
+    # (thread ID, checkpoint NS, transcript ID) -> seq -> blob
+    transcript_entries: dict[tuple[str, str, str], dict[int, tuple[str, bytes]]]
 
     def __init__(
         self,
@@ -199,16 +196,33 @@ class InMemorySaver(
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         committed = self._parent_refs(config, writes)
-        # Hash the plaintext so resends compare equal under nondeterministic encryption.
+        # Content is compared as serialized plaintext; encryption is nondeterministic.
+        cipher = (
+            self.serde.cipher if isinstance(self.serde, EncryptedSerializer) else None
+        )
         plain = (
             self.serde.serde
             if isinstance(self.serde, EncryptedSerializer)
             else self.serde
         )
-        # transcript -> (fork point, entries this put adds)
+
+        def decrypt(blob: tuple[str, bytes]) -> tuple[str, bytes]:
+            typ, data = blob
+            if cipher is not None and "+" in typ:
+                typ, name = typ.split("+", 1)
+                data = cipher.decrypt(name, data)
+            return typ, data
+
+        def encrypt(typ: str, data: bytes) -> tuple[str, bytes]:
+            if cipher is None:
+                return typ, data
+            name, ciphertext = cipher.encrypt(data)
+            return f"{typ}+{name}", ciphertext
+
+        # transcript -> (fork point, plaintext of entries this put adds)
         staged: dict[
             tuple[str, str, str],
-            tuple[tuple[str, int] | None, dict[int, tuple[bytes, tuple[str, bytes]]]],
+            tuple[tuple[str, int] | None, dict[int, tuple[str, bytes]]],
         ] = {}
 
         def stage(key: tuple[str, str, str]) -> bool:
@@ -257,21 +271,17 @@ class InMemorySaver(
                     )
                 if e.seq <= base:  # committed by the parent checkpoint
                     continue
-                typ, data = plain.dumps_typed(e.value)
-                digest = hashlib.sha256(typ.encode() + b"\0" + data).digest()
-                have = new.get(e.seq) or stored.get(e.seq)
+                content = plain.dumps_typed(e.value)
+                have = new.get(e.seq)
+                if have is None and e.seq in stored:
+                    have = decrypt(stored[e.seq])
                 if have is not None:
-                    if have[0] != digest:
+                    if have != content:
                         raise TranscriptConflictError(
                             f"transcript {tid} has different content at seq {e.seq}"
                         )
                 elif e.seq == last_seq(key) + 1:
-                    blob = (
-                        (typ, data)
-                        if plain is self.serde
-                        else self.serde.dumps_typed(e.value)
-                    )
-                    new[e.seq] = (digest, blob)
+                    new[e.seq] = content
                 else:
                     raise ValueError(
                         f"transcript {tid}: seq {e.seq} skips past {last_seq(key)}"
@@ -282,7 +292,9 @@ class InMemorySaver(
                 )
         for key, (fork, new) in staged.items():
             self.transcripts[key] = fork
-            self.transcript_entries.setdefault(key, {}).update(new)
+            self.transcript_entries.setdefault(key, {}).update(
+                {seq: encrypt(*content) for seq, content in new.items()}
+            )
         return {
             **values,
             **{k: _TranscriptRef(w.transcript_id, w.head) for k, w in writes.items()},
@@ -305,7 +317,7 @@ class InMemorySaver(
             floor = fork[1] if fork else 0
             entries += [
                 _TranscriptEntry(seq, self.serde.loads_typed(blob))
-                for seq, (_, blob) in self.transcript_entries.get(key, {}).items()
+                for seq, blob in self.transcript_entries.get(key, {}).items()
                 if floor < seq <= head
             ]
             transcript_id, head = (fork[0], min(head, fork[1])) if fork else (None, 0)
