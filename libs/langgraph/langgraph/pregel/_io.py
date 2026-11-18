@@ -54,7 +54,7 @@ def read_channels(
 
 
 def map_command(cmd: Command) -> Iterator[tuple[str, str, Any]]:
-    """Map input chunk to a sequence of pending writes in the form (channel, value)."""
+    """Map a Command to a sequence of pending writes in the form (task_id, channel, value)."""
     if cmd.graph == Command.PARENT:
         raise InvalidUpdateError("There is no parent graph")
     if cmd.goto:
