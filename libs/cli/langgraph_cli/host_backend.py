@@ -372,7 +372,7 @@ class HostBackendClient(_JsonClient):
             payload["agent"] = agent
         else:
             payload["name"] = name
-        # Unlike update, create requires the field, even when the list is empty.
+        # Unlike update, create sends an empty list too.
         if secrets is not None:
             payload["secrets"] = secrets
         return self._request("POST", "/v2/deployments", payload)
