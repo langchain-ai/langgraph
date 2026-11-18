@@ -746,3 +746,26 @@ def test_transcript_resend_compares_plaintext_under_encryption() -> None:
         put(_TranscriptEntry(1, {"text": "b"}))
     read = saver.get_transcript(config=config, ref=_TranscriptRef("T", 1))
     assert read.entries == [_TranscriptEntry(1, {"text": "a"})]
+
+
+def test_transcript_failed_put_stores_no_entries() -> None:
+    saver = InMemorySaver()
+    config: RunnableConfig = {"configurable": {"thread_id": "t", "checkpoint_ns": ""}}
+    checkpoint = empty_checkpoint()
+    checkpoint["channel_values"] = {
+        "messages": _TranscriptWrite("T", 1, [_TranscriptEntry(1, "a")]),
+        "other": object(),
+    }
+    with pytest.raises(TypeError):
+        saver.put(config, checkpoint, {}, {"messages": 1, "other": 1})
+    read = saver.get_transcript(config=config, ref=_TranscriptRef("T", 1))
+    assert read.entries == []
+
+
+def test_transcript_bare_ref_is_checked() -> None:
+    saver = InMemorySaver()
+    config: RunnableConfig = {"configurable": {"thread_id": "t", "checkpoint_ns": ""}}
+    checkpoint = empty_checkpoint()
+    checkpoint["channel_values"] = {"messages": _TranscriptRef("T", 5)}
+    with pytest.raises(ValueError):
+        saver.put(config, checkpoint, {}, {"messages": 1})

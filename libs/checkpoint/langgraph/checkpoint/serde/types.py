@@ -64,11 +64,13 @@ class _TranscriptWrite(NamedTuple):
       raises `TranscriptConflictError`.
     - Any other entry is appended at one past the transcript's last seq.
     - `head` is at most the transcript's last seq once the entries are stored.
-    - `parent_transcript_id` and `fork_seq` are set together, only on a fork, and
-      are the same on every write to it. The parent must exist in the same
-      thread and namespace with entries through `fork_seq`.
+    - `parent_transcript_id` and `fork_seq` are set together, on the write that
+      creates a fork. Later writes may omit them; if given, they must match. The
+      parent must already be stored, before this put, in the same thread and
+      namespace with entries through `fork_seq`.
 
     Breaking any other rule raises `ValueError`. A rejected put stores nothing.
+    A bare `_TranscriptRef` in a checkpoint is checked as a write with no entries.
     """
 
     transcript_id: str

@@ -6,7 +6,14 @@ import pickle
 import random
 import shutil
 from collections import defaultdict
-from collections.abc import AsyncIterator, Iterable, Iterator, Mapping, Sequence
+from collections.abc import (
+    AsyncIterator,
+    Callable,
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+)
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from types import TracebackType
 from typing import Any
@@ -185,14 +192,22 @@ class InMemorySaver(
 
     def _put_transcripts(
         self, config: RunnableConfig, values: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Store the entries of each `_TranscriptWrite` and leave its pointer.
+    ) -> tuple[dict[str, Any], Callable[[], None]]:
+        """Check each `_TranscriptWrite` and replace it with its pointer.
 
-        Checks every write before storing anything, so a rejected put stores nothing.
+        Returns the values to store and a function that stores the entries, to call
+        once the rest of the checkpoint has serialized. A bare `_TranscriptRef` is
+        checked as a write with no entries.
         """
-        writes = {k: v for k, v in values.items() if isinstance(v, _TranscriptWrite)}
+        writes = {
+            k: _TranscriptWrite(v.transcript_id, v.head)
+            if isinstance(v, _TranscriptRef)
+            else v
+            for k, v in values.items()
+            if isinstance(v, (_TranscriptWrite, _TranscriptRef))
+        }
         if not writes:
-            return values
+            return values, lambda: None
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         committed = self._parent_refs(config, writes)
@@ -225,10 +240,9 @@ class InMemorySaver(
             tuple[tuple[str, int] | None, dict[int, tuple[str, bytes]]],
         ] = {}
 
-        def stage(key: tuple[str, str, str]) -> bool:
-            if key not in staged and key in self.transcripts:
-                staged[key] = (self.transcripts[key], {})
-            return key in staged
+        def stored_last_seq(key: tuple[str, str, str]) -> int:
+            fork = self.transcripts[key]
+            return (fork[1] if fork else 0) + len(self.transcript_entries.get(key, {}))
 
         def last_seq(key: tuple[str, str, str]) -> int:
             fork, new = staged[key]
@@ -242,23 +256,27 @@ class InMemorySaver(
                 raise ValueError(
                     f"transcript {tid}: parent_transcript_id and fork_seq go together"
                 )
-            fork = (
+            given = (
                 None
                 if w.parent_transcript_id is None
                 else (w.parent_transcript_id, w.fork_seq)
             )
-            if not stage(key):
-                if fork is not None:
-                    parent = (thread_id, checkpoint_ns, fork[0])
-                    if not stage(parent) or not 0 <= fork[1] <= last_seq(parent):
-                        raise ValueError(
-                            f"transcript {tid}: parent has no entry at fork_seq {fork[1]}"
-                        )
-                staged[key] = (fork, {})
-            if staged[key][0] != fork:
-                raise ValueError(
-                    f"transcript {tid}: fork point differs from its first write"
-                )
+            if key not in staged:
+                if key in self.transcripts:
+                    staged[key] = (self.transcripts[key], {})
+                else:
+                    if given is not None:
+                        parent = (thread_id, checkpoint_ns, given[0])
+                        if parent not in self.transcripts or not (
+                            0 <= given[1] <= stored_last_seq(parent)
+                        ):
+                            raise ValueError(
+                                f"transcript {tid}: no stored parent entry at fork_seq {given[1]}"
+                            )
+                    staged[key] = (given, {})
+            fork = staged[key][0]
+            if given is not None and given != fork:
+                raise ValueError(f"transcript {tid}: fork point differs from its own")
             new = staged[key][1]
             stored = self.transcript_entries.get(key, {})
             floor = fork[1] if fork else 0
@@ -290,15 +308,18 @@ class InMemorySaver(
                 raise ValueError(
                     f"transcript {tid}: head {w.head} outside [{floor}, {last_seq(key)}]"
                 )
-        for key, (fork, new) in staged.items():
-            self.transcripts[key] = fork
-            self.transcript_entries.setdefault(key, {}).update(
-                {seq: encrypt(*content) for seq, content in new.items()}
-            )
+
+        def commit() -> None:
+            for key, (fork, new) in staged.items():
+                self.transcripts[key] = fork
+                self.transcript_entries.setdefault(key, {}).update(
+                    {seq: encrypt(*content) for seq, content in new.items()}
+                )
+
         return {
             **values,
             **{k: _TranscriptRef(w.transcript_id, w.head) for k, w in writes.items()},
-        }
+        }, commit
 
     def get_transcript(
         self, *, config: RunnableConfig, ref: _TranscriptRef
@@ -633,20 +654,21 @@ class InMemorySaver(
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         values: dict[str, Any] = c.pop("channel_values")  # type: ignore[misc]
-        values = self._put_transcripts(config, values)
-        for k, v in new_versions.items():
-            self.blobs[(thread_id, checkpoint_ns, k, v)] = (
+        values, commit_transcripts = self._put_transcripts(config, values)
+        blobs = {
+            (thread_id, checkpoint_ns, k, v): (
                 self.serde.dumps_typed(values[k]) if k in values else ("empty", b"")
             )
-        self.storage[thread_id][checkpoint_ns].update(
-            {
-                checkpoint["id"]: (
-                    self.serde.dumps_typed(c),
-                    self.serde.dumps_typed(get_checkpoint_metadata(config, metadata)),
-                    config["configurable"].get("checkpoint_id"),  # parent
-                )
-            }
+            for k, v in new_versions.items()
+        }
+        saved = (
+            self.serde.dumps_typed(c),
+            self.serde.dumps_typed(get_checkpoint_metadata(config, metadata)),
+            config["configurable"].get("checkpoint_id"),  # parent
         )
+        commit_transcripts()
+        self.blobs.update(blobs)
+        self.storage[thread_id][checkpoint_ns][checkpoint["id"]] = saved
         return {
             "configurable": {
                 "thread_id": thread_id,
