@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
-    TranscriptConflictError,
     create_checkpoint,
     empty_checkpoint,
 )
@@ -729,23 +728,29 @@ class TestPreDeltaBlobTerminator:
         assert "PENDING-AT-TARGET" not in values
 
 
-def test_transcript_resend_compares_plaintext_under_encryption() -> None:
+def test_transcript_entries_round_trip_under_encryption() -> None:
     saver = InMemorySaver(
         serde=EncryptedSerializer.from_pycryptodome_aes(key=b"1234567890123456")
     )
     config: RunnableConfig = {"configurable": {"thread_id": "t", "checkpoint_ns": ""}}
-
-    def put(*entries: _TranscriptEntry) -> None:
-        checkpoint = empty_checkpoint()
-        checkpoint["channel_values"] = {"messages": _TranscriptWrite("T", 1, entries)}
-        saver.put(config, checkpoint, {}, {"messages": 1})
-
-    put(_TranscriptEntry(1, {"text": "a"}))
-    put(_TranscriptEntry(1, {"text": "a"}))
-    with pytest.raises(TranscriptConflictError):
-        put(_TranscriptEntry(1, {"text": "b"}))
+    checkpoint = empty_checkpoint()
+    checkpoint["channel_values"] = {
+        "messages": _TranscriptWrite("T", 1, [_TranscriptEntry(1, {"text": "a"})])
+    }
+    saver.put(config, checkpoint, {}, {"messages": 1})
     read = saver.get_transcript(config=config, ref=_TranscriptRef("T", 1))
     assert read.entries == [_TranscriptEntry(1, {"text": "a"})]
+
+
+def test_transcript_entries_need_a_new_version() -> None:
+    saver = InMemorySaver()
+    config: RunnableConfig = {"configurable": {"thread_id": "t", "checkpoint_ns": ""}}
+    checkpoint = empty_checkpoint()
+    checkpoint["channel_values"] = {
+        "messages": _TranscriptWrite("T", 1, [_TranscriptEntry(1, "a")])
+    }
+    with pytest.raises(ValueError):
+        saver.put(config, checkpoint, {}, {})
 
 
 def test_transcript_failed_put_stores_no_entries() -> None:
@@ -758,8 +763,8 @@ def test_transcript_failed_put_stores_no_entries() -> None:
     }
     with pytest.raises(TypeError):
         saver.put(config, checkpoint, {}, {"messages": 1, "other": 1})
-    read = saver.get_transcript(config=config, ref=_TranscriptRef("T", 1))
-    assert read.entries == []
+    read = saver.get_transcript(config=config, ref=_TranscriptRef("T", 0))
+    assert read == ([], False)
 
 
 def test_transcript_bare_ref_is_checked() -> None:

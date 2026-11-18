@@ -34,8 +34,7 @@ class _DeltaSnapshot(NamedTuple):
 class _TranscriptEntry(NamedTuple):
     """One immutable entry of a transcript.
 
-    The writer assigns `seq`. The saver serializes `value` with its own serde
-    and decides whether a resend at the same seq is unchanged.
+    The writer assigns `seq`. The saver serializes `value` with its own serde.
     """
 
     seq: int
@@ -53,21 +52,25 @@ class _TranscriptWrite(NamedTuple):
     """What a channel hands `put` for a transcript.
 
     The saver stores `entries` in the checkpoint's transaction and keeps
-    `_TranscriptRef(transcript_id, head)` as the channel's value. Rules:
+    `_TranscriptRef(transcript_id, head)` as the channel's value. A write carries
+    exactly the entries its checkpoint adds:
 
-    - Every entry's seq is above `fork_seq` (or 0) and at most `head`.
-    - An entry at or below the head of the parent checkpoint's pointer to this
-      transcript was committed with it and is skipped unread, so a channel can
-      resend everything since it loaded at no cost.
-    - Any other entry at a stored seq must have the same content, compared as
-      the saver's serialized plaintext (before encryption). Different content
-      raises `TranscriptConflictError`.
-    - Any other entry is appended at one past the transcript's last seq.
-    - `head` is at most the transcript's last seq once the entries are stored.
+    - The base is the head of the parent checkpoint's pointer to this transcript.
+      For a transcript the put creates, it is `fork_seq`, or 0 without a parent.
+    - `entries` have seqs `base + 1` through `head`, in order, with no gaps and
+      nothing at or below the base. A write with no entries has `head == base`.
+    - An entry at a seq the transcript already holds raises
+      `TranscriptConflictError`, whatever its content.
+    - A transcript the parent checkpoint does not point at can only be created,
+      not written to.
     - `parent_transcript_id` and `fork_seq` are set together, on the write that
       creates a fork. Later writes may omit them; if given, they must match. The
       parent must already be stored, before this put, in the same thread and
       namespace with entries through `fork_seq`.
+    - Only a channel in `new_versions` may carry entries, and one put writes each
+      transcript at most once.
+    - A put whose checkpoint id is already stored is a replay: its entries are
+      not checked or stored.
 
     Breaking any other rule raises `ValueError`. A rejected put stores nothing.
     A bare `_TranscriptRef` in a checkpoint is checked as a write with no entries.
@@ -82,6 +85,8 @@ class _TranscriptWrite(NamedTuple):
 
 class _Transcript(NamedTuple):
     """Entries `1..head` of a transcript, with ancestors' shared prefixes resolved.
+
+    Reading a head past the stored entries raises `ValueError`.
 
     `has_later_entries` is true when the transcript holds an entry of its own
     above the requested head. A writer that loaded such a head forks instead of

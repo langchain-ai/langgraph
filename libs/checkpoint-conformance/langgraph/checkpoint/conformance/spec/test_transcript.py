@@ -2,10 +2,11 @@
 
 The cases live in `transcript_cases.json` so that stores written in other
 languages can run the same ones. Each case runs against fresh ids. A `put` step
-stores one checkpoint whose `messages` channel holds a `_TranscriptWrite`, as a
+stores one checkpoint whose channels hold one `_TranscriptWrite` each, as a
 child of checkpoint `from` when given; `expect` is `"conflict"`
 (`TranscriptConflictError`) or `"invalid"` (`ValueError`). A `read` step
-compares values, and `expect_later` compares `has_later_entries`. An entry
+compares values, or expects `"invalid"`, and `expect_later` compares
+`has_later_entries`. `ns` is the checkpoint namespace, default `""`. An entry
 `{"seq": n, "text": s}` has `value = s`.
 """
 
@@ -47,9 +48,9 @@ async def _run_case(saver: BaseCheckpointSaver, case: dict[str, Any]) -> None:
             )
         return names[kind, name]
 
-    def config(thread: str, parent: str | None = None) -> RunnableConfig:
+    def config(thread: str, ns: str = "", parent: str | None = None) -> RunnableConfig:
         cfg: RunnableConfig = {
-            "configurable": {"thread_id": ident("thread", thread), "checkpoint_ns": ""}
+            "configurable": {"thread_id": ident("thread", thread), "checkpoint_ns": ns}
         }
         if parent is not None:
             cfg["configurable"]["checkpoint_id"] = ident("checkpoint", parent)
@@ -81,7 +82,7 @@ async def _run_case(saver: BaseCheckpointSaver, case: dict[str, Any]) -> None:
             outcome = None
             try:
                 await saver.aput(
-                    config(put["thread"], put.get("from")),
+                    config(put["thread"], put.get("ns", ""), put.get("from")),
                     checkpoint,
                     generate_metadata(step=i),
                     {k: i + 1 for k in values},
@@ -95,12 +96,17 @@ async def _run_case(saver: BaseCheckpointSaver, case: dict[str, Any]) -> None:
             )
         else:
             read = step["read"]
-            result = await saver.aget_transcript(
-                config=config(read["thread"]),
-                ref=_TranscriptRef(
-                    ident("transcript", read["transcript"]), read["head"]
-                ),
-            )
+            try:
+                result = await saver.aget_transcript(
+                    config=config(read["thread"], read.get("ns", "")),
+                    ref=_TranscriptRef(
+                        ident("transcript", read["transcript"]), read["head"]
+                    ),
+                )
+            except ValueError:
+                assert step["expect"] == "invalid", f"step {i}: unexpected ValueError"
+                continue
+            assert step["expect"] != "invalid", f"step {i}: expected ValueError"
             got = [e.value for e in result.entries]
             assert got == step["expect"], (
                 f"step {i}: expected {step['expect']}, got {got}"
