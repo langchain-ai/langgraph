@@ -2,9 +2,11 @@
 
 The cases live in `transcript_cases.json` so that stores written in other
 languages can run the same ones. Each case runs against fresh ids. A `put` step
-stores one checkpoint whose `messages` channel holds a `_TranscriptWrite`; a
-`read` step compares values, and `expect_later` compares `has_later_entries`.
-An entry `{"seq": n, "text": s}` has `value = s`.
+stores one checkpoint whose `messages` channel holds a `_TranscriptWrite`, as a
+child of checkpoint `from` when given; `expect` is `"conflict"`
+(`TranscriptConflictError`) or `"invalid"` (`ValueError`). A `read` step
+compares values, and `expect_later` compares `has_later_entries`. An entry
+`{"seq": n, "text": s}` has `value = s`.
 """
 
 from __future__ import annotations
@@ -45,10 +47,13 @@ async def _run_case(saver: BaseCheckpointSaver, case: dict[str, Any]) -> None:
             )
         return names[kind, name]
 
-    def config(thread: str) -> RunnableConfig:
-        return {
+    def config(thread: str, parent: str | None = None) -> RunnableConfig:
+        cfg: RunnableConfig = {
             "configurable": {"thread_id": ident("thread", thread), "checkpoint_ns": ""}
         }
+        if parent is not None:
+            cfg["configurable"]["checkpoint_id"] = ident("checkpoint", parent)
+        return cfg
 
     for i, step in enumerate(case["steps"]):
         if "put" in step:
@@ -71,23 +76,23 @@ async def _run_case(saver: BaseCheckpointSaver, case: dict[str, Any]) -> None:
             checkpoint = generate_checkpoint(
                 checkpoint_id=ident("checkpoint", put["checkpoint"]),
                 channel_values=values,
-                channel_versions={k: 1 for k in values},
+                channel_versions={k: i + 1 for k in values},
             )
+            outcome = None
             try:
                 await saver.aput(
-                    config(put["thread"]),
+                    config(put["thread"], put.get("from")),
                     checkpoint,
                     generate_metadata(step=i),
-                    {k: 1 for k in values},
+                    {k: i + 1 for k in values},
                 )
             except TranscriptConflictError:
-                assert step.get("expect") == "conflict", (
-                    f"step {i}: unexpected conflict"
-                )
-            else:
-                assert step.get("expect") != "conflict", (
-                    f"step {i}: expected a conflict"
-                )
+                outcome = "conflict"
+            except ValueError:
+                outcome = "invalid"
+            assert outcome == step.get("expect"), (
+                f"step {i}: expected {step.get('expect')}, got {outcome}"
+            )
         else:
             read = step["read"]
             result = await saver.aget_transcript(

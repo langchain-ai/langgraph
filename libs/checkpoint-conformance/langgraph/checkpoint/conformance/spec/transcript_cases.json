@@ -112,11 +112,11 @@
     "name": "run_after_rollback_forks",
     "steps": [
       {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "text": "a"}], "head": 1}]}},
-      {"put": {"thread": "t", "checkpoint": "rolled_back", "writes": [{"transcript": "T", "entries": [{"seq": 2, "text": "lost"}], "head": 2}]}},
+      {"put": {"thread": "t", "checkpoint": "rolled_back", "writes": [{"transcript": "T", "entries": [{"seq": 2, "text": "lost"}], "head": 2}], "from": "c1"}},
       {"read": {"thread": "t", "transcript": "T", "head": 1}, "expect": ["a"], "expect_later": true},
-      {"put": {"thread": "t", "checkpoint": "c2", "writes": [{"transcript": "T2", "parent": "T", "fork_seq": 1, "entries": [{"seq": 2, "text": "b"}], "head": 2}]}},
+      {"put": {"thread": "t", "checkpoint": "c2", "writes": [{"transcript": "T2", "parent": "T", "fork_seq": 1, "entries": [{"seq": 2, "text": "b"}], "head": 2}], "from": "c1"}},
       {"read": {"thread": "t", "transcript": "T2", "head": 2}, "expect": ["a", "b"], "expect_later": false},
-      {"put": {"thread": "t", "checkpoint": "c3", "writes": [{"transcript": "T2", "parent": "T", "fork_seq": 1, "entries": [{"seq": 3, "text": "c"}], "head": 3}]}},
+      {"put": {"thread": "t", "checkpoint": "c3", "writes": [{"transcript": "T2", "parent": "T", "fork_seq": 1, "entries": [{"seq": 3, "text": "c"}], "head": 3}], "from": "c2"}},
       {"read": {"thread": "t", "transcript": "T2", "head": 3}, "expect": ["a", "b", "c"], "expect_later": false}
     ]
   },
@@ -124,8 +124,8 @@
     "name": "append_after_rollback_without_fork_is_conflict",
     "steps": [
       {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "text": "a"}], "head": 1}]}},
-      {"put": {"thread": "t", "checkpoint": "rolled_back", "writes": [{"transcript": "T", "entries": [{"seq": 2, "text": "lost"}], "head": 2}]}},
-      {"put": {"thread": "t", "checkpoint": "c2", "writes": [{"transcript": "T", "entries": [{"seq": 2, "text": "b"}], "head": 2}]}, "expect": "conflict"}
+      {"put": {"thread": "t", "checkpoint": "rolled_back", "writes": [{"transcript": "T", "entries": [{"seq": 2, "text": "lost"}], "head": 2}], "from": "c1"}},
+      {"put": {"thread": "t", "checkpoint": "c2", "writes": [{"transcript": "T", "entries": [{"seq": 2, "text": "b"}], "head": 2}], "from": "c1"}, "expect": "conflict"}
     ]
   },
   {
@@ -156,6 +156,70 @@
     "steps": [
       {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "head": 1, "entries": [{"seq": 1, "text": "a"}, {"seq": 1, "text": "a"}]}]}},
       {"read": {"thread": "t", "transcript": "T", "head": 1}, "expect": ["a"]}
+    ]
+  },
+  {
+    "name": "entries_committed_by_parent_checkpoint_are_skipped",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "text": "a"}, {"seq": 2, "text": "b"}], "head": 2}]}},
+      {"put": {"thread": "t", "checkpoint": "c2", "writes": [{"transcript": "T", "entries": [{"seq": 1, "text": "X"}, {"seq": 2, "text": "b"}, {"seq": 3, "text": "c"}], "head": 3}], "from": "c1"}},
+      {"read": {"thread": "t", "transcript": "T", "head": 3}, "expect": ["a", "b", "c"]}
+    ]
+  },
+  {
+    "name": "entry_above_head_is_invalid",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "text": "a"}, {"seq": 2, "text": "b"}], "head": 1}]}, "expect": "invalid"},
+      {"read": {"thread": "t", "transcript": "T", "head": 2}, "expect": [], "expect_later": false}
+    ]
+  },
+  {
+    "name": "seq_gap_is_invalid",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "text": "a"}], "head": 1}]}},
+      {"put": {"thread": "t", "checkpoint": "c2", "writes": [{"transcript": "T", "entries": [{"seq": 3, "text": "c"}], "head": 3}]}, "expect": "invalid"},
+      {"read": {"thread": "t", "transcript": "T", "head": 3}, "expect": ["a"], "expect_later": false}
+    ]
+  },
+  {
+    "name": "head_past_last_seq_is_invalid",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "text": "a"}], "head": 2}]}, "expect": "invalid"}
+    ]
+  },
+  {
+    "name": "fork_entry_at_or_below_fork_seq_is_invalid",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "text": "a"}, {"seq": 2, "text": "b"}], "head": 2}]}},
+      {"put": {"thread": "t", "checkpoint": "c2", "writes": [{"transcript": "T2", "entries": [{"seq": 1, "text": "x"}, {"seq": 2, "text": "y"}], "head": 2, "parent": "T", "fork_seq": 1}]}, "expect": "invalid"}
+    ]
+  },
+  {
+    "name": "fork_of_unknown_parent_is_invalid",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T2", "entries": [{"seq": 2, "text": "y"}], "head": 2, "parent": "missing", "fork_seq": 1}]}, "expect": "invalid"}
+    ]
+  },
+  {
+    "name": "fork_seq_past_parent_is_invalid",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "text": "a"}, {"seq": 2, "text": "b"}], "head": 2}]}},
+      {"put": {"thread": "t", "checkpoint": "c2", "writes": [{"transcript": "T2", "entries": [{"seq": 4, "text": "y"}], "head": 4, "parent": "T", "fork_seq": 3}]}, "expect": "invalid"}
+    ]
+  },
+  {
+    "name": "fork_seq_without_parent_is_invalid",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "fork_seq": 0, "entries": [{"seq": 1, "text": "a"}], "head": 1}]}, "expect": "invalid"}
+    ]
+  },
+  {
+    "name": "changed_fork_point_is_invalid",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "text": "a"}, {"seq": 2, "text": "b"}], "head": 2}]}},
+      {"put": {"thread": "t", "checkpoint": "c2", "writes": [{"transcript": "T2", "entries": [{"seq": 2, "text": "y"}], "head": 2, "parent": "T", "fork_seq": 1}]}},
+      {"put": {"thread": "t", "checkpoint": "c3", "writes": [{"transcript": "T2", "entries": [{"seq": 3, "text": "z"}], "head": 3, "parent": "T", "fork_seq": 0}]}, "expect": "invalid"},
+      {"put": {"thread": "t", "checkpoint": "c4", "writes": [{"transcript": "T2", "entries": [{"seq": 3, "text": "z"}], "head": 3}]}, "expect": "invalid"}
     ]
   }
 ]

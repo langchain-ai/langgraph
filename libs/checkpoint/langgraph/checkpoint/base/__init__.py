@@ -619,11 +619,7 @@ class BaseCheckpointSaver(Generic[V]):
         !!! warning "Beta"
 
             Part of transcript support; in beta. A saver that overrides this also
-            stores the entries of each `_TranscriptWrite` in `put`, in the same
-            transaction as the checkpoint, and raises `TranscriptConflictError`
-            when an entry exists at the same seq with different content.
-            Content is compared on the serialized plaintext, before any
-            encryption.
+            stores each `_TranscriptWrite` in `put` by the rules on that type.
         """
         raise NotImplementedError
 

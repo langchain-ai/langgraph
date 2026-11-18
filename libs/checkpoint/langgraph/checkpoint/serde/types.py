@@ -52,10 +52,23 @@ class _TranscriptRef(NamedTuple):
 class _TranscriptWrite(NamedTuple):
     """What a channel hands `put` for a transcript.
 
-    A saver that supports transcripts stores `entries` with the checkpoint and
-    keeps `_TranscriptRef(transcript_id, head)` as the channel's value.
-    `parent_transcript_id` and `fork_seq` are set only by a transcript forked
-    from another, and are the same on every write to it.
+    The saver stores `entries` in the checkpoint's transaction and keeps
+    `_TranscriptRef(transcript_id, head)` as the channel's value. Rules:
+
+    - Every entry's seq is above `fork_seq` (or 0) and at most `head`.
+    - An entry at or below the head of the parent checkpoint's pointer to this
+      transcript was committed with it and is skipped unread, so a channel can
+      resend everything since it loaded at no cost.
+    - Any other entry at a stored seq must have the same content, compared as
+      the saver's serialized plaintext (before encryption). Different content
+      raises `TranscriptConflictError`.
+    - Any other entry is appended at one past the transcript's last seq.
+    - `head` is at most the transcript's last seq once the entries are stored.
+    - `parent_transcript_id` and `fork_seq` are set together, only on a fork, and
+      are the same on every write to it. The parent must exist in the same
+      thread and namespace with entries through `fork_seq`.
+
+    Breaking any other rule raises `ValueError`. A rejected put stores nothing.
     """
 
     transcript_id: str

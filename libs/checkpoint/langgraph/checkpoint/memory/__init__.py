@@ -7,7 +7,7 @@ import pickle
 import random
 import shutil
 from collections import defaultdict
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from types import TracebackType
 from typing import Any
@@ -166,42 +166,123 @@ class InMemorySaver(
             for k in sorted(stored, key=lambda k: writes_sort_key(stored[k][3], *k))
         ]
 
+    def _parent_refs(
+        self, config: RunnableConfig, channels: Iterable[str]
+    ) -> dict[str, _TranscriptRef]:
+        """The transcript pointers held by the checkpoint `config` points at."""
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"]["checkpoint_ns"]
+        parent_id = config["configurable"].get("checkpoint_id")
+        saved = self.storage[thread_id][checkpoint_ns].get(parent_id or "")
+        if saved is None:
+            return {}
+        versions = self.serde.loads_typed(saved[0])["channel_versions"]
+        refs: dict[str, _TranscriptRef] = {}
+        for k in channels:
+            blob = self.blobs.get((thread_id, checkpoint_ns, k, versions.get(k, "")))
+            if blob is not None and blob[0] != "empty":
+                value = self.serde.loads_typed(blob)
+                if isinstance(value, _TranscriptRef):
+                    refs[k] = value
+        return refs
+
     def _put_transcripts(
-        self, thread_id: str, checkpoint_ns: str, values: dict[str, Any]
+        self, config: RunnableConfig, values: dict[str, Any]
     ) -> dict[str, Any]:
-        """Store the entries of each `_TranscriptWrite` and leave its pointer."""
+        """Store the entries of each `_TranscriptWrite` and leave its pointer.
+
+        Checks every write before storing anything, so a rejected put stores nothing.
+        """
         writes = {k: v for k, v in values.items() if isinstance(v, _TranscriptWrite)}
+        if not writes:
+            return values
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"]["checkpoint_ns"]
+        committed = self._parent_refs(config, writes)
         # Hash the plaintext so resends compare equal under nondeterministic encryption.
         plain = (
             self.serde.serde
             if isinstance(self.serde, EncryptedSerializer)
             else self.serde
         )
-        merged: dict[
-            tuple[str, str, str], dict[int, tuple[bytes, tuple[str, bytes]]]
+        # transcript -> (fork point, entries this put adds)
+        staged: dict[
+            tuple[str, str, str],
+            tuple[tuple[str, int] | None, dict[int, tuple[bytes, tuple[str, bytes]]]],
         ] = {}
-        for w in writes.values():
-            key = (thread_id, checkpoint_ns, w.transcript_id)
-            entries = merged.setdefault(key, dict(self.transcript_entries.get(key, {})))
+
+        def stage(key: tuple[str, str, str]) -> bool:
+            if key not in staged and key in self.transcripts:
+                staged[key] = (self.transcripts[key], {})
+            return key in staged
+
+        def last_seq(key: tuple[str, str, str]) -> int:
+            fork, new = staged[key]
+            stored = self.transcript_entries.get(key, {})
+            return (fork[1] if fork else 0) + len(stored) + len(new)
+
+        for k, w in writes.items():
+            tid = w.transcript_id
+            key = (thread_id, checkpoint_ns, tid)
+            if (w.parent_transcript_id is None) != (w.fork_seq is None):
+                raise ValueError(
+                    f"transcript {tid}: parent_transcript_id and fork_seq go together"
+                )
+            fork = (
+                None
+                if w.parent_transcript_id is None
+                else (w.parent_transcript_id, w.fork_seq)
+            )
+            if not stage(key):
+                if fork is not None:
+                    parent = (thread_id, checkpoint_ns, fork[0])
+                    if not stage(parent) or not 0 <= fork[1] <= last_seq(parent):
+                        raise ValueError(
+                            f"transcript {tid}: parent has no entry at fork_seq {fork[1]}"
+                        )
+                staged[key] = (fork, {})
+            if staged[key][0] != fork:
+                raise ValueError(
+                    f"transcript {tid}: fork point differs from its first write"
+                )
+            new = staged[key][1]
+            stored = self.transcript_entries.get(key, {})
+            floor = fork[1] if fork else 0
+            ref = committed.get(k)
+            base = ref.head if ref is not None and ref.transcript_id == tid else floor
             for e in w.entries:
+                if not floor < e.seq <= w.head:
+                    raise ValueError(
+                        f"transcript {tid}: seq {e.seq} outside ({floor}, {w.head}]"
+                    )
+                if e.seq <= base:  # committed by the parent checkpoint
+                    continue
                 typ, data = plain.dumps_typed(e.value)
                 digest = hashlib.sha256(typ.encode() + b"\0" + data).digest()
-                if e.seq in entries:
-                    if entries[e.seq][0] != digest:
+                have = new.get(e.seq) or stored.get(e.seq)
+                if have is not None:
+                    if have[0] != digest:
                         raise TranscriptConflictError(
-                            f"transcript {w.transcript_id} has different content at seq {e.seq}"
+                            f"transcript {tid} has different content at seq {e.seq}"
                         )
-                    continue
-                entries[e.seq] = (digest, self.serde.dumps_typed(e.value))
-        for w in writes.values():
-            key = (thread_id, checkpoint_ns, w.transcript_id)
-            if key not in self.transcripts:
-                self.transcripts[key] = (
-                    None
-                    if w.parent_transcript_id is None
-                    else (w.parent_transcript_id, w.fork_seq or 0)
+                elif e.seq == last_seq(key) + 1:
+                    blob = (
+                        (typ, data)
+                        if plain is self.serde
+                        else self.serde.dumps_typed(e.value)
+                    )
+                    new[e.seq] = (digest, blob)
+                else:
+                    raise ValueError(
+                        f"transcript {tid}: seq {e.seq} skips past {last_seq(key)}"
+                    )
+            if not floor <= w.head <= last_seq(key):
+                raise ValueError(
+                    f"transcript {tid}: head {w.head} outside [{floor}, {last_seq(key)}]"
                 )
-        self.transcript_entries.update(merged)
+        for key, (fork, new) in staged.items():
+            self.transcripts[key] = fork
+            self.transcript_entries.setdefault(key, {}).update(new)
         return {
             **values,
             **{k: _TranscriptRef(w.transcript_id, w.head) for k, w in writes.items()},
@@ -540,7 +621,7 @@ class InMemorySaver(
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         values: dict[str, Any] = c.pop("channel_values")  # type: ignore[misc]
-        values = self._put_transcripts(thread_id, checkpoint_ns, values)
+        values = self._put_transcripts(config, values)
         for k, v in new_versions.items():
             self.blobs[(thread_id, checkpoint_ns, k, v)] = (
                 self.serde.dumps_typed(values[k]) if k in values else ("empty", b"")
