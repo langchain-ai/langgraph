@@ -82,7 +82,7 @@ class ChannelRead(RunnableCallable):
             read: READ_TYPE = config[CONF][CONFIG_KEY_READ]
         except KeyError:
             raise RuntimeError(
-                "Not configured with a read function"
+                "Not configured with a read function. "
                 "Make sure to call in the context of a Pregel process"
             )
         if mapper:
