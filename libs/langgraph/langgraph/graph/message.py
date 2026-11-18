@@ -25,6 +25,9 @@ from typing_extensions import TypedDict, deprecated
 from langgraph._internal._constants import CONF, CONFIG_KEY_SEND
 from langgraph.graph.state import StateGraph
 from langgraph.pregel._messages import (
+    REMOVE_ALL_MESSAGES as REMOVE_ALL_MESSAGES,
+)
+from langgraph.pregel._messages import (
     _messages_delta_reducer as _messages_delta_reducer,
 )
 from langgraph.warnings import LangGraphDeprecatedSinceV10
@@ -37,8 +40,6 @@ __all__ = (
 )
 
 Messages = list[MessageLikeRepresentation] | MessageLikeRepresentation
-
-REMOVE_ALL_MESSAGES = "__remove_all__"
 
 
 def _add_messages_wrapper(func: Callable) -> Callable[[Messages, Messages], Messages]:
