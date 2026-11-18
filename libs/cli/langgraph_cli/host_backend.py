@@ -468,7 +468,8 @@ class HostBackendClient(_JsonClient):
             payload["revision_source"] = revision_source
         if tracked_packages:
             payload["tracked_packages"] = tracked_packages
-        if secrets is not None:
+        # On update the control plane reads an empty list as "unchanged".
+        if secrets:
             payload["secrets"] = secrets
         return self._request("PATCH", f"/v2/deployments/{deployment_id}", payload)
 
@@ -501,7 +502,8 @@ class HostBackendClient(_JsonClient):
         if source_config:
             payload["source_config"] = source_config
 
-        if secrets is not None:
+        # On update the control plane reads an empty list as "unchanged".
+        if secrets:
             payload["secrets"] = secrets
         return self._request("PATCH", f"/v2/deployments/{deployment_id}", payload)
 

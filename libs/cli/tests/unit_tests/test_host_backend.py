@@ -234,6 +234,21 @@ def _routing_client(seen: dict) -> HostBackendClient:
             id="internal_docker_revision_names_its_source",
         ),
         pytest.param(
+            lambda c: c.update_deployment(
+                "dep-123",
+                "registry.example.com/app@sha256:abc",
+                revision_source="internal_docker",
+                secrets=[],
+            ),
+            {
+                "revision_source": "internal_docker",
+                "source_revision_config": {
+                    "image_uri": "registry.example.com/app@sha256:abc"
+                },
+            },
+            id="revision_omits_an_empty_secrets_list",
+        ),
+        pytest.param(
             lambda c: c.update_deployment_internal_source(
                 "dep-123",
                 source_tarball_path="tarballs/src.tgz",
@@ -252,7 +267,6 @@ def _routing_client(seen: dict) -> HostBackendClient:
                     "install_command": "yarn install",
                     "build_command": "yarn build",
                 },
-                "secrets": [],
             },
             id="internal_source_revision_sends_js_build_commands",
         ),
