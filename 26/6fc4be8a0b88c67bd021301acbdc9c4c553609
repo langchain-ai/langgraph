@@ -1,0 +1,24 @@
+libs/langgraph/langgraph/pregel/_executor.py
+  s_f9fd073ba22700::t_f5e86228c30e5f 203-209,212
+libs/langgraph/langgraph/stream/run_stream.py
+  s_f9fd073ba22700::t_deafade6edd2f7 502,508-511
+libs/langgraph/tests/test_pregel_stream_events_v3.py
+  s_f9fd073ba22700::t_8949171d17aa28 649-654
+  s_f9fd073ba22700::t_ba0ad7fca0aeb2 610-648,655
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "266fc4be8a0b88c67bd021301acbdc9c4c553609",
+  "prompts": {},
+  "sessions": {
+    "s_f9fd073ba22700": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bd3efbda-5874-43eb-8654-4d8f6b6152f7",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Kiewan Villatel <kiewan@langchain.dev>"
+    }
+  }
+}
