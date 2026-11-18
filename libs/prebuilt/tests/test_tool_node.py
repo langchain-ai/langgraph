@@ -2566,3 +2566,50 @@ def test_tool_node_list_return_mixed_with_regular_tool() -> None:
     tool_call_ids = {m.tool_call_id for m in all_msgs}
     assert list_tool_id in tool_call_ids
     assert regular_tool_id in tool_call_ids
+
+
+async def test_tool_node_override_state_updates_injected_state_and_runtime() -> None:
+    """Verify ToolCallRequest.override(state=...) updates InjectedState and ToolRuntime.state."""
+    from langgraph.prebuilt.tool_node import ToolRuntime
+
+    class TopicState(MessagesState):
+        topic: str
+
+    @dec_tool
+    def read_topic(
+        topic: Annotated[str, InjectedState("topic")], runtime: ToolRuntime
+    ) -> str:
+        """Report the topic supplied to the tool."""
+        return f"injected={topic}, runtime={runtime.state['topic']}"
+
+    def wrap(request, execute):
+        return execute(request.override(state={**request.state, "topic": "filtered"}))
+
+    async def awrap(request, execute):
+        return await execute(
+            request.override(state={**request.state, "topic": "filtered"})
+        )
+
+    graph = (
+        StateGraph(TopicState)
+        .add_node(
+            "tools", ToolNode([read_topic], wrap_tool_call=wrap, awrap_tool_call=awrap)
+        )
+        .add_edge(START, "tools")
+        .compile()
+    )
+
+    graph_input = {
+        "topic": "original",
+        "messages": [
+            AIMessage(content="", tool_calls=[{"name": "read_topic", "args": {}, "id": "tool-1"}])
+        ],
+    }
+
+    sync_res = graph.invoke(graph_input)
+    assert sync_res["messages"][-1].content == "injected=filtered, runtime=filtered"
+    assert sync_res["topic"] == "original"
+
+    async_res = await graph.ainvoke(graph_input)
+    assert async_res["messages"][-1].content == "injected=filtered, runtime=filtered"
+    assert async_res["topic"] == "original"

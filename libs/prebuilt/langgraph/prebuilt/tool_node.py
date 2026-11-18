@@ -204,6 +204,16 @@ class ToolCallRequest:
             new_request = request.override(tool_call=modified_call, state=new_state)
             ```
         """
+        if (
+            "state" in overrides
+            and "runtime" not in overrides
+            and self.runtime is not None
+        ):
+            return replace(
+                self,
+                **overrides,
+                runtime=replace(self.runtime, state=overrides["state"]),
+            )
         return replace(self, **overrides)
 
 
