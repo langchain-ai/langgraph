@@ -564,8 +564,8 @@ class entrypoint(Generic[ContextT]):
                     type_annotations = get_args(sig.return_annotation)
                     if len(type_annotations) != 2:
                         raise TypeError(
-                            "Please an annotation for both the return_ and "
-                            "the save values."
+                            "Please provide an annotation for both the return_ and "
+                            "the save values. "
                             "For example, `-> entrypoint.final[int, str]` would assign a "
                             "return_ a type of `int` and save the type `str`."
                         )
