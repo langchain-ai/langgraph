@@ -189,7 +189,9 @@ class ToolCallRequest:
                 Supported keys:
 
                 - tool_call: Tool call dict with `name`, `args`, and `id`
-                - state: Agent state (`dict`, `list`, or `BaseModel`)
+                - state: Agent state (`dict`, `list`, or `BaseModel`). Also
+                    replaces `runtime.state`, so the tool gets this state through
+                    both `InjectedState` and `ToolRuntime`.
 
         Returns:
             New ToolCallRequest instance with specified overrides applied.
@@ -204,7 +206,13 @@ class ToolCallRequest:
             new_request = request.override(tool_call=modified_call, state=new_state)
             ```
         """
-        return replace(self, **overrides)
+        request = replace(self, **overrides)
+        # None outside a graph, or a mock in tests: replace() would raise on either.
+        if "state" in overrides and isinstance(request.runtime, ToolRuntime):
+            request = replace(
+                request, runtime=replace(request.runtime, state=request.state)
+            )
+        return request
 
 
 ToolCallWrapper = Callable[
