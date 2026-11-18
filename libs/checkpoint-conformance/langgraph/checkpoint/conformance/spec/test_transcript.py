@@ -3,13 +3,12 @@
 The cases live in `transcript_cases.json` so that stores written in other
 languages can run the same ones. Each case runs against fresh ids. A `put` step
 stores one checkpoint whose `messages` channel holds a `_TranscriptWrite`; a
-`read` step compares payloads, and `expect_later` compares `has_later_entries`.
-An entry `{"seq": n, "text": s}` has `payload = s` and `hash = sha256(s)`.
+`read` step compares values, and `expect_later` compares `has_later_entries`.
+An entry `{"seq": n, "text": s}` has `value = s`.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 import traceback
 from collections.abc import Callable
@@ -59,12 +58,7 @@ async def _run_case(saver: BaseCheckpointSaver, case: dict[str, Any]) -> None:
                     transcript_id=ident("transcript", w["transcript"]),
                     head=w["head"],
                     entries=[
-                        _TranscriptEntry(
-                            e["seq"],
-                            hashlib.sha256(e["text"].encode()).digest(),
-                            e["text"].encode(),
-                        )
-                        for e in w["entries"]
+                        _TranscriptEntry(e["seq"], e["text"]) for e in w["entries"]
                     ],
                     parent_transcript_id=ident("transcript", w["parent"])
                     if "parent" in w
@@ -102,7 +96,7 @@ async def _run_case(saver: BaseCheckpointSaver, case: dict[str, Any]) -> None:
                     ident("transcript", read["transcript"]), read["head"]
                 ),
             )
-            got = [e.payload.decode() for e in result.entries]
+            got = [e.value for e in result.entries]
             assert got == step["expect"], (
                 f"step {i}: expected {step['expect']}, got {got}"
             )
@@ -121,7 +115,7 @@ async def test_pointer_is_stored_in_place_of_the_write(
     cfg: RunnableConfig = {
         "configurable": {"thread_id": str(uuid4()), "checkpoint_ns": ""}
     }
-    write = _TranscriptWrite("t", 1, [_TranscriptEntry(1, b"h", b"a")])
+    write = _TranscriptWrite("t", 1, [_TranscriptEntry(1, "a")])
     checkpoint = generate_checkpoint(
         channel_values={"messages": write}, channel_versions={"messages": 1}
     )

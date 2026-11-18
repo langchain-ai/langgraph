@@ -32,11 +32,14 @@ class _DeltaSnapshot(NamedTuple):
 
 
 class _TranscriptEntry(NamedTuple):
-    """One immutable entry of a transcript. The writer assigns `seq` and `hash`."""
+    """One immutable entry of a transcript.
+
+    The writer assigns `seq`. The saver serializes `value` with its own serde
+    and decides whether a resend at the same seq is unchanged.
+    """
 
     seq: int
-    hash: bytes
-    payload: bytes
+    value: Any
 
 
 class _TranscriptRef(NamedTuple):

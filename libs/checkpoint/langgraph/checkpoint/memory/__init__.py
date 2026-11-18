@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import pickle
@@ -28,6 +29,7 @@ from langgraph.checkpoint.base import (
     get_checkpoint_metadata,
     writes_sort_key,
 )
+from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.serde.types import (
     _Transcript,
     _TranscriptEntry,
@@ -91,8 +93,10 @@ class InMemorySaver(
     ]
     # (thread ID, checkpoint NS, transcript ID) -> (parent transcript ID, fork seq)
     transcripts: dict[tuple[str, str, str], tuple[str, int] | None]
-    # (thread ID, checkpoint NS, transcript ID) -> seq -> entry
-    transcript_entries: dict[tuple[str, str, str], dict[int, _TranscriptEntry]]
+    # (thread ID, checkpoint NS, transcript ID) -> seq -> (plaintext hash, blob)
+    transcript_entries: dict[
+        tuple[str, str, str], dict[int, tuple[bytes, tuple[str, bytes]]]
+    ]
 
     def __init__(
         self,
@@ -167,16 +171,28 @@ class InMemorySaver(
     ) -> dict[str, Any]:
         """Store the entries of each `_TranscriptWrite` and leave its pointer."""
         writes = {k: v for k, v in values.items() if isinstance(v, _TranscriptWrite)}
-        merged: dict[tuple[str, str, str], dict[int, _TranscriptEntry]] = {}
+        # Hash the plaintext so resends compare equal under nondeterministic encryption.
+        plain = (
+            self.serde.serde
+            if isinstance(self.serde, EncryptedSerializer)
+            else self.serde
+        )
+        merged: dict[
+            tuple[str, str, str], dict[int, tuple[bytes, tuple[str, bytes]]]
+        ] = {}
         for w in writes.values():
             key = (thread_id, checkpoint_ns, w.transcript_id)
             entries = merged.setdefault(key, dict(self.transcript_entries.get(key, {})))
             for e in w.entries:
-                if e.seq in entries and entries[e.seq].hash != e.hash:
-                    raise TranscriptConflictError(
-                        f"transcript {w.transcript_id} has different content at seq {e.seq}"
-                    )
-                entries[e.seq] = e
+                typ, data = plain.dumps_typed(e.value)
+                digest = hashlib.sha256(typ.encode() + b"\0" + data).digest()
+                if e.seq in entries:
+                    if entries[e.seq][0] != digest:
+                        raise TranscriptConflictError(
+                            f"transcript {w.transcript_id} has different content at seq {e.seq}"
+                        )
+                    continue
+                entries[e.seq] = (digest, self.serde.dumps_typed(e.value))
         for w in writes.values():
             key = (thread_id, checkpoint_ns, w.transcript_id)
             if key not in self.transcripts:
@@ -207,8 +223,8 @@ class InMemorySaver(
             fork = self.transcripts.get(key)
             floor = fork[1] if fork else 0
             entries += [
-                e
-                for seq, e in self.transcript_entries.get(key, {}).items()
+                _TranscriptEntry(seq, self.serde.loads_typed(blob))
+                for seq, (_, blob) in self.transcript_entries.get(key, {}).items()
                 if floor < seq <= head
             ]
             transcript_id, head = (fork[0], min(head, fork[1])) if fork else (None, 0)

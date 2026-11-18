@@ -9,14 +9,21 @@ from pydantic import BaseModel
 from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
+    TranscriptConflictError,
     create_checkpoint,
     empty_checkpoint,
 )
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.serde.jsonplus import (
     JsonPlusSerializer,
     _warned_blocked_types,
     _warned_unregistered_types,
+)
+from langgraph.checkpoint.serde.types import (
+    _TranscriptEntry,
+    _TranscriptRef,
+    _TranscriptWrite,
 )
 
 
@@ -720,3 +727,22 @@ class TestPreDeltaBlobTerminator:
         assert "PRE-DELTA-WRITE" in values
         # And the pending write at the target is never folded in.
         assert "PENDING-AT-TARGET" not in values
+
+
+def test_transcript_resend_compares_plaintext_under_encryption() -> None:
+    saver = InMemorySaver(
+        serde=EncryptedSerializer.from_pycryptodome_aes(key=b"1234567890123456")
+    )
+    config: RunnableConfig = {"configurable": {"thread_id": "t", "checkpoint_ns": ""}}
+
+    def put(*entries: _TranscriptEntry) -> None:
+        checkpoint = empty_checkpoint()
+        checkpoint["channel_values"] = {"messages": _TranscriptWrite("T", 1, entries)}
+        saver.put(config, checkpoint, {}, {"messages": 1})
+
+    put(_TranscriptEntry(1, {"text": "a"}))
+    put(_TranscriptEntry(1, {"text": "a"}))
+    with pytest.raises(TranscriptConflictError):
+        put(_TranscriptEntry(1, {"text": "b"}))
+    read = saver.get_transcript(config=config, ref=_TranscriptRef("T", 1))
+    assert read.entries == [_TranscriptEntry(1, {"text": "a"})]
