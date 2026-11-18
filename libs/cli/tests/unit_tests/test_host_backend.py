@@ -275,6 +275,23 @@ def _routing_client(seen: dict) -> HostBackendClient:
                 "dep-123",
                 source_tarball_path="tarballs/src.tgz",
                 config_path="langgraph.json",
+                secrets=[{"name": "KEY", "value": "val"}],
+            ),
+            {
+                "revision_source": "internal_source",
+                "source_revision_config": {
+                    "source_tarball_path": "tarballs/src.tgz",
+                    "langgraph_config_path": "langgraph.json",
+                },
+                "secrets": [{"name": "KEY", "value": "val"}],
+            },
+            id="internal_source_revision_forwards_secrets",
+        ),
+        pytest.param(
+            lambda c: c.update_deployment_internal_source(
+                "dep-123",
+                source_tarball_path="tarballs/src.tgz",
+                config_path="langgraph.json",
             ),
             {
                 "revision_source": "internal_source",
