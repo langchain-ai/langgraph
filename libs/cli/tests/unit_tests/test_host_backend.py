@@ -268,7 +268,7 @@ def _routing_client(seen: dict) -> HostBackendClient:
                     "build_command": "yarn build",
                 },
             },
-            id="internal_source_revision_sends_js_build_commands",
+            id="internal_source_revision_sends_build_commands_and_omits_empty_secrets",
         ),
         pytest.param(
             lambda c: c.update_deployment_internal_source(
