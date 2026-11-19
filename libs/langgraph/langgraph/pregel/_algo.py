@@ -68,8 +68,8 @@ from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
-from langgraph.constants import END, START, TAG_HIDDEN
-from langgraph.errors import InvalidUpdateError, NodeError
+from langgraph.constants import TAG_HIDDEN
+from langgraph.errors import NodeError
 from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel._call import get_runnable_for_task, identifier
 from langgraph.pregel._io import read_channels
@@ -187,22 +187,12 @@ def should_interrupt(
     )
 
 
-def _is_state_key(key: str, channels: Mapping[str, BaseChannel]) -> bool:
-    """Whether `key` is a state channel, not one the graph adds to route or trigger nodes."""
-    return (
-        key in channels
-        and key not in RESERVED
-        and key not in (START, END, PREVIOUS, TASKS)
-        and NS_END not in key
-    )
-
-
 def local_read(
     scratchpad: PregelScratchpad,
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
     task: WritesProtocol,
-    select: list[str] | str | None,
+    select: list[str] | str,
     fresh: bool = False,
     *,
     proposed: Sequence[tuple[str, Any]] = (),
@@ -211,15 +201,8 @@ def local_read(
     Used by conditional edges to read a copy of the state with reflecting the writes
     from that node only.
 
-    `select=None` reads every state key. `proposed` writes are applied after the
-    task's own without being queued, so a fresh read raises `InvalidUpdateError`
-    for an update the channels would reject at the end of the step."""
-    for c, _ in proposed:
-        if not _is_state_key(c, channels):
-            msg = f"Cannot write to '{c}': it is not a state key"
-            raise InvalidUpdateError(msg)
-    if select is None:
-        select = [k for k in channels if _is_state_key(k, channels)]
+    `proposed` writes are applied after the task's own without being queued, so a
+    fresh read raises `InvalidUpdateError` for an update the step would reject."""
     # a snapshot, so another thread queuing a write cannot break the loops below
     writes = (*task.writes, *proposed)
     updated: dict[str, list[Any]] = defaultdict(list)
