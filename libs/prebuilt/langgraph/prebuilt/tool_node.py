@@ -107,6 +107,12 @@ except ImportError:  # `langgraph` before `is_invalid_resume` never marks resume
         return False
 
 
+try:
+    from langgraph._internal._constants import CONFIG_KEY_READ_STATE
+except ImportError:  # `langgraph` before `CONFIG_KEY_READ_STATE` never sets the key
+    CONFIG_KEY_READ_STATE = "__pregel_read_state"
+
+
 # right now we use a dict as the default, can change this to AgentState, but depends
 # on if this lives in LangChain or LangGraph... ideally would have some typed
 # messages key
@@ -189,7 +195,9 @@ class ToolCallRequest:
                 Supported keys:
 
                 - tool_call: Tool call dict with `name`, `args`, and `id`
-                - state: Agent state (`dict`, `list`, or `BaseModel`)
+                - state: Agent state (`dict`, `list`, or `BaseModel`). Also
+                    replaces `runtime.state`, so the tool gets this state through
+                    both `InjectedState` and `ToolRuntime`.
 
         Returns:
             New ToolCallRequest instance with specified overrides applied.
@@ -204,7 +212,13 @@ class ToolCallRequest:
             new_request = request.override(tool_call=modified_call, state=new_state)
             ```
         """
-        return replace(self, **overrides)
+        request = replace(self, **overrides)
+        # None outside a graph, or a mock in tests: replace() would raise on either.
+        if "state" in overrides and isinstance(request.runtime, ToolRuntime):
+            request = replace(
+                request, runtime=replace(request.runtime, state=request.state)
+            )
+        return request
 
 
 ToolCallWrapper = Callable[
@@ -1324,7 +1338,8 @@ class ToolNode(RunnableCallable):
         - `ToolCallWithContext` dict — legacy Send payload carrying an inlined
           state snapshot; return `input["state"]`.
         - list of `ToolCall` dicts — new Send payload with no inlined state;
-          hydrate state from channels via `CONFIG_KEY_READ`.
+          read the state this node would get from an edge, coerced to its
+          input schema (raw channel values on older `langgraph`).
         - regular graph state (dict/list/BaseModel) — return `input` as-is.
         """
         if isinstance(input, dict) and input.get("__type") == "tool_call_with_context":
@@ -1335,7 +1350,10 @@ class ToolNode(RunnableCallable):
             and isinstance(input[-1], dict)
             and input[-1].get("type") == "tool_call"
         ):
-            read = config.get(CONF, {}).get(CONFIG_KEY_READ)
+            conf = config.get(CONF, {})
+            if (read_state := conf.get(CONFIG_KEY_READ_STATE)) is not None:
+                return read_state()
+            read = conf.get(CONFIG_KEY_READ)
             if read is None:
                 return {}
             # Pregel installs CONFIG_KEY_READ as

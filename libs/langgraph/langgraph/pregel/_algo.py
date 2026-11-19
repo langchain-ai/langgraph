@@ -42,6 +42,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_NODE_ERROR,
     CONFIG_KEY_READ,
+    CONFIG_KEY_READ_STATE,
     CONFIG_KEY_RESUME_MAP,
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SCRATCHPAD,
@@ -734,6 +735,7 @@ def prepare_single_task(
                                         triggers,
                                     ),
                                 ),
+                                CONFIG_KEY_READ_STATE: None,
                                 CONFIG_KEY_CHECKPOINTER: (
                                     checkpointer
                                     or configurable.get(CONFIG_KEY_CHECKPOINTER)
@@ -911,6 +913,7 @@ def prepare_push_task_functional(
                         managed,
                         PregelTaskWrites(in_progress_task_path, name, writes, triggers),
                     ),
+                    CONFIG_KEY_READ_STATE: None,
                     CONFIG_KEY_CHECKPOINTER: (
                         checkpointer or configurable.get(CONFIG_KEY_CHECKPOINTER)
                     ),
@@ -1081,6 +1084,15 @@ def prepare_push_task_send(
                             translated_task_path, packet.node, writes, triggers
                         ),
                     ),
+                    CONFIG_KEY_READ_STATE: partial(
+                        _proc_input,
+                        proc,
+                        managed,
+                        channels,
+                        for_execution=True,
+                        scratchpad=scratchpad,
+                        input_cache=None,
+                    ),
                     CONFIG_KEY_CHECKPOINTER: (
                         checkpointer or configurable.get(CONFIG_KEY_CHECKPOINTER)
                     ),
@@ -1222,6 +1234,7 @@ def prepare_node_error_handler_task(
                         PUSH_TRIGGER,
                     ),
                 ),
+                CONFIG_KEY_READ_STATE: None,
                 CONFIG_KEY_CHECKPOINTER: (
                     checkpointer or configurable.get(CONFIG_KEY_CHECKPOINTER)
                 ),
