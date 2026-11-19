@@ -18,7 +18,7 @@ from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 from langgraph.graph import START, StateGraph
-from langgraph.graph.message import _messages_delta_reducer
+from langgraph.graph.message import REMOVE_ALL_MESSAGES, _messages_delta_reducer
 from langgraph.graph.state import _get_channel
 from langgraph.pregel._checkpoint import delta_channels_to_snapshot
 from langgraph.types import Overwrite
@@ -151,6 +151,25 @@ def test_delta_channel_basic_two_steps() -> None:
     assert len(ch.get()) == 2
     assert ch.get()[0].content == "hi"
     assert ch.get()[1].content == "hello"
+
+
+def test_delta_channel_from_none_checkpoint_replays_from_empty() -> None:
+    ch = DeltaChannel(_messages_delta_reducer, list).from_checkpoint(None)
+    msg = HumanMessage(content="hi", id="h1")
+    ch.replay_writes([("t0", "messages", [msg])])
+    assert ch.get() == [msg]
+
+
+def test_messages_delta_reducer_remove_all() -> None:
+    old = HumanMessage(content="old", id="h0")
+    dropped = HumanMessage(content="dropped", id="h1")
+    kept = AIMessage(content="kept", id="a1")
+    writes = [[dropped], [RemoveMessage(id=REMOVE_ALL_MESSAGES), kept]]
+    assert _messages_delta_reducer([old], writes) == [kept]
+    state = [old]
+    for w in writes:
+        state = _messages_delta_reducer(state, [w])
+    assert state == [kept]
 
 
 def test_delta_channel_from_checkpoint_writes_list() -> None:

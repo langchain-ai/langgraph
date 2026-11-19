@@ -433,21 +433,24 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
 # Defined here rather than in `langgraph.graph.message`, which re-exports it:
 # `ensure_message_ids` has to recognize it, and importing that module from the
 # loop would be an import cycle.
+REMOVE_ALL_MESSAGES = "__remove_all__"
+
+
 def _messages_delta_reducer(
     state: list[AnyMessage], writes: list[list[AnyMessage]]
 ) -> list[AnyMessage]:
     """**Experimental.** Batch reducer for use with `DeltaChannel`.
 
     Processes all writes in one pass — dedup by ID, `RemoveMessage`
-    tombstoning — without calling `add_messages`.
+    tombstoning, `REMOVE_ALL_MESSAGES` reset — without calling `add_messages`.
 
     This reducer is batching-invariant, as required by `DeltaChannel`:
     `reducer(reducer(state, xs), ys) == reducer(state, xs + ys)`.
 
     Raw dict / string / tuple inputs are coerced to typed `BaseMessage`
     objects so that HTTP-driven graphs work without a separate coercion
-    step. This is not full `add_messages` parity — `REMOVE_ALL_MESSAGES`,
-    unknown-id `RemoveMessage` errors, missing-id UUID assignment, and
+    step. This is not full `add_messages` parity — unknown-id
+    `RemoveMessage` errors, missing-id UUID assignment, and
     `BaseMessageChunk` conversion are not handled here.
 
     Example::
@@ -477,6 +480,13 @@ def _messages_delta_reducer(
     else:
         state_msgs = cast("list[AnyMessage]", convert_to_messages(state))
     msgs = cast("list[AnyMessage]", convert_to_messages(flat))
+
+    for idx in range(len(msgs) - 1, -1, -1):
+        m = msgs[idx]
+        if isinstance(m, RemoveMessage) and m.id == REMOVE_ALL_MESSAGES:
+            state_msgs = []
+            msgs = msgs[idx + 1 :]
+            break
 
     index: dict[str, int] = {
         m.id: i for i, m in enumerate(state_msgs) if m.id is not None
