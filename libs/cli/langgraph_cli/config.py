@@ -1400,6 +1400,7 @@ def python_config_to_docker(
     api_version: str | None = None,
     *,
     escape_variables: bool = False,
+    single_root_copy: bool = False,
 ) -> tuple[str, dict[str, str]]:
     """Generate a Dockerfile from the configuration."""
     source_kind = _get_source_kind(config)
@@ -1412,6 +1413,7 @@ def python_config_to_docker(
             base_image,
             api_version=api_version,
             build_tools_to_uninstall=build_tools_to_uninstall,
+            single_root_copy=single_root_copy,
         )
     _validate_local_dependency_files(config_path, config)
     if pip_installer == "auto":
@@ -1772,6 +1774,7 @@ def config_to_docker(
     build_command: str | None = None,
     build_context: str | None = None,
     escape_variables: bool = False,
+    single_root_copy: bool = False,
 ) -> tuple[str, dict[str, str]]:
     base_image = base_image or default_base_image(config)
 
@@ -1792,6 +1795,7 @@ def config_to_docker(
         base_image=base_image,
         api_version=api_version,
         escape_variables=escape_variables,
+        single_root_copy=single_root_copy,
     )
 
 
