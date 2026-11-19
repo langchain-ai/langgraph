@@ -1,6 +1,5 @@
 import operator
 import sys
-import threading
 from collections.abc import Callable
 from typing import Annotated, Any
 
@@ -75,26 +74,6 @@ async def test_an_async_node_finds_its_task_from_context() -> None:
 
     graph = StateGraph(State).add_node("node", node).add_edge(START, "node").compile()
     assert await graph.ainvoke({"many": [0]}) == {"one": "a", "many": [0]}
-
-
-async def test_an_async_node_can_pass_its_config() -> None:
-    async def node(state: State, config: RunnableConfig) -> None:
-        write_state({"one": "a"}, config=config)
-        assert read_state("one", config=config) == {"one": "a"}
-
-    graph = StateGraph(State).add_node("node", node).add_edge(START, "node").compile()
-    assert await graph.ainvoke({"many": [0]}) == {"one": "a", "many": [0]}
-
-
-def test_a_thread_reaches_the_task_through_the_config() -> None:
-    def node(state: State, config: RunnableConfig) -> None:
-        thread = threading.Thread(
-            target=write_state, args=({"one": "a"},), kwargs={"config": config}
-        )
-        thread.start()
-        thread.join()
-
-    assert run(node) == {"one": "a", "many": [0]}
 
 
 @pytest.mark.parametrize(
@@ -180,7 +159,7 @@ def test_outside_a_task() -> None:
     with pytest.raises(NotInTaskError):
         RunnableLambda(lambda _: read_state()).invoke(None)
     with pytest.raises(NotInTaskError):
-        write_state({"one": "a"}, config={"configurable": {}})
+        RunnableLambda(lambda _: write_state({"one": "a"})).invoke(None)
 
 
 def test_an_entrypoint_has_no_state_keys() -> None:
