@@ -64,7 +64,6 @@ from langgraph.errors import (
     GraphRecursionError,
     InvalidUpdateError,
     NodeError,
-    ParentCommand,
 )
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
@@ -9077,7 +9076,8 @@ async def test_parent_command_goto(
 async def test_timeout_with_parent_command(
     async_checkpointer: BaseCheckpointSaver, with_timeout: bool
 ) -> None:
-    """Test that parent commands are properly propagated during timeouts."""
+    """Test that a top-level parent command surfaces as an error, not a
+    timeout (langgraph#9713)."""
 
     class State(TypedDict):
         value: str
@@ -9093,12 +9093,10 @@ async def test_timeout_with_parent_command(
     if with_timeout:
         graph.step_timeout = 1
 
-    # Should propagate parent command, not timeout
+    # Should raise InvalidUpdateError naming the node, not timeout
     thread1 = {"configurable": {"thread_id": "1"}}
-    with pytest.raises(ParentCommand) as exc_info:
+    with pytest.raises(InvalidUpdateError, match="node 'parent_cmd'"):
         await graph.ainvoke({"value": "start"}, thread1)
-    assert exc_info.value.args[0].goto == "test_cmd"
-    assert exc_info.value.args[0].update == {"key": "value"}
 
 
 async def test_fork_and_update_task_results(

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import pytest
 from typing_extensions import TypedDict
 
+from langgraph.errors import InvalidUpdateError
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
@@ -51,3 +53,23 @@ def test_parent_command_from_nested_subgraph() -> None:
 
     assert graph.invoke({"jump_from_idx": 1}) == {"jump_from_idx": 1}
     assert graph.invoke({"jump_from_idx": 2}) == {"jump_from_idx": 2}
+
+
+def test_top_level_parent_command_raises_invalid_update_error() -> None:
+    """A Command(PARENT) returned by a node in a graph with no parent graph
+    is a user error, not an internal routing signal (langgraph#9713)."""
+
+    class State(TypedDict):
+        x: int
+
+    def node(state: State):
+        return Command(graph=Command.PARENT, goto="other", update={"x": 1})
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_node("other", lambda s: {"x": 2})
+    builder.add_edge(START, "node")
+
+    graph = builder.compile()
+    with pytest.raises(InvalidUpdateError, match="node 'node'"):
+        graph.invoke({"x": 0})

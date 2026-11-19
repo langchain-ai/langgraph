@@ -62,7 +62,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.config import get_stream_writer
-from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
+from langgraph.errors import GraphRecursionError, InvalidUpdateError
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState, _messages_delta_reducer, add_messages
@@ -8532,7 +8532,8 @@ def test_parent_command_goto_deeply_nested(
 def test_timeout_with_parent_command(
     sync_checkpointer: BaseCheckpointSaver, with_timeout: bool
 ) -> None:
-    """Test that parent commands are properly propagated during timeouts."""
+    """Test that a top-level parent command surfaces as an error, not a
+    timeout (langgraph#9713)."""
 
     class State(TypedDict):
         value: str
@@ -8548,12 +8549,10 @@ def test_timeout_with_parent_command(
     if with_timeout:
         graph.step_timeout = 1
 
-    # Should propagate parent command, not timeout
+    # Should raise InvalidUpdateError naming the node, not timeout
     thread1 = {"configurable": {"thread_id": "1"}}
-    with pytest.raises(ParentCommand) as exc_info:
+    with pytest.raises(InvalidUpdateError, match="node 'parent_cmd'"):
         graph.invoke({"value": "start"}, thread1)
-    assert exc_info.value.args[0].goto == "test_cmd"
-    assert exc_info.value.args[0].update == {"key": "value"}
 
 
 def test_fork_and_update_task_results(sync_checkpointer: BaseCheckpointSaver) -> None:

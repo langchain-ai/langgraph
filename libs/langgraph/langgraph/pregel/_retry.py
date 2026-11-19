@@ -41,6 +41,7 @@ from langgraph._internal._runnable import create_task_in_config_context
 from langgraph._internal._timeout import sync_timeout_unsupported
 from langgraph.errors import (
     GraphBubbleUp,
+    InvalidUpdateError,
     NodeCancelledError,
     NodeTimeoutError,
     ParentCommand,
@@ -646,7 +647,16 @@ def run_with_retry(
                 break
             elif cmd.graph == Command.PARENT:
                 # this command is for the parent graph, assign it to the parent.
-                exc.args = (replace(cmd, graph=_checkpoint_ns_for_parent_command(ns)),)
+                parent_ns = _checkpoint_ns_for_parent_command(ns)
+                if not parent_ns:
+                    # There is no parent graph: this task runs in the
+                    # outermost graph, so a ParentCommand is a user error,
+                    # not an internal routing signal (langgraph#9713).
+                    raise InvalidUpdateError(
+                        f"Command.PARENT was returned by node '{task.name}', "
+                        "but this graph has no parent graph"
+                    ) from exc
+                exc.args = (replace(cmd, graph=parent_ns),)
             # bubble up
             raise
         except GraphBubbleUp:
@@ -779,7 +789,18 @@ async def arun_with_retry(
                 break
             elif cmd.graph == Command.PARENT:
                 # this command is for the parent graph, assign it to the parent.
-                exc.args = (replace(cmd, graph=_checkpoint_ns_for_parent_command(ns)),)
+                parent_ns = _checkpoint_ns_for_parent_command(ns)
+                if not parent_ns:
+                    # There is no parent graph: this task runs in the
+                    # outermost graph, so a ParentCommand is a user error,
+                    # not an internal routing signal (langgraph#9713).
+                    err = InvalidUpdateError(
+                        f"Command.PARENT was returned by node '{task.name}', "
+                        "but this graph has no parent graph"
+                    )
+                    _finish_timed_attempt(config, attempt_ctx, err)
+                    raise err from exc
+                exc.args = (replace(cmd, graph=parent_ns),)
             _finish_timed_attempt(config, attempt_ctx)
             # bubble up the exception to the parent graph
             raise

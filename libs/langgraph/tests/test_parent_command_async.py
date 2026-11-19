@@ -4,6 +4,7 @@ import pytest
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import TypedDict
 
+from langgraph.errors import InvalidUpdateError
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
@@ -55,3 +56,23 @@ async def test_parent_command_from_nested_subgraph() -> None:
 
     assert await graph.ainvoke({"jump_from_idx": 1}) == {"jump_from_idx": 1}
     assert await graph.ainvoke({"jump_from_idx": 2}) == {"jump_from_idx": 2}
+
+
+async def test_top_level_parent_command_raises_invalid_update_error() -> None:
+    """Async twin of the sync test: a Command(PARENT) returned by a node in
+    a graph with no parent graph raises InvalidUpdateError (langgraph#9713)."""
+
+    class State(TypedDict):
+        x: int
+
+    async def node(state: State):
+        return Command(graph=Command.PARENT, goto="other", update={"x": 1})
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_node("other", lambda s: {"x": 2})
+    builder.add_edge(START, "node")
+
+    graph = builder.compile()
+    with pytest.raises(InvalidUpdateError, match="node 'node'"):
+        await graph.ainvoke({"x": 0})

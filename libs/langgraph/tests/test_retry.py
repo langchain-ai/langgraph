@@ -1743,6 +1743,10 @@ async def test_arun_with_retry_timeout_observer_treats_parent_command_as_non_err
             raise ParentCommand(Command(graph=Command.PARENT))
 
     task = _make_task(ParentProc(), timeout=_idle_timeout(0.05), name="parent")
+    # Nested namespace: the command still has a parent graph to bubble to,
+    # so it propagates as ParentCommand (langgraph#9713 converts only a
+    # top-level ParentCommand, i.e. one with an empty parent namespace).
+    task.config[CONF][CONFIG_KEY_CHECKPOINT_NS] = "parent:tid|child:tid"
     task.config[CONF][CONFIG_KEY_TIMED_ATTEMPT_OBSERVER] = events.append
     with pytest.raises(ParentCommand):
         await arun_with_retry(task, retry_policy=None)
