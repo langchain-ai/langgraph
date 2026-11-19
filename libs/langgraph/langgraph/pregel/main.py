@@ -76,6 +76,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_RUNNER_SUBMIT,
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SEND,
+    CONFIG_KEY_STATE_KEYS,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_STREAM_MESSAGES_V2,
     CONFIG_KEY_TASK_ID,
@@ -2047,6 +2048,7 @@ class Pregel(
                             # deque.extend is thread-safe
                             CONFIG_KEY_SEND: writes.extend,
                             CONFIG_KEY_TASK_ID: task_id,
+                            CONFIG_KEY_STATE_KEYS: self.stream_channels_list,
                             CONFIG_KEY_READ: partial(
                                 local_read,
                                 _scratchpad(
@@ -2547,6 +2549,7 @@ class Pregel(
                             # deque.extend is thread-safe
                             CONFIG_KEY_SEND: writes.extend,
                             CONFIG_KEY_TASK_ID: task_id,
+                            CONFIG_KEY_STATE_KEYS: self.stream_channels_list,
                             CONFIG_KEY_READ: partial(
                                 local_read,
                                 _scratchpad(

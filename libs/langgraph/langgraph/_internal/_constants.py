@@ -72,6 +72,8 @@ CONFIG_KEY_DURABILITY = sys.intern("__pregel_durability")
 # holds the durability mode, one of "sync", "async", or "exit"
 CONFIG_KEY_RUNTIME = sys.intern("__pregel_runtime")
 # holds a `Runtime` instance with context, store, stream writer, etc.
+CONFIG_KEY_STATE_KEYS = sys.intern("__pregel_state_keys")
+# holds the names of the graph's state channels
 CONFIG_KEY_RESUME_MAP = sys.intern("__pregel_resume_map")
 # holds a mapping of task ns -> resume value for resuming tasks
 CONFIG_KEY_STRICT_RESUME = sys.intern("__pregel_strict_resume")

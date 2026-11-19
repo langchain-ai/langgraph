@@ -47,6 +47,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SCRATCHPAD,
+    CONFIG_KEY_STATE_KEYS,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_STRICT_RESUME,
     CONFIG_KEY_TASK_ID,
@@ -74,7 +75,7 @@ from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import _get_overwrite
 from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.untracked_value import UntrackedValue
-from langgraph.constants import TAG_HIDDEN
+from langgraph.constants import END, TAG_HIDDEN
 from langgraph.errors import (
     EmptyInputError,
     GraphInterrupt,
@@ -349,6 +350,11 @@ class PregelLoop:
         self.input_keys = input_keys
         self.output_keys = output_keys
         self.stream_keys = stream_keys
+        keys = [stream_keys] if isinstance(stream_keys, str) else stream_keys
+        # an entrypoint streams its return value through END, which is not state
+        self.config = patch_configurable(
+            self.config, {CONFIG_KEY_STATE_KEYS: [k for k in keys if k != END]}
+        )
         self.interrupt_after = interrupt_after
         self.interrupt_before = interrupt_before
         self.manager = manager

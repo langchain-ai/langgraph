@@ -12,8 +12,9 @@ from langgraph._internal._constants import (
     CONFIG_KEY_READ,
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SEND,
+    CONFIG_KEY_STATE_KEYS,
 )
-from langgraph.errors import NotInTaskError
+from langgraph.errors import InvalidUpdateError, NotInTaskError
 from langgraph.types import StreamWriter
 
 
@@ -216,8 +217,12 @@ def read_state(*keys: str) -> dict[str, Any]:
 
     A node receives state as it was when the step started. This also applies
     the updates the node has queued since, such as with
-    [`write_state`][langgraph.config.write_state]. Like `get_store`, it does
-    not work in async code on Python < 3.11.
+    [`write_state`][langgraph.config.write_state]. A key that holds its value
+    for one step, such as an `EphemeralValue`, reads as unset unless the node
+    wrote it. Like `get_store`, this does not work in async code on
+    Python < 3.11.
+
+    !!! version-added "Added in version 1.2.23"
 
     Args:
         *keys: The state keys to read. Reads every state key when omitted.
@@ -226,17 +231,26 @@ def read_state(*keys: str) -> dict[str, Any]:
         The values by key. A key with no value is left out.
 
     Raises:
+        KeyError: When a key is not a state key.
         NotInTaskError: When called outside of a graph node or task.
     """
-    return _task_conf("read_state")[CONFIG_KEY_READ](list(keys) or None, True)
+    conf = _task_conf("read_state")
+    state_keys = conf.get(CONFIG_KEY_STATE_KEYS, ())
+    for key in keys:
+        if key not in state_keys:
+            msg = f"'{key}' is not a state key"
+            raise KeyError(msg)
+    return conf[CONFIG_KEY_READ](list(keys or state_keys), True)
 
 
 def write_state(update: Mapping[str, Any]) -> None:
     """Queue a state update from inside a node or tool.
 
-    The update is applied when the step ends, like one the node returns, and
+    The update is applied when the step ends, and
     [`read_state`][langgraph.config.read_state] sees it at once. Like
-    `get_store`, it does not work in async code on Python < 3.11.
+    `get_store`, this does not work in async code on Python < 3.11.
+
+    !!! version-added "Added in version 1.2.23"
 
     Args:
         update: The values to write, by state key.
@@ -247,6 +261,11 @@ def write_state(update: Mapping[str, Any]) -> None:
         NotInTaskError: When called outside of a graph node or task.
     """
     conf = _task_conf("write_state")
+    state_keys = conf.get(CONFIG_KEY_STATE_KEYS, ())
+    for key in update:
+        if key not in state_keys:
+            msg = f"Cannot write to '{key}': it is not a state key"
+            raise InvalidUpdateError(msg)
     writes = list(update.items())
-    conf[CONFIG_KEY_READ]([key for key, _ in writes], True, proposed=writes)
+    conf[CONFIG_KEY_READ](list(update), True, proposed=writes)
     conf[CONFIG_KEY_SEND](writes)

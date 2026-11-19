@@ -112,8 +112,7 @@ def test_a_rejected_update_queues_none_of_its_keys() -> None:
 
 
 @pytest.mark.parametrize(
-    "key",
-    ["missing", "__interrupt__", "__pregel_tasks", "__start__", "branch:to:other"],
+    "key", ["missing", "__pregel_tasks", "__start__", "branch:to:other"]
 )
 def test_write_state_rejects_a_key_that_is_not_state(key: str) -> None:
     ran: list[str] = []
@@ -151,7 +150,39 @@ def test_read_state_returns_state_keys_only() -> None:
     assert [sorted(state) for state in seen] == [["many"]]
 
 
-def test_outside_a_task() -> None:
+def test_read_state_rejects_a_key_that_is_not_state() -> None:
+    def node(state: State) -> None:
+        for key in ("missing", "__start__", "branch:to:node"):
+            with pytest.raises(KeyError, match="not a state key"):
+                read_state(key)
+
+    assert run(node) == {"many": [0]}
+
+
+def test_a_state_key_may_contain_a_colon() -> None:
+    Colon = TypedDict("Colon", {"user:name": str})
+
+    def node(state: Any) -> None:
+        write_state({"user:name": "a"})
+        assert read_state() == {"user:name": "a"}
+
+    graph = StateGraph(Colon).add_node("node", node).add_edge(START, "node").compile()
+    assert graph.invoke({}) == {"user:name": "a"}
+
+
+def test_a_one_step_key_reads_as_unset_until_the_node_writes_it() -> None:
+    seen: list[dict[str, Any]] = []
+
+    def node(state: State) -> None:
+        seen.append(read_state("ephemeral"))
+        write_state({"ephemeral": "b"})
+        seen.append(read_state("ephemeral"))
+
+    run(node, {"ephemeral": "a"})
+    assert seen == [{}, {"ephemeral": "b"}]
+
+
+def test_read_and_write_state_need_a_running_graph() -> None:
     with pytest.raises(NotInTaskError, match="read_state outside"):
         read_state()
     with pytest.raises(NotInTaskError, match="write_state outside"):
@@ -165,8 +196,9 @@ def test_outside_a_task() -> None:
 def test_an_entrypoint_has_no_state_keys() -> None:
     @entrypoint()
     def workflow(value: int) -> dict[str, Any]:
-        with pytest.raises(InvalidUpdateError, match="not a state key"):
-            write_state({END: value})
+        for key in (END, "__previous__"):
+            with pytest.raises(InvalidUpdateError, match="not a state key"):
+                write_state({key: value})
         return read_state()
 
     assert workflow.invoke(1) == {}
