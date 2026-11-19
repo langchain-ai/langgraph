@@ -322,6 +322,7 @@ EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
 EXT_DELTA_SNAPSHOT = 7
+EXT_TYPED_DICT = 8
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
@@ -653,7 +654,21 @@ def _create_msgpack_ext_hook(
         return False
 
     def ext_hook(code: int, data: bytes) -> Any:
-        if code == EXT_DELTA_SNAPSHOT:
+        if code == EXT_TYPED_DICT:
+            keys, values = ormsgpack.unpackb(
+                data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+            )
+            if len(keys) != len(values):
+                raise ValueError("Invalid typed dictionary: key/value count mismatch")
+
+            # MessagePack decodes tuples as lists; dictionary keys must be hashable.
+            def restore_key(key: Any) -> Any:
+                if isinstance(key, list):
+                    return tuple(restore_key(item) for item in key)
+                return key
+
+            return dict(zip((restore_key(key) for key in keys), values))
+        elif code == EXT_DELTA_SNAPSHOT:
             return _DeltaSnapshot(
                 ormsgpack.unpackb(
                     data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
@@ -775,6 +790,16 @@ _msgpack_ext_hook = _create_msgpack_ext_hook(allowed_modules=None)
 
 
 def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
+    if code == EXT_TYPED_DICT:
+        keys, values = ormsgpack.unpackb(
+            data,
+            ext_hook=_msgpack_ext_hook_to_json,
+            option=ormsgpack.OPT_NON_STR_KEYS,
+        )
+        if len(keys) != len(values):
+            raise ValueError("Invalid typed dictionary: key/value count mismatch")
+        # JSON-compatible decoding cannot preserve arbitrary Python key types.
+        return {str(key): value for key, value in zip(keys, values)}
     if code == EXT_CONSTRUCTOR_SINGLE_ARG:
         try:
             tup = ormsgpack.unpackb(
@@ -882,8 +907,34 @@ _option = (
 )
 
 
+def _prepare_msgpack(data: Any) -> Any:
+    """Move non-native dictionary keys into list positions before packing.
+
+    ormsgpack does not invoke its custom default encoder for mapping keys.
+    The extension's parallel lists allow keys to use the existing typed-value
+    encodings without changing the wire format for ordinary dictionaries.
+    """
+    if isinstance(data, dict):
+        if any(
+            type(key) not in (str, int, float, bool, type(None), bytes)
+            for key in data
+        ):
+            return ormsgpack.Ext(
+                EXT_TYPED_DICT,
+                _msgpack_enc((list(data.keys()), list(data.values()))),
+            )
+        return {key: _prepare_msgpack(value) for key, value in data.items()}
+    if isinstance(data, list):
+        return [_prepare_msgpack(value) for value in data]
+    if isinstance(data, tuple):
+        return tuple(_prepare_msgpack(value) for value in data)
+    return data
+
+
 def _msgpack_enc(data: Any) -> bytes:
-    return ormsgpack.packb(data, default=_msgpack_default, option=_option)
+    return ormsgpack.packb(
+        _prepare_msgpack(data), default=_msgpack_default, option=_option
+    )
 
 
 def _normalize_allowlist(
