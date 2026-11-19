@@ -28,7 +28,7 @@ async def test_extensions_async(async_threads) -> None:
 
         # Iterator exits at the `ask_human` interrupt via `_signal_paused`,
         # so we capture exactly the pre-interrupt progress sequence.
-        steps = [e.get("step") for e in events]
+        steps = [e["payload"]["step"] for e in events]
         assert steps == _EXPECTED_PRE_INTERRUPT_STEPS, (
             f"unexpected step sequence: {steps}"
         )
@@ -43,7 +43,7 @@ def test_extensions_sync(sync_threads) -> None:
         for event in thread.extensions["progress"]:
             events.append(event)
 
-        steps = [e.get("step") for e in events]
+        steps = [e["payload"]["step"] for e in events]
         assert steps == _EXPECTED_PRE_INTERRUPT_STEPS, (
             f"unexpected step sequence: {steps}"
         )
