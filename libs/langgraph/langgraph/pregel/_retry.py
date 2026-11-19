@@ -41,6 +41,7 @@ from langgraph._internal._runnable import create_task_in_config_context
 from langgraph._internal._timeout import sync_timeout_unsupported
 from langgraph.errors import (
     GraphBubbleUp,
+    InvalidUpdateError,
     NodeCancelledError,
     NodeTimeoutError,
     ParentCommand,
@@ -645,8 +646,13 @@ def run_with_retry(
                     w.invoke(cmd, config)
                 break
             elif cmd.graph == Command.PARENT:
+                parent_ns = _checkpoint_ns_for_parent_command(ns)
+                if not parent_ns:
+                    raise InvalidUpdateError(
+                        f"Command(graph=Command.PARENT) was returned by node '{task.name}', but this graph has no parent graph."
+                    )
                 # this command is for the parent graph, assign it to the parent.
-                exc.args = (replace(cmd, graph=_checkpoint_ns_for_parent_command(ns)),)
+                exc.args = (replace(cmd, graph=parent_ns),)
             # bubble up
             raise
         except GraphBubbleUp:
@@ -778,8 +784,15 @@ async def arun_with_retry(
                 _finish_timed_attempt(config, attempt_ctx)
                 break
             elif cmd.graph == Command.PARENT:
+                parent_ns = _checkpoint_ns_for_parent_command(ns)
+                if not parent_ns:
+                    exc = InvalidUpdateError(
+                        f"Command(graph=Command.PARENT) was returned by node '{task.name}', but this graph has no parent graph."
+                    )
+                    _finish_timed_attempt(config, attempt_ctx, exc)
+                    raise exc
                 # this command is for the parent graph, assign it to the parent.
-                exc.args = (replace(cmd, graph=_checkpoint_ns_for_parent_command(ns)),)
+                exc.args = (replace(cmd, graph=parent_ns),)
             _finish_timed_attempt(config, attempt_ctx)
             # bubble up the exception to the parent graph
             raise
