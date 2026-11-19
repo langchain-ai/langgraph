@@ -69,7 +69,7 @@ from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
-from langgraph.errors import NodeError
+from langgraph.errors import InvalidUpdateError, NodeError
 from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel._call import get_runnable_for_task, identifier
 from langgraph.pregel._io import read_channels
@@ -192,22 +192,32 @@ def local_read(
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
     task: WritesProtocol,
-    select: list[str] | str,
+    select: list[str] | str | None,
     fresh: bool = False,
+    proposed: Sequence[tuple[str, Any]] = (),
 ) -> dict[str, Any] | Any:
     """Function injected under CONFIG_KEY_READ in task config, to read current state.
     Used by conditional edges to read a copy of the state with reflecting the writes
-    from that node only."""
+    from that node only.
+
+    `select=None` reads every channel. `proposed` writes are applied after the
+    task's own without being queued, so a fresh read raises `InvalidUpdateError`
+    for an update the channels would reject at the end of the step."""
+    for c, _ in proposed:
+        if c not in channels or c == TASKS:
+            raise InvalidUpdateError(f"Cannot write to unknown state key '{c}'")
+    if select is None:
+        select = list(channels)
     updated: dict[str, list[Any]] = defaultdict(list)
     if isinstance(select, str):
         managed_keys = []
-        for c, v in task.writes:
+        for c, v in itertools.chain(task.writes, proposed):
             if c == select:
                 updated[c].append(v)
     else:
         managed_keys = [k for k in select if k in managed]
         select = [k for k in select if k not in managed]
-        for c, v in task.writes:
+        for c, v in itertools.chain(task.writes, proposed):
             if c in select:
                 updated[c].append(v)
     if fresh:

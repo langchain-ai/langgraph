@@ -25,6 +25,7 @@ __all__ = (
     "NodeError",
     "NodeInterrupt",
     "NodeTimeoutError",
+    "NotInTaskError",
     "ParentCommand",
     "EmptyInputError",
     "TaskNotFound",
@@ -99,6 +100,10 @@ class InvalidUpdateError(Exception):
     """
 
     pass
+
+
+class NotInTaskError(RuntimeError):
+    """Raised when task state is read or written outside of a running graph task."""
 
 
 class GraphInterrupt(GraphBubbleUp):

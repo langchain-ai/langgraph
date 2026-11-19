@@ -1,4 +1,5 @@
 import dataclasses
+import threading
 from collections.abc import Callable
 from typing import Any
 
@@ -17,3 +18,5 @@ class PregelScratchpad:
     resume: list[Any]
     # subgraph
     subgraph_counter: Callable[[], int]
+    # serializes `read_state` and `write_state`, which tools call from several threads
+    state_lock: threading.RLock = dataclasses.field(default_factory=threading.RLock)
