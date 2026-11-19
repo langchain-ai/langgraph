@@ -437,14 +437,12 @@ REMOVE_ALL_MESSAGES = "__remove_all__"
 
 
 def _messages_delta_reducer(
-    state: list[AnyMessage] | None, writes: list[list[AnyMessage]]
+    state: list[AnyMessage], writes: list[list[AnyMessage]]
 ) -> list[AnyMessage]:
     """**Experimental.** Batch reducer for use with `DeltaChannel`.
 
     Processes all writes in one pass — dedup by ID, `RemoveMessage`
     tombstoning, `REMOVE_ALL_MESSAGES` reset — without calling `add_messages`.
-    A `None` state (replay of a thread whose first checkpoint has no value
-    for the channel) is treated as empty.
 
     This reducer is batching-invariant, as required by `DeltaChannel`:
     `reducer(reducer(state, xs), ys) == reducer(state, xs + ys)`.
@@ -480,7 +478,7 @@ def _messages_delta_reducer(
     if state and isinstance(state[0], BaseMessage):
         state_msgs = state
     else:
-        state_msgs = cast("list[AnyMessage]", convert_to_messages(state or []))
+        state_msgs = cast("list[AnyMessage]", convert_to_messages(state))
     msgs = cast("list[AnyMessage]", convert_to_messages(flat))
 
     for idx in range(len(msgs) - 1, -1, -1):

@@ -119,7 +119,7 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         """Initialize from a stored blob.
 
         Blob types:
-          * `MISSING`: start empty; caller replays writes.
+          * `MISSING` or `None`: start empty; caller replays writes.
           * `_DeltaSnapshot(value)`: restore value directly from snapshot.
           * plain value (migration from old `BinaryOperatorAggregate` blobs):
             use directly.
@@ -128,7 +128,7 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
             self.reducer, self.typ, snapshot_frequency=self.snapshot_frequency
         )
         new.key = self.key
-        if checkpoint is MISSING:
+        if checkpoint is MISSING or checkpoint is None:
             new.value = self.typ()
         elif isinstance(checkpoint, _DeltaSnapshot):
             new.value = checkpoint.value

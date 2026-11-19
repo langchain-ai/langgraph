@@ -153,12 +153,11 @@ def test_delta_channel_basic_two_steps() -> None:
     assert ch.get()[1].content == "hello"
 
 
-def test_messages_delta_reducer_none_state() -> None:
+def test_delta_channel_from_none_checkpoint_replays_from_empty() -> None:
+    ch = DeltaChannel(_messages_delta_reducer, list).from_checkpoint(None)
     msg = HumanMessage(content="hi", id="h1")
-    assert _messages_delta_reducer(None, [[msg]]) == [msg]
-    assert _messages_delta_reducer(None, []) == []
-    result = _messages_delta_reducer(None, [[{"role": "user", "content": "hi"}]])
-    assert isinstance(result[0], HumanMessage)
+    ch.replay_writes([("t0", "messages", [msg])])
+    assert ch.get() == [msg]
 
 
 def test_messages_delta_reducer_remove_all() -> None:
