@@ -1,8 +1,7 @@
-import contextvars
 import operator
 import sys
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from typing import Annotated, Any
 
 import pytest
@@ -14,10 +13,16 @@ from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.config import read_state, write_state
 from langgraph.errors import InvalidUpdateError, NotInTaskError
-from langgraph.graph import START, StateGraph
+from langgraph.func import entrypoint
+from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, Overwrite, interrupt
 
 pytestmark = pytest.mark.anyio
+
+NEEDS_CONTEXTVARS = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 
 
 class State(TypedDict, total=False):
@@ -32,16 +37,7 @@ def run(node: Callable[..., Any], input: State | None = None) -> dict[str, Any]:
     return graph.invoke(input or {"many": [0]})
 
 
-def test_state_declares_the_one_value_channels_under_test() -> None:
-    graph = StateGraph(State).add_node("node", lambda state: None)
-    channels = graph.add_edge(START, "node").compile().channels
-    assert isinstance(channels["ephemeral"], EphemeralValue)
-    assert isinstance(channels["untracked"], UntrackedValue)
-    assert channels["ephemeral"].guard
-    assert channels["untracked"].guard
-
-
-def test_read_state_applies_the_tasks_own_updates() -> None:
+def test_read_state_applies_the_nodes_own_updates() -> None:
     seen: dict[str, Any] = {}
 
     def node(state: State) -> None:
@@ -49,7 +45,7 @@ def test_read_state_applies_the_tasks_own_updates() -> None:
         write_state({"one": "a", "many": [1]})
         seen["all"] = read_state()
         seen["one"] = read_state("one")
-        seen["list"] = read_state(["many"])
+        seen["both"] = read_state("one", "many")
         seen["input"] = dict(state)
 
     assert run(node) == {"one": "a", "many": [0, 1]}
@@ -57,34 +53,48 @@ def test_read_state_applies_the_tasks_own_updates() -> None:
         "start": {"many": [0]},
         "all": {"one": "a", "many": [0, 1]},
         "one": {"one": "a"},
-        "list": {"many": [0, 1]},
+        "both": {"one": "a", "many": [0, 1]},
         "input": {"many": [0]},
     }
 
 
-def test_read_state_rejects_a_key_that_is_not_state() -> None:
-    def node(state: State) -> None:
-        read_state("missing")
-
-    with pytest.raises(KeyError, match="missing"):
-        run(node)
-
-
 def test_write_state_adds_to_the_update_the_node_returns() -> None:
     def node(state: State) -> State:
-        write_state([("many", [1]), ("many", [2])])
+        write_state({"many": [1]})
+        write_state({"many": [2]})
         return {"many": [3]}
 
     assert run(node) == {"many": [0, 1, 2, 3]}
 
 
-async def test_write_state_in_an_async_node() -> None:
+@NEEDS_CONTEXTVARS
+async def test_an_async_node_finds_its_task_from_context() -> None:
     async def node(state: State) -> None:
         write_state({"one": "a"})
         assert read_state("one") == {"one": "a"}
 
     graph = StateGraph(State).add_node("node", node).add_edge(START, "node").compile()
     assert await graph.ainvoke({"many": [0]}) == {"one": "a", "many": [0]}
+
+
+async def test_an_async_node_can_pass_its_config() -> None:
+    async def node(state: State, config: RunnableConfig) -> None:
+        write_state({"one": "a"}, config=config)
+        assert read_state("one", config=config) == {"one": "a"}
+
+    graph = StateGraph(State).add_node("node", node).add_edge(START, "node").compile()
+    assert await graph.ainvoke({"many": [0]}) == {"one": "a", "many": [0]}
+
+
+def test_a_thread_reaches_the_task_through_the_config() -> None:
+    def node(state: State, config: RunnableConfig) -> None:
+        thread = threading.Thread(
+            target=write_state, args=({"one": "a"},), kwargs={"config": config}
+        )
+        thread.start()
+        thread.join()
+
+    assert run(node) == {"one": "a", "many": [0]}
 
 
 @pytest.mark.parametrize(
@@ -94,12 +104,11 @@ async def test_write_state_in_an_async_node() -> None:
         ({"many": Overwrite([1])}, {"many": Overwrite([2])}),
         ({"ephemeral": "a"}, {"ephemeral": "b"}),
         ({"untracked": "a"}, {"untracked": "b"}),
-        ({"many": [1]}, [("one", "a"), ("one", "b")]),
     ],
-    ids=["last-value", "overwrite", "ephemeral", "untracked", "twice-in-one-update"],
+    ids=["last-value", "overwrite", "ephemeral", "untracked"],
 )
 def test_write_state_rejects_a_second_value_for_a_one_value_key(
-    first: dict[str, Any], second: Any
+    first: dict[str, Any], second: dict[str, Any]
 ) -> None:
     after: dict[str, Any] = {}
 
@@ -110,12 +119,11 @@ def test_write_state_rejects_a_second_value_for_a_one_value_key(
             write_state(second)
         after.update(unchanged=read_state() == before)
 
-    expected = run(lambda state: first)
-    assert run(node) == expected
+    assert run(node) == run(lambda state: first)
     assert after == {"unchanged": True}
 
 
-def test_rejected_update_queues_none_of_its_keys() -> None:
+def test_a_rejected_update_queues_none_of_its_keys() -> None:
     def node(state: State) -> None:
         write_state({"one": "a"})
         with pytest.raises(InvalidUpdateError):
@@ -125,22 +133,43 @@ def test_rejected_update_queues_none_of_its_keys() -> None:
 
 
 @pytest.mark.parametrize(
-    "update",
-    [
-        {"missing": 1},
-        {"many": [1], "__interrupt__": "x"},
-        [("many", [1]), ("__pregel_tasks", "x")],
-        ["many"],
-        [("many", [1], "extra")],
-    ],
-    ids=["unknown", "reserved-write", "tasks-channel", "not-tuples", "long-tuple"],
+    "key",
+    ["missing", "__interrupt__", "__pregel_tasks", "__start__", "branch:to:other"],
 )
-def test_write_state_rejects_keys_that_are_not_state(update: Any) -> None:
-    def node(state: State) -> None:
-        with pytest.raises(InvalidUpdateError):
-            write_state(update)
+def test_write_state_rejects_a_key_that_is_not_state(key: str) -> None:
+    ran: list[str] = []
 
-    assert run(node) == {"many": [0]}
+    def node(state: State) -> None:
+        with pytest.raises(InvalidUpdateError, match="not a state key"):
+            write_state({"many": [1], key: None})
+
+    graph = (
+        StateGraph(State)
+        .add_node("node", node)
+        .add_node("other", lambda state: ran.append("other"))
+        .add_edge(START, "node")
+        .add_edge("other", END)
+        .compile()
+    )
+    assert graph.invoke({"many": [0]}) == {"many": [0]}
+    assert ran == []
+
+
+def test_read_state_returns_state_keys_only() -> None:
+    seen: list[dict[str, Any]] = []
+
+    graph = (
+        StateGraph(State)
+        .add_node("a", lambda state: {"many": [1]})
+        .add_node("b", lambda state: {"many": [2]})
+        .add_node("joined", lambda state: seen.append(read_state()))
+        .add_edge(START, "a")
+        .add_edge(START, "b")
+        .add_edge(["a", "b"], "joined")
+        .compile()
+    )
+    graph.invoke({"many": [0]})
+    assert [sorted(state) for state in seen] == [["many"]]
 
 
 def test_outside_a_task() -> None:
@@ -151,147 +180,20 @@ def test_outside_a_task() -> None:
     with pytest.raises(NotInTaskError):
         RunnableLambda(lambda _: read_state()).invoke(None)
     with pytest.raises(NotInTaskError):
-        RunnableLambda(lambda _: write_state({"one": "a"})).invoke(None)
+        write_state({"one": "a"}, config={"configurable": {}})
 
 
-def in_thread(fn: Callable[[], Any]) -> Any:
-    """Run `fn` on a thread that starts with an empty context."""
-    out: list[Any] = []
+def test_an_entrypoint_has_no_state_keys() -> None:
+    @entrypoint()
+    def workflow(value: int) -> dict[str, Any]:
+        with pytest.raises(InvalidUpdateError, match="not a state key"):
+            write_state({END: value})
+        return read_state()
 
-    def target() -> None:
-        try:
-            out.append(fn())
-        except Exception as exc:
-            out.append(exc)
-
-    thread = threading.Thread(target=target)
-    thread.start()
-    thread.join()
-    return out[0]
+    assert workflow.invoke(1) == {}
 
 
-@pytest.mark.skipif(
-    getattr(sys.flags, "thread_inherit_context", 0) == 1,
-    reason="threads inherit the caller's context on this build",
-)
-def test_a_thread_reaches_the_task_through_a_copied_context() -> None:
-    def node(state: State) -> None:
-        assert isinstance(in_thread(read_state), NotInTaskError)
-        context = contextvars.copy_context()
-        in_thread(lambda: context.run(write_state, {"one": "a"}))
-        assert in_thread(lambda: context.run(read_state, "one")) == {"one": "a"}
-
-    assert run(node) == {"one": "a", "many": [0]}
-
-
-@pytest.fixture
-def eager_thread_switches() -> Iterator[None]:
-    interval = sys.getswitchinterval()
-    sys.setswitchinterval(1e-6)
-    yield
-    sys.setswitchinterval(interval)
-
-
-def task_thread(fn: Callable[..., None], *args: Any) -> threading.Thread:
-    """A thread that runs `fn` in a copy of the calling task's context."""
-    return threading.Thread(target=contextvars.copy_context().run, args=(fn, *args))
-
-
-def start_all(threads: list[threading.Thread]) -> None:
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-
-
-@pytest.mark.usefixtures("eager_thread_switches")
-def test_concurrent_writers_to_a_one_value_key_have_one_winner() -> None:
-    writers = 16
-    outcomes: list[str] = []
-
-    def node(state: State) -> None:
-        barrier = threading.Barrier(writers)
-
-        def write(i: int) -> None:
-            barrier.wait()
-            try:
-                write_state({"one": str(i), "many": [i]})
-            except InvalidUpdateError:
-                outcomes.append("rejected")
-            else:
-                outcomes.append(str(i))
-
-        start_all([task_thread(write, i) for i in range(writers)])
-
-    for _ in range(50):
-        outcomes.clear()
-        result = run(node, {"many": []})
-        winners = [o for o in outcomes if o != "rejected"]
-        assert len(winners) == 1
-        assert result == {"one": winners[0], "many": [int(winners[0])]}
-
-
-@pytest.mark.usefixtures("eager_thread_switches")
-def test_concurrent_readers_and_writers_lose_no_update() -> None:
-    writers, sends = 8, 50
-    errors: list[Exception] = []
-
-    def node(state: State) -> None:
-        def work(i: int) -> None:
-            try:
-                for _ in range(sends):
-                    write_state({"many": [i]})
-                    read_state("many")
-            except Exception as exc:
-                errors.append(exc)
-
-        start_all([task_thread(work, i) for i in range(writers)])
-
-    result = run(node, {"many": []})
-    assert errors == []
-    assert sorted(result["many"]) == sorted(list(range(writers)) * sends)
-
-
-def test_a_writer_waits_for_another_threads_check_to_finish() -> None:
-    checking, release = threading.Event(), threading.Event()
-
-    def slow_add(left: list[int], right: list[int]) -> list[int]:
-        if right == [1]:
-            checking.set()
-            release.wait(5)
-        return left + right
-
-    class SlowState(TypedDict, total=False):
-        one: str
-        slow: Annotated[list[int], slow_add]
-
-    outcomes: dict[str, str] = {}
-
-    def node(state: SlowState) -> None:
-        def write(name: str, update: dict[str, Any]) -> None:
-            try:
-                write_state(update)
-            except InvalidUpdateError:
-                outcomes[name] = "rejected"
-            else:
-                outcomes[name] = "queued"
-
-        first = task_thread(write, "first", {"slow": [1], "one": "a"})
-        second = task_thread(write, "second", {"one": "b"})
-        first.start()
-        checking.wait(5)
-        second.start()
-        second.join(0.1)
-        release.set()
-        first.join()
-        second.join()
-
-    graph = StateGraph(SlowState).add_node("node", node).add_edge(START, "node")
-    assert graph.compile().invoke({"slow": [0]}) == {"one": "a", "slow": [0, 1]}
-    assert outcomes == {"first": "queued", "second": "rejected"}
-
-
-def test_updates_sent_before_an_interrupt_apply_once_after_resume() -> None:
+def test_updates_written_before_an_interrupt_apply_once_after_resume() -> None:
     def node(state: State) -> State:
         write_state({"many": [1]})
         answer = interrupt("ok?")

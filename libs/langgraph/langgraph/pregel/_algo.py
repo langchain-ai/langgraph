@@ -68,7 +68,7 @@ from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
-from langgraph.constants import TAG_HIDDEN
+from langgraph.constants import END, START, TAG_HIDDEN
 from langgraph.errors import InvalidUpdateError, NodeError
 from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel._call import get_runnable_for_task, identifier
@@ -187,6 +187,16 @@ def should_interrupt(
     )
 
 
+def _is_state_key(key: str, channels: Mapping[str, BaseChannel]) -> bool:
+    """Whether `key` is a state channel, not one the graph adds to route or trigger nodes."""
+    return (
+        key in channels
+        and key not in RESERVED
+        and key not in (START, END, PREVIOUS, TASKS)
+        and NS_END not in key
+    )
+
+
 def local_read(
     scratchpad: PregelScratchpad,
     channels: Mapping[str, BaseChannel],
@@ -194,30 +204,34 @@ def local_read(
     task: WritesProtocol,
     select: list[str] | str | None,
     fresh: bool = False,
+    *,
     proposed: Sequence[tuple[str, Any]] = (),
 ) -> dict[str, Any] | Any:
     """Function injected under CONFIG_KEY_READ in task config, to read current state.
     Used by conditional edges to read a copy of the state with reflecting the writes
     from that node only.
 
-    `select=None` reads every channel. `proposed` writes are applied after the
+    `select=None` reads every state key. `proposed` writes are applied after the
     task's own without being queued, so a fresh read raises `InvalidUpdateError`
     for an update the channels would reject at the end of the step."""
     for c, _ in proposed:
-        if c not in channels or c == TASKS:
-            raise InvalidUpdateError(f"Cannot write to unknown state key '{c}'")
+        if not _is_state_key(c, channels):
+            msg = f"Cannot write to '{c}': it is not a state key"
+            raise InvalidUpdateError(msg)
     if select is None:
-        select = list(channels)
+        select = [k for k in channels if _is_state_key(k, channels)]
+    # a snapshot, so another thread queuing a write cannot break the loops below
+    writes = (*task.writes, *proposed)
     updated: dict[str, list[Any]] = defaultdict(list)
     if isinstance(select, str):
         managed_keys = []
-        for c, v in itertools.chain(task.writes, proposed):
+        for c, v in writes:
             if c == select:
                 updated[c].append(v)
     else:
         managed_keys = [k for k in select if k in managed]
         select = [k for k in select if k not in managed]
-        for c, v in itertools.chain(task.writes, proposed):
+        for c, v in writes:
             if c in select:
                 updated[c].append(v)
     if fresh:
