@@ -53,6 +53,74 @@ class InnerPydantic(BaseModel):
     hello: str
 
 
+class CheckpointColor(Enum):
+    RED = "red"
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        CheckpointColor.RED,
+        uuid.UUID("12345678-1234-5678-1234-567812345678"),
+        date(2026, 11, 19),
+        datetime(2026, 11, 19, 12, 30),
+        time(12, 30),
+        Decimal("12.25"),
+        pathlib.Path("/tmp/checkpoint"),
+        IPv4Address("192.0.2.1"),
+        ("nested", CheckpointColor.RED),
+    ],
+)
+def test_typed_dict_keys_round_trip(key: object) -> None:
+    serde = JsonPlusSerializer()
+    original = {key: {"count": 3}}
+    restored = serde.loads_typed(serde.dumps_typed(original))
+    assert restored == original
+    assert type(next(iter(restored))) is type(key)
+
+
+def test_typed_dict_keys_nested_and_mixed() -> None:
+    serde = JsonPlusSerializer()
+    original = {
+        "list": [{CheckpointColor.RED: 3, 5: 3}],
+        "nested": {uuid.UUID("12345678-1234-5678-1234-567812345678"): 2},
+    }
+    assert serde.loads_typed(serde.dumps_typed(original)) == original
+
+
+def test_plain_dict_encoding_is_unchanged() -> None:
+    serde = JsonPlusSerializer()
+    original = {"foo": {"bar": 3}, 5: "value"}
+    encoded = serde.dumps_typed(original)
+    assert encoded[0] == "msgpack"
+    assert ormsgpack.unpackb(encoded[1], option=ormsgpack.OPT_NON_STR_KEYS) == original
+
+
+def test_typed_dict_checkpoint_counter() -> None:
+    from typing import TypedDict
+
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.graph import START, StateGraph
+
+    class CounterState(TypedDict, total=False):
+        d: dict
+
+    def count(state: CounterState) -> CounterState:
+        d = dict(state.get("d", {}))
+        for key in (CheckpointColor.RED, 5):
+            d[key] = d.get(key, 0) + 1
+        return {"d": d}
+
+    graph = StateGraph(CounterState)
+    graph.add_node("count", count)
+    graph.add_edge(START, "count")
+    app = graph.compile(checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "typed-dict-keys"}}
+    for _ in range(3):
+        app.invoke({}, config)
+    assert app.get_state(config).values["d"] == {CheckpointColor.RED: 3, 5: 3}
+
+
 class MyPydantic(BaseModel):
     foo: str
     bar: int
