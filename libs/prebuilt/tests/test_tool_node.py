@@ -3,6 +3,7 @@ import dataclasses
 import json
 import sys
 import warnings
+from collections.abc import Callable
 from functools import partial
 from typing import (
     Annotated,
@@ -1571,6 +1572,66 @@ def test_tool_node_inject_state(schema_: type[T]) -> None:
     result = node.invoke([msg], config=_create_config_with_runtime())
     tool_message = result[-1]
     assert tool_message.content == "hi?"
+
+
+@pytest.mark.parametrize("schema_", _INJECTED_STATE_SCHEMAS)
+def test_tool_node_send_tool_call_gets_same_state_as_edge(schema_: type[T]) -> None:
+    call = ToolCall(name="record", args={}, id="call_1", type="tool_call")
+    seen: list[tuple[type, type]] = []
+
+    def record(runtime: ToolRuntime, state: Annotated[T, InjectedState]) -> str:
+        """Record the state types the tool gets."""
+        seen.append((type(runtime.state), type(state)))
+        return "ok"
+
+    def agent(state: Any) -> dict:
+        return {"messages": [AIMessage("", tool_calls=[call])]}
+
+    def state_types(route: Callable[[Any], str | list[Send]]) -> tuple[type, type]:
+        seen.clear()
+        graph = (
+            StateGraph(schema_)
+            .add_node("agent", agent)
+            .add_node("tools", ToolNode([record]))
+            .add_edge(START, "agent")
+            .add_conditional_edges("agent", route, ["tools"])
+            .compile()
+        )
+        graph.invoke({"messages": [], "foo": "bar"})
+        return seen[0]
+
+    by_send = state_types(lambda _: [Send("tools", [call])])
+    by_edge = state_types(lambda _: "tools")
+    assert by_send == by_edge
+
+
+def test_tool_node_in_graph_run_by_send_gets_that_graphs_state() -> None:
+    call = ToolCall(name="record", args={}, id="call_1", type="tool_call")
+    seen: list[Any] = []
+
+    def record(runtime: ToolRuntime) -> str:
+        """Record the state the tool gets."""
+        seen.append(runtime.state)
+        return "ok"
+
+    class State(TypedDict):
+        value: str
+
+    def call_tools(state: State) -> dict:
+        ToolNode([record]).invoke([call])
+        return {}
+
+    inner = StateGraph(State).add_node(call_tools).add_edge(START, "call_tools")
+    outer = (
+        StateGraph(State)
+        .add_node("inner", inner.compile())
+        .add_conditional_edges(
+            START, lambda _: [Send("inner", {"value": "inner"})], ["inner"]
+        )
+        .compile()
+    )
+    outer.invoke({"value": "outer"})
+    assert seen == [{"value": "inner"}]
 
 
 def test_tool_node_inject_store() -> None:

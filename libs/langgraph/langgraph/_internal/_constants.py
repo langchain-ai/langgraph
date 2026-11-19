@@ -37,6 +37,10 @@ CONFIG_KEY_SEND = sys.intern("__pregel_send")
 # holds the `write` function that accepts writes to state/edges/reserved keys
 CONFIG_KEY_READ = sys.intern("__pregel_read")
 # holds the `read` function that returns a copy of the current state
+CONFIG_KEY_READ_STATE = sys.intern("__pregel_read_state")
+# holds a function that returns the state as the task's node gets it from an edge,
+# set on Send tasks, whose input is the Send arg instead. Other tasks set it to None
+# so a graph running inside a Send task never reads its parent's state
 CONFIG_KEY_CALL = sys.intern("__pregel_call")
 # holds the `call` function that accepts a node/func, args and returns a future
 CONFIG_KEY_CHECKPOINTER = sys.intern("__pregel_checkpointer")
