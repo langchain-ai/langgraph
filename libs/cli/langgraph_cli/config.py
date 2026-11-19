@@ -154,12 +154,9 @@ def _get_pip_cleanup_lines(
     pip_installer: Literal["uv", "pip"],
 ) -> str:
     commands = [
-        f"""# -- Ensure user deps didn't inadvertently overwrite langgraph-api
-RUN mkdir -p /api/langgraph_api /api/langgraph_runtime /api/langgraph_license && \
-touch /api/langgraph_api/__init__.py /api/langgraph_runtime/__init__.py /api/langgraph_license/__init__.py
-RUN PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir --no-deps -e /api
-# -- End of ensuring user deps didn't inadvertently overwrite langgraph-api --
-# -- Removing build deps from the final image ~<:===~~~ --"""
+        "mkdir -p /api/langgraph_api /api/langgraph_runtime /api/langgraph_license && "
+        "touch /api/langgraph_api/__init__.py /api/langgraph_runtime/__init__.py /api/langgraph_license/__init__.py",
+        f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir --no-deps -e /api",
     ]
     if to_uninstall:
         for pack in to_uninstall:
@@ -168,30 +165,31 @@ RUN PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir --no-deps -e /api
                     f"Invalid build tool: {pack}; must be one of {', '.join(_BUILD_TOOLS)}"
                 )
         packs_str = " ".join(sorted(to_uninstall))
-        commands.append(f"RUN pip uninstall -y {packs_str}")
+        commands.append(f"pip uninstall -y {packs_str}")
         # Ensure the directories are removed entirely
         packages_rm = " ".join(
             f"/usr/local/lib/python*/site-packages/{pack}*" for pack in to_uninstall
         )
         if "pip" in to_uninstall:
             packages_rm += ' && find /usr/local/bin -name "pip*" -delete || true'
-        commands.append(f"RUN rm -rf {packages_rm}")
+        commands.append(f"rm -rf {packages_rm}")
         wolfi_packages_rm = " ".join(
             f"/usr/lib/python*/site-packages/{pack}*" for pack in to_uninstall
         )
         if "pip" in to_uninstall:
             wolfi_packages_rm += ' && find /usr/bin -name "pip*" -delete || true'
-        commands.append(f"RUN rm -rf {wolfi_packages_rm}")
+        commands.append(f"rm -rf {wolfi_packages_rm}")
         if pip_installer == "uv":
             commands.append(
-                f"RUN uv pip uninstall --system {packs_str} && rm /usr/bin/uv /usr/bin/uvx"
+                f"uv pip uninstall --system {packs_str} && rm /usr/bin/uv /usr/bin/uvx"
             )
-    else:
-        if pip_installer == "uv":
-            commands.append(
-                "RUN rm /usr/bin/uv /usr/bin/uvx\n# -- End of build deps removal --"
-            )
-    return "\n".join(commands)
+    elif pip_installer == "uv":
+        commands.append("rm /usr/bin/uv /usr/bin/uvx")
+    # One RUN, since each layer is costly on copy-based snapshotters; subshells scope each `|| true`.
+    return (
+        "# -- Restore langgraph-api over user deps, then remove build deps --\n"
+        "RUN " + " && \\\n    ".join(f"({command})" for command in commands)
+    )
 
 
 def _parse_version(version_str: str) -> tuple[int, int]:
@@ -1608,7 +1606,10 @@ ADD {relpath} /deps/{name}
                 pip_installer=pip_installer,
             ),
             "",
-            f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
+            # The JS install step already set this WORKDIR.
+            f"WORKDIR {local_deps.working_dir}"
+            if local_deps.working_dir and not js_inst_str
+            else "",
         ]
     )
 
@@ -1690,7 +1691,7 @@ def node_config_to_docker(
         "",
         os.linesep.join(env_vars),
         "",
-        f"WORKDIR {build_workdir}",
+        f"WORKDIR {build_workdir}" if build_workdir != install_workdir else "",
         "",
         build_step,
     ]
