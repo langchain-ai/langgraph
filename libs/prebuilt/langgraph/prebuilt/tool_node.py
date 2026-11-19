@@ -82,9 +82,9 @@ from langchain_core.tools.base import (
     _is_injected_arg_type,
     get_all_basemodel_annotations,
 )
-from langgraph._internal._constants import CONF, CONFIG_KEY_READ
 from langgraph._internal._runnable import RunnableCallable
-from langgraph.errors import GraphBubbleUp
+from langgraph.config import read_state
+from langgraph.errors import GraphBubbleUp, NotInTaskError
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.pregel._tools import _tool_call_writer
 from langgraph.runtime import ExecutionInfo, ServerInfo
@@ -1332,7 +1332,7 @@ class ToolNode(RunnableCallable):
         - `ToolCallWithContext` dict — legacy Send payload carrying an inlined
           state snapshot; return `input["state"]`.
         - list of `ToolCall` dicts — new Send payload with no inlined state;
-          hydrate state from channels via `CONFIG_KEY_READ`.
+          hydrate state from channels with `read_state`.
         - regular graph state (dict/list/BaseModel) — return `input` as-is.
         """
         if isinstance(input, dict) and input.get("__type") == "tool_call_with_context":
@@ -1343,15 +1343,11 @@ class ToolNode(RunnableCallable):
             and isinstance(input[-1], dict)
             and input[-1].get("type") == "tool_call"
         ):
-            read = config.get(CONF, {}).get(CONFIG_KEY_READ)
-            if read is None:
+            try:
+                return read_state()
+            except NotInTaskError:
+                # not running in a graph, so there is no state to read
                 return {}
-            # Pregel installs CONFIG_KEY_READ as
-            # `functools.partial(local_read, scratchpad, channels, managed, task)`.
-            # Match the previous inlined-state contract by reading channels only;
-            # managed values have their own injection path (`ToolRuntime.context`).
-            channels = read.args[1]
-            return cast("dict[str, Any]", read(list(channels), True))
         return input
 
     def _inject_tool_args(
