@@ -745,6 +745,76 @@ class StateSnapshot(NamedTuple):
     """
 
 
+class _FrozenSendDict(dict):
+    """A dict that explains why writes are rejected after Send is hashed."""
+
+    def _immutable(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("Cannot mutate a Send payload after hashing; Send is immutable once hashed.")
+
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable
+    __ior__ = _immutable
+
+
+class _FrozenSendList(list):
+    """A list that rejects mutations after its owning Send is hashed."""
+
+    def _immutable(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("Cannot mutate a Send payload after hashing; Send is immutable once hashed.")
+
+    __setitem__ = __delitem__ = append = clear = extend = insert = pop = remove = reverse = sort = _immutable
+    __iadd__ = __imul__ = _immutable
+
+
+class _FrozenSendSet(set):
+    """A set that rejects mutations after its owning Send is hashed."""
+
+    def _immutable(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("Cannot mutate a Send payload after hashing; Send is immutable once hashed.")
+
+    add = clear = difference_update = discard = intersection_update = pop = remove = symmetric_difference_update = update = _immutable
+    __ior__ = __iand__ = __isub__ = __ixor__ = _immutable
+
+
+def _freeze_send_payload(value: Any, active: set[int] | None = None) -> Any:
+    """Copy and protect nested built-in containers, preserving their container types."""
+    if not isinstance(value, (dict, list, set, tuple, frozenset)):
+        return value
+    if active is None:
+        active = set()
+    if id(value) in active:
+        raise TypeError("Cannot hash a Send with a cyclic payload.")
+    active.add(id(value))
+    try:
+        if isinstance(value, dict):
+            return _FrozenSendDict(
+                (key, _freeze_send_payload(item, active)) for key, item in value.items()
+            )
+        if isinstance(value, list):
+            return _FrozenSendList(_freeze_send_payload(item, active) for item in value)
+        if isinstance(value, set):
+            return _FrozenSendSet(_freeze_send_payload(item, active) for item in value)
+        if isinstance(value, tuple):
+            return tuple(_freeze_send_payload(item, active) for item in value)
+        return frozenset(_freeze_send_payload(item, active) for item in value)
+    finally:
+        active.remove(id(value))
+
+
+def _send_hash_key(value: Any) -> Any:
+    """Canonical hash key for supported nested payloads; dict/set order is irrelevant."""
+    if isinstance(value, dict):
+        return ("dict", frozenset(
+            (_send_hash_key(key), _send_hash_key(item)) for key, item in value.items()
+        ))
+    if isinstance(value, list):
+        return ("list", tuple(_send_hash_key(item) for item in value))
+    if isinstance(value, tuple):
+        return ("tuple", tuple(_send_hash_key(item) for item in value))
+    if isinstance(value, (set, frozenset)):
+        return ("set", frozenset(_send_hash_key(item) for item in value))
+    return value
+
+
 class Send:
     """A message or packet to send to a specific node in the graph.
 
@@ -792,7 +862,7 @@ class Send:
         ```
     """
 
-    __slots__ = ("node", "arg", "timeout")
+    __slots__ = ("node", "arg", "timeout", "_cached_hash")
 
     node: str
     arg: Any
@@ -818,9 +888,26 @@ class Send:
         self.node = node
         self.arg = arg
         self.timeout = TimeoutPolicy.coerce(timeout)
+        self._cached_hash: int | None = None
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in ("node", "arg", "timeout") and getattr(self, "_cached_hash", None) is not None:
+            raise TypeError(
+                f"Cannot modify Send.{name} after hashing; Send is immutable once hashed."
+            )
+        object.__setattr__(self, name, value)
 
     def __hash__(self) -> int:
-        return hash((self.node, self.arg, self.timeout))
+        if self._cached_hash is not None:
+            return self._cached_hash
+
+        # Prepare everything before freezing this Send: an unsupported or cyclic
+        # payload must raise without changing the object or its mutability.
+        frozen_arg = _freeze_send_payload(self.arg)
+        result = hash((self.node, _send_hash_key(frozen_arg), self.timeout))
+        object.__setattr__(self, "arg", frozen_arg)
+        object.__setattr__(self, "_cached_hash", result)
+        return result
 
     def __repr__(self) -> str:
         if self.timeout is None:
