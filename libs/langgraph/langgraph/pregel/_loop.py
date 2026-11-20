@@ -4,7 +4,7 @@ import asyncio
 import binascii
 import concurrent.futures
 from collections import defaultdict, deque
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from contextlib import (
     AbstractAsyncContextManager,
     AbstractContextManager,
@@ -200,16 +200,28 @@ class PregelLoop:
         Callable[
             [
                 concurrent.futures.Future | None,
-                Sequence[Any],
+                Sequence[concurrent.futures.Future],
                 RunnableConfig,
                 Checkpoint,
-                str,
+                CheckpointMetadata,
                 ChannelVersions,
             ],
-            Any,
+            RunnableConfig,
+        ]
+        | Callable[
+            [
+                asyncio.Task | None,
+                Sequence[asyncio.Future],
+                RunnableConfig,
+                Checkpoint,
+                CheckpointMetadata,
+                ChannelVersions,
+            ],
+            Awaitable[RunnableConfig],
         ]
         | None
     )
+
     _migrate_checkpoint: Callable[[Checkpoint], None] | None
     submit: Submit
     channels: Mapping[str, BaseChannel]
@@ -1734,6 +1746,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         )
         self.stack = ExitStack()
         if checkpointer:
+            self._checkpointer_put_after_previous = self._put_checkpoint_after_previous
             self.checkpointer_get_next_version = checkpointer.get_next_version
             self.checkpointer_put_writes = checkpointer.put_writes
             self.checkpointer_put_writes_accepts_task_path = (
@@ -1741,11 +1754,11 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             )
         else:
             self.checkpointer_get_next_version = increment
-            self._checkpointer_put_after_previous = None  # type: ignore[assignment]
+            self._checkpointer_put_after_previous = None
             self.checkpointer_put_writes = None
             self.checkpointer_put_writes_accepts_task_path = False
 
-    def _checkpointer_put_after_previous(
+    def _put_checkpoint_after_previous(
         self,
         prev: concurrent.futures.Future | None,
         delta_write_futs: Sequence[concurrent.futures.Future],
@@ -1990,6 +2003,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         )
         self.stack = AsyncExitStack()
         if checkpointer:
+            self._checkpointer_put_after_previous = self._put_checkpoint_after_previous
             self.checkpointer_get_next_version = checkpointer.get_next_version
             self.checkpointer_put_writes = checkpointer.aput_writes
             self.checkpointer_put_writes_accepts_task_path = (
@@ -1997,11 +2011,11 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             )
         else:
             self.checkpointer_get_next_version = increment
-            self._checkpointer_put_after_previous = None  # type: ignore[assignment]
+            self._checkpointer_put_after_previous = None
             self.checkpointer_put_writes = None
             self.checkpointer_put_writes_accepts_task_path = False
 
-    async def _checkpointer_put_after_previous(
+    async def _put_checkpoint_after_previous(
         self,
         prev: asyncio.Task | None,
         delta_write_futs: Sequence[asyncio.Future],
