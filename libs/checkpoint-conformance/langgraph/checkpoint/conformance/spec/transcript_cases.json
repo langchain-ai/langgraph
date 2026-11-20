@@ -15,6 +15,43 @@
     ]
   },
   {
+    "name": "insert_ahead_of_a_run_takes_the_previous_run",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "message_id": "q1", "run_id": "r1", "text": "q1"}, {"seq": 2, "message_id": "ai", "run_id": "r1", "text": "call c1"}, {"seq": 3, "message_id": "q2", "run_id": "R", "text": "q2"}], "head": 3}]}},
+      {"put": {"thread": "t", "checkpoint": "c2", "writes": [{"transcript": "T2", "parent": "T", "fork_seq": 2, "entries": [{"seq": 3, "message_id": "tool", "run_id": "r1", "text": "result c1"}, {"seq": 4, "message_id": "q2", "run_id": "R", "text": "q2"}], "head": 4}], "from": "c1"}},
+      {"read": {"thread": "t", "transcript": "T2", "head": 4}, "expect": ["q1", "call c1", "result c1", "q2"], "expect_keys": [["q1", "r1"], ["ai", "r1"], ["tool", "r1"], ["q2", "R"]]}
+    ]
+  },
+  {
+    "name": "entries_without_a_run_do_not_split_a_run",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "run_id": "r1", "text": "a"}, {"seq": 2, "text": "b"}], "head": 2}]}},
+      {"put": {"thread": "t", "checkpoint": "c2", "writes": [{"transcript": "T", "entries": [{"seq": 3, "run_id": "r1", "text": "c"}, {"seq": 4, "run_id": "r2", "text": "d"}], "head": 4}], "from": "c1"}},
+      {"read": {"thread": "t", "transcript": "T", "head": 4}, "expect": ["a", "b", "c", "d"], "expect_keys": [["a", "r1"], ["b", null], ["c", "r1"], ["d", "r2"]]}
+    ]
+  },
+  {
+    "name": "run_after_another_run_is_invalid",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "run_id": "r1", "text": "a"}, {"seq": 2, "run_id": "r2", "text": "b"}], "head": 2}]}},
+      {"put": {"thread": "t", "checkpoint": "c2", "writes": [{"transcript": "T", "entries": [{"seq": 3, "run_id": "r1", "text": "c"}], "head": 3}], "from": "c1"}, "expect": "invalid"},
+      {"read": {"thread": "t", "transcript": "T", "head": 2}, "expect": ["a", "b"], "expect_later": false}
+    ]
+  },
+  {
+    "name": "run_after_another_run_in_one_write_is_invalid",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "run_id": "r1", "text": "a"}, {"seq": 2, "run_id": "r2", "text": "b"}, {"seq": 3, "run_id": "r1", "text": "c"}], "head": 3}]}, "expect": "invalid"}
+    ]
+  },
+  {
+    "name": "fork_run_after_another_run_in_the_parent_is_invalid",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "run_id": "r1", "text": "a"}, {"seq": 2, "run_id": "r2", "text": "b"}], "head": 2}]}},
+      {"put": {"thread": "t", "checkpoint": "c2", "writes": [{"transcript": "T2", "parent": "T", "fork_seq": 2, "entries": [{"seq": 3, "run_id": "r1", "text": "c"}], "head": 3}], "from": "c1"}, "expect": "invalid"}
+    ]
+  },
+  {
     "name": "replay_that_changes_message_id_is_conflict",
     "steps": [
       {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "message_id": "m1", "run_id": "r1", "text": "a"}], "head": 1}]}},

@@ -318,6 +318,13 @@ class InMemorySaver(
                 raise ValueError(
                     f"transcript {tid}: entries must be seqs {base + 1}..{w.head}, got {seqs}"
                 )
+            self._check_runs_contiguous(
+                thread_id,
+                checkpoint_ns,
+                tid,
+                (tid, base) if key in self.transcripts else (given or (None, 0)),
+                w.entries,
+            )
             stored = self.transcript_entries.get(key, {})
             if any(seq in stored for seq in seqs):
                 raise TranscriptConflictError(
@@ -337,6 +344,46 @@ class InMemorySaver(
                 self.transcript_entries.setdefault(key, {}).update(new)
 
         return stored_values, commit
+
+    def _runs_below(
+        self, thread_id: str, checkpoint_ns: str, tid: str | None, head: int
+    ) -> Iterator[str | None]:
+        """`run_id` of each entry at or below `head`, from `head` down."""
+        while tid is not None:
+            key = (thread_id, checkpoint_ns, tid)
+            fork = self.transcripts.get(key)
+            stored = self.transcript_entries.get(key, {})
+            for seq in range(head, fork[1] if fork else 0, -1):
+                yield stored[seq][1]
+            tid, head = (fork[0], min(head, fork[1])) if fork else (None, 0)
+
+    def _check_runs_contiguous(
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        tid: str,
+        below: tuple[str | None, int],
+        entries: Sequence[_TranscriptEntry],
+    ) -> None:
+        """Reject a `run_id` that reappears after another run's entries."""
+        # ponytail: scans the lineage once per run a write starts; a real store
+        # looks the run up in an index instead.
+        last = next(
+            (r for r in self._runs_below(thread_id, checkpoint_ns, *below) if r), None
+        )
+        started: set[str] = set()
+        for e in entries:
+            if e.run_id is None or e.run_id == last:
+                continue
+            if e.run_id in started or e.run_id in self._runs_below(
+                thread_id, checkpoint_ns, *below
+            ):
+                raise ValueError(
+                    f"transcript {tid}: run {e.run_id} at seq {e.seq} follows "
+                    "another run's entries"
+                )
+            started.add(e.run_id)
+            last = e.run_id
 
     def _last_seq(self, key: tuple[str, str, str]) -> int:
         fork = self.transcripts[key]

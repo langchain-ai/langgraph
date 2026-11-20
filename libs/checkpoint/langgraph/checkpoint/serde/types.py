@@ -40,9 +40,14 @@ class _TranscriptEntry(NamedTuple):
 
     - `message_id` is the message's stable id, a non-empty string. `seq` is only a
       slot in one transcript; `message_id` follows the message across transcripts.
-    - `run_id` is the run that appended the entry (`config["run_id"]`), a non-empty
-      string, or `None` for an entry written outside a run. Readers derive turns
-      from it.
+    - `run_id` is the run whose part of the conversation the entry is, a non-empty
+      string, or `None` for an entry outside any run. It is the run that appended
+      the entry (`config["run_id"]`), except that an entry inserted ahead of
+      existing entries takes the `run_id` of the entry before it.
+    - Ignoring entries without a `run_id`, each run's entries sit together in
+      seq order: a `run_id` cannot reappear after another run's entries.
+      Breaking this raises `ValueError`. A turn starts at the lowest seq of the
+      run that started it.
 
     A copy made by a rewrite or fork keeps both.
     """
