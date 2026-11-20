@@ -731,7 +731,6 @@ def test_local_deploy_records_the_pushed_digest_and_tracked_packages(
     assert deploy_project.control_plane.bodies[_patch(CREATED_ID)] == {
         "revision_source": "internal_docker",
         "source_revision_config": {"image_uri": PUSHED_DIGEST},
-        "secrets": [],
         "tracked_packages": TRACKED_PACKAGES,
     }
 
@@ -852,7 +851,6 @@ def test_remote_build_creates_an_internal_source_deployment_and_uploads_the_arch
             "langgraph_config_path": ARCHIVE[2],
         },
         "source_config": {"install_command": "yarn install"},
-        "secrets": [],
         "tracked_packages": TRACKED_PACKAGES,
     }
     assert "Build triggered" in result.output
@@ -962,7 +960,6 @@ def test_push_to_updates_an_existing_external_deployment_with_the_new_image(
     ]
     assert deploy_project.control_plane.bodies[_patch("dep-ext")] == {
         "source_revision_config": {"image_uri": EXTERNAL_DIGEST},
-        "secrets": [],
         "tracked_packages": TRACKED_PACKAGES,
     }
 
@@ -1030,7 +1027,6 @@ def test_image_uri_updates_an_existing_external_deployment_without_any_docker_wo
     assert deploy_project.timeline == [LIST_DEPLOYMENTS, _patch("dep-ext")]
     assert deploy_project.control_plane.bodies[_patch("dep-ext")] == {
         "source_revision_config": {"image_uri": EXTERNAL_DIGEST},
-        "secrets": [],
         "tracked_packages": TRACKED_PACKAGES,
     }
 

@@ -150,6 +150,10 @@ def _resources(payload: object) -> list[dict[str, Any]]:
     return [item for item in resources if isinstance(item, dict)]
 
 
+def _secrets_to_replace(secrets: list[dict[str, str]] | None) -> dict[str, Any]:
+    return {"secrets": secrets} if secrets else {}
+
+
 class HostBackendError(click.ClickException):
     """Raised when the host backend returns an error response."""
 
@@ -468,8 +472,7 @@ class HostBackendClient(_JsonClient):
             payload["revision_source"] = revision_source
         if tracked_packages:
             payload["tracked_packages"] = tracked_packages
-        if secrets is not None:
-            payload["secrets"] = secrets
+        payload.update(_secrets_to_replace(secrets))
         return self._request("PATCH", f"/v2/deployments/{deployment_id}", payload)
 
     def update_deployment_internal_source(
@@ -501,8 +504,7 @@ class HostBackendClient(_JsonClient):
         if source_config:
             payload["source_config"] = source_config
 
-        if secrets is not None:
-            payload["secrets"] = secrets
+        payload.update(_secrets_to_replace(secrets))
         return self._request("PATCH", f"/v2/deployments/{deployment_id}", payload)
 
     def list_revisions(
