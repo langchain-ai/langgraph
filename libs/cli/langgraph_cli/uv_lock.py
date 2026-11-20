@@ -874,12 +874,14 @@ def python_config_to_docker_uv_lock(
     build_tools_to_uninstall: tuple[str, ...] | None,
 ) -> tuple[str, dict[str, str]]:
     from langgraph_cli.config import (
+        _NPMRC_SECRET_MOUNT,
         DEFAULT_NODE_VERSION,
         _build_python_install_commands,
         _build_runtime_env_vars,
         _get_node_pm_install_cmd,
         _get_pip_cleanup_lines,
         _image_supports_uv,
+        _python_install_run,
         _validate_git_http_url_userinfo_files,
         docker_tag,
     )
@@ -1012,8 +1014,10 @@ def python_config_to_docker_uv_lock(
             ]
         ),
     )
-    docker_plan.add_instruction(
-        "RUN", f"{global_reqs_pip_install} -r uv_requirements.txt"
+    docker_plan.add_raw(
+        _python_install_run(
+            f"{global_reqs_pip_install} -r uv_requirements.txt", pip_installer="uv"
+        )
     )
     docker_plan.add_instruction("RUN", "rm -rf /tmp/uv_export")
     docker_plan.add_raw("# -- End of uv.lock dependencies install --")
@@ -1030,7 +1034,11 @@ def python_config_to_docker_uv_lock(
         docker_plan.add_instruction(
             "WORKDIR", plan.container_roots[package.root].as_posix()
         )
-        docker_plan.add_instruction("RUN", f"{global_reqs_pip_install} --no-deps -e .")
+        docker_plan.add_raw(
+            _python_install_run(
+                f"{global_reqs_pip_install} --no-deps -e .", pip_installer="uv"
+            )
+        )
         docker_plan.add_raw(f"# -- End of workspace package {package_label} --")
         docker_plan.add_blank()
 
@@ -1046,9 +1054,9 @@ def python_config_to_docker_uv_lock(
         docker_plan.add_instruction("WORKDIR", plan.working_dir)
         docker_plan.add_instruction(
             "RUN",
-            f"{_get_node_pm_install_cmd(plan.target_root)} && "
-            "tsx /api/langgraph_api/js/build.mts",
+            f"{_NPMRC_SECRET_MOUNT} {_get_node_pm_install_cmd(plan.target_root)}",
         )
+        docker_plan.add_instruction("RUN", "tsx /api/langgraph_api/js/build.mts")
         docker_plan.add_raw("# -- End of JS dependencies install --")
         docker_plan.add_blank()
 

@@ -146,6 +146,28 @@ DEFAULT_IMAGE_DISTRO = "debian"
 
 
 _BUILD_TOOLS = ("pip", "setuptools", "wheel")
+_NPMRC_SECRET_MOUNT = (
+    "--mount=type=secret,id=LANGSMITH_NPMRC,target=/root/.npmrc,required=false"
+)
+_PIP_CONFIG_SECRET_MOUNT = "--mount=type=secret,id=LANGSMITH_PIP_CONFIG,target=/run/secrets/LANGSMITH_PIP_CONFIG,required=false"
+_UV_CONFIG_SECRET_MOUNT = "--mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false"
+
+
+def _python_install_run(
+    command: str,
+    *,
+    pip_installer: Literal["uv", "pip"],
+    pip_config_file: bool = False,
+) -> str:
+    if pip_installer == "uv":
+        return f"RUN {_UV_CONFIG_SECRET_MOUNT} {command}"
+    fallback = "else export PIP_CONFIG_FILE=/pipconfig.txt; " if pip_config_file else ""
+    return (
+        f"RUN {_PIP_CONFIG_SECRET_MOUNT} "
+        "if [ -f /run/secrets/LANGSMITH_PIP_CONFIG ]; then "
+        "export PIP_CONFIG_FILE=/run/secrets/LANGSMITH_PIP_CONFIG; "
+        f"{fallback}fi; {command}"
+    )
 
 
 def _get_pip_cleanup_lines(
@@ -153,11 +175,15 @@ def _get_pip_cleanup_lines(
     to_uninstall: tuple[str] | None,
     pip_installer: Literal["uv", "pip"],
 ) -> str:
+    reinstall_api = _python_install_run(
+        f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir --no-deps -e /api",
+        pip_installer=pip_installer,
+    )
     commands = [
         f"""# -- Ensure user deps didn't inadvertently overwrite langgraph-api
 RUN mkdir -p /api/langgraph_api /api/langgraph_runtime /api/langgraph_license && \
 touch /api/langgraph_api/__init__.py /api/langgraph_runtime/__init__.py /api/langgraph_license/__init__.py
-RUN PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir --no-deps -e /api
+{reinstall_api}
 # -- End of ensuring user deps didn't inadvertently overwrite langgraph-api --
 # -- Removing build deps from the final image ~<:===~~~ --"""
     ]
@@ -1243,7 +1269,7 @@ def _build_python_install_commands(
     local_reqs_pip_install = base_install
     global_reqs_pip_install = base_install
 
-    if config.get("pip_config_file"):
+    if config.get("pip_config_file") and install_cmd.startswith("uv "):
         local_reqs_pip_install = (
             f"PIP_CONFIG_FILE=/pipconfig.txt {local_reqs_pip_install}"
         )
@@ -1449,7 +1475,13 @@ def python_config_to_docker(
     _update_http_app_path(config_path, config, local_deps)
 
     pip_pkgs_str = (
-        f"RUN {local_reqs_pip_install} {' '.join(pypi_deps)}" if pypi_deps else ""
+        _python_install_run(
+            f"{local_reqs_pip_install} {' '.join(pypi_deps)}",
+            pip_installer=pip_installer,
+            pip_config_file=bool(config.get("pip_config_file")),
+        )
+        if pypi_deps
+        else ""
     )
     if local_deps.pip_reqs:
         pip_reqs_str = os.linesep.join(
@@ -1460,7 +1492,12 @@ def python_config_to_docker(
             )
             for reqpath, destpath in local_deps.pip_reqs
         )
-        pip_reqs_str += f"{os.linesep}RUN {local_reqs_pip_install} {' '.join('-r ' + r for _, r in local_deps.pip_reqs)}"
+        pip_reqs_install = _python_install_run(
+            f"{local_reqs_pip_install} {' '.join('-r ' + r for _, r in local_deps.pip_reqs)}",
+            pip_installer=pip_installer,
+            pip_config_file=bool(config.get("pip_config_file")),
+        )
+        pip_reqs_str += f"{os.linesep}{pip_reqs_install}"
         pip_reqs_str = f"""# -- Installing local requirements --
 {pip_reqs_str}
 # -- End of local requirements install --"""
@@ -1559,7 +1596,8 @@ ADD {relpath} /deps/{name}
                 "# -- Installing JS dependencies --",
                 f"ENV NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}",
                 f"WORKDIR {local_deps.working_dir}",
-                f"RUN {_get_node_pm_install_cmd(config_path.parent)} && tsx /api/langgraph_api/js/build.mts",
+                f"RUN {_NPMRC_SECRET_MOUNT} {_get_node_pm_install_cmd(config_path.parent)}",
+                "RUN tsx /api/langgraph_api/js/build.mts",
                 "# -- End of JS dependencies install --",
             ]
         )
@@ -1579,13 +1617,17 @@ ADD {relpath} /deps/{name}
 
     # Add main dockerfile content
     dep_vname = "$$dep" if escape_variables else "$dep"
-    local_deps_install_str = f"""RUN for dep in /deps/*; do \
+    local_deps_install_str = _python_install_run(
+        f"""for dep in /deps/*; do \
             echo "Installing {dep_vname}"; \
             if [ -d "{dep_vname}" ]; then \
                 echo "Installing {dep_vname}"; \
                 (cd "{dep_vname}" && {global_reqs_pip_install} -e .); \
             fi; \
-        done"""
+        done""",
+        pip_installer=pip_installer,
+        pip_config_file=bool(config.get("pip_config_file")),
+    )
     docker_file_contents.extend(
         [
             f"FROM {image_str}",
@@ -1660,7 +1702,7 @@ def node_config_to_docker(
         # Monorepo case: install from root, build from config directory
         container_root = f"/deps/{pathlib.Path(build_context).name}"
         install_workdir = container_root
-        install_step = f"RUN {install_cmd}"
+        install_step = f"RUN {_NPMRC_SECRET_MOUNT} {install_cmd}"
 
         if build_command:
             build_step = f"RUN {build_command}"
@@ -1669,7 +1711,7 @@ def node_config_to_docker(
     else:
         # Original behavior: everything happens in the same directory
         install_workdir = faux_path
-        install_step = f"RUN {install_cmd}"
+        install_step = f"RUN {_NPMRC_SECRET_MOUNT} {install_cmd}"
         build_step = 'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts'
 
     if build_context:
