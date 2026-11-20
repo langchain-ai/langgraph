@@ -607,6 +607,52 @@ class TestStreamV2Async:
             _ = await anext(aiter(run.values))
         assert run._exhausted is True
 
+    @pytest.mark.parametrize("with_msg", [False, True])
+    async def test_external_cancel_forwards_message_to_node(
+        self, with_msg: bool
+    ) -> None:
+        class Marker:
+            pass
+
+        marker = Marker()
+        started = asyncio.Event()
+        seen: list[asyncio.CancelledError] = []
+
+        class S(TypedDict):
+            value: str
+
+        async def slow(state: S) -> dict:
+            started.set()
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError as e:
+                seen.append(e)
+                raise
+            return {"value": "done"}
+
+        graph = StateGraph(S).add_node("slow", slow).set_entry_point("slow").compile()
+        run = await graph.astream_events({"value": "x"}, version="v3")
+
+        async def consume() -> None:
+            async for _ in run.values:
+                pass
+
+        task = asyncio.ensure_future(consume())
+        await started.wait()
+        if with_msg:
+            task.cancel(msg=marker)
+        else:
+            task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert len(seen) == 1
+        if with_msg:
+            assert seen[0].args == (marker,)
+        else:
+            # A bare cancel carries no user message (the executor's own
+            # sentinel may be present instead).
+            assert not any(isinstance(a, Marker) for a in seen[0].args)
+
     async def test_abort_cancels_running_subgraph(self) -> None:
         class CountState(TypedDict):
             count: int
