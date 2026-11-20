@@ -59,9 +59,10 @@ class Item:
             For example: `("documents", 'user123')`
         created_at: Timestamp of item creation.
         updated_at: Timestamp of last update.
+        revision: Opaque write revision, or `None` if conditional writes are unsupported.
     """
 
-    __slots__ = ("value", "key", "namespace", "created_at", "updated_at")
+    __slots__ = ("value", "key", "namespace", "created_at", "updated_at", "revision")
 
     def __init__(
         self,
@@ -71,8 +72,10 @@ class Item:
         namespace: tuple[str, ...],
         created_at: datetime,
         updated_at: datetime,
+        revision: str | None = None,
     ):
         self.value = value
+        self.revision = revision
         self.key = key
         # The casting from json-like types is for if this object is
         # deserialized.
@@ -97,19 +100,23 @@ class Item:
             and self.namespace == other.namespace
             and self.created_at == other.created_at
             and self.updated_at == other.updated_at
+            and self.revision == other.revision
         )
 
     def __hash__(self) -> int:
         return hash((self.namespace, self.key))
 
     def dict(self) -> dict:
-        return {
+        result = {
             "namespace": list(self.namespace),
             "key": self.key,
             "value": self.value,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }
+        if self.revision is not None:
+            result["revision"] = self.revision
+        return result
 
     def __repr__(self) -> str:
         return f"Item({', '.join(f'{k}={v!r}' for k, v in self.dict().items())})"
@@ -128,6 +135,8 @@ class SearchItem(Item):
         created_at: datetime,
         updated_at: datetime,
         score: float | None = None,
+        *,
+        revision: str | None = None,
     ) -> None:
         """Initialize a result item.
 
@@ -138,6 +147,7 @@ class SearchItem(Item):
             created_at: When the item was first created.
             updated_at: When the item was last updated.
             score: Relevance/similarity score if from a ranked operation.
+            revision: Opaque write revision for conditional updates, if supported.
         """
         super().__init__(
             value=value,
@@ -145,6 +155,7 @@ class SearchItem(Item):
             namespace=namespace,
             created_at=created_at,
             updated_at=updated_at,
+            revision=revision,
         )
         self.score = score
 
@@ -949,6 +960,20 @@ class BaseStore(ABC):
             ]
         )
 
+    def compare_and_swap(
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+        value: Mapping[str, Any] | None,
+        *,
+        expected_revision: str | None,
+        index: Literal[False] | list[str] | None = None,
+    ) -> bool:
+        """Atomically replace/delete a matching revision (`None` requires absence), or raise if unsupported."""
+        raise NotImplementedError(
+            f"Atomic conditional writes are not supported by {self.__class__.__name__}."
+        )
+
     def delete(self, namespace: tuple[str, ...], key: str) -> None:
         """Delete an item.
 
@@ -1234,6 +1259,20 @@ class BaseStore(ABC):
                     ttl=_ensure_ttl(self.ttl_config, ttl),
                 )
             ]
+        )
+
+    async def acompare_and_swap(
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+        value: Mapping[str, Any] | None,
+        *,
+        expected_revision: str | None,
+        index: Literal[False] | list[str] | None = None,
+    ) -> bool:
+        """Asynchronously compare and replace/delete atomically, or raise if unsupported."""
+        raise NotImplementedError(
+            f"Atomic conditional writes are not supported by {self.__class__.__name__}."
         )
 
     async def adelete(self, namespace: tuple[str, ...], key: str) -> None:

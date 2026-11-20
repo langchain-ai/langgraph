@@ -106,25 +106,31 @@ import concurrent.futures as cf
 import functools
 import logging
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from copy import deepcopy
 from datetime import datetime, timezone
 from importlib import util
-from typing import Any
+from threading import Lock
+from typing import Any, Literal
+from uuid import uuid4
 
 from langchain_core.embeddings import Embeddings
 
 from langgraph.store.base import (
+    NOT_PROVIDED,
     BaseStore,
     GetOp,
     IndexConfig,
     Item,
     ListNamespacesOp,
     MatchCondition,
+    NotProvided,
     Op,
     PutOp,
     Result,
     SearchItem,
     SearchOp,
+    _validate_namespace,
     ensure_embeddings,
     get_text_at_path,
     tokenize_path,
@@ -178,9 +184,11 @@ class InMemoryStore(BaseStore):
         "_vectors",
         "index_config",
         "embeddings",
+        "_lock",
     )
 
     def __init__(self, *, index: IndexConfig | None = None) -> None:
+        self._lock = Lock()
         # Both _data and _vectors are wrapped in the In-memory API
         # Do not change their names
         self._data: dict[tuple[str, ...], dict[str, Item]] = defaultdict(dict)
@@ -206,32 +214,94 @@ class InMemoryStore(BaseStore):
     def batch(self, ops: Iterable[Op]) -> list[Result]:
         # The batch/abatch methods are treated as internal.
         # Users should access via put/search/get/list_namespaces/etc.
-        results, put_ops, search_ops = self._prepare_ops(ops)
+        ops = list(ops)
+        with self._lock:
+            results, put_ops, search_ops = self._prepare_ops(ops)
         if search_ops:
             queryinmem_store = self._embed_search_queries(search_ops)
             self._batch_search(search_ops, queryinmem_store, results)
 
         to_embed = self._extract_texts(put_ops)
+        embeddings = []
         if to_embed and self.index_config and self.embeddings:
             embeddings = self.embeddings.embed_documents(list(to_embed))
-            self._insertinmem_store(to_embed, embeddings)
-        self._apply_put_ops(put_ops)
+        vectors = self._prepare_vectors(to_embed, embeddings)
+        self._apply_put_ops(put_ops, vectors)
         return results
 
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
         # The batch/abatch methods are treated as internal.
         # Users should access via put/search/get/list_namespaces/etc.
-        results, put_ops, search_ops = self._prepare_ops(ops)
+        ops = list(ops)
+        with self._lock:
+            results, put_ops, search_ops = self._prepare_ops(ops)
         if search_ops:
             queryinmem_store = await self._aembed_search_queries(search_ops)
             self._batch_search(search_ops, queryinmem_store, results)
 
         to_embed = self._extract_texts(put_ops)
+        embeddings = []
         if to_embed and self.index_config and self.embeddings:
             embeddings = await self.embeddings.aembed_documents(list(to_embed))
-            self._insertinmem_store(to_embed, embeddings)
-        self._apply_put_ops(put_ops)
+        vectors = self._prepare_vectors(to_embed, embeddings)
+        self._apply_put_ops(put_ops, vectors)
         return results
+
+    def compare_and_swap(
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+        value: Mapping[str, Any] | None,
+        *,
+        expected_revision: str | None,
+        index: Literal[False] | list[str] | None = None,
+    ) -> bool:
+        """Conditionally replace/delete within this instance, checking after embedding completes."""
+        _validate_namespace(namespace)
+        if expected_revision is not None and not isinstance(expected_revision, str):
+            raise TypeError("expected_revision must be a string or None")
+        with self._lock:
+            _, put_ops, _ = self._prepare_ops(
+                [PutOp(namespace, str(key), value, index)]
+            )
+        to_embed = self._extract_texts(put_ops)
+        embeddings = (
+            self.embeddings.embed_documents(list(to_embed))
+            if to_embed and self.embeddings
+            else []
+        )
+        vectors = self._prepare_vectors(to_embed, embeddings)
+        return self._apply_put_ops(
+            put_ops, vectors, expected_revision=expected_revision
+        )
+
+    async def acompare_and_swap(
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+        value: Mapping[str, Any] | None,
+        *,
+        expected_revision: str | None,
+        index: Literal[False] | list[str] | None = None,
+    ) -> bool:
+        """Asynchronously conditionally replace/delete within this instance without locking across awaits."""
+        _validate_namespace(namespace)
+        if expected_revision is not None and not isinstance(expected_revision, str):
+            raise TypeError("expected_revision must be a string or None")
+        with self._lock:
+            _, put_ops, _ = self._prepare_ops(
+                [PutOp(namespace, str(key), value, index)]
+            )
+        to_embed = self._extract_texts(put_ops)
+        embeddings = (
+            await self.embeddings.aembed_documents(list(to_embed))
+            if to_embed and self.embeddings
+            else []
+        )
+        vectors = self._prepare_vectors(to_embed, embeddings)
+        return self._apply_put_ops(
+            put_ops, vectors, expected_revision=expected_revision
+        )
 
     # Helpers
 
@@ -366,6 +436,7 @@ class InMemoryStore(BaseStore):
                         created_at=item.created_at,
                         updated_at=item.updated_at,
                         score=float(score) if score is not None else None,
+                        revision=item.revision,
                     )
                     for score, item in kept
                 ]
@@ -377,6 +448,7 @@ class InMemoryStore(BaseStore):
                         value=item.value,
                         created_at=item.created_at,
                         updated_at=item.updated_at,
+                        revision=item.revision,
                     )
                     for (item, _) in candidates[op.offset : op.offset + op.limit]
                 ]
@@ -396,33 +468,55 @@ class InMemoryStore(BaseStore):
         for i, op in enumerate(ops):
             if isinstance(op, GetOp):
                 item = self._data[op.namespace].get(op.key)
-                results.append(item)
+                results.append(deepcopy(item))
             elif isinstance(op, SearchOp):
-                search_ops[i] = (op, self._filter_items(op))
+                search_ops[i] = (op, deepcopy(self._filter_items(op)))
                 results.append(None)
             elif isinstance(op, ListNamespacesOp):
                 results.append(self._handle_list_namespaces(op))
             elif isinstance(op, PutOp):
-                put_ops[(op.namespace, op.key)] = op
+                put_ops[(op.namespace, op.key)] = op._replace(
+                    value=deepcopy(dict(op.value)) if op.value is not None else None,
+                    index=deepcopy(op.index),
+                )
                 results.append(None)
             else:
                 raise ValueError(f"Unknown operation type: {type(op)}")
 
         return results, put_ops, search_ops
 
-    def _apply_put_ops(self, put_ops: dict[tuple[tuple[str, ...], str], PutOp]) -> None:
-        for (namespace, key), op in put_ops.items():
-            if op.value is None:
-                self._data[namespace].pop(key, None)
-                self._vectors[namespace].pop(key, None)
-            else:
-                self._data[namespace][key] = Item(
-                    value=dict(op.value),
-                    key=key,
-                    namespace=namespace,
-                    created_at=datetime.now(timezone.utc),
-                    updated_at=datetime.now(timezone.utc),
-                )
+    def _apply_put_ops(
+        self,
+        put_ops: dict[tuple[tuple[str, ...], str], PutOp],
+        vectors: dict[tuple[tuple[str, ...], str], dict[str, list[float]]],
+        *,
+        expected_revision: str | None | NotProvided = NOT_PROVIDED,
+    ) -> bool:
+        with self._lock:
+            if expected_revision is not NOT_PROVIDED:
+                ((namespace, key),) = put_ops
+                current = self._data.get(namespace, {}).get(key)
+                if expected_revision is None:
+                    if current is not None:
+                        return False
+                elif current is None or current.revision != expected_revision:
+                    return False
+            for (namespace, key), op in put_ops.items():
+                self._vectors.get(namespace, {}).pop(key, None)
+                if op.value is None:
+                    self._data.get(namespace, {}).pop(key, None)
+                else:
+                    now = datetime.now(timezone.utc)
+                    self._data[namespace][key] = Item(
+                        value=dict(op.value),
+                        key=key,
+                        namespace=namespace,
+                        created_at=now,
+                        updated_at=now,
+                        revision=uuid4().hex,
+                    )
+                    self._vectors[namespace][key] = vectors.get((namespace, key), {})
+        return True
 
     def _extract_texts(
         self, put_ops: dict[tuple[tuple[str, ...], str], PutOp]
@@ -452,19 +546,23 @@ class InMemoryStore(BaseStore):
 
         return {}
 
-    def _insertinmem_store(
+    def _prepare_vectors(
         self,
         to_embed: dict[str, list[tuple[tuple[str, ...], str, str]]],
         embeddings: list[list[float]],
-    ) -> None:
-        indices = [index for indices in to_embed.values() for index in indices]
-        if len(indices) != len(embeddings):
+    ) -> dict[tuple[tuple[str, ...], str], dict[str, list[float]]]:
+        if len(to_embed) != len(embeddings):
             raise ValueError(
                 f"Number of embeddings ({len(embeddings)}) does not"
-                f" match number of indices ({len(indices)})"
+                f" match number of texts ({len(to_embed)})"
             )
-        for embedding, (ns, key, path) in zip(embeddings, indices, strict=False):
-            self._vectors[ns][key][path] = embedding
+        vectors: dict[tuple[tuple[str, ...], str], dict[str, list[float]]] = (
+            defaultdict(dict)
+        )
+        for indices, embedding in zip(to_embed.values(), embeddings, strict=False):
+            for ns, key, path in indices:
+                vectors[(ns, key)][path] = embedding.copy()
+        return vectors
 
     def _handle_list_namespaces(self, op: ListNamespacesOp) -> list[tuple[str, ...]]:
         all_namespaces = list(
