@@ -749,7 +749,9 @@ class _FrozenSendDict(dict):
     """A dict that explains why writes are rejected after Send is hashed."""
 
     def _immutable(self, *args: Any, **kwargs: Any) -> None:
-        raise TypeError("Cannot mutate a Send payload after hashing; Send is immutable once hashed.")
+        raise TypeError(
+            "Cannot mutate a Send payload after hashing; Send is immutable once hashed."
+        )
 
     __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable
     __ior__ = _immutable
@@ -759,9 +761,13 @@ class _FrozenSendList(list):
     """A list that rejects mutations after its owning Send is hashed."""
 
     def _immutable(self, *args: Any, **kwargs: Any) -> None:
-        raise TypeError("Cannot mutate a Send payload after hashing; Send is immutable once hashed.")
+        raise TypeError(
+            "Cannot mutate a Send payload after hashing; Send is immutable once hashed."
+        )
 
-    __setitem__ = __delitem__ = append = clear = extend = insert = pop = remove = reverse = sort = _immutable
+    __setitem__ = __delitem__ = append = clear = extend = insert = (
+        pop
+    ) = remove = reverse = sort = _immutable
     __iadd__ = __imul__ = _immutable
 
 
@@ -769,9 +775,13 @@ class _FrozenSendSet(set):
     """A set that rejects mutations after its owning Send is hashed."""
 
     def _immutable(self, *args: Any, **kwargs: Any) -> None:
-        raise TypeError("Cannot mutate a Send payload after hashing; Send is immutable once hashed.")
+        raise TypeError(
+            "Cannot mutate a Send payload after hashing; Send is immutable once hashed."
+        )
 
-    add = clear = difference_update = discard = intersection_update = pop = remove = symmetric_difference_update = update = _immutable
+    add = clear = difference_update = discard = intersection_update = (
+        pop
+    ) = remove = symmetric_difference_update = update = _immutable
     __ior__ = __iand__ = __isub__ = __ixor__ = _immutable
 
 
@@ -803,9 +813,13 @@ def _freeze_send_payload(value: Any, active: set[int] | None = None) -> Any:
 def _send_hash_key(value: Any) -> Any:
     """Canonical hash key for supported nested payloads; dict/set order is irrelevant."""
     if isinstance(value, dict):
-        return ("dict", frozenset(
-            (_send_hash_key(key), _send_hash_key(item)) for key, item in value.items()
-        ))
+        return (
+            "dict",
+            frozenset(
+                (_send_hash_key(key), _send_hash_key(item))
+                for key, item in value.items()
+            ),
+        )
     if isinstance(value, list):
         return ("list", tuple(_send_hash_key(item) for item in value))
     if isinstance(value, tuple):
@@ -827,6 +841,13 @@ class Send:
     One such example is a "map-reduce" workflow where your graph invokes
     the same node multiple times in parallel with different states,
     before aggregating the results back into the main graph's state.
+
+    Hashing a Send freezes its built-in dict, list, and set payload containers.
+    Attempts to mutate those containers or reassign node, arg, or timeout
+    after hashing raise TypeError. The caller's original containers are not
+    frozen; Send retains an independent snapshot for hash stability. Custom
+    mutable objects are not recursively frozen and should not be used in
+    hashable payloads.
 
     Attributes:
         node (str): The name of the target node to send the message to.
@@ -891,7 +912,9 @@ class Send:
         self._cached_hash: int | None = None
 
     def __setattr__(self, name: str, value: Any) -> None:
-        if name in ("node", "arg", "timeout") and getattr(self, "_cached_hash", None) is not None:
+        if name in ("node", "arg", "timeout") and (
+            getattr(self, "_cached_hash", None) is not None
+        ):
             raise TypeError(
                 f"Cannot modify Send.{name} after hashing; Send is immutable once hashed."
             )
