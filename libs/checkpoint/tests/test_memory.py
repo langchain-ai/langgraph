@@ -529,6 +529,41 @@ class TestBaseFallbackGetChannelWrites:
         values = [v for _, _, v in result["writes"]]
         assert values == [{"content": "first"}, {"content": "second"}]
 
+    async def test_fallback_reports_a_parent_it_cannot_fetch(self) -> None:
+        saver, thread_id, ns = self._build_saver_with_chain()
+        serde = JsonPlusSerializer()
+        first, second, target = (f"{n:032}.{0:016}" for n in (1, 2, 3))
+        child = empty_checkpoint()
+        child["id"] = second
+        child["channel_versions"] = {"messages": 1}
+        saver.storage[thread_id][ns][second] = (
+            serde.dumps_typed(child),
+            serde.dumps_typed({}),
+            first,
+        )
+        del saver.storage[thread_id][ns][first]
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": ns,
+                "checkpoint_id": target,
+            }
+        }
+        channels = ["messages", "later"]
+
+        result = saver.get_delta_channel_history(config=config, channels=channels)
+
+        assert result == await saver.aget_delta_channel_history(
+            config=config, channels=channels
+        )
+        assert result["messages"]["missing_checkpoint_id"] == first
+        assert [v for _, _, v in result["messages"]["writes"]] == [
+            {"content": "second"}
+        ]
+        # `later` had no version yet when the missing checkpoint's child was
+        # saved, so none of its history is missing.
+        assert "missing_checkpoint_id" not in result["later"]
+
     async def test_async_fallback_concurrent_tasks_do_not_interfere(self) -> None:
         """Regression: the re-entrancy guard must be task-local, not thread-local.
 
