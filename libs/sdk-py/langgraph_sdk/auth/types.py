@@ -29,7 +29,9 @@ Values:
     - interrupted: Run was manually interrupted
 """
 
-MultitaskStrategy = typing.Literal["reject", "rollback", "interrupt", "enqueue"]
+MultitaskStrategy = typing.Literal[
+    "reject", "rollback", "interrupt", "enqueue", "insert"
+]
 """Strategy for handling multiple concurrent tasks.
 
 Values:
@@ -37,6 +39,7 @@ Values:
     - rollback: Cancel current task and start new one
     - interrupt: Interrupt current task and start new one
     - enqueue: Queue new tasks to run after current one
+    - insert: Add input to current task at its next safe step; held while interrupted
 """
 
 OnConflictBehavior = typing.Literal["raise", "do_nothing"]
