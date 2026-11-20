@@ -40,6 +40,7 @@ from langgraph._internal._constants import (
 from langgraph._internal._future import chain_future, run_coroutine_threadsafe
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import MISSING
+from langgraph.config import get_config
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import GraphBubbleUp, GraphInterrupt, is_invalid_resume
 from langgraph.pregel._algo import Call
@@ -712,6 +713,21 @@ def _panic_or_proceed(
         raise timeout_exc_cls("Timed out")
 
 
+def _scratchpad_for_task(task: PregelExecutableTask) -> PregelScratchpad:
+    # Prefer the scratchpad from the runnable config the task is executing
+    # under: node retries replace it (see _reset_scratchpad_counters in
+    # _retry.py), so a retried node re-issues the same child task ids and
+    # reuses their checkpointed results instead of running them a second
+    # time. Fall back to the task's own config when there is no runnable
+    # context (eg. a @task called from a thread the node spawned itself).
+    try:
+        if scratchpad := get_config()[CONF].get(CONFIG_KEY_SCRATCHPAD):
+            return scratchpad
+    except (RuntimeError, KeyError):
+        pass
+    return task.config[CONF][CONFIG_KEY_SCRATCHPAD]
+
+
 def _call(
     task: weakref.ref[PregelExecutableTask],
     func: Callable[[Any], Awaitable[Any] | Any],
@@ -732,7 +748,7 @@ def _call(
 
     fut: concurrent.futures.Future | None = None
     # schedule PUSH tasks, collect futures
-    scratchpad: PregelScratchpad = task().config[CONF][CONFIG_KEY_SCRATCHPAD]  # type: ignore[union-attr]
+    scratchpad: PregelScratchpad = _scratchpad_for_task(task())  # type: ignore[arg-type]
     # schedule the next task, if the callback returns one
     if next_task := schedule_task(
         task(),  # type: ignore[arg-type]
@@ -879,7 +895,7 @@ async def _acall_impl(
     try:
         fut: asyncio.Future | None = None
         # schedule PUSH tasks, collect futures
-        scratchpad: PregelScratchpad = task().config[CONF][CONFIG_KEY_SCRATCHPAD]  # type: ignore[union-attr]
+        scratchpad: PregelScratchpad = _scratchpad_for_task(task())  # type: ignore[arg-type]
         # schedule the next task, if the callback returns one
         if next_task := await schedule_task(
             task(),  # type: ignore[arg-type]
