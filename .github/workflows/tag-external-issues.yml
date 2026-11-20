@@ -197,17 +197,20 @@ jobs:
 
       - name: Backfill labels
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          MAX_ITEMS: ${{ inputs.max_items }}
+          BACKFILL_TYPE: ${{ inputs.backfill_type }}
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const { owner, repo } = context.repo;
-            const rawMax = '${{ inputs.max_items }}';
+            const rawMax = process.env.MAX_ITEMS;
             const maxItems = parseInt(rawMax, 10);
             if (isNaN(maxItems) || maxItems <= 0) {
               core.setFailed(`Invalid max_items: "${rawMax}" — must be a positive integer`);
               return;
             }
-            const backfillType = '${{ inputs.backfill_type }}';
+            const backfillType = process.env.BACKFILL_TYPE;
 
             const TRUSTED_THRESHOLD = 5;
             const LABEL_COLOR = 'b76e79';
