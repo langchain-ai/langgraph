@@ -1,7 +1,7 @@
 """Exercise `thread.extensions[name]` against the integration API.
 
-Every node in the example graph writes `("progress", {...})` via
-`get_stream_writer`. This script verifies the `extensions["progress"]`
+Every node in the example graph writes `{"name": "progress", ...}` via
+`get_stream_writer`, relayed onto the named `progress` channel. This script verifies the `extensions["progress"]`
 projection yields each progress event in order.
 """
 
@@ -32,7 +32,7 @@ async def run_async() -> None:
             print(f"  total progress events: {len(events)}")
             assert events, "expected at least one progress event"
             # Verify ordering covers the node sequence.
-            steps = [e.get("step") for e in events]
+            steps = [e["payload"]["step"] for e in events]
             print(f"  step sequence: {steps}")
     finally:
         await raw.aclose()
@@ -51,7 +51,7 @@ def run_sync() -> None:
                 events.append(event)
             print(f"  total progress events: {len(events)}")
             assert events, "expected at least one progress event"
-            steps = [e.get("step") for e in events]
+            steps = [e["payload"]["step"] for e in events]
             print(f"  step sequence: {steps}")
     finally:
         raw.close()

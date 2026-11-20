@@ -73,6 +73,15 @@ _CHILD_CONFIGS = pytest.mark.parametrize(
     ids=["no_config", "own_thread", "caller_thread"],
 )
 
+_OWN_THREAD_CONFIGS = pytest.mark.parametrize(
+    "child_config",
+    [
+        {"configurable": {"thread_id": "child"}},
+        {"configurable": {"thread_id": "parent"}},
+    ],
+    ids=["own_thread", "caller_thread"],
+)
+
 
 _TASK_CALLERS = pytest.mark.parametrize(
     "nested", [False, True], ids=["from_entrypoint", "from_task_in_task"]
@@ -202,15 +211,8 @@ async def test_child_graph_streams_only_to_the_node_streaming_it_async(
     assert len(received) == len(_CHAT_AND_ECHO_EVENTS)
 
 
-@pytest.mark.parametrize(
-    "child_config",
-    [
-        {"configurable": {"thread_id": "child"}},
-        {"configurable": {"thread_id": "parent"}},
-    ],
-    ids=["own_thread", "caller_thread"],
-)
-def test_child_graph_on_its_own_thread_skips_a_caller_streaming_subgraphs(
+@_OWN_THREAD_CONFIGS
+def test_child_graph_on_its_own_thread_streams_to_a_caller_streaming_subgraphs(
     child_config: dict,
 ) -> None:
     child = _one_node_graph(_chat_and_echo)
@@ -224,9 +226,32 @@ def test_child_graph_on_its_own_thread_skips_a_caller_streaming_subgraphs(
         {"configurable": {"thread_id": "parent"}},
         stream_mode=["messages", "tools"],
         subgraphs=True,
+        version="v2",
     )
 
-    assert list(parts) == []
+    assert [_summary(part) for part in parts] == _CHAT_AND_ECHO_EVENTS
+
+
+@NEEDS_CONTEXTVARS
+@_OWN_THREAD_CONFIGS
+async def test_child_graph_on_its_own_thread_streams_to_a_caller_streaming_subgraphs_async(
+    child_config: dict,
+) -> None:
+    child = _one_node_graph(_achat_and_echo)
+
+    async def node(state: MessagesState) -> dict:
+        await child.ainvoke({"messages": []}, child_config)
+        return {}
+
+    parts = _one_node_graph(node).astream(
+        {"messages": []},
+        {"configurable": {"thread_id": "parent"}},
+        stream_mode=["messages", "tools"],
+        subgraphs=True,
+        version="v2",
+    )
+
+    assert [_summary(part) async for part in parts] == _CHAT_AND_ECHO_EVENTS
 
 
 def test_node_gets_the_events_of_every_subgraph_it_streams() -> None:

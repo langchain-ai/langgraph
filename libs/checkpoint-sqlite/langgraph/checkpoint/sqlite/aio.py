@@ -4,7 +4,14 @@ import asyncio
 import json
 import random
 import threading
-from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
+from collections.abc import (
+    AsyncGenerator,
+    AsyncIterator,
+    Callable,
+    Iterator,
+    Mapping,
+    Sequence,
+)
 from contextlib import asynccontextmanager
 from typing import Any, TypeVar, cast
 
@@ -137,7 +144,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
     @asynccontextmanager
     async def from_conn_string(
         cls, conn_string: str
-    ) -> AsyncIterator[AsyncSqliteSaver]:
+    ) -> AsyncGenerator[AsyncSqliteSaver, None]:
         """Create a new AsyncSqliteSaver instance from a connection string.
 
         Args:

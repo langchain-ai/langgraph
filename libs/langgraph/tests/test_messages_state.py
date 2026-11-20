@@ -5,6 +5,7 @@ import langchain_core
 import pytest
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     AnyMessage,
     HumanMessage,
     RemoveMessage,
@@ -166,6 +167,41 @@ def test_non_list_inputs():
         AIMessage(content="Hi there!", id="2"),
     ]
     assert result == expected_result
+
+
+def test_message_likes_and_chunks_are_converted_on_both_sides():
+    left = [
+        HumanMessage(content="Hello", id="1"),
+        {"role": "assistant", "content": "Hi", "id": "2"},
+    ]
+    right = [AIMessageChunk(content="chunk", id="3"), ("user", "Thanks")]
+    result = add_messages(left, right)
+    assert [type(m) for m in result] == [
+        HumanMessage,
+        AIMessage,
+        AIMessage,
+        HumanMessage,
+    ]
+    assert result[:3] == [
+        HumanMessage(content="Hello", id="1"),
+        AIMessage(content="Hi", id="2"),
+        AIMessage(content="chunk", id="3"),
+    ]
+    assert result[3].content == "Thanks"
+
+
+def test_chunk_only_lists_are_converted():
+    left = [AIMessageChunk(content="a", id="1")]
+    right = [AIMessageChunk(content="b", id="2")]
+    result = add_messages(left, right)
+    assert [type(m) for m in result] == [AIMessage, AIMessage]
+
+
+def test_result_is_a_new_list():
+    left = [HumanMessage(content="Hello", id="1")]
+    result = add_messages(left, [])
+    assert result == left
+    assert result is not left
 
 
 def test_delete_all():

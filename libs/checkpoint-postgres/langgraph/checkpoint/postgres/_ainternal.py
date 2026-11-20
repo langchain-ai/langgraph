@@ -1,6 +1,6 @@
 """Shared async utility functions for the Postgres checkpoint & storage classes."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from psycopg import AsyncConnection
@@ -13,7 +13,7 @@ Conn = AsyncConnection[DictRow] | AsyncConnectionPool[AsyncConnection[DictRow]]
 @asynccontextmanager
 async def get_connection(
     conn: Conn,
-) -> AsyncIterator[AsyncConnection[DictRow]]:
+) -> AsyncGenerator[AsyncConnection[DictRow], None]:
     if isinstance(conn, AsyncConnection):
         yield conn
     elif isinstance(conn, AsyncConnectionPool):

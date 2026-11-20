@@ -25,6 +25,9 @@ from typing_extensions import TypedDict, deprecated
 from langgraph._internal._constants import CONF, CONFIG_KEY_SEND
 from langgraph.graph.state import StateGraph
 from langgraph.pregel._messages import (
+    REMOVE_ALL_MESSAGES as REMOVE_ALL_MESSAGES,
+)
+from langgraph.pregel._messages import (
     _messages_delta_reducer as _messages_delta_reducer,
 )
 from langgraph.warnings import LangGraphDeprecatedSinceV10
@@ -37,8 +40,6 @@ __all__ = (
 )
 
 Messages = list[MessageLikeRepresentation] | MessageLikeRepresentation
-
-REMOVE_ALL_MESSAGES = "__remove_all__"
 
 
 def _add_messages_wrapper(func: Callable) -> Callable[[Messages, Messages], Messages]:
@@ -194,14 +195,8 @@ def add_messages(
     if not isinstance(right, list):
         right = [right]  # type: ignore[assignment]
     # coerce to message
-    left = [
-        message_chunk_to_message(cast(BaseMessageChunk, m))
-        for m in convert_to_messages(left)
-    ]
-    right = [
-        message_chunk_to_message(cast(BaseMessageChunk, m))
-        for m in convert_to_messages(right)
-    ]
+    left = _coerce_to_messages(left)
+    right = _coerce_to_messages(right)
     # assign missing ids
     for m in left:
         if m.id is None:
@@ -234,7 +229,8 @@ def add_messages(
 
             merged_by_id[m.id] = len(merged)
             merged.append(m)
-    merged = [m for m in merged if m.id not in ids_to_remove]
+    if ids_to_remove:
+        merged = [m for m in merged if m.id not in ids_to_remove]
 
     if format == "langchain-openai":
         merged = _format_messages(merged)
@@ -245,6 +241,20 @@ def add_messages(
         pass
 
     return merged
+
+
+def _coerce_to_messages(messages: list) -> list[Any]:
+    # Both conversions return a plain message unchanged, and a long history is
+    # all plain messages, so check the few distinct types instead of each item.
+    if all(
+        issubclass(t, BaseMessage) and not issubclass(t, BaseMessageChunk)
+        for t in set(map(type, messages))
+    ):
+        return messages
+    return [
+        message_chunk_to_message(cast(BaseMessageChunk, m))
+        for m in convert_to_messages(messages)
+    ]
 
 
 @deprecated(

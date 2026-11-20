@@ -370,6 +370,14 @@ class PregelLoop:
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.durability = durability
+        # Channel types are fixed for the run, so per-step code reads these
+        # instead of scanning every channel.
+        self._has_untracked_channels = any(
+            isinstance(spec, UntrackedValue) for spec in specs.values()
+        )
+        self._delta_channel_names = [
+            k for k, spec in specs.items() if isinstance(spec, DeltaChannel)
+        ]
         self._has_graph_lifecycle_callbacks = has_graph_lifecycle_callbacks
         self._graph_lifecycle_events = deque()
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
@@ -508,9 +516,7 @@ class PregelLoop:
             writes_to_save = writes
 
         # check if any writes are to an UntrackedValue channel
-        if any(
-            isinstance(channel, UntrackedValue) for channel in self.channels.values()
-        ):
+        if self._has_untracked_channels:
             # we do not persist untracked values in checkpoints
             writes_to_save = [
                 # sanitize UntrackedValues that are nested within Send packets
@@ -852,10 +858,12 @@ class PregelLoop:
         Unfinished (failed or interrupted) tasks keep empty writes, so the
         runner re-executes them or routes them to error handlers.
         """
-        for tid, status in read_task_statuses(self.checkpoint_pending_writes).items():
-            if task := tasks.get(tid):
-                task.writes.extend(status.output)
-                self._reapplied_task_ids.add(tid)
+        # Filter first: this runs once per task call, and reading the status of
+        # every task that wrote would make runs with many task calls quadratic.
+        writes = (w for w in self.checkpoint_pending_writes if w[0] in tasks)
+        for tid, status in read_task_statuses(writes).items():
+            tasks[tid].writes.extend(status.output)
+            self._reapplied_task_ids.add(tid)
 
     def _resume_error_handlers_if_applicable(self) -> None:
         """On resume, schedule error handlers for tasks that failed in a prior run.
@@ -1312,9 +1320,7 @@ class PregelLoop:
             )
             new_counters: dict[str, tuple[int, int]] = {}
             updated = self.updated_channels or set()
-            for ch_name, ch in self.channels.items():
-                if not isinstance(ch, DeltaChannel):
-                    continue
+            for ch_name in self._delta_channel_names:
                 u, s = prev_counters.get(ch_name, (0, 0))
                 s += 1
                 if ch_name in updated:
@@ -1334,7 +1340,9 @@ class PregelLoop:
         # create new checkpoint
         channels_to_snapshot = (
             delta_channels_to_snapshot(
-                self.channels, new_counters, self.checkpoint["channel_versions"]
+                {k: self.channels[k] for k in self._delta_channel_names},
+                new_counters,
+                self.checkpoint["channel_versions"],
             )
             | self._delta_channels_forced_snapshot
             if do_checkpoint
@@ -1363,9 +1371,7 @@ class PregelLoop:
         elif "counters_since_delta_snapshot" in self.checkpoint_metadata:
             del self.checkpoint_metadata["counters_since_delta_snapshot"]
         # sanitize TASK channel in the checkpoint before saving (durability=="exit")
-        if TASKS in self.checkpoint["channel_values"] and any(
-            isinstance(channel, UntrackedValue) for channel in self.channels.values()
-        ):
+        if TASKS in self.checkpoint["channel_values"] and self._has_untracked_channels:
             sanitized_tasks = [
                 sanitize_untracked_values_in_send(value, self.channels)
                 if isinstance(value, Send)

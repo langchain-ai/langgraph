@@ -118,5 +118,5 @@ def test_agent_lookup_refuses_a_control_plane_that_ignores_the_filter(deployment
     result = CliRunner().invoke(cli, AGENT_ARGS)
 
     assert result.exit_code != 0
-    assert "does not filter deployments by agent" in result.output
+    assert "does not filter Agent Servers by agent" in result.output
     assert len(requests) == 1

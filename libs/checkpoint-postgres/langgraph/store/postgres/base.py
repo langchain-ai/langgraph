@@ -7,7 +7,7 @@ import logging
 import re
 import threading
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from typing import (
@@ -789,7 +789,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         pool_config: PoolConfig | None = None,
         index: PostgresIndexConfig | None = None,
         ttl: TTLConfig | None = None,
-    ) -> Iterator[PostgresStore]:
+    ) -> Generator[PostgresStore, None, None]:
         """Create a new PostgresStore instance from a connection string.
 
         Args:
@@ -940,7 +940,9 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             self.stop_ttl_sweeper(timeout=0.1)
 
     @contextmanager
-    def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
+    def _cursor(
+        self, *, pipeline: bool = False
+    ) -> Generator[Cursor[DictRow], None, None]:
         """Create a database cursor as a context manager.
 
         Args:
@@ -977,14 +979,19 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                     ):
                         yield cur
             else:
-                with conn.cursor(binary=True, row_factory=dict_row) as cur:
+                # Lone reads land here, so take the lock like the pipeline branch:
+                # another thread may be holding this connection in a pipeline.
+                with self.lock, conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
     def batch(self, ops: Iterable[Op]) -> list[Result]:
         grouped_ops, num_ops = _group_ops(ops)
         results: list[Result] = [None] * num_ops
 
-        with self._cursor(pipeline=True) as cur:
+        # A lone read is one statement: outside a pipeline it costs one round
+        # trip instead of two (its fetch, then the Sync on leaving the pipeline).
+        lone_read = num_ops == 1 and PutOp not in grouped_ops and not self.pipe
+        with self._cursor(pipeline=not lone_read) as cur:
             if GetOp in grouped_ops:
                 self._batch_get_ops(
                     cast(Sequence[tuple[int, GetOp]], grouped_ops[GetOp]), results, cur

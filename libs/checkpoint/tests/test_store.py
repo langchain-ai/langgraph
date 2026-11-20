@@ -22,7 +22,7 @@ from langgraph.store.base import (
     get_text_at_path,
     validate_op_namespace,
 )
-from langgraph.store.base.batch import AsyncBatchedBaseStore
+from langgraph.store.base.batch import AsyncBatchedBaseStore, _dedupe_ops
 from langgraph.store.memory import InMemoryStore
 from tests.embed_test_utils import CharacterEmbeddings
 
@@ -73,6 +73,29 @@ async def test_async_batch_store_resilience() -> None:
     result2 = await async_store.aget(("test", "namespace"), "key")
     assert result2 is not None
     assert result2.value == doc2
+
+
+def test_dedupe_ops_maps_repeated_reads_and_puts_to_one_op() -> None:
+    ops = [
+        GetOp(("a",), "k"),
+        PutOp(("a",), "k", {"v": 1}),
+        GetOp(("a",), "k"),
+        SearchOp(("a",), filter={"x": 1}),
+        SearchOp(("a",), filter={"x": 1}),
+        PutOp(("a",), "k", {"v": 2}),
+        GetOp(("b",), "k"),
+        ListNamespacesOp(match_conditions=(MatchCondition("prefix", ("a",)),)),
+        ListNamespacesOp(match_conditions=(MatchCondition("prefix", ("a",)),)),
+    ]
+    listen, dedupped = _dedupe_ops(ops)
+    assert dedupped == [
+        GetOp(("a",), "k"),
+        PutOp(("a",), "k", {"v": 2}),
+        SearchOp(("a",), filter={"x": 1}),
+        GetOp(("b",), "k"),
+        ListNamespacesOp(match_conditions=(MatchCondition("prefix", ("a",)),)),
+    ]
+    assert listen == [0, 1, 0, 2, 2, 1, 3, 4, 4]
 
 
 def test_get_text_at_path() -> None:
@@ -435,6 +458,43 @@ def test_list_namespaces_no_conditions() -> None:
     result = store.list_namespaces()
     expected = namespaces
     assert sorted(result) == sorted(expected)
+
+
+def test_search_pages_match_full_listing() -> None:
+    store = InMemoryStore()
+    items_per_namespace = 7
+    for ns in [("a",), ("a", "b"), ("ab",), ("a", "c", "d")]:
+        for i in range(items_per_namespace):
+            store.put(ns, f"k{i}", {"i": i, "even": i % 2 == 0})
+
+    def keys(items: list) -> list[tuple[tuple[str, ...], str]]:
+        return [(item.namespace, item.key) for item in items]
+
+    full = keys(store.search(("a",), limit=100))
+    assert {ns for ns, _ in full} == {("a",), ("a", "b"), ("a", "c", "d")}
+    assert len(full) == 3 * items_per_namespace
+    paged = [
+        key
+        for offset in range(0, len(full), 4)
+        for key in keys(store.search(("a",), limit=4, offset=offset))
+    ]
+    assert paged == full
+    even = keys(store.search(("a",), filter={"even": True}, limit=100))
+    assert (
+        keys(store.search(("a",), filter={"even": True}, limit=3, offset=2))
+        == even[2:5]
+    )
+
+
+def test_vector_search_scores_every_item(fake_embeddings: CharacterEmbeddings) -> None:
+    store = InMemoryStore(
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
+    )
+    for i in range(4):
+        store.put(("test",), f"other{i}", {"text": f"zzz qqq {i}"})
+    store.put(("test",), "match", {"text": "apple pie"})
+    results = store.search(("test",), query="apple pie", limit=1)
+    assert [r.key for r in results] == ["match"]
 
 
 def test_list_namespaces_empty_store() -> None:

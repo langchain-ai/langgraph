@@ -40,7 +40,7 @@ langgraph new [PATH] --template TEMPLATE_NAME
 
 ### `langgraph dev` 🏃‍♀️
 
-Run LangGraph API server in development mode with hot reloading.
+Run Agent Server in development mode with hot reloading.
 
 ```bash
 langgraph dev [OPTIONS]
@@ -54,7 +54,7 @@ langgraph dev [OPTIONS]
 
 ### `langgraph up` 🚀
 
-Launch LangGraph API server in Docker.
+Launch Agent Server in Docker.
 
 ```bash
 langgraph up [OPTIONS]
@@ -86,14 +86,55 @@ langgraph dockerfile SAVE_PATH [OPTIONS]
   -c, --config FILE       Config file path
 ```
 
+### `langgraph deploy`
+
+Build and deploy an Agent Server image to LangSmith. Use `--agent-server-id` to
+update an existing Agent Server and `--agent-server-type` to select its type.
+The legacy `--deployment-id` and `--deployment-type` spellings remain supported
+as hidden compatibility aliases, with no removal scheduled. Older Python CLI
+versions and the JavaScript CLI may still require the legacy spellings; check
+command help for your installed version.
+
+#### Where `deploy` sends requests
+
+All `deploy` commands need only a LangSmith API key (`LANGSMITH_API_KEY`). The CLI
+asks the LangSmith API (`LANGSMITH_ENDPOINT`, or `https://api.smith.langchain.com`
+by default) which workspaces the key can use. If the workspace runs on a
+LangSmith data plane in your own cloud (BYOC on AWS, Azure, or GCP), the CLI
+talks to that data plane's host API and sets the workspace for you. The data
+plane URL must use https, since the API key is sent there. Status links still
+point at the LangSmith UI. If the key's workspaces sit on different data planes,
+set `LANGSMITH_TENANT_ID` to the workspace ID to reach its data plane; without
+it, the CLI starts on the LangSmith control plane, and the workspace ID you
+enter when asked picks the data plane. A `LANGSMITH_TENANT_ID` the key can't
+use is an error. If the workspace lookup fails, the CLI says so and uses the
+LangSmith control plane.
+
+`--host-url` (or `LANGGRAPH_HOST_URL`) sends every request to the given host
+backend URL instead and skips this lookup.
+
+#### What a data plane supports
+
+On a BYOC data plane, the data plane decides which deployments `deploy` can make:
+
+- Building with `deploy` (a local Docker build, or `--remote`) needs a data plane
+  that supports CLI builds. Otherwise, push to a registry you manage with
+  `--push-to <registry>/<repository>`, or deploy an existing image with
+  `--image-uri`. Both work on every data plane.
+- `--agent-server-type` defaults to `serverless`, or to `dev` on a data plane
+  without scale to zero. Asking for `serverless` or `dedicated` on a data plane
+  that doesn't support it fails before anything is created.
+
 ### `langgraph deploy metrics`
 
-Fetch deployment monitoring time series as JSON through the LangSmith control plane.
-Use `langgraph deploy list` to find the deployment ID. Authentication uses the same
-API key and workspace configuration as the other deployment commands.
+Fetch Agent Server monitoring time series as JSON. Like the other `deploy`
+commands, it finds the API key's workspace and sends the request to that
+workspace's control plane or data plane (see
+[Where `deploy` sends requests](#where-deploy-sends-requests)). Use
+`langgraph deploy list` to find the Agent Server ID.
 
 ```bash
-langgraph deploy metrics DEPLOYMENT_ID \
+langgraph deploy metrics AGENT_SERVER_ID \
   --start-time 2026-10-28T00:00:00Z \
   --end-time 2026-10-28T01:00:00Z \
   --metrics cpu_usage,memory_usage,worker_count
@@ -108,8 +149,8 @@ langgraph deploy metrics DEPLOYMENT_ID \
 - Queue: `run_queue_wait_time`
 
 These are exact metric names, not free-text search terms. Availability depends on
-the deployment and platform; a supported metric may have no data. Use
-`lg_run_count` for deployment runs, not the UI schema's placeholder `run_count`.
+the Agent Server and platform; a supported metric may have no data. Use
+`lg_run_count` for Agent Server runs, not the UI schema's placeholder `run_count`.
 
 Omit `--metrics` to fetch all available metrics. Time bounds default to the last
 15 minutes, and the backend picks the resolution from the time
@@ -136,8 +177,8 @@ series has fewer than two timestamps. UI metadata and repeated series IDs are
 omitted. The host-backend response itself is unchanged.
 
 ```bash
-langgraph deploy metrics DEPLOYMENT_ID --summary
-langgraph deploy metrics DEPLOYMENT_ID --raw
+langgraph deploy metrics AGENT_SERVER_ID --summary
+langgraph deploy metrics AGENT_SERVER_ID --raw
 ```
 
 `--summary` returns the same shape without `points`. `--raw` returns the original
@@ -145,7 +186,7 @@ UI chart schema without reshaping or rounding. These flags are mutually exclusiv
 Neither mode returns traces.
 
 Size comparison using the realistic synthetic unit-test fixture (compact JSON
-serialization for all modes; not a live deployment benchmark):
+serialization for all modes; not a live Agent Server benchmark):
 
 | Before: raw UI schema | After: default | After: summary |
 | --- | --- | --- |

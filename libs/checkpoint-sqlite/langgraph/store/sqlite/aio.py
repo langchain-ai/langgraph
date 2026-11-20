@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import defaultdict
-from collections.abc import AsyncIterator, Callable, Iterable, Sequence
+from collections.abc import AsyncGenerator, Callable, Iterable, Sequence
 from contextlib import asynccontextmanager
 from types import TracebackType
 from typing import Any, cast
@@ -128,7 +128,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
         *,
         index: SqliteIndexConfig | None = None,
         ttl: TTLConfig | None = None,
-    ) -> AsyncIterator[AsyncSqliteStore]:
+    ) -> AsyncGenerator[AsyncSqliteStore, None]:
         """Create a new AsyncSqliteStore instance from a connection string.
 
         Args:
@@ -223,7 +223,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
     @asynccontextmanager
     async def _cursor(
         self, *, transaction: bool = True
-    ) -> AsyncIterator[aiosqlite.Cursor]:
+    ) -> AsyncGenerator[aiosqlite.Cursor, None]:
         """Get a cursor for the SQLite database.
 
         Args:

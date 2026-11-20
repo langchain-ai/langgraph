@@ -354,8 +354,6 @@ class _ResourceOn(
     Generic base class for resource-specific handlers.
     """
 
-    value: type[VCreate | VUpdate | VRead | VDelete | VSearch]
-
     Create: type[VCreate]
     Read: type[VRead]
     Update: type[VUpdate]

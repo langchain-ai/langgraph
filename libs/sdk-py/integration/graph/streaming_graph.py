@@ -13,8 +13,10 @@ Each node is designed to surface a specific v3 channel:
 - `subgraph` is a nested `StateGraph` invoked once so `thread.subgraphs` has
   exactly one direct child (`tasks` + `messages` under a namespace).
 
-Extensions: every node writes custom progress data, which `_ProgressTransformer`
-forwards to the named `progress` channel.
+Extensions: every node writes `{"name": "progress", ...}` with
+`get_stream_writer()`, and `ProgressTransformer` relays the root-level ones
+onto a named `progress` channel, so `thread.extensions["progress"]` produces
+deterministic events.
 
 No real LLM is used — message streaming is simulated by yielding a list of
 `AIMessageChunk`s from the node. This keeps the integration suite
@@ -38,33 +40,9 @@ from langchain_core.tools import tool
 from langgraph.config import get_stream_writer
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
-from langgraph.stream import StreamChannel, StreamTransformer
-from langgraph.stream._types import ProtocolEvent
-from langgraph.stream.transformers import UpdatesTransformer
+from langgraph.stream import ProtocolEvent, StreamChannel, StreamTransformer
+from langgraph.stream.transformers import CustomTransformer, UpdatesTransformer
 from langgraph.types import interrupt
-
-
-class _ProgressTransformer(StreamTransformer):
-    required_stream_modes = ("custom",)
-
-    def __init__(self, scope: tuple[str, ...] = ()) -> None:
-        super().__init__(scope)
-        self._channel: StreamChannel[dict[str, Any]] = StreamChannel("progress")
-
-    def init(self) -> dict[str, Any]:
-        return {"progress": self._channel}
-
-    def process(self, event: ProtocolEvent) -> bool:
-        if event["method"] == "custom":
-            params = event["params"]
-            data = params["data"]
-            if (
-                params["namespace"] == list(self.scope)
-                and isinstance(data, dict)
-                and data.get("name") == "progress"
-            ):
-                self._channel.push(data)
-        return True
 
 
 class _StreamingFakeChatModel(BaseChatModel):
@@ -297,6 +275,33 @@ def run_subgraph(state: AgentState) -> dict[str, Any]:
     }
 
 
+class ProgressTransformer(StreamTransformer):
+    """The server only routes named channels to `thread.extensions[name]`."""
+
+    required_stream_modes = ("custom",)
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
+        self._channel: StreamChannel[dict[str, Any]] = StreamChannel("progress")
+        self._scope_list = list(scope)
+
+    def init(self) -> dict[str, Any]:
+        return {"progress": self._channel}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        if event["method"] != "custom":
+            return True
+        params = event["params"]
+        data = params["data"]
+        if (
+            params["namespace"] == self._scope_list
+            and isinstance(data, dict)
+            and data.get("name") == "progress"
+        ):
+            self._channel.push(data)
+        return True
+
+
 # ---------------------------------------------------------------------------
 # Top-level graph
 # ---------------------------------------------------------------------------
@@ -316,5 +321,10 @@ _builder.set_finish_point("run_subgraph")
 
 graph = _builder.compile(
     name="v3_integration_agent",
-    transformers=[_ProgressTransformer, UpdatesTransformer],
+    # Register transformers so ``custom`` (``get_stream_writer()``) and
+    # ``updates`` channels emit on the wire. ``MessagesTransformer`` is
+    # auto-registered by the v3 mux for any graph that streams a chat
+    # model. ``ValuesTransformer`` / ``LifecycleTransformer`` are also
+    # always-on natives.
+    transformers=[CustomTransformer, UpdatesTransformer, ProgressTransformer],
 )

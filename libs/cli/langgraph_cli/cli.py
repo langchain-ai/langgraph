@@ -1,10 +1,11 @@
-"""CLI entrypoint for LangGraph API server."""
+"""CLI entrypoint for Agent Server."""
 
 import os
 import pathlib
 import shutil
 import sys
 from collections.abc import Sequence
+from urllib.parse import SplitResult, urlencode, urlsplit, urlunsplit
 
 import click
 import click.exceptions
@@ -45,7 +46,7 @@ OPT_CONFIG = click.option(
 
     \b
     Config file must be a JSON file that has the following keys:
-    - "dependencies": array of dependencies for langgraph API server. Dependencies can be one of the following:
+    - "dependencies": array of dependencies for the Agent Server. Dependencies can be one of the following:
       - ".", which would look for local python packages, as well as pyproject.toml, setup.py or requirements.txt in the app directory
       - "./local_package"
       - "<package_name>
@@ -140,17 +141,6 @@ OPT_VERBOSE = click.option(
     help="Show more output from the server logs",
 )
 OPT_WATCH = click.option("--watch", is_flag=True, help="Restart on file changes")
-OPT_DEBUGGER_PORT = click.option(
-    "--debugger-port",
-    type=int,
-    help="Pull the debugger image locally and serve the UI on specified port",
-)
-OPT_DEBUGGER_BASE_URL = click.option(
-    "--debugger-base-url",
-    type=str,
-    help="URL used by the debugger to access LangGraph API. Defaults to http://127.0.0.1:[PORT]",
-)
-
 OPT_POSTGRES_URI = click.option(
     "--postgres-uri",
     help="Postgres URI to use for the database. Defaults to launching a local database",
@@ -160,7 +150,7 @@ OPT_API_VERSION = click.option(
     "--api-version",
     type=str,
     help=(
-        "API server version to use for the base image. If unspecified, the "
+        "Agent Server version to use for the base image. If unspecified, the "
         "latest stable version will be used. Compatible ranges like "
         "~=0.11.0.dev5 stay on 0.11.0.dev5 while only newer dev builds exist, "
         "then resolve to the newest matching rc or stable release, for example "
@@ -242,18 +232,94 @@ cli.add_command(deploy)
 # ---------------------------------------------------------------------------
 
 
+def _validated_http_url(value: str, option_name: str) -> SplitResult:
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+        _ = parsed.port
+    except ValueError as exc:
+        raise click.UsageError(
+            f"{option_name} must be a valid HTTP(S) URL without credentials."
+        ) from exc
+
+    if (
+        value != value.strip()
+        or parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise click.UsageError(
+            f"{option_name} must be a valid HTTP(S) URL without credentials."
+        )
+    return parsed
+
+
+def _studio_link(
+    *,
+    port: int,
+    studio_url: str | None,
+    api_url: str | None,
+    debugger_base_url: str | None,
+) -> str:
+    if debugger_base_url is not None:
+        if api_url is not None and api_url != debugger_base_url:
+            raise click.UsageError(
+                "--api-url and --debugger-base-url cannot specify different URLs."
+            )
+        click.echo(
+            "Warning: --debugger-base-url is deprecated; use --api-url instead.",
+            err=True,
+        )
+        api_url = debugger_base_url
+
+    studio_url = "https://smith.langchain.com" if studio_url is None else studio_url
+    api_url = f"http://127.0.0.1:{port}" if api_url is None else api_url
+    studio_parts = _validated_http_url(studio_url, "--studio-url")
+    _validated_http_url(api_url, "--api-url")
+    if studio_parts.query or studio_parts.fragment:
+        raise click.UsageError(
+            "--studio-url must not include a query string or fragment."
+        )
+
+    studio_path = f"{studio_parts.path.rstrip('/')}/studio/"
+    return urlunsplit(
+        studio_parts._replace(
+            path=studio_path,
+            query=urlencode({"baseUrl": api_url}),
+        )
+    )
+
+
 @OPT_RECREATE
 @OPT_PULL
 @OPT_PORT
 @OPT_DOCKER_COMPOSE
 @OPT_CONFIG
 @OPT_VERBOSE
-@OPT_DEBUGGER_PORT
-@OPT_DEBUGGER_BASE_URL
 @OPT_WATCH
 @OPT_POSTGRES_URI
 @OPT_API_VERSION
 @OPT_ENGINE_RUNTIME_MODE
+@click.option(
+    "--studio-url",
+    type=str,
+    default=None,
+    help="URL of the LangGraph Studio instance. Defaults to https://smith.langchain.com",
+)
+@click.option(
+    "--api-url",
+    type=str,
+    default=None,
+    help="URL that LangGraph Studio uses to access the API. Defaults to http://127.0.0.1:[PORT]",
+)
+@click.option(
+    "--debugger-base-url",
+    type=str,
+    default=None,
+    hidden=True,
+)
 @click.option(
     "--image",
     type=str,
@@ -264,7 +330,7 @@ cli.add_command(deploy)
 @click.option(
     "--base-image",
     default=None,
-    help="Base image to use for the LangGraph API server. Pin to specific versions using version tags. Defaults to langchain/langgraph-api or langchain/langgraphjs-api."
+    help="Base image to use for the Agent Server. Pin to specific versions using version tags. Defaults to langchain/langgraph-api or langchain/langgraphjs-api."
     "\n\n    \b\nExamples:\n    --base-image langchain/langgraph-server:0.2.18  # Pin to a specific patch version"
     "\n    --base-image langchain/langgraph-server:0.2  # Pin to a minor version (Python)",
 )
@@ -273,7 +339,7 @@ cli.add_command(deploy)
     is_flag=True,
     help="Wait for services to start before returning. Implies --detach",
 )
-@cli.command(help="🚀 Launch LangGraph API server.")
+@cli.command(help="🚀 Launch Agent Server.")
 @log_command
 def up(
     config: pathlib.Path,
@@ -284,17 +350,24 @@ def up(
     watch: bool,
     wait: bool,
     verbose: bool,
-    debugger_port: int | None,
-    debugger_base_url: str | None,
     postgres_uri: str | None,
     api_version: str | None,
     engine_runtime_mode: str,
+    studio_url: str | None,
+    api_url: str | None,
+    debugger_base_url: str | None,
     image: str | None,
     base_image: str | None,
 ):
-    click.secho("Starting LangGraph API server...", fg="green")
+    studio_link = _studio_link(
+        port=port,
+        studio_url=studio_url,
+        api_url=api_url,
+        debugger_base_url=debugger_base_url,
+    )
+    click.secho("Starting Agent Server...", fg="green")
     click.secho(
-        """For local dev, requires env var LANGSMITH_API_KEY with access to LangSmith Deployment.
+        """For local dev, requires env var LANGSMITH_API_KEY with access to LangSmith Agent Server.
 For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KEY.""",
     )
     with Runner() as runner, Progress(message="Pulling...") as set:
@@ -308,8 +381,6 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
             pull=pull,
             watch=watch,
             verbose=verbose,
-            debugger_port=debugger_port,
-            debugger_base_url=debugger_base_url,
             postgres_uri=postgres_uri,
             api_version=api_version,
             engine_runtime_mode=engine_runtime_mode,
@@ -337,20 +408,12 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
             if "unpacking to docker.io" in line:
                 set("Starting...")
             elif "Application startup complete" in line:
-                debugger_origin = (
-                    f"http://localhost:{debugger_port}"
-                    if debugger_port
-                    else "https://smith.langchain.com"
-                )
-                debugger_base_url_query = (
-                    debugger_base_url or f"http://127.0.0.1:{port}"
-                )
                 set("")
                 sys.stdout.write(
                     f"""Ready!
 - API: http://localhost:{port}
 - Docs: http://localhost:{port}/docs
-- LangGraph Studio: {debugger_origin}/studio/?baseUrl={debugger_base_url_query}
+- LangGraph Studio: {studio_link}
 """
                 )
                 sys.stdout.flush()
@@ -394,7 +457,7 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
 )
 @click.option(
     "--base-image",
-    help="Base image to use for the LangGraph API server. Pin to specific versions using version tags. Defaults to langchain/langgraph-api or langchain/langgraphjs-api."
+    help="Base image to use for the Agent Server. Pin to specific versions using version tags. Defaults to langchain/langgraph-api or langchain/langgraphjs-api."
     "\n\n    \b\nExamples:\n    --base-image langchain/langgraph-server:0.2.18  # Pin to a specific patch version"
     "\n    --base-image langchain/langgraph-server:0.2  # Pin to a minor version (Python)",
 )
@@ -410,7 +473,7 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
 )
 @click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
 @cli.command(
-    help="📦 Build LangGraph API server Docker image.",
+    help="📦 Build Agent Server Docker image.",
     context_settings=dict(
         ignore_unknown_options=True,
     ),
@@ -527,12 +590,12 @@ tests
 @OPT_CONFIG
 @click.argument("save_path", type=click.Path(resolve_path=True))
 @cli.command(
-    help="🐳 Generate a Dockerfile for the LangGraph API server, with Docker Compose options."
+    help="🐳 Generate a Dockerfile for the Agent Server, with Docker Compose options."
 )
 @click.option(
     "--add-docker-compose",
     help=(
-        "Add additional files for running the LangGraph API server with "
+        "Add additional files for running the Agent Server with "
         "docker-compose. These files include a docker-compose.yml, .env file, "
         "and a .dockerignore file."
     ),
@@ -540,7 +603,7 @@ tests
 )
 @click.option(
     "--base-image",
-    help="Base image to use for the LangGraph API server. Pin to specific versions using version tags. Defaults to langchain/langgraph-api or langchain/langgraphjs-api."
+    help="Base image to use for the Agent Server. Pin to specific versions using version tags. Defaults to langchain/langgraph-api or langchain/langgraphjs-api."
     "\n\n    \b\nExamples:\n    --base-image langchain/langgraph-server:0.2.18  # Pin to a specific patch version"
     "\n    --base-image langchain/langgraph-server:0.2  # Pin to a minor version (Python)",
 )
@@ -632,7 +695,7 @@ def dockerfile(
                         "\n",
                         "# LANGSMITH_API_KEY=your-api-key",
                         "\n",
-                        "# Or if you have a LangSmith Deployment license key, "
+                        "# Or if you have an Agent Server license key, "
                         "then uncomment the following line: ",
                         "\n",
                         "# LANGGRAPH_CLOUD_LICENSE_KEY=your-license-key",
@@ -729,7 +792,7 @@ def dockerfile(
     "--server-log-level",
     type=str,
     default="WARNING",
-    help="Set the log level for the API server.",
+    help="Set the log level for the Agent Server.",
 )
 @click.option(
     "--ssl-certfile",
@@ -757,7 +820,7 @@ def dockerfile(
 )
 @cli.command(
     "dev",
-    help="🏃‍♀️‍➡️ Run LangGraph API server in development mode with hot reloading and debugging support",
+    help="🏃‍♀️‍➡️ Run Agent Server in development mode with hot reloading and debugging support",
 )
 @log_command
 def dev(
@@ -776,7 +839,7 @@ def dev(
     ssl_certfile: pathlib.Path | None,
     ssl_keyfile: pathlib.Path | None,
 ):
-    """CLI entrypoint for running the LangGraph API server."""
+    """CLI entrypoint for running the Agent Server."""
     if (ssl_certfile is None) != (ssl_keyfile is None):
         raise click.UsageError(
             "Both --ssl-certfile and --ssl-keyfile must be provided to enable HTTPS."
@@ -936,8 +999,6 @@ def prepare_args_and_stdin(
     docker_compose: pathlib.Path | None,
     port: int,
     watch: bool,
-    debugger_port: int | None = None,
-    debugger_base_url: str | None = None,
     postgres_uri: str | None = None,
     api_version: str | None = None,
     engine_runtime_mode: str = "combined_queue_worker",
@@ -951,8 +1012,6 @@ def prepare_args_and_stdin(
     stdin = langgraph_cli.docker.compose(
         capabilities,
         port=port,
-        debugger_port=debugger_port,
-        debugger_base_url=debugger_base_url,
         postgres_uri=postgres_uri,
         image=image,
         base_image=base_image,
@@ -990,15 +1049,13 @@ def prepare(
     pull: bool,
     watch: bool,
     verbose: bool,
-    debugger_port: int | None = None,
-    debugger_base_url: str | None = None,
     postgres_uri: str | None = None,
     api_version: str | None = None,
     engine_runtime_mode: str = "combined_queue_worker",
     image: str | None = None,
     base_image: str | None = None,
 ) -> tuple[list[str], str]:
-    """Prepare the arguments and stdin for running the LangGraph API server."""
+    """Prepare the arguments and stdin for running the Agent Server."""
     config_json = langgraph_cli.config.validate_config_file(config_path)
     warn_non_wolfi_distro(config_json)
     # pull latest images
@@ -1033,8 +1090,6 @@ def prepare(
         docker_compose=docker_compose,
         port=port,
         watch=watch,
-        debugger_port=debugger_port,
-        debugger_base_url=debugger_base_url or f"http://127.0.0.1:{port}",
         postgres_uri=postgres_uri,
         api_version=api_version,
         engine_runtime_mode=engine_runtime_mode,
