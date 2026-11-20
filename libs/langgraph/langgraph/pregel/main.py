@@ -1264,6 +1264,7 @@ class Pregel(
             saved.checkpoint,
             saver=saver,
             config=saved.config,
+            metadata=saved.metadata,
         )
         # tasks for this checkpoint
         next_tasks = prepare_next_tasks(
@@ -1389,6 +1390,7 @@ class Pregel(
             saved.checkpoint,
             saver=saver,
             config=saved.config,
+            metadata=saved.metadata,
         )
         # tasks for this checkpoint
         next_tasks = prepare_next_tasks(
@@ -1710,6 +1712,7 @@ class Pregel(
                 checkpoint,
                 saver=checkpointer,
                 config=saved.config if saved is not None else None,
+                metadata=saved.metadata if saved is not None else None,
             )
             values, as_node = updates[0][:2]
 
@@ -2213,6 +2216,7 @@ class Pregel(
                 checkpoint,
                 saver=checkpointer,
                 config=saved.config if saved is not None else None,
+                metadata=saved.metadata if saved is not None else None,
             )
             values, as_node = updates[0][:2]
             # no values, just clear all tasks

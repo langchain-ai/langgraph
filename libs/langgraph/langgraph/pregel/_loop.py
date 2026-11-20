@@ -1929,6 +1929,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             self.checkpoint,
             saver=self.checkpointer,
             config=self.checkpoint_config,
+            metadata=self.checkpoint_metadata,
         )
         self.stack.push(self._suppress_interrupt)
         self.status = "input"
@@ -2188,6 +2189,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             self.checkpoint,
             saver=self.checkpointer,
             config=self.checkpoint_config,
+            metadata=self.checkpoint_metadata,
         )
         self.stack.push(self._suppress_interrupt)
         self.status = "input"
