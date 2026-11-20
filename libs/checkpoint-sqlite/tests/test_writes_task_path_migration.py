@@ -149,3 +149,58 @@ async def test_async_read_only_legacy_database_still_reads_delta_history(
         got = await saver.aget_delta_channel_history(config=child, channels=["ch"])
 
     assert got["ch"] == {"seed": "seed", "writes": [("task", "ch", "write")]}
+
+
+class CustomDriverOperationalError(Exception):
+    """Simulates an OperationalError from non-stdlib SQLite drivers such as sqlcipher3."""
+
+
+def test_setup_handles_non_stdlib_driver_duplicate_column_error(
+    tmp_path: Path,
+) -> None:
+    db = tmp_path / "custom_driver.sqlite"
+    real_conn = sqlite3.connect(db)
+
+    class NonStdlibDriverConnProxy:
+        def __init__(self, target: sqlite3.Connection) -> None:
+            self._target = target
+
+        def __getattr__(self, name: str):
+            return getattr(self._target, name)
+
+        def executescript(self, sql: str) -> None:
+            self._target.executescript(sql)
+
+        def execute(self, sql: str, *args, **kwargs):
+            if "ALTER TABLE writes ADD COLUMN task_path" in sql:
+                raise CustomDriverOperationalError("duplicate column name: task_path")
+            return self._target.execute(sql, *args, **kwargs)
+
+        def commit(self) -> None:
+            self._target.commit()
+
+        def cursor(self):
+            return self._target.cursor()
+
+    proxy = NonStdlibDriverConnProxy(real_conn)
+    saver = SqliteSaver(proxy)  # type: ignore[arg-type]
+    saver.setup()
+    assert saver.is_setup is True
+
+
+async def test_async_setup_handles_non_stdlib_driver_duplicate_column_error(
+    tmp_path: Path,
+) -> None:
+    db = tmp_path / "custom_driver_async.sqlite"
+    async with aiosqlite.connect(db) as conn:
+        original_execute = conn.execute
+
+        def custom_execute(sql: str, *args, **kwargs):
+            if "ALTER TABLE writes ADD COLUMN task_path" in sql:
+                raise CustomDriverOperationalError("duplicate column name: task_path")
+            return original_execute(sql, *args, **kwargs)
+
+        conn.execute = custom_execute  # type: ignore[method-assign]
+        saver = AsyncSqliteSaver(conn)
+        await saver.setup()
+        assert saver.is_setup is True

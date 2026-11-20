@@ -174,12 +174,13 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             self.conn.execute(
                 "ALTER TABLE writes ADD COLUMN task_path TEXT NOT NULL DEFAULT ''"
             )
-        except sqlite3.OperationalError as e:
+        except (sqlite3.OperationalError, Exception) as e:
             # A read-only database from before the column can still be read;
             # its rows would all read back as '' anyway.
-            if "readonly database" in str(e):
+            error_msg = str(e).lower()
+            if "readonly database" in error_msg:
                 self._has_task_path = False
-            elif "duplicate column name" not in str(e):
+            elif "duplicate column name" not in error_msg:
                 raise
 
         self.is_setup = True

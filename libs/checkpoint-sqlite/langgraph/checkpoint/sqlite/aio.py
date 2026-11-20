@@ -361,12 +361,13 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                     "ALTER TABLE writes ADD COLUMN task_path TEXT NOT NULL DEFAULT ''"
                 )
                 await self.conn.commit()
-            except aiosqlite.OperationalError as e:
+            except (aiosqlite.OperationalError, Exception) as e:
                 # A read-only database from before the column can still be read;
                 # its rows would all read back as '' anyway.
-                if "readonly database" in str(e):
+                error_msg = str(e).lower()
+                if "readonly database" in error_msg:
                     self._has_task_path = False
-                elif "duplicate column name" not in str(e):
+                elif "duplicate column name" not in error_msg:
                     raise
 
             self.is_setup = True
