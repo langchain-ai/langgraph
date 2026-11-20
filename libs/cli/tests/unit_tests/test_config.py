@@ -910,6 +910,7 @@ def test_config_to_docker_simple():
     expected_docker_stdin = f"""\
 # syntax=docker/dockerfile:1.4
 FROM langchain/langgraph-api:3.11
+WORKDIR /deps/outer-unit_tests/unit_tests
 # -- Installing local requirements --
 COPY --from=outer-requirements.txt requirements.txt /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
 RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
@@ -950,8 +951,7 @@ RUN for dep in /deps/*; do             echo "Installing $dep";             if [ 
 # -- End of local dependencies install --
 ENV LANGGRAPH_HTTP='{{"app": "/deps/examples/my_app.py:app"}}'
 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
-{FORMATTED_CLEANUP_LINES}
-WORKDIR /deps/outer-unit_tests/unit_tests\
+{FORMATTED_CLEANUP_LINES}\
 """
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
 
@@ -974,6 +974,7 @@ def test_config_to_docker_outside_path():
         """\
 # syntax=docker/dockerfile:1.4
 FROM langchain/langgraph-api:3.11
+WORKDIR /deps/outer-unit_tests/unit_tests
 # -- Adding non-package dependency unit_tests --
 ADD . /deps/outer-unit_tests/unit_tests
 RUN set -ex && \\
@@ -1008,9 +1009,6 @@ RUN for dep in /deps/*; do             echo "Installing $dep";             if [ 
 ENV LANGSERVE_GRAPHS='{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}'
 """
         + FORMATTED_CLEANUP_LINES
-        + """
-WORKDIR /deps/outer-unit_tests/unit_tests\
-"""
     )
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
     assert additional_contexts == {
@@ -1035,6 +1033,7 @@ def test_config_to_docker_pipconfig():
         """\
 FROM langchain/langgraph-api:3.11
 ADD pipconfig.txt /pipconfig.txt
+WORKDIR /deps/outer-unit_tests/unit_tests
 # -- Adding non-package dependency unit_tests --
 ADD . /deps/outer-unit_tests/unit_tests
 RUN set -ex && \\
@@ -1055,9 +1054,6 @@ RUN for dep in /deps/*; do             echo "Installing $dep";             if [ 
 ENV LANGSERVE_GRAPHS='{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}'
 """
         + FORMATTED_CLEANUP_LINES
-        + """
-WORKDIR /deps/outer-unit_tests/unit_tests\
-"""
     )
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
     assert additional_contexts == {}
@@ -1144,6 +1140,7 @@ dependencies = ["langchain"]"""
     os.remove(pyproject_path)
     expected_docker_stdin = (
         """FROM langchain/langgraph-api:3.11
+WORKDIR /deps/unit_tests
 # -- Adding local package . --
 ADD . /deps/unit_tests
 # -- End of local package . --
@@ -1153,9 +1150,6 @@ RUN for dep in /deps/*; do             echo "Installing $dep";             if [ 
 ENV LANGSERVE_GRAPHS='{"agent": "/deps/unit_tests/graphs/agent.py:graph"}'
 """
         + FORMATTED_CLEANUP_LINES
-        + "\n"
-        + "WORKDIR /deps/unit_tests"
-        ""
     )
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
     assert additional_contexts == {}
@@ -1525,6 +1519,7 @@ def test_config_to_docker_gen_ui_python():
 
     expected_docker_stdin = f"""FROM langchain/langgraph-api:3.11
 RUN /storage/install-node.sh
+WORKDIR /deps/outer-unit_tests/unit_tests
 # -- Adding non-package dependency unit_tests --
 ADD . /deps/outer-unit_tests/unit_tests
 RUN set -ex && \\
@@ -1547,11 +1542,9 @@ ENV LANGGRAPH_UI_CONFIG='{{"shared": ["nuqs"]}}'
 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 # -- Installing JS dependencies --
 ENV NODE_VERSION=20
-WORKDIR /deps/outer-unit_tests/unit_tests
 RUN npm i && tsx /api/langgraph_api/js/build.mts
 # -- End of JS dependencies install --
-{FORMATTED_CLEANUP_LINES}
-WORKDIR /deps/outer-unit_tests/unit_tests"""
+{FORMATTED_CLEANUP_LINES}"""
 
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
     assert additional_contexts == {}
@@ -1572,6 +1565,7 @@ def test_config_to_docker_multiplatform():
 
     expected_docker_stdin = f"""FROM langchain/langgraph-api:3.11
 RUN /storage/install-node.sh
+WORKDIR /deps/outer-unit_tests/unit_tests
 # -- Adding non-package dependency unit_tests --
 ADD . /deps/outer-unit_tests/unit_tests
 RUN set -ex && \\
@@ -1592,11 +1586,9 @@ RUN for dep in /deps/*; do             echo "Installing $dep";             if [ 
 ENV LANGSERVE_GRAPHS='{{"python": "/deps/outer-unit_tests/unit_tests/multiplatform/python.py:graph", "js": "/deps/outer-unit_tests/unit_tests/multiplatform/js.mts:graph"}}'
 # -- Installing JS dependencies --
 ENV NODE_VERSION=22
-WORKDIR /deps/outer-unit_tests/unit_tests
 RUN npm i && tsx /api/langgraph_api/js/build.mts
 # -- End of JS dependencies install --
-{FORMATTED_CLEANUP_LINES}
-WORKDIR /deps/outer-unit_tests/unit_tests"""
+{FORMATTED_CLEANUP_LINES}"""
 
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
     assert additional_contexts == {}
@@ -2803,7 +2795,7 @@ def test_config_retain_build_tools():
         "/usr/local/lib/python*/site-packages/" + pckg + "*" in docker_true
         for pckg in _BUILD_TOOLS
     )
-    assert "RUN pip uninstall -y pip setuptools wheel" not in docker_true
+    assert "pip uninstall" not in docker_true
     config_false = validate_config(
         {**copy.deepcopy(base_config), "keep_pkg_tools": False}
     )
@@ -2814,7 +2806,7 @@ def test_config_retain_build_tools():
         "/usr/local/lib/python*/site-packages/" + pckg + "*" in docker_false
         for pckg in _BUILD_TOOLS
     )
-    assert "RUN pip uninstall -y pip setuptools wheel" in docker_false
+    assert "pip uninstall -y pip setuptools wheel && \\" in docker_false
     config_list = validate_config(
         {**copy.deepcopy(base_config), "keep_pkg_tools": ["pip", "setuptools"]}
     )
@@ -2829,8 +2821,79 @@ def test_config_retain_build_tools():
         "/usr/local/lib/python*/site-packages/" + pckg + "*" in docker_list
         for pckg in ("pip", "setuptools")
     )
-    assert "RUN pip uninstall -y wheel" in docker_list
-    assert "RUN pip uninstall -y pip setuptools" not in docker_list
+    assert "pip uninstall -y wheel && \\" in docker_list
+    assert "pip uninstall -y pip setuptools" not in docker_list
+
+
+_CLEANUP_PREFIX = """\
+# -- Ensure user deps didn't inadvertently overwrite langgraph-api, then remove build deps from the final image --
+RUN mkdir -p /api/langgraph_api /api/langgraph_runtime /api/langgraph_license && \\
+    touch /api/langgraph_api/__init__.py /api/langgraph_runtime/__init__.py /api/langgraph_license/__init__.py && \\
+    PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir --no-deps -e /api"""
+_RM_ALL = """ && \\
+    pip uninstall -y pip setuptools wheel && \\
+    (rm -rf /usr/local/lib/python*/site-packages/pip* /usr/local/lib/python*/site-packages/setuptools* /usr/local/lib/python*/site-packages/wheel* && find /usr/local/bin -name "pip*" -delete || true) && \\
+    (rm -rf /usr/lib/python*/site-packages/pip* /usr/lib/python*/site-packages/setuptools* /usr/lib/python*/site-packages/wheel* && find /usr/bin -name "pip*" -delete || true)"""
+_UV = "uv pip install --system"
+
+
+@pytest.mark.parametrize(
+    ("install_cmd", "to_uninstall", "pip_installer", "expected_tail"),
+    [
+        (
+            _UV,
+            _BUILD_TOOLS,
+            "uv",
+            _RM_ALL
+            + """ && \\
+    uv pip uninstall --system pip setuptools wheel && \\
+    rm /usr/bin/uv /usr/bin/uvx""",
+        ),
+        ("pip install", _BUILD_TOOLS, "pip", _RM_ALL),
+        # keep_pkg_tools: true
+        (_UV, (), "uv", " && \\\n    rm /usr/bin/uv /usr/bin/uvx"),
+        ("pip install", (), "pip", ""),
+        # keep_pkg_tools: ["pip", "setuptools"]
+        (
+            _UV,
+            ("wheel",),
+            "uv",
+            """ && \\
+    pip uninstall -y wheel && \\
+    (rm -rf /usr/local/lib/python*/site-packages/wheel*) && \\
+    (rm -rf /usr/lib/python*/site-packages/wheel*) && \\
+    uv pip uninstall --system wheel && \\
+    rm /usr/bin/uv /usr/bin/uvx""",
+        ),
+    ],
+)
+def test_pip_cleanup_lines_single_run(
+    install_cmd, to_uninstall, pip_installer, expected_tail
+):
+    # The whole repair/cleanup tail is one RUN (one BuildKit snapshot), and
+    # each `|| true` is scoped to its own `rm -rf` group by a subshell.
+    actual = _get_pip_cleanup_lines(install_cmd, to_uninstall, pip_installer)
+    assert actual == _CLEANUP_PREFIX.format(install_cmd=install_cmd) + expected_tail
+    assert actual.count("RUN ") == 1
+
+
+def test_config_to_docker_workdir_before_sources():
+    docker, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "dependencies": ["langchain", "."],
+                "graphs": {"agent": "./agent.py:graph"},
+            }
+        ),
+        base_image="langchain/langgraph-api",
+    )
+    lines = clean_empty_lines(docker).splitlines()
+    workdir = lines.index("WORKDIR /deps/outer-unit_tests/unit_tests")
+    # After the PyPI deps install (not source-dependent), before the first ADD.
+    assert lines[workdir - 1].startswith("RUN ") and "langchain" in lines[workdir - 1]
+    assert lines[workdir + 2] == "ADD . /deps/outer-unit_tests/unit_tests"
+    assert [ln for ln in lines if ln.startswith("WORKDIR")] == [lines[workdir]]
 
 
 # config_to_compose
@@ -2843,6 +2906,7 @@ def test_config_to_compose_simple_config():
             context: .
             dockerfile_inline: |
                 FROM langchain/langgraph-api:3.11
+                WORKDIR /deps/outer-unit_tests/unit_tests
                 # -- Adding non-package dependency unit_tests --
                 ADD . /deps/outer-unit_tests/unit_tests
                 RUN set -ex && \\
@@ -2862,7 +2926,6 @@ def test_config_to_compose_simple_config():
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
-                WORKDIR /deps/outer-unit_tests/unit_tests
         """
     actual_compose_stdin = config_to_compose(
         PATH_TO_CONFIG,
@@ -2884,6 +2947,7 @@ def test_config_to_compose_env_vars():
             context: .
             dockerfile_inline: |
                 FROM langchain/langgraph-api-custom:3.11
+                WORKDIR /deps/outer-unit_tests/unit_tests
                 # -- Adding non-package dependency unit_tests --
                 ADD . /deps/outer-unit_tests/unit_tests
                 RUN set -ex && \\
@@ -2903,7 +2967,6 @@ def test_config_to_compose_env_vars():
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
-                WORKDIR /deps/outer-unit_tests/unit_tests
         """
     openai_api_key = "key"
     actual_compose_stdin = config_to_compose(
@@ -2929,6 +2992,7 @@ def test_config_to_compose_env_file():
             context: .
             dockerfile_inline: |
                 FROM langchain/langgraph-api:3.11
+                WORKDIR /deps/outer-unit_tests/unit_tests
                 # -- Adding non-package dependency unit_tests --
                 ADD . /deps/outer-unit_tests/unit_tests
                 RUN set -ex && \\
@@ -2948,7 +3012,6 @@ def test_config_to_compose_env_file():
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
-                WORKDIR /deps/outer-unit_tests/unit_tests
         """
     actual_compose_stdin = config_to_compose(
         PATH_TO_CONFIG,
@@ -2967,6 +3030,7 @@ def test_config_to_compose_watch():
             context: .
             dockerfile_inline: |
                 FROM langchain/langgraph-api:3.11
+                WORKDIR /deps/outer-unit_tests/unit_tests
                 # -- Adding non-package dependency unit_tests --
                 ADD . /deps/outer-unit_tests/unit_tests
                 RUN set -ex && \\
@@ -2986,7 +3050,6 @@ def test_config_to_compose_watch():
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
-                WORKDIR /deps/outer-unit_tests/unit_tests
         
         develop:
             watch:
@@ -3014,6 +3077,7 @@ def test_config_to_compose_end_to_end():
             context: .
             dockerfile_inline: |
                 FROM langchain/langgraph-api:3.11
+                WORKDIR /deps/outer-unit_tests/unit_tests
                 # -- Adding non-package dependency unit_tests --
                 ADD . /deps/outer-unit_tests/unit_tests
                 RUN set -ex && \\
@@ -3033,7 +3097,6 @@ def test_config_to_compose_end_to_end():
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
-                WORKDIR /deps/outer-unit_tests/unit_tests
         
         develop:
             watch:
