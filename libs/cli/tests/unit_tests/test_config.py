@@ -2357,7 +2357,56 @@ def test_config_to_docker_uv_lock_does_not_apply_gitignore():
             base_image="langchain/langgraph-api:0.2.47",
         )
 
-        assert "ADD README.md /deps/workspace/README.md" in docker
+        assert "ADD . /deps/workspace\n" in docker
+
+
+def test_config_to_docker_uv_lock_copies_root_once_when_dockerignore_drops_builtins():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = pathlib.Path(tmpdir) / "single"
+        project_root.mkdir()
+        (project_root / "uv.lock").write_text("# uv lock file\n")
+        (project_root / "pyproject.toml").write_text(
+            textwrap.dedent(
+                """
+                [project]
+                name = "single-app"
+                version = "0.1.0"
+                dependencies = ["httpx>=0.28"]
+
+                [build-system]
+                requires = ["setuptools>=61"]
+                build-backend = "setuptools.build_meta"
+                """
+            ).strip()
+            + "\n"
+        )
+        (project_root / "langgraph.json").write_text("{}\n")
+        (project_root / "src").mkdir()
+        (project_root / "src" / "agent.py").write_text("graph = object()\n")
+        (project_root / "docs").mkdir()
+        (project_root / "docs" / "index.md").write_text("# docs\n")
+        (project_root / ".git").mkdir()
+        (project_root / ".git" / "HEAD").write_text("ref: refs/heads/main\n")
+        (project_root / ".venv").mkdir()
+        (project_root / ".venv" / "pyvenv.cfg").write_text("home = /usr\n")
+        (project_root / ".dockerignore").write_text(".git\n.venv\n")
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {"agent": "./src/agent.py:graph"},
+                "source": {"kind": "uv"},
+            }
+        )
+        docker, _ = config_to_docker(
+            project_root / "langgraph.json",
+            config,
+            base_image="langchain/langgraph-api:0.2.47",
+        )
+
+        assert "ADD . /deps/workspace\n" in docker
+        assert "ADD src " not in docker
+        assert "ADD docs " not in docker
 
 
 def test_config_to_docker_uv_lock_skips_dockerignore_entries_in_workspace():
