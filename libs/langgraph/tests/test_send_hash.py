@@ -17,7 +17,10 @@ def test_send_preserves_list_vs_tuple_equality() -> None:
     left = Send("process", {"items": [1, 2]})
     right = Send("process", {"items": (1, 2)})
     assert left != right
-    assert hash(left) != hash(right) or left != right
+    # Distinct container types remain unequal even after either is hashed.
+    hash(left)
+    hash(right)
+    assert left != right
 
 
 def test_send_mutable_until_hashed() -> None:
