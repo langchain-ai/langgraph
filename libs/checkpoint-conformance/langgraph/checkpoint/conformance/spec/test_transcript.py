@@ -6,8 +6,10 @@ stores one checkpoint whose channels hold one `_TranscriptWrite` each, as a
 child of checkpoint `from` when given; `expect` is `"conflict"`
 (`TranscriptConflictError`) or `"invalid"` (`ValueError`). A `read` step
 compares values, or expects `"invalid"`, and `expect_later` compares
-`has_later_entries`. `ns` is the checkpoint namespace, default `""`. An entry
-`{"seq": n, "text": s}` has `value = s`.
+`has_later_entries`, and `expect_keys` compares `[message_id, run_id]` per
+entry. `ns` is the checkpoint namespace, default `""`. An entry
+`{"seq": n, "text": s}` has `value = s`, `message_id` from `"message_id"`
+(default `s`) and `run_id` from `"run_id"` (default `None`).
 """
 
 from __future__ import annotations
@@ -64,7 +66,13 @@ async def _run_case(saver: BaseCheckpointSaver, case: dict[str, Any]) -> None:
                     transcript_id=ident("transcript", w["transcript"]),
                     head=w["head"],
                     entries=[
-                        _TranscriptEntry(e["seq"], e["text"]) for e in w["entries"]
+                        _TranscriptEntry(
+                            e["seq"],
+                            e.get("message_id", e["text"]),
+                            e.get("run_id"),
+                            e["text"],
+                        )
+                        for e in w["entries"]
                     ],
                     parent_transcript_id=ident("transcript", w["parent"])
                     if "parent" in w
@@ -113,6 +121,11 @@ async def _run_case(saver: BaseCheckpointSaver, case: dict[str, Any]) -> None:
             )
             seqs = [e.seq for e in result.entries]
             assert seqs == list(range(1, len(seqs) + 1)), f"step {i}: seqs {seqs}"
+            if "expect_keys" in step:
+                keys = [[e.message_id, e.run_id] for e in result.entries]
+                assert keys == step["expect_keys"], (
+                    f"step {i}: expected keys {step['expect_keys']}, got {keys}"
+                )
             if "expect_later" in step:
                 assert result.has_later_entries == step["expect_later"], (
                     f"step {i}: has_later_entries is {result.has_later_entries}"
@@ -126,7 +139,7 @@ async def test_pointer_is_stored_in_place_of_the_write(
     cfg: RunnableConfig = {
         "configurable": {"thread_id": str(uuid4()), "checkpoint_ns": ""}
     }
-    write = _TranscriptWrite("t", 1, [_TranscriptEntry(1, "a")])
+    write = _TranscriptWrite("t", 1, [_TranscriptEntry(1, "m1", "r1", "a")])
     checkpoint = generate_checkpoint(
         channel_values={"messages": write}, channel_versions={"messages": 1}
     )

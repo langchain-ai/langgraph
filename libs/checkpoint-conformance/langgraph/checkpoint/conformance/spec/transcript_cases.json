@@ -1,5 +1,48 @@
 [
   {
+    "name": "entry_keys_round_trip",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "message_id": "m1", "run_id": "r1", "text": "a"}, {"seq": 2, "message_id": "m2", "run_id": "r1", "text": "b"}], "head": 2}]}},
+      {"read": {"thread": "t", "transcript": "T", "head": 2}, "expect": ["a", "b"], "expect_keys": [["m1", "r1"], ["m2", "r1"]]}
+    ]
+  },
+  {
+    "name": "fork_copy_keeps_entry_keys",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "message_id": "m1", "run_id": "r1", "text": "a"}, {"seq": 2, "message_id": "m2", "run_id": "r1", "text": "b"}, {"seq": 3, "message_id": "m3", "run_id": "r2", "text": "c"}, {"seq": 4, "message_id": "m4", "run_id": "r2", "text": "d"}], "head": 4}]}},
+      {"put": {"thread": "t", "checkpoint": "c2", "writes": [{"transcript": "T2", "parent": "T", "fork_seq": 1, "entries": [{"seq": 2, "message_id": "m3", "run_id": "r2", "text": "c"}, {"seq": 3, "message_id": "m4", "run_id": "r3", "text": "d edited"}], "head": 3}], "from": "c1"}},
+      {"read": {"thread": "t", "transcript": "T2", "head": 3}, "expect": ["a", "c", "d edited"], "expect_keys": [["m1", "r1"], ["m3", "r2"], ["m4", "r3"]]}
+    ]
+  },
+  {
+    "name": "replay_that_changes_message_id_is_conflict",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "message_id": "m1", "run_id": "r1", "text": "a"}], "head": 1}]}},
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "message_id": "other", "run_id": "r1", "text": "a"}], "head": 1}]}, "expect": "conflict"},
+      {"read": {"thread": "t", "transcript": "T", "head": 1}, "expect": ["a"], "expect_keys": [["m1", "r1"]]}
+    ]
+  },
+  {
+    "name": "replay_that_changes_run_id_is_conflict",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "message_id": "m1", "run_id": "r1", "text": "a"}], "head": 1}]}},
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "message_id": "m1", "run_id": "r2", "text": "a"}], "head": 1}]}, "expect": "conflict"},
+      {"read": {"thread": "t", "transcript": "T", "head": 1}, "expect": ["a"], "expect_keys": [["m1", "r1"]]}
+    ]
+  },
+  {
+    "name": "empty_message_id_is_invalid",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "message_id": "", "text": "a"}], "head": 1}]}, "expect": "invalid"}
+    ]
+  },
+  {
+    "name": "empty_run_id_is_invalid",
+    "steps": [
+      {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "message_id": "m1", "run_id": "", "text": "a"}], "head": 1}]}, "expect": "invalid"}
+    ]
+  },
+  {
     "name": "append_then_read",
     "steps": [
       {"put": {"thread": "t", "checkpoint": "c1", "writes": [{"transcript": "T", "entries": [{"seq": 1, "text": "a"}, {"seq": 2, "text": "b"}], "head": 2}]}},

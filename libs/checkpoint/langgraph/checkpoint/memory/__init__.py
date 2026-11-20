@@ -98,8 +98,10 @@ class InMemorySaver(
     ]
     # (thread ID, checkpoint NS, transcript ID) -> (parent transcript ID, fork seq)
     transcripts: dict[tuple[str, str, str], tuple[str, int] | None]
-    # (thread ID, checkpoint NS, transcript ID) -> seq -> blob
-    transcript_entries: dict[tuple[str, str, str], dict[int, tuple[str, bytes]]]
+    # (thread ID, checkpoint NS, transcript ID) -> seq -> (message ID, run ID, blob)
+    transcript_entries: dict[
+        tuple[str, str, str], dict[int, tuple[str, str | None, tuple[str, bytes]]]
+    ]
 
     def __init__(
         self,
@@ -229,6 +231,15 @@ class InMemorySaver(
         }
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
+        for w in writes.values():
+            for e in w.entries:
+                if not (isinstance(e.message_id, str) and e.message_id) or not (
+                    e.run_id is None or (isinstance(e.run_id, str) and e.run_id)
+                ):
+                    raise ValueError(
+                        f"transcript {w.transcript_id}: entry {e.seq} needs a non-empty "
+                        "message_id and a run_id that is None or non-empty"
+                    )
         if checkpoint_id in self.storage[thread_id][checkpoint_ns]:
             stored_refs = self._checkpoint_refs(
                 thread_id, checkpoint_ns, checkpoint_id, writes
@@ -238,6 +249,18 @@ class InMemorySaver(
                     raise ValueError(
                         f"replay of checkpoint {checkpoint_id} changes the pointer on {k}"
                     )
+                stored = self.transcript_entries.get(
+                    (thread_id, checkpoint_ns, w.transcript_id), {}
+                )
+                for e in w.entries:
+                    if e.seq not in stored or stored[e.seq][:2] != (
+                        e.message_id,
+                        e.run_id,
+                    ):
+                        raise TranscriptConflictError(
+                            f"replay of checkpoint {checkpoint_id} changes entry {e.seq} "
+                            f"of transcript {w.transcript_id}"
+                        )
             return stored_values, lambda: None
         parent_heads = {
             r.transcript_id: r.head for r in self._parent_refs(config, writes).values()
@@ -245,7 +268,10 @@ class InMemorySaver(
         # transcript -> (fork point, serialized entries this put adds)
         staged: dict[
             tuple[str, str, str],
-            tuple[tuple[str, int] | None, dict[int, tuple[str, bytes]]],
+            tuple[
+                tuple[str, int] | None,
+                dict[int, tuple[str, str | None, tuple[str, bytes]]],
+            ],
         ] = {}
         for k, w in writes.items():
             tid = w.transcript_id
@@ -299,7 +325,10 @@ class InMemorySaver(
                 )
             staged[key] = (
                 fork,
-                {e.seq: self.serde.dumps_typed(e.value) for e in w.entries},
+                {
+                    e.seq: (e.message_id, e.run_id, self.serde.dumps_typed(e.value))
+                    for e in w.entries
+                },
             )
 
         def commit() -> None:
@@ -329,8 +358,10 @@ class InMemorySaver(
             fork = self.transcripts.get(key)
             floor = fork[1] if fork else 0
             entries += [
-                _TranscriptEntry(seq, self.serde.loads_typed(blob))
-                for seq, blob in self.transcript_entries.get(key, {}).items()
+                _TranscriptEntry(seq, mid, rid, self.serde.loads_typed(blob))
+                for seq, (mid, rid, blob) in self.transcript_entries.get(
+                    key, {}
+                ).items()
                 if floor < seq <= head
             ]
             transcript_id, head = (fork[0], min(head, fork[1])) if fork else (None, 0)

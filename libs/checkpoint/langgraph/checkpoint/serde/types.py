@@ -34,10 +34,22 @@ class _DeltaSnapshot(NamedTuple):
 class _TranscriptEntry(NamedTuple):
     """One immutable entry of a transcript.
 
-    The writer assigns `seq`. The saver serializes `value` with its own serde.
+    The writer assigns `seq`. The saver serializes `value` with its own serde and
+    stores `message_id` and `run_id` as given, so readers can find messages and
+    the runs that wrote them without decoding values.
+
+    - `message_id` is the message's stable id, a non-empty string. `seq` is only a
+      slot in one transcript; `message_id` follows the message across transcripts.
+    - `run_id` is the run that appended the entry (`config["run_id"]`), a non-empty
+      string, or `None` for an entry written outside a run. Readers derive turns
+      from it.
+
+    A copy made by a rewrite or fork keeps both.
     """
 
     seq: int
+    message_id: str
+    run_id: str | None
     value: Any
 
 
@@ -70,7 +82,9 @@ class _TranscriptWrite(NamedTuple):
     - Only a channel in `new_versions` may carry entries, and one put writes each
       transcript at most once.
     - A put whose checkpoint id is already stored is a replay: its pointers must
-      equal the stored ones, and its entries are not checked or stored. A retry
+      equal the stored ones, and its entries must be stored with the same `message_id`
+      and `run_id`, else `TranscriptConflictError`. Their values are not compared, and
+      nothing is stored. A retry
       resends the same put, with the same checkpoint id.
 
     Breaking any other rule raises `ValueError`. A rejected put stores nothing.
