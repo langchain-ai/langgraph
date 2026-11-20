@@ -77,6 +77,7 @@ from langgraph.pregel._write import (
     ChannelWriteEntry,
     ChannelWriteTupleEntry,
 )
+from langgraph.runtime import Runtime
 from langgraph.types import (
     All,
     CachePolicy,
@@ -264,6 +265,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         self.context_schema = context_schema
 
         self._node_defaults: _NodeDefaults = _NodeDefaults()
+        self._cancel_handler: Callable[[Any, Runtime[ContextT]], Any] | None = None
+        self._cancel_timeout = 5.0
 
         self._add_schema(self.state_schema)
         self._add_schema(self.input_schema, allow_managed=False)
@@ -332,6 +335,41 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             defaults.error_handler = error_handler
         if timeout is not None:
             defaults.timeout = coerce_timeout_policy(timeout)
+        return self
+
+    def set_cancel_handler(
+        self,
+        handler: Callable[[StateT, Runtime[ContextT]], Any],
+        *,
+        timeout: float = 5.0,
+    ) -> Self:
+        """Set a handler that runs once when an async run of this graph is cancelled.
+
+        A cancelled node never reaches its `error_handler`, so state can be left
+        mid-step, for example an AI message whose tool call never got a result.
+        After the cancelled run finishes saving, the handler gets the latest state
+        and the run's `Runtime`. A returned update is saved with `update_state`,
+        then the cancellation propagates.
+
+        The handler runs only when the cancel message is a `RunCancelled`, as in
+        `task.cancel(RunCancelled("user stop"))`. Plain cancels, like `asyncio.timeout`
+        or a process shutting down, skip it so the run can be resumed as is.
+
+        Only top-level async runs with a checkpointer call the handler. It gets
+        `timeout` seconds in total; if it runs over or raises, the error is logged
+        and the update is skipped.
+
+        Args:
+            handler: Sync or async callable taking `(state, runtime)` and returning
+                a state update or `None`.
+            timeout: Seconds the handler may take, including the wait for the
+                cancelled run to finish saving.
+
+        Returns:
+            Self: The builder instance, for chaining.
+        """
+        self._cancel_handler = handler
+        self._cancel_timeout = timeout
         return self
 
     @property
@@ -1365,6 +1403,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             store=store,
             cache=cache,
             node_error_handler_map=node_error_handler_map,
+            cancel_handler=self._cancel_handler,
+            cancel_timeout=self._cancel_timeout,
             name=name or "LangGraph",
             stream_transformers=transformers,
         )
