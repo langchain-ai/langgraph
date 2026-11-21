@@ -18,11 +18,14 @@ from typing_extensions import TypedDict
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import END, START, StateGraph
 from langgraph.pregel import _checkpoint
+from langgraph.types import Command
 
 pytestmark = pytest.mark.anyio
 
 THREAD: RunnableConfig = {"configurable": {"thread_id": "1"}}
-WARNING = "DeltaChannel 'items' at checkpoint"
+WARNING = "DeltaChannel 'items' of thread '1' at checkpoint"
+# What the update counter in the checkpoint metadata adds to the message.
+COUNTED = "supersteps wrote to it since its last snapshot"
 
 
 class _KeepsNewest(InMemorySaver):
@@ -127,20 +130,72 @@ def test_run_on_a_thread_with_expired_checkpoints_warns_and_continues(
     out = graph.invoke({"items": ["in"]}, THREAD)
 
     assert out == {"items": ["b", "in", "a", "b"]}
-    assert any(WARNING in message for message in warnings())
+    assert any(WARNING in message and COUNTED in message for message in warnings())
 
 
-async def test_async_load_after_older_checkpoints_expired_warns(
-    warnings: Any,
-) -> None:
+def test_update_on_a_thread_with_expired_checkpoints_warns(warnings: Any) -> None:
+    graph = _graph(_KeepsNewest(keep=2))
+    graph.invoke({"items": ["in"]}, THREAD)
+
+    graph.update_state(THREAD, {"items": ["u"]})
+
+    assert any(WARNING in message and COUNTED in message for message in warnings())
+
+
+async def test_async_load_run_and_update_warn(warnings: Any) -> None:
     graph = _graph(_KeepsNewest(keep=2))
     await graph.ainvoke({"items": ["in"]}, THREAD)
 
     state = await graph.aget_state(THREAD)
-
     assert state.values == {"items": ["b"]}
     [message] = warnings()
     assert "on its parent chain is gone" in message
+    assert COUNTED in message
+
+    await graph.aupdate_state(THREAD, {"items": ["u"]})
+    assert len(warnings()) == 2
+    assert COUNTED in warnings()[1]
+
+    await graph.ainvoke({"items": ["in"]}, THREAD)
+    assert len(warnings()) > 2
+    assert all(COUNTED in message for message in warnings())
+
+
+class _OddCounter(_KeepsNewest):
+    """Returns a counter in a shape the loop never writes."""
+
+    def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
+        saved = super().get_tuple(config)
+        if saved is None:
+            return None
+        counters: Any = {"items": None}
+        return saved._replace(
+            metadata={**saved.metadata, "counters_since_delta_snapshot": counters}
+        )
+
+
+def test_a_counter_the_check_cannot_read_does_not_fail_the_load(
+    warnings: Any,
+) -> None:
+    graph = _graph(_OddCounter(keep=2))
+    graph.invoke({"items": ["in"]}, THREAD)
+
+    assert graph.get_state(THREAD).values == {"items": ["b"]}
+    [message] = warnings()
+    assert "on its parent chain is gone" in message
+    assert COUNTED not in message
+
+
+def test_first_input_as_a_command_update_does_not_warn(warnings: Any) -> None:
+    graph = _graph(_KeepsNewest(keep=100))
+
+    graph.invoke(Command(update={"items": ["in"]}, goto="a"), THREAD)
+
+    # The input checkpoint has a version for `items` and nothing before it.
+    assert [state.values for state in graph.get_state_history(THREAD)][-1] == {
+        "items": []
+    }
+    assert warnings() == []
 
 
 def test_complete_history_loads_without_a_warning(warnings: Any) -> None:

@@ -439,7 +439,9 @@ class BaseCheckpointSaver(Generic[V]):
             * Force a fresh snapshot on the kept checkpoint before deleting
               ancestors — rewrite `channel_values[k] = _DeltaSnapshot(value)`
               for each delta channel `k` (resolving `value` via the existing
-              ancestor walk first), then prune.
+              ancestor walk first) and remove `k` from the checkpoint
+              metadata's `counters_since_delta_snapshot`, which counts the
+              updates since the last snapshot, then prune.
             * Skip pruning threads whose graph uses `DeltaChannel` until one
               of the above is implemented.
         """
