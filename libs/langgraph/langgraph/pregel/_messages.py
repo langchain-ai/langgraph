@@ -554,9 +554,26 @@ def _with_message_ids(value: Any) -> Any:
             return _map_messages(value, _list_item_with_id)
         return _message_with_id(value)
     if isinstance(overwrite_value, (list, tuple)):
+        # A 2-tuple of (role, content) is a single message-like, not a
+        # sequence of two messages: only treat it as a sequence when the
+        # second element is itself a message (i.e. a 2-item list of messages).
+        if (
+            isinstance(overwrite_value, tuple)
+            and len(overwrite_value) == 2
+            and isinstance(overwrite_value[0], str)
+            and not isinstance(overwrite_value[1], BaseMessage)
+        ):
+            items = _map_messages([overwrite_value], _message_with_id)
+            return Overwrite(items)
         items = _map_messages(overwrite_value, _message_with_id)
         if items is not overwrite_value:
             return Overwrite(items)
+        return value
+    # Scalar overwrite payload: coerce to a message (when possible) and wrap
+    # in a list so the DeltaChannel always holds a valid list value.
+    new = _message_with_id(overwrite_value)
+    if isinstance(new, BaseMessage):
+        return Overwrite([new])
     return value
 
 
@@ -566,6 +583,8 @@ def _with_base_message_ids(value: Any) -> Any:
         if isinstance(overwrite_value, (list, tuple)):
             for item in overwrite_value:
                 _stamp_message_id(item)
+        else:
+            _stamp_message_id(overwrite_value)
         return value
     if isinstance(value, list):
         return _map_messages(value, _base_list_item_with_id)
