@@ -321,7 +321,9 @@ class RemoteGraph(PregelProtocol):
             edges=[DrawableEdge(**edge) for edge in graph["edges"]],
         )
 
-    def _create_state_snapshot(self, state: ThreadState) -> StateSnapshot:
+    def _create_state_snapshot(
+        self, state: ThreadState, config: RunnableConfig | None = None
+    ) -> StateSnapshot:
         tasks: list[PregelTask] = []
         for task in state["tasks"]:
             interrupts = tuple(
@@ -351,15 +353,23 @@ class RemoteGraph(PregelProtocol):
         return StateSnapshot(
             values=state["values"],
             next=tuple(state["next"]) if state["next"] else tuple(),
-            config={
-                "configurable": {
-                    "thread_id": state["checkpoint"]["thread_id"],
-                    "checkpoint_ns": state["checkpoint"]["checkpoint_ns"],
-                    "checkpoint_id": state["checkpoint"]["checkpoint_id"],
-                    "checkpoint_map": state["checkpoint"].get("checkpoint_map", {}),
+            config=(
+                {
+                    "configurable": {
+                        "thread_id": state["checkpoint"]["thread_id"],
+                        "checkpoint_ns": state["checkpoint"]["checkpoint_ns"],
+                        "checkpoint_id": state["checkpoint"]["checkpoint_id"],
+                        "checkpoint_map": state["checkpoint"].get("checkpoint_map", {}),
+                    }
                 }
-            },
-            metadata=CheckpointMetadata(**state["metadata"]),
+                if state["checkpoint"] is not None
+                else (config if config is not None else {})
+            ),
+            metadata=(
+                CheckpointMetadata(**state["metadata"])
+                if state["metadata"] is not None
+                else None
+            ),
             created_at=state["created_at"],
             parent_config=(
                 {
@@ -469,7 +479,7 @@ class RemoteGraph(PregelProtocol):
             headers=headers,
             params=params,
         )
-        return self._create_state_snapshot(state)
+        return self._create_state_snapshot(state, config=merged_config)
 
     async def aget_state(
         self,
@@ -505,7 +515,7 @@ class RemoteGraph(PregelProtocol):
             headers=headers,
             params=params,
         )
-        return self._create_state_snapshot(state)
+        return self._create_state_snapshot(state, config=merged_config)
 
     def get_state_history(
         self,
@@ -544,7 +554,7 @@ class RemoteGraph(PregelProtocol):
             params=params,
         )
         for state in states:
-            yield self._create_state_snapshot(state)
+            yield self._create_state_snapshot(state, config=merged_config)
 
     async def aget_state_history(
         self,
@@ -585,7 +595,7 @@ class RemoteGraph(PregelProtocol):
             params=params,
         )
         for state in states:
-            yield self._create_state_snapshot(state)
+            yield self._create_state_snapshot(state, config=merged_config)
 
     def bulk_update_state(
         self,

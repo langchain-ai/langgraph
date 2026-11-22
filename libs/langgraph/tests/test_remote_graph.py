@@ -275,6 +275,80 @@ async def test_aget_state():
     )
 
 
+def test_get_state_new_thread():
+    # set up test
+    # A thread that has been created but never run has no checkpoint yet:
+    # the server returns null checkpoint and metadata, and get_state
+    # should return an empty snapshot retaining the requested config.
+    mock_sync_client = MagicMock()
+    mock_sync_client.threads.get_state.return_value = {
+        "values": {},
+        "next": [],
+        "checkpoint": None,
+        "metadata": None,
+        "created_at": None,
+        "parent_checkpoint": None,
+        "tasks": [],
+        "interrupts": [],
+    }
+
+    # call method / assertions
+    remote_pregel = RemoteGraph(
+        "test_graph_id",
+        sync_client=mock_sync_client,
+    )
+
+    config = {"configurable": {"thread_id": "thread1"}}
+    state_snapshot = remote_pregel.get_state(config)
+
+    assert state_snapshot == StateSnapshot(
+        values={},
+        next=(),
+        config={"configurable": {"thread_id": "thread1"}},
+        metadata=None,
+        created_at=None,
+        parent_config=None,
+        tasks=(),
+        interrupts=(),
+    )
+
+
+@pytest.mark.anyio
+async def test_aget_state_new_thread():
+    # set up test
+    mock_async_client = AsyncMock()
+    mock_async_client.threads.get_state.return_value = {
+        "values": {},
+        "next": [],
+        "checkpoint": None,
+        "metadata": None,
+        "created_at": None,
+        "parent_checkpoint": None,
+        "tasks": [],
+        "interrupts": [],
+    }
+
+    # call method / assertions
+    remote_pregel = RemoteGraph(
+        "test_graph_id",
+        client=mock_async_client,
+    )
+
+    config = {"configurable": {"thread_id": "thread1"}}
+    state_snapshot = await remote_pregel.aget_state(config)
+
+    assert state_snapshot == StateSnapshot(
+        values={},
+        next=(),
+        config={"configurable": {"thread_id": "thread1"}},
+        metadata=None,
+        created_at=None,
+        parent_config=None,
+        tasks=(),
+        interrupts=(),
+    )
+
+
 def test_get_state_history():
     # set up test
     mock_sync_client = MagicMock()
