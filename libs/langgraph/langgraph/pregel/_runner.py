@@ -40,6 +40,7 @@ from langgraph._internal._constants import (
 from langgraph._internal._future import chain_future, run_coroutine_threadsafe
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import MISSING
+from langgraph.config import get_config
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import GraphBubbleUp, GraphInterrupt, is_invalid_resume
 from langgraph.pregel._algo import Call
@@ -712,6 +713,15 @@ def _panic_or_proceed(
         raise timeout_exc_cls("Timed out")
 
 
+def _task_scratchpad(task: PregelExecutableTask) -> PregelScratchpad:
+    # Retry patches the runnable config, not task.config.
+    try:
+        config = get_config()
+    except RuntimeError:
+        config = task.config
+    return config[CONF][CONFIG_KEY_SCRATCHPAD]
+
+
 def _call(
     task: weakref.ref[PregelExecutableTask],
     func: Callable[[Any], Awaitable[Any] | Any],
@@ -732,10 +742,13 @@ def _call(
 
     fut: concurrent.futures.Future | None = None
     # schedule PUSH tasks, collect futures
-    scratchpad: PregelScratchpad = task().config[CONF][CONFIG_KEY_SCRATCHPAD]  # type: ignore[union-attr]
+    parent = task()
+    if parent is None:
+        raise RuntimeError("Parent task is no longer alive")
+    scratchpad = _task_scratchpad(parent)
     # schedule the next task, if the callback returns one
     if next_task := schedule_task(
-        task(),  # type: ignore[arg-type]
+        parent,
         scratchpad.call_counter(),
         Call(
             func,
@@ -879,10 +892,13 @@ async def _acall_impl(
     try:
         fut: asyncio.Future | None = None
         # schedule PUSH tasks, collect futures
-        scratchpad: PregelScratchpad = task().config[CONF][CONFIG_KEY_SCRATCHPAD]  # type: ignore[union-attr]
+        parent = task()
+        if parent is None:
+            raise RuntimeError("Parent task is no longer alive")
+        scratchpad = _task_scratchpad(parent)
         # schedule the next task, if the callback returns one
         if next_task := await schedule_task(
-            task(),  # type: ignore[arg-type]
+            parent,
             scratchpad.call_counter(),
             Call(
                 func,

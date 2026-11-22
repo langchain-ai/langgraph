@@ -573,10 +573,8 @@ def _checkpoint_ns_for_parent_command(ns: str) -> str:
     return NS_SEP.join(parts)
 
 
-def _reset_interrupt_counter(config: RunnableConfig) -> RunnableConfig:
-    # A retry reruns the node from its first line, so its interrupt() calls count
-    # from the first again to reuse the answers its task already has, rather than
-    # asking again under an id the next resume can't match.
+def _reset_retry_counters(config: RunnableConfig) -> RunnableConfig:
+    # Restart call and interrupt indexes so a retry reuses checkpointed ids.
     scratchpad = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
     if scratchpad is None:
         return config
@@ -584,7 +582,9 @@ def _reset_interrupt_counter(config: RunnableConfig) -> RunnableConfig:
         config,
         {
             CONFIG_KEY_SCRATCHPAD: replace(
-                scratchpad, interrupt_counter=LazyAtomicCounter()
+                scratchpad,
+                call_counter=LazyAtomicCounter(),
+                interrupt_counter=LazyAtomicCounter(),
             )
         },
     )
@@ -700,7 +700,7 @@ def run_with_retry(
             )
             # signal subgraphs to resume (if available)
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
-            config = _reset_interrupt_counter(config)
+            config = _reset_retry_counters(config)
 
 
 async def arun_with_retry(
@@ -849,7 +849,7 @@ async def arun_with_retry(
             )
             # signal subgraphs to resume (if available)
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
-            config = _reset_interrupt_counter(config)
+            config = _reset_retry_counters(config)
 
 
 def _return_value(task: PregelExecutableTask) -> Any:
