@@ -1243,3 +1243,22 @@ def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
     assert result3[0].key == "3"
     assert result4[0].key == "4"
     assert result5[0].key == "5"
+
+
+async def test_comparison_filter_skips_items_without_a_numeric_field() -> None:
+    """A missing or non-numeric value does not match a comparison filter.
+
+    The SQL stores compare those rows against NULL and leave them out.
+    """
+    store = InMemoryStore()
+    store.put(("items",), "a", {"score": 5})
+    store.put(("items",), "b", {"note": "no score field"})
+    store.put(("items",), "c", {"score": 12})
+    store.put(("items",), "d", {"score": "high"})
+    expected = {"$gt": ["c"], "$gte": ["c"], "$lt": ["a"], "$lte": ["a"]}
+    for op, keys in expected.items():
+        for results in (
+            store.search(("items",), filter={"score": {op: 10}}),
+            await store.asearch(("items",), filter={"score": {op: 10}}),
+        ):
+            assert sorted(item.key for item in results) == keys, op

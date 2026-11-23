@@ -587,14 +587,22 @@ def _apply_operator(value: Any, operator: str, op_value: Any) -> bool:
     """Apply a comparison operator, matching PostgreSQL's JSONB behavior."""
     if operator == "$eq":
         return value == op_value
-    elif operator == "$gt":
-        return float(value) > float(op_value)
-    elif operator == "$gte":
-        return float(value) >= float(op_value)
-    elif operator == "$lt":
-        return float(value) < float(op_value)
-    elif operator == "$lte":
-        return float(value) <= float(op_value)
+    elif operator in ("$gt", "$gte", "$lt", "$lte"):
+        try:
+            left = float(value)
+        except (TypeError, ValueError):
+            # An item whose field is missing or not numeric cannot satisfy a
+            # numeric comparison. The SQL-backed stores exclude such rows
+            # instead of failing the whole search, so exclude them here too.
+            return False
+        right = float(op_value)
+        if operator == "$gt":
+            return left > right
+        elif operator == "$gte":
+            return left >= right
+        elif operator == "$lt":
+            return left < right
+        return left <= right
     elif operator == "$ne":
         return value != op_value
     else:
