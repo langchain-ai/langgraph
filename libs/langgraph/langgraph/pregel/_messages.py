@@ -26,7 +26,7 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResul
 from pydantic import BaseModel
 
 from langgraph._internal._config import filter_to_user_tags
-from langgraph._internal._constants import NS_SEP, PUSH
+from langgraph._internal._constants import NS_SEP, OVERWRITE, PUSH
 from langgraph.channels.binop import BinaryOperatorAggregate, _get_overwrite
 from langgraph.channels.delta import DeltaChannel
 from langgraph.constants import START, TAG_HIDDEN, TAG_NOSTREAM
@@ -551,9 +551,10 @@ def ensure_message_ids(
     the reducer reads it. An empty id counts as missing.
 
     In an `add_messages` channel, including `add_messages(format=...)`, the
-    message-likes `add_messages` accepts become messages with ids, including
-    those in an `Overwrite`, which `add_messages` never sees. As in
-    `add_messages`, only a `None` id is missing.
+    message-likes `add_messages` accepts get ids, including those in an
+    `Overwrite`, which `add_messages` never sees. A message dict stays a dict
+    with an `"id"` added; a string or `(role, content)` tuple becomes a
+    message. As in `add_messages`, only a `None` id is missing.
 
     A `StateGraph` input is one write to `START`; the values in it get ids by
     the channel they go to, so the input checkpoint saves them.
@@ -608,7 +609,9 @@ def _is_add_messages(operator: Any) -> bool:
     from langgraph.graph.message import add_messages
 
     if isinstance(operator, partial):
-        operator = operator.func
+        # `add_messages(format=...)` is a `partial` of the same function that
+        # `add_messages()` wraps.
+        return operator.func is cast(Any, add_messages)().func
     return operator is add_messages
 
 
@@ -621,10 +624,20 @@ def _with_add_messages_ids(value: Any) -> Any:
         new_items = _add_messages_item_with_id(items)
     if new_items is items:
         return value
-    return Overwrite(new_items) if is_overwrite else new_items
+    if not is_overwrite:
+        return new_items
+    if isinstance(value, Overwrite):
+        return Overwrite(new_items)
+    if OVERWRITE in value:
+        return {OVERWRITE: new_items}
+    return {**value, "value": new_items}
 
 
 def _add_messages_item_with_id(item: Any) -> Any:
+    if isinstance(item, dict):
+        if _is_message_dict(item) and item.get("id") is None:
+            return {**item, "id": str(uuid.uuid4())}
+        return item
     if not isinstance(item, BaseMessage):
         try:
             item = convert_to_messages([item])[0]

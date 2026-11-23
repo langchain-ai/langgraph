@@ -193,12 +193,16 @@ MESSAGE_SHAPES = [
 ]
 
 
+def _id(m: Any) -> str | None:
+    return m.get("id") if isinstance(m, dict) else m.id
+
+
 def _hello_ids(graph: Any, config: dict) -> list[str | None]:
     return [
         next(
-            m.id
+            _id(m)
             for m in graph.get_state(config).values["messages"]
-            if m.content == "hello"
+            if (m.get("content") if isinstance(m, dict) else m.content) == "hello"
         )
         for _ in range(2)
     ]
@@ -364,8 +368,23 @@ def test_updates_carry_the_saved_message_ids(channel: Any, write: Any) -> None:
     streamed = updates[0]["agent"]["messages"]
     streamed = streamed if isinstance(streamed, list) else [streamed]
     first, second = _hello_ids(graph, config)
-    assert [m.id for m in streamed] == [first], "updates must show the saved id"
+    assert [_id(m) for m in streamed] == [first], "updates must show the saved id"
     assert first == second
+
+
+def test_add_messages_keeps_a_message_dict_a_dict() -> None:
+    written = {"role": "user", "content": "hello"}
+    graph = _build_graph(InMemorySaver(), channel=add_messages, write=lambda: [written])
+    config = {"configurable": {"thread_id": "t"}}
+
+    updates = list(graph.stream({"messages": []}, config, stream_mode="updates"))
+
+    (streamed,) = updates[0]["agent"]["messages"]
+    assert streamed == {**written, "id": streamed["id"]}
+    assert streamed["id"] == _hello_ids(graph, config)[0]
+    assert written == {"role": "user", "content": "hello"}, (
+        "the node's dict is left as is"
+    )
 
 
 @pytest.mark.parametrize("channel", MESSAGES_CHANNELS)
