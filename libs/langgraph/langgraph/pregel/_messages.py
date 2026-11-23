@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import dataclasses
+import copy
 import uuid
 from collections.abc import (
     AsyncIterator,
@@ -557,7 +557,8 @@ def ensure_message_ids(
     message. As in `add_messages`, only a `None` id is missing.
 
     A `StateGraph` input is one write to `START`; the values in it get ids by
-    the channel they go to, so the input checkpoint saves them.
+    the channel they go to, so the input checkpoint saves them. In a graph
+    with one root channel, the whole input goes to that channel.
 
     A write that changes is replaced in `writes`: lists and dicts the caller
     passed in are never changed, only the ids of message objects.
@@ -582,6 +583,8 @@ def _channel_value_with_message_ids(spec: Any, value: Any) -> Any:
 
 
 def _input_with_message_ids(channels: Mapping[str, Any], value: Any) -> Any:
+    if "__root__" in channels:
+        return _channel_value_with_message_ids(channels["__root__"], value)
     if isinstance(value, dict):
         new_value = {
             k: _channel_value_with_message_ids(channels.get(k), v)
@@ -601,7 +604,11 @@ def _input_with_message_ids(channels: Mapping[str, Any], value: Any) -> Any:
         return value
     if isinstance(value, BaseModel):
         return value.model_copy(update=changed)
-    return dataclasses.replace(value, **changed)
+    # Copied, not rebuilt: rebuilding runs the user's `__post_init__` again.
+    new_value = copy.copy(value)
+    for name, field_value in changed.items():
+        object.__setattr__(new_value, name, field_value)
+    return new_value
 
 
 def _is_add_messages(operator: Any) -> bool:

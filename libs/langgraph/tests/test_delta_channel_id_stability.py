@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Annotated, Any
 
 import pytest
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel
 from typing_extensions import TypedDict
@@ -448,7 +448,17 @@ class _DataclassState:
     messages: Annotated[list, add_messages] = field(default_factory=list)
 
 
-@pytest.mark.parametrize("schema", [_PydanticState, _DataclassState])
+@dataclass
+class _SystemPromptState:
+    messages: Annotated[list, add_messages] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.messages = [SystemMessage("be brief"), *self.messages]
+
+
+@pytest.mark.parametrize(
+    "schema", [_PydanticState, _DataclassState, _SystemPromptState]
+)
 @pytest.mark.parametrize(
     "input",
     [
@@ -468,6 +478,8 @@ def test_a_state_object_input_saves_its_message_ids(schema: Any, input: Any) -> 
     state = schema(messages=input())
     input_types = [type(m) for m in state.messages]
     graph.invoke(state, config)
+    saved = graph.get_state(config).values["messages"]
+    assert len(saved) == len(state.messages) + 1, "the input is saved as built"
     first, _ = _hello_ids(graph, config)
     oldest = list(graph.get_state_history(config))[-1]
 
@@ -476,6 +488,40 @@ def test_a_state_object_input_saves_its_message_ids(schema: Any, input: Any) -> 
     assert first, "the message should get a UUID"
     assert _hello_ids(graph, config) == [first, first]
     assert [type(m) for m in state.messages] == input_types, "the input is left as is"
+
+
+@pytest.mark.parametrize(
+    "input",
+    [
+        pytest.param(lambda: [HumanMessage("hello")], id="message"),
+        pytest.param(lambda: {"role": "user", "content": "hello"}, id="dict"),
+        pytest.param(lambda: "hello", id="bare string"),
+    ],
+)
+def test_a_root_channel_input_saves_its_message_ids(input: Any) -> None:
+    graph = (
+        StateGraph(Annotated[list, add_messages])
+        .add_node("agent", lambda state: [AIMessage("reply")])
+        .add_edge(START, "agent")
+        .compile(checkpointer=InMemorySaver())
+    )
+    config = {"configurable": {"thread_id": "t"}}
+
+    def hello_id() -> str | None:
+        return next(
+            _id(m)
+            for m in graph.get_state(config).values
+            if (m.get("content") if isinstance(m, dict) else m.content) == "hello"
+        )
+
+    graph.invoke(input(), config)
+    first = hello_id()
+    oldest = list(graph.get_state_history(config))[-1]
+
+    graph.invoke(None, oldest.config)
+
+    assert first, "the message should get a UUID"
+    assert hello_id() == first
 
 
 def test_an_overwrite_on_a_formatting_add_messages_channel_gets_a_stable_id() -> None:
