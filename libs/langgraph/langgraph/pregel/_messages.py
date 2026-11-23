@@ -590,7 +590,6 @@ def _input_with_message_ids(channels: Mapping[str, Any], value: Any) -> Any:
 
 @cache
 def _add_messages_reducers() -> tuple[Any, Any]:
-    """`add_messages`, and the function its `format=` partials wrap."""
     # Imported here: `langgraph.graph.message` imports this module.
     from langgraph.graph.message import add_messages
 
@@ -605,7 +604,6 @@ def _is_add_messages(operator: Any) -> bool:
 
 
 def _add_messages_ids(value: Any) -> Any:
-    """A message dict stays a dict; as in `add_messages`, an empty id is kept."""
     is_overwrite, items = _unwrap(value)
     if _is_many(items, is_overwrite):
         new = _map_messages(items, _add_messages_item)
@@ -615,7 +613,6 @@ def _add_messages_ids(value: Any) -> Any:
 
 
 def _delta_messages_ids(value: Any) -> Any:
-    """Every message-like becomes a message."""
     is_overwrite, items = _unwrap(value)
     if not _is_many(items, is_overwrite):
         new = _message(items)
@@ -683,7 +680,6 @@ def _map_messages(items: list | tuple, step: Callable[[Any], Any]) -> list | tup
 
 
 def _new_id() -> str:
-    # `uuid.uuid4`, as in `add_messages`, so tests that patch it still apply.
     return str(uuid.uuid4())
 
 
@@ -706,7 +702,6 @@ def _dict_with_id(item: Any, *, keep_empty: bool = False) -> Any:
 
 
 def _message(item: Any, *, strict: bool = False, keep_empty: bool = False) -> Any:
-    """A message-like becomes a message; one that can't is left as it is."""
     if not isinstance(item, BaseMessage):
         try:
             item = convert_to_messages([item])[0]

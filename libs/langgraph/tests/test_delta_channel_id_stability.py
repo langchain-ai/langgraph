@@ -467,8 +467,7 @@ def test_a_replay_from_the_first_checkpoint_keeps_the_input_message_ids(
     config = {"configurable": {"thread_id": "t"}}
     graph.invoke({"messages": input()}, config, durability=durability)
     first, _ = _hello_ids(graph, config)
-    # `exit` saves no input checkpoint, only the last one (and, for a
-    # DeltaChannel, an anchor with no `source` that can't be replayed).
+    # `exit` saves no input checkpoint; a DeltaChannel anchor has no `source`.
     oldest = [s for s in graph.get_state_history(config) if "source" in s.metadata][-1]
 
     graph.invoke(None, oldest.config)
