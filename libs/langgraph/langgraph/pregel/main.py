@@ -1275,10 +1275,11 @@ class Pregel(
             saved.config,
             step,
             stop,
-            # A state snapshot only needs task metadata. Do not prepare
-            # executable tasks here: that would run user code such as a
-            # CachePolicy.key_func while merely inspecting saved state.
-            for_execution=False,
+            for_execution=True,
+            compute_cache_key=False,
+            store=self.store,
+            checkpointer=saver,
+            manager=None,
         )
         # get the subgraphs
         subgraphs = dict(self.get_subgraphs())
@@ -1400,10 +1401,11 @@ class Pregel(
             saved.config,
             step,
             stop,
-            # A state snapshot only needs task metadata. Do not prepare
-            # executable tasks here: that would run user code such as a
-            # CachePolicy.key_func while merely inspecting saved state.
-            for_execution=False,
+            for_execution=True,
+            compute_cache_key=False,
+            store=self.store,
+            checkpointer=saver,
+            manager=None,
         )
         # get the subgraphs
         subgraphs = {n: g async for n, g in self.aget_subgraphs()}
