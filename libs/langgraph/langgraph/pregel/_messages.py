@@ -610,6 +610,7 @@ class _IdRule:
     in_list: Callable[[Any, _IdRule], Any]
     in_overwrite: Callable[[Any, _IdRule], Any]
     empty_is_missing: bool
+    overwrite_as_list: bool = False
 
 
 def _with_ids(value: Any, rule: _IdRule) -> Any:
@@ -618,10 +619,14 @@ def _with_ids(value: Any, rule: _IdRule) -> Any:
         if isinstance(value, list):
             return _map_messages(value, rule.in_list, rule)
         return rule.alone(value, rule)
-    if isinstance(items, (list, tuple)):
+    if isinstance(items, list) or (
+        isinstance(items, tuple) and not _is_message_pair(items)
+    ):
         new_items = _map_messages(items, rule.in_overwrite, rule)
     else:
         new_items = rule.in_overwrite(items, rule)
+        if rule.overwrite_as_list and isinstance(new_items, BaseMessage):
+            new_items = [new_items]
     if new_items is items:
         return value
     if isinstance(value, Overwrite):
@@ -629,6 +634,17 @@ def _with_ids(value: Any, rule: _IdRule) -> Any:
     if OVERWRITE in value:
         return {OVERWRITE: new_items}
     return {**value, "value": new_items}
+
+
+def _is_message_pair(items: tuple) -> bool:
+    """A `(role, content)` pair is one message, not two."""
+    if len(items) != 2 or not isinstance(items[0], str):
+        return False
+    try:
+        convert_to_messages([items])
+    except Exception:
+        return False
+    return True
 
 
 def _map_messages(
@@ -693,12 +709,16 @@ def _add_messages_item(item: Any, rule: _IdRule) -> Any:
 # leaving one that can't be as it is, "dict" adds an `"id"` to a message dict,
 # "stamp" gives only message objects ids. Other DeltaChannels may hold other
 # data. A message dict in a list on a DeltaChannel that can't become a message
-# raises here, before it is saved. `add_messages` keeps an empty id.
+# raises here, before it is saved. `add_messages` keeps an empty id. In an
+# Overwrite, a `(role, content)` pair is one message, and on a
+# `_messages_delta_reducer` channel a message alone is saved in a list.
 #                          alone           in a list           in an Overwrite
 # _messages_delta_reducer  message         message             message
 # other DeltaChannel       dict, stamp     message dict, stamp stamp
 # add_messages             dict, message   dict, message       dict, message
-_DELTA_MESSAGES = _IdRule(_message, _list_item, _message, empty_is_missing=True)
+_DELTA_MESSAGES = _IdRule(
+    _message, _list_item, _message, empty_is_missing=True, overwrite_as_list=True
+)
 _DELTA = _IdRule(_dict_with_id, _list_item, _stamped, empty_is_missing=True)
 _ADD_MESSAGES = _IdRule(
     _add_messages_item,

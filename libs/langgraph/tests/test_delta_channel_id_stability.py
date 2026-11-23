@@ -190,6 +190,8 @@ MESSAGE_SHAPES = [
     pytest.param(lambda: "hello", id="bare string"),
     pytest.param(lambda: Overwrite(["hello"]), id="Overwrite"),
     pytest.param(lambda: Overwrite(("hello",)), id="Overwrite of a tuple"),
+    pytest.param(lambda: Overwrite(HumanMessage("hello")), id="Overwrite of a message"),
+    pytest.param(lambda: Overwrite(("user", "hello")), id="Overwrite of a pair"),
     pytest.param(lambda: {"__overwrite__": [("user", "hello")]}, id="Overwrite dict"),
 ]
 
@@ -225,15 +227,7 @@ def test_input_message_of_any_shape_gets_stable_id(write: Any) -> None:
     assert first == second, "its id must be the same on every read"
 
 
-@pytest.mark.parametrize(
-    "write",
-    [
-        *MESSAGE_SHAPES,
-        pytest.param(
-            lambda: Overwrite(HumanMessage("hello")), id="Overwrite of a message"
-        ),
-    ],
-)
+@pytest.mark.parametrize("write", MESSAGE_SHAPES)
 def test_node_message_of_any_shape_gets_stable_id(write: Any) -> None:
     graph = _build_graph(InMemorySaver(), reducer=_messages_delta_reducer, write=write)
     config = {"configurable": {"thread_id": "t"}}
@@ -424,6 +418,37 @@ def test_an_overwrite_keeps_its_message_ids_in_a_fork(channel: Any, write: Any) 
     assert first, "the message should get a UUID"
     assert first == second, "its id must be the same on every read"
     assert _hello_ids(graph, forked) == [first, first], "a fork must keep it"
+
+
+@pytest.mark.parametrize("channel", MESSAGES_CHANNELS)
+@pytest.mark.parametrize(
+    "write",
+    [
+        pytest.param(lambda: Overwrite(HumanMessage("hello")), id="message"),
+        pytest.param(
+            lambda: Overwrite({"role": "user", "content": "hello"}), id="dict"
+        ),
+        pytest.param(lambda: Overwrite("hello"), id="string"),
+        pytest.param(lambda: Overwrite(("user", "hello")), id="pair"),
+    ],
+)
+def test_one_message_in_an_overwrite_stays_one_message(
+    channel: Any, write: Any
+) -> None:
+    graph = _build_graph(InMemorySaver(), channel=channel(), write=write)
+    config = {"configurable": {"thread_id": "t"}}
+
+    graph.invoke({"messages": []}, config)
+    graph.invoke({"messages": [("user", "next")]}, config)
+
+    value = graph.get_state(config).values["messages"]
+    messages = value if isinstance(value, list) else [value]
+    assert [
+        m.get("content") if isinstance(m, dict) else m.content for m in messages
+    ] == ["hello"]
+    first, second = _hello_ids(graph, config)
+    assert first, "the message should get a UUID"
+    assert first == second, "its id must be the same on every read"
 
 
 @pytest.mark.parametrize("channel", MESSAGES_CHANNELS)
