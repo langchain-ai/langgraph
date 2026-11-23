@@ -3,6 +3,7 @@
 import re
 from contextlib import contextmanager
 from typing import Any
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -358,3 +359,21 @@ def test_get_checkpoint_no_channel_values(
 
         checkpoint = saver.get_tuple(config)
         assert checkpoint.checkpoint["channel_values"] == {}
+
+
+def test_from_conn_string_prepare_threshold() -> None:
+    with patch("psycopg.Connection.connect") as mock_connect:
+        mock_conn = MagicMock()
+        mock_connect.return_value.__enter__.return_value = mock_conn
+        with PostgresSaver.from_conn_string("test_conn", prepare_threshold=None):
+            pass
+        mock_connect.assert_called_once_with(
+            "test_conn", autocommit=True, prepare_threshold=None, row_factory=dict_row
+        )
+
+        mock_connect.reset_mock()
+        with ShallowPostgresSaver.from_conn_string("test_conn", prepare_threshold=5):
+            pass
+        mock_connect.assert_called_once_with(
+            "test_conn", autocommit=True, prepare_threshold=5, row_factory=dict_row
+        )
