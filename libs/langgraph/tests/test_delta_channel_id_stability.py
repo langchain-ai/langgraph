@@ -8,6 +8,7 @@ ID in each LangSmith trace / on every resumed invocation.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Annotated, Any
 
 import pytest
@@ -420,18 +421,34 @@ def test_a_replay_from_the_first_checkpoint_keeps_the_input_message_ids(
 
 
 class _PydanticState(BaseModel):
-    messages: Annotated[list[AnyMessage], add_messages]
+    messages: Annotated[list, add_messages] = []
 
 
-def test_a_state_object_input_saves_its_message_ids() -> None:
+@dataclass
+class _DataclassState:
+    messages: Annotated[list, add_messages] = field(default_factory=list)
+
+
+@pytest.mark.parametrize("schema", [_PydanticState, _DataclassState])
+@pytest.mark.parametrize(
+    "input",
+    [
+        pytest.param(lambda: [HumanMessage("hello")], id="message"),
+        pytest.param(lambda: [{"role": "user", "content": "hello"}], id="dict"),
+        pytest.param(lambda: [("user", "hello")], id="tuple"),
+    ],
+)
+def test_a_state_object_input_saves_its_message_ids(schema: Any, input: Any) -> None:
     graph = (
-        StateGraph(_PydanticState)
+        StateGraph(schema)
         .add_node("agent", lambda state: {"messages": [AIMessage("reply")]})
         .add_edge(START, "agent")
         .compile(checkpointer=InMemorySaver())
     )
     config = {"configurable": {"thread_id": "t"}}
-    graph.invoke(_PydanticState(messages=[HumanMessage("hello")]), config)
+    state = schema(messages=input())
+    input_types = [type(m) for m in state.messages]
+    graph.invoke(state, config)
     first, _ = _hello_ids(graph, config)
     oldest = list(graph.get_state_history(config))[-1]
 
@@ -439,6 +456,7 @@ def test_a_state_object_input_saves_its_message_ids() -> None:
 
     assert first, "the message should get a UUID"
     assert _hello_ids(graph, config) == [first, first]
+    assert [type(m) for m in state.messages] == input_types, "the input is left as is"
 
 
 def test_an_overwrite_on_a_formatting_add_messages_channel_gets_a_stable_id() -> None:

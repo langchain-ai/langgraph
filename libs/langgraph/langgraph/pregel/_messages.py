@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import uuid
 from collections.abc import (
     AsyncIterator,
@@ -588,10 +589,18 @@ def _input_with_message_ids(channels: Mapping[str, Any], value: Any) -> Any:
         if all(new_value[k] is v for k, v in value.items()):
             return value
         return new_value
-    # A state object keeps its values, so only its message objects get ids.
+    changed = {}
     for name, field_value in _state_items(value):
-        _channel_value_with_message_ids(channels.get(name), field_value)
-    return value
+        new_field_value = _channel_value_with_message_ids(
+            channels.get(name), field_value
+        )
+        if new_field_value is not field_value:
+            changed[name] = new_field_value
+    if not changed:
+        return value
+    if isinstance(value, BaseModel):
+        return value.model_copy(update=changed)
+    return dataclasses.replace(value, **changed)
 
 
 def _is_add_messages(operator: Any) -> bool:
