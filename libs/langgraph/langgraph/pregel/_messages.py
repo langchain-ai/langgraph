@@ -11,7 +11,7 @@ from collections.abc import (
     Sequence,
 )
 from dataclasses import fields, is_dataclass
-from functools import partial
+from functools import cache, partial
 from typing import (
     Any,
     TypeVar,
@@ -585,23 +585,15 @@ def _channel_value_with_message_ids(spec: Any, value: Any) -> Any:
 def _input_with_message_ids(channels: Mapping[str, Any], value: Any) -> Any:
     if "__root__" in channels:
         return _channel_value_with_message_ids(channels["__root__"], value)
-    if isinstance(value, dict):
-        new_value = {
-            k: _channel_value_with_message_ids(channels.get(k), v)
-            for k, v in value.items()
-        }
-        if all(new_value[k] is v for k, v in value.items()):
-            return value
-        return new_value
-    changed = {}
-    for name, field_value in _state_items(value):
-        new_field_value = _channel_value_with_message_ids(
-            channels.get(name), field_value
-        )
-        if new_field_value is not field_value:
-            changed[name] = new_field_value
+    changed = {
+        name: new
+        for name, old in _state_items(value)
+        if (new := _channel_value_with_message_ids(channels.get(name), old)) is not old
+    }
     if not changed:
         return value
+    if isinstance(value, dict):
+        return {**value, **changed}
     if isinstance(value, BaseModel):
         return value.model_copy(update=changed)
     # Copied, not rebuilt: rebuilding runs the user's `__post_init__` again.
@@ -611,14 +603,19 @@ def _input_with_message_ids(channels: Mapping[str, Any], value: Any) -> Any:
     return new_value
 
 
-def _is_add_messages(operator: Any) -> bool:
+@cache
+def _add_messages_reducers() -> tuple[Any, Any]:
+    """`add_messages`, and the function its `format=` partials wrap."""
     # Imported here: `langgraph.graph.message` imports this module.
     from langgraph.graph.message import add_messages
 
+    return add_messages, cast(Any, add_messages)().func
+
+
+def _is_add_messages(operator: Any) -> bool:
+    add_messages, func = _add_messages_reducers()
     if isinstance(operator, partial):
-        # `add_messages(format=...)` is a `partial` of the same function that
-        # `add_messages()` wraps.
-        return operator.func is cast(Any, add_messages)().func
+        return operator.func is func
     return operator is add_messages
 
 
