@@ -10008,6 +10008,7 @@ def test_get_state_and_history_do_not_compute_cache_keys() -> None:
 
     graph.invoke({"value": 1}, config)
     key_calls.clear()
+    fail_key = True
 
     assert graph.get_state(config).next == ("worker",)
     assert key_calls == []
@@ -10016,7 +10017,6 @@ def test_get_state_and_history_do_not_compute_cache_keys() -> None:
     assert history
     assert key_calls == []
 
-    fail_key = True
     with pytest.raises(RuntimeError, match="cache key unavailable"):
         graph.invoke(None, config)
     assert key_calls == [1]
@@ -10053,6 +10053,7 @@ async def test_aget_state_and_history_do_not_compute_cache_keys() -> None:
 
     await graph.ainvoke({"value": 1}, config)
     key_calls.clear()
+    fail_key = True
 
     assert (await graph.aget_state(config)).next == ("worker",)
     assert key_calls == []
@@ -10061,7 +10062,6 @@ async def test_aget_state_and_history_do_not_compute_cache_keys() -> None:
     assert history
     assert key_calls == []
 
-    fail_key = True
     with pytest.raises(RuntimeError, match="cache key unavailable"):
         await graph.ainvoke(None, config)
     assert key_calls == [1]
