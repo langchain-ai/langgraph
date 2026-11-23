@@ -841,6 +841,31 @@ def test_validate_config_file():
             validate_config_file(config_path)
 
 
+def test_validate_config_file_reads_utf8(tmp_path: pathlib.Path):
+    """langgraph.json and package.json are UTF-8, whatever the host locale is.
+
+    Both files are written by editors as UTF-8, so reading them with the
+    locale's encoding fails on hosts whose default encoding is not UTF-8 (for
+    example Windows with a CJK code page), or silently mangles the values.
+    """
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_bytes(
+        json.dumps(
+            {"dependencies": ["."], "graphs": {"客服": "./agent.py:graph"}},
+            ensure_ascii=False,
+        ).encode("utf-8")
+    )
+    (tmp_path / "package.json").write_bytes(
+        json.dumps({"name": "test", "author": "Bjørn"}, ensure_ascii=False).encode(
+            "utf-8"
+        )
+    )
+
+    config = validate_config_file(config_path)
+
+    assert list(config["graphs"]) == ["客服"], ascii(list(config["graphs"]))
+
+
 def test_validate_config_multiplatform():
     # default node
     config = validate_config(
