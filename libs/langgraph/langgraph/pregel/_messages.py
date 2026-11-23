@@ -10,7 +10,7 @@ from collections.abc import (
     MutableSequence,
     Sequence,
 )
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import fields, is_dataclass
 from functools import cache, partial
 from typing import (
     Any,
@@ -560,10 +560,10 @@ def ensure_message_ids(
 def _channel_value_with_message_ids(spec: Any, value: Any) -> Any:
     if isinstance(spec, DeltaChannel):
         if spec.reducer is _messages_delta_reducer:
-            return _with_ids(value, _DELTA_MESSAGES)
-        return _with_ids(value, _DELTA)
+            return _delta_messages_ids(value)
+        return _delta_ids(value)
     if isinstance(spec, BinaryOperatorAggregate) and _is_add_messages(spec.operator):
-        return _with_ids(value, _ADD_MESSAGES)
+        return _add_messages_ids(value)
     return value
 
 
@@ -578,11 +578,10 @@ def _input_with_message_ids(channels: Mapping[str, Any], value: Any) -> Any:
     if not changed:
         return value
     if isinstance(value, dict):
-        # Built from the input's own keys, so the copy has exactly those.
         return {k: changed.get(k, v) for k, v in value.items()}
     if isinstance(value, BaseModel):
         return value.model_copy(update=changed)
-    # Copied, not rebuilt: rebuilding runs the user's `__post_init__` again.
+    # Not `dataclasses.replace`, which reruns `__post_init__`.
     new_value = copy.copy(value)
     for name, field_value in changed.items():
         object.__setattr__(new_value, name, field_value)
@@ -605,40 +604,68 @@ def _is_add_messages(operator: Any) -> bool:
     return operator is add_messages
 
 
-@dataclass(frozen=True)
-class _IdRule:
-    alone: Callable[[Any, _IdRule], Any]
-    in_list: Callable[[Any, _IdRule], Any]
-    in_overwrite: Callable[[Any, _IdRule], Any]
-    empty_is_missing: bool
-    overwrite_as_list: bool = False
-
-
-def _with_ids(value: Any, rule: _IdRule) -> Any:
-    is_overwrite, items = _get_overwrite(value)
-    if not is_overwrite:
-        if isinstance(value, list):
-            return _map_messages(value, rule.in_list, rule)
-        return rule.alone(value, rule)
-    if isinstance(items, list) or (
-        isinstance(items, tuple) and not _is_message_pair(items)
-    ):
-        new_items = _map_messages(items, rule.in_overwrite, rule)
+def _add_messages_ids(value: Any) -> Any:
+    """A message dict stays a dict; as in `add_messages`, an empty id is kept."""
+    is_overwrite, items = _unwrap(value)
+    if _is_many(items, is_overwrite):
+        new = _map_messages(items, _add_messages_item)
     else:
-        new_items = rule.in_overwrite(items, rule)
-        if rule.overwrite_as_list and isinstance(new_items, BaseMessage):
-            new_items = [new_items]
-    if new_items is items:
+        new = _add_messages_item(items)
+    return _rewrap(value, is_overwrite, items, new)
+
+
+def _delta_messages_ids(value: Any) -> Any:
+    """Every message-like becomes a message."""
+    is_overwrite, items = _unwrap(value)
+    if not _is_many(items, is_overwrite):
+        new = _message(items)
+        if is_overwrite and isinstance(new, BaseMessage):
+            new = [new]
+    elif is_overwrite:
+        new = _map_messages(items, _message)
+    else:
+        new = _map_messages(items, _delta_messages_list_item)
+    return _rewrap(value, is_overwrite, items, new)
+
+
+def _delta_ids(value: Any) -> Any:
+    """Other DeltaChannels may hold other data, so less is converted."""
+    is_overwrite, items = _unwrap(value)
+    if is_overwrite:
+        many = _is_many(items, is_overwrite)
+        new = _map_messages(items, _stamped) if many else _stamped(items)
+    elif isinstance(items, list):
+        new = _map_messages(items, _delta_list_item)
+    else:
+        new = _dict_with_id(items)
+    return _rewrap(value, is_overwrite, items, new)
+
+
+def _unwrap(value: Any) -> tuple[bool, Any]:
+    is_overwrite, items = _get_overwrite(value)
+    return is_overwrite, items if is_overwrite else value
+
+
+def _rewrap(value: Any, is_overwrite: bool, items: Any, new: Any) -> Any:
+    if new is items:
         return value
+    if not is_overwrite:
+        return new
     if isinstance(value, Overwrite):
-        return Overwrite(new_items)
+        return Overwrite(new)
     if OVERWRITE in value:
-        return {OVERWRITE: new_items}
-    return {**value, "value": new_items}
+        return {OVERWRITE: new}
+    return {**value, "value": new}
+
+
+def _is_many(items: Any, is_overwrite: bool) -> bool:
+    """In an `Overwrite`, a tuple is many messages unless it's a `(role, content)` pair."""
+    if isinstance(items, list):
+        return True
+    return is_overwrite and isinstance(items, tuple) and not _is_message_pair(items)
 
 
 def _is_message_pair(items: tuple) -> bool:
-    """A `(role, content)` pair is one message, not two."""
     if len(items) != 2 or not isinstance(items[0], str):
         return False
     try:
@@ -648,10 +675,8 @@ def _is_message_pair(items: tuple) -> bool:
     return True
 
 
-def _map_messages(
-    items: list | tuple, step: Callable[[Any, _IdRule], Any], rule: _IdRule
-) -> list | tuple:
-    mapped = [step(item, rule) for item in items]
+def _map_messages(items: list | tuple, step: Callable[[Any], Any]) -> list | tuple:
+    mapped = [step(item) for item in items]
     if all(new is old for new, old in zip(mapped, items)):
         return items
     return mapped if isinstance(items, list) else tuple(mapped)
@@ -662,26 +687,25 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
-def _is_missing(id: Any, rule: _IdRule) -> bool:
-    return id is None or (rule.empty_is_missing and not id)
+def _needs_id(id: Any, *, keep_empty: bool) -> bool:
+    return id is None or (not keep_empty and not id)
 
 
-def _stamped(item: Any, rule: _IdRule) -> Any:
-    if isinstance(item, BaseMessage) and _is_missing(item.id, rule):
+def _stamped(item: Any, *, keep_empty: bool = False) -> Any:
+    if isinstance(item, BaseMessage) and _needs_id(item.id, keep_empty=keep_empty):
         item.id = _new_id()
     return item
 
 
-def _dict_with_id(item: Any, rule: _IdRule) -> Any:
-    """A message dict stays a dict with an id; a message object is stamped."""
+def _dict_with_id(item: Any, *, keep_empty: bool = False) -> Any:
     if not isinstance(item, dict):
-        return _stamped(item, rule)
-    if _is_message_dict(item) and _is_missing(item.get("id"), rule):
+        return _stamped(item, keep_empty=keep_empty)
+    if _is_message_dict(item) and _needs_id(item.get("id"), keep_empty=keep_empty):
         return {**item, "id": _new_id()}
     return item
 
 
-def _message(item: Any, rule: _IdRule, *, strict: bool = False) -> Any:
+def _message(item: Any, *, strict: bool = False, keep_empty: bool = False) -> Any:
     """A message-like becomes a message; one that can't is left as it is."""
     if not isinstance(item, BaseMessage):
         try:
@@ -690,40 +714,25 @@ def _message(item: Any, rule: _IdRule, *, strict: bool = False) -> Any:
             if strict:
                 raise
             return item
-    return _stamped(item, rule)
+    return _stamped(item, keep_empty=keep_empty)
 
 
-def _list_item(item: Any, rule: _IdRule) -> Any:
-    """A message dict in a list becomes a message, or raises if it can't."""
-    if isinstance(item, dict) and _is_message_dict(item):
-        return _message(item, rule, strict=True)
-    return rule.alone(item, rule)
+def _is_list_message_dict(item: Any) -> bool:
+    # Raises here, before it is saved, if it can't become a message.
+    return isinstance(item, dict) and _is_message_dict(item)
 
 
-def _add_messages_item(item: Any, rule: _IdRule) -> Any:
+def _delta_messages_list_item(item: Any) -> Any:
+    return _message(item, strict=_is_list_message_dict(item))
+
+
+def _delta_list_item(item: Any) -> Any:
+    if _is_list_message_dict(item):
+        return _message(item, strict=True)
+    return _dict_with_id(item)
+
+
+def _add_messages_item(item: Any) -> Any:
     if isinstance(item, dict):
-        return _dict_with_id(item, rule)
-    return _message(item, rule)
-
-
-# How each messages channel gives ids: "message" converts a message-like,
-# leaving one that can't be as it is, "dict" adds an `"id"` to a message dict,
-# "stamp" gives only message objects ids. Other DeltaChannels may hold other
-# data. A message dict in a list on a DeltaChannel that can't become a message
-# raises here, before it is saved. `add_messages` keeps an empty id. In an
-# Overwrite, a `(role, content)` pair is one message, and on a
-# `_messages_delta_reducer` channel a message alone is saved in a list.
-#                          alone           in a list           in an Overwrite
-# _messages_delta_reducer  message         message             message
-# other DeltaChannel       dict, stamp     message dict, stamp stamp
-# add_messages             dict, message   dict, message       dict, message
-_DELTA_MESSAGES = _IdRule(
-    _message, _list_item, _message, empty_is_missing=True, overwrite_as_list=True
-)
-_DELTA = _IdRule(_dict_with_id, _list_item, _stamped, empty_is_missing=True)
-_ADD_MESSAGES = _IdRule(
-    _add_messages_item,
-    _add_messages_item,
-    _add_messages_item,
-    empty_is_missing=False,
-)
+        return _dict_with_id(item, keep_empty=True)
+    return _message(item, keep_empty=True)
