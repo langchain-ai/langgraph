@@ -621,5 +621,5 @@ def _message_with_id(item: Any, *, strict: bool = False) -> Any:
 
 
 def _stamp_message_id(item: Any) -> None:
-    if isinstance(item, BaseMessage) and item.id is None:
+    if isinstance(item, BaseMessage) and not item.id:
         item.id = str(uuid4())

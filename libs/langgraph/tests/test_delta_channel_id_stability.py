@@ -173,6 +173,7 @@ def test_delta_channel_message_in_an_overwrite_gets_stable_id(container: type) -
 MESSAGE_SHAPES = [
     pytest.param(lambda: [HumanMessage("hello")], id="message"),
     pytest.param(lambda: HumanMessage("hello"), id="bare message"),
+    pytest.param(lambda: [HumanMessage("hello", id="")], id="message, empty id"),
     pytest.param(lambda: [{"role": "user", "content": "hello"}], id="dict"),
     pytest.param(lambda: {"type": "human", "content": "hello"}, id="bare dict"),
     pytest.param(
@@ -221,6 +222,31 @@ def test_node_message_of_any_shape_gets_stable_id(write: Any) -> None:
     first, second = _hello_ids(graph, config)
     assert first, "the message should get a UUID"
     assert first == second, "its id must be the same on every read"
+
+
+@pytest.mark.parametrize(
+    "write",
+    [
+        pytest.param(
+            lambda: [HumanMessage("a", id=""), HumanMessage("b", id="")],
+            id="messages",
+        ),
+        pytest.param(
+            lambda: Overwrite([HumanMessage("a", id=""), HumanMessage("b", id="")]),
+            id="Overwrite",
+        ),
+    ],
+)
+def test_messages_with_empty_ids_in_one_write_get_distinct_ids(write: Any) -> None:
+    graph = _build_graph(InMemorySaver(), reducer=_messages_delta_reducer, write=write)
+    config = {"configurable": {"thread_id": "t"}}
+
+    graph.invoke({"messages": []}, config)
+
+    messages = graph.get_state(config).values["messages"]
+    assert [m.content for m in messages] == ["a", "b"]
+    assert all(m.id for m in messages), "each message should get a UUID"
+    assert messages[0].id != messages[1].id
 
 
 def test_a_list_written_twice_adds_its_messages_twice() -> None:
