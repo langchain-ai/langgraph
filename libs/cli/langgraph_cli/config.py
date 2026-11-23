@@ -54,6 +54,16 @@ _API_VERSION_PART_PATTERN = re.compile(
     r"(?:\.(?P<patch>\d+))?"
     r"(?:(?:\.|)(?P<pre>dev|rc)(?P<pre_n>\d+))?$"
 )
+_DEFAULT_API_BASE_IMAGES = frozenset(
+    {
+        "langchain/langgraph-api",
+        "langchain/langgraphjs-api",
+        "langchain/langgraph-executor",
+    }
+)
+_PIN_EXACT_API_VERSION_HINT = (
+    'Pin an exact api_version instead, e.g.:\n  "api_version": "0.18.3"'
+)
 
 
 class _ParsedApiVersion(NamedTuple):
@@ -288,7 +298,7 @@ def _ensure_compatible_api_version_base_image(base_image: str) -> None:
         )
 
 
-def _get_pypi_versions(package_name: str) -> list[str]:
+def _get_pypi_versions(package_name: str, *, exclude_yanked: bool = False) -> list[str]:
     try:
         response = httpx.get(
             f"https://pypi.org/pypi/{package_name}/json",
@@ -305,7 +315,65 @@ def _get_pypi_versions(package_name: str) -> list[str]:
         raise click.UsageError(
             f"Failed to fetch PyPI versions for {package_name}: invalid response."
         )
-    return [version for version in releases if isinstance(version, str)]
+    return [
+        version
+        for version, files in releases.items()
+        if isinstance(version, str)
+        and (
+            not exclude_yanked
+            or (
+                isinstance(files, list)
+                and any(
+                    isinstance(file, dict) and not file.get("yanked") for file in files
+                )
+            )
+        )
+    ]
+
+
+def _resolve_api_version_line(
+    api_version: str,
+    base_image: str,
+    version_distro_tag: str,
+) -> str:
+    """Resolve a bare major or minor api_version to its newest final release."""
+    if base_image not in _DEFAULT_API_BASE_IMAGES:
+        return api_version
+    try:
+        line = _parse_api_version(api_version)
+    except ValueError:
+        return api_version
+    if line.prerelease is not None or len(line.release) > 2:
+        return api_version
+
+    try:
+        pypi_versions = _get_pypi_versions("langgraph-api", exclude_yanked=True)
+    except click.UsageError as exc:
+        raise click.UsageError(
+            f"Could not resolve api_version {api_version!r} to a release: "
+            f"{exc.message}\n\n{_PIN_EXACT_API_VERSION_HINT}"
+        ) from None
+
+    candidates: list[tuple[_ParsedApiVersion, str]] = []
+    for candidate_str in pypi_versions:
+        try:
+            candidate = _parse_api_version(candidate_str)
+        except ValueError:
+            continue
+        if (
+            candidate.prerelease is None
+            and candidate.release[: len(line.release)] == line.release
+        ):
+            candidates.append((candidate, candidate_str))
+
+    if not candidates:
+        raise click.UsageError(
+            f"No final PyPI releases match api_version {api_version!r} "
+            f"for {base_image} with {version_distro_tag!r}.\n\n"
+            f"{_PIN_EXACT_API_VERSION_HINT}"
+        )
+
+    return max(candidates, key=lambda item: _api_version_sort_key(item[0]))[1]
 
 
 def _resolve_compatible_api_version(
@@ -315,7 +383,7 @@ def _resolve_compatible_api_version(
 ) -> str:
     match = _API_VERSION_RANGE_PATTERN.fullmatch(api_version)
     if not match:
-        return api_version
+        return _resolve_api_version_line(api_version, base_image, version_distro_tag)
 
     floor_str = match.group("version").strip()
     try:
