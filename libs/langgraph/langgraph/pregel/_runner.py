@@ -75,10 +75,11 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
     # Stop condition is injected by PregelRunner instead of hard-coded here.
     # This lets the runner treat graph-error-handled exceptions as non-fatal
     # so `on_done` does not trigger an early stop for those futures.
-    should_stop: Callable[[set[F]], bool]
+    should_stop: Callable[[Iterable[F]], bool]
     counter: int
     done: set[F]
-    failed: set[F]
+    # futures that raised, in the order they failed (dict as an ordered set)
+    failed: dict[F, None]
     lock: threading.Lock
 
     def __init__(
@@ -87,7 +88,7 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
         callback: weakref.ref[
             Callable[[PregelExecutableTask, BaseException | None], None]
         ],
-        should_stop: Callable[[set[F]], bool],
+        should_stop: Callable[[Iterable[F]], bool],
         future_type: type[F],
         # used for generic typing, newer py supports FutureDict[...](...)
     ) -> None:
@@ -98,7 +99,7 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
         self.should_stop = should_stop
         self.counter = 0
         self.done: set[F] = set()
-        self.failed: set[F] = set()
+        self.failed: dict[F, None] = {}
 
     def __setitem__(
         self,
@@ -128,7 +129,7 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
                 # Only a future that raised can meet the stop condition, so check
                 # those instead of every done future (quadratic in wide steps).
                 if not fut.cancelled() and fut.exception() is not None:
-                    self.failed.add(fut)
+                    self.failed[fut] = None
                 # Wake waiter when all tracked futures are done, or when runner-level
                 # stop condition is met (for example, a non-handled fatal exception).
                 if self.counter == 0 or self.should_stop(self.failed):
@@ -157,10 +158,14 @@ class PregelRunner:
             Awaitable[PregelExecutableTask | None],
         ]
         | None = None,
+        checkpointed: bool = False,
     ) -> None:
         self.submit = submit
         self.put_writes = put_writes
         self.use_astream = use_astream
+        # Whether a checkpointer saves task writes, so a failed step can be resumed.
+        # If so, a failed task doesn't cancel the others (see `_should_stop_others`).
+        self.checkpointed = checkpointed
         self.node_finished = node_finished
         self.node_error_handler_map = dict(node_error_handler_map or {})
         self.error_handler_nodes = set(self.node_error_handler_map.values())
@@ -193,8 +198,13 @@ class PregelRunner:
         futures = FuturesDict(
             callback=weakref.WeakMethod(self.commit),
             event=threading.Event(),
+            # with a checkpointer, a failure mustn't wake the end-of-step wait early:
+            # `concurrent.futures.wait` can return before a task's done callback has
+            # saved its writes, and that wait is what waits for it
             should_stop=partial(
-                _should_stop_others, handled_exception_ids=self._handled_exception_ids
+                _should_stop_others,
+                handled_exception_ids=self._handled_exception_ids,
+                checkpointed=self.checkpointed,
             ),
             future_type=concurrent.futures.Future,
         )
@@ -240,7 +250,7 @@ class PregelRunner:
                         fut: concurrent.futures.Future = concurrent.futures.Future()
                         fut.set_exception(exc)
                         futures.done.add(fut)
-                        futures.failed.add(fut)
+                        futures.failed[fut] = None
                 elif reraise and id(exc) not in self._handled_exception_ids:
                     # let the caller stream this task's result before it raises
                     yield
@@ -334,7 +344,9 @@ class PregelRunner:
                 del fut, task
             # maybe stop other tasks
             if _should_stop_others(
-                done_for_stop, handled_exception_ids=self._handled_exception_ids
+                done_for_stop,
+                handled_exception_ids=self._handled_exception_ids,
+                checkpointed=self.checkpointed,
             ):
                 break
             # give control back to the caller
@@ -348,7 +360,11 @@ class PregelRunner:
         # panic on failure or timeout
         try:
             _panic_or_proceed(
-                futures.done.union(f for f, t in futures.items() if t is not None),
+                [
+                    *futures.failed,
+                    *futures.done,
+                    *(f for f, t in futures.items() if t is not None),
+                ],
                 panic=reraise,
                 handled_exception_ids=self._handled_exception_ids,
                 handled_futures=handled_futures,
@@ -385,8 +401,12 @@ class PregelRunner:
         futures = FuturesDict(
             callback=weakref.WeakMethod(self.commit),
             event=asyncio.Event(),
+            # same stop rule as `tick`; asyncio runs done callbacks before
+            # `asyncio.wait` returns, so here it only keeps the two in step
             should_stop=partial(
-                _should_stop_others, handled_exception_ids=self._handled_exception_ids
+                _should_stop_others,
+                handled_exception_ids=self._handled_exception_ids,
+                checkpointed=self.checkpointed,
             ),
             future_type=asyncio.Future,
         )
@@ -434,7 +454,7 @@ class PregelRunner:
                         fut: asyncio.Future = loop.create_future()
                         fut.set_exception(exc)
                         futures.done.add(fut)
-                        futures.failed.add(fut)
+                        futures.failed[fut] = None
                 elif reraise and id(exc) not in self._handled_exception_ids:
                     # let the caller stream this task's result before it raises
                     yield
@@ -546,25 +566,38 @@ class PregelRunner:
                 del fut, task
             # maybe stop other tasks
             if _should_stop_others(
-                done_for_stop, handled_exception_ids=self._handled_exception_ids
+                done_for_stop,
+                handled_exception_ids=self._handled_exception_ids,
+                checkpointed=self.checkpointed,
             ):
                 break
             # give control back to the caller
             yield
         # wait for done callbacks
-        await asyncio.wait_for(
-            futures.event.wait(),
-            timeout=(max(0, end_time - loop.time()) if end_time else None),
-        )
+        try:
+            await asyncio.wait_for(
+                futures.event.wait(),
+                timeout=(max(0, end_time - loop.time()) if end_time else None),
+            )
+        except asyncio.TimeoutError:
+            # a task that failed before the step timed out is the error to raise
+            if not _any_failed(
+                futures.failed, handled_exception_ids=self._handled_exception_ids
+            ):
+                raise
         # give control back to the caller
         yield
-        # cancel waiter task
+        # cancel the waiter task, and any task still running after a timeout
         for fut in futures:
             fut.cancel()
         # panic on failure or timeout
         try:
             _panic_or_proceed(
-                futures.done.union(f for f, t in futures.items() if t is not None),
+                [
+                    *futures.failed,
+                    *futures.done,
+                    *(f for f, t in futures.items() if t is not None),
+                ],
                 timeout_exc_cls=asyncio.TimeoutError,
                 panic=reraise,
                 handled_exception_ids=self._handled_exception_ids,
@@ -624,12 +657,28 @@ class PregelRunner:
 
 
 def _should_stop_others(
-    done: set[F],
+    done: Iterable[F],
+    *,
+    handled_exception_ids: set[int] | None = None,
+    checkpointed: bool = False,
+) -> bool:
+    """Check if a task failed in a way that should cancel all other tasks.
+
+    With a checkpointer no failure does: a task cancelled after its side effects saves
+    no output, so resuming the failed step would run it again. The others finish and
+    save their writes, and the error is raised once they're done. Without a
+    checkpointer nothing resumes, so the step fails fast."""
+    return not checkpointed and _any_failed(
+        done, handled_exception_ids=handled_exception_ids
+    )
+
+
+def _any_failed(
+    done: Iterable[F],
     *,
     handled_exception_ids: set[int] | None = None,
 ) -> bool:
-    """Check if any task failed, if so, cancel all other tasks.
-    GraphInterrupts are not considered failures.
+    """Check if any task failed. GraphInterrupts are not considered failures.
 
     Neither is an invalid resume value: it's raised once the other tasks finish, so a
     task answered in the same resume isn't cut off after its side effects and then run
@@ -663,7 +712,7 @@ def _exception(
 
 
 def _panic_or_proceed(
-    futs: set[concurrent.futures.Future] | set[asyncio.Future],
+    futs: Iterable[concurrent.futures.Future] | Iterable[asyncio.Future],
     *,
     timeout_exc_cls: type[Exception] = TimeoutError,
     panic: bool = True,
@@ -671,20 +720,23 @@ def _panic_or_proceed(
     handled_futures: Collection[concurrent.futures.Future[Any] | asyncio.Future[Any]]
     | None = None,
 ) -> None:
-    """Cancel remaining tasks if any failed, re-raise exception if panic is True."""
-    done: set[concurrent.futures.Future[Any] | asyncio.Future[Any]] = set()
+    """Cancel remaining tasks if any failed, re-raise exception if panic is True.
+
+    The first failure in `futs` is the one raised, so callers list failed futures
+    first, in the order they failed."""
+    # dict as an ordered set, to keep the order of `futs`
+    done: dict[concurrent.futures.Future[Any] | asyncio.Future[Any], None] = {}
     inflight: set[concurrent.futures.Future[Any] | asyncio.Future[Any]] = set()
     for fut in futs:
         if fut.cancelled():
             continue
         elif fut.done():
-            done.add(fut)
+            done[fut] = None
         else:
             inflight.add(fut)
     interrupts: list[GraphInterrupt] = []
-    while done:
+    for fut in done:
         # if any task failed
-        fut = done.pop()
         if exc := _exception(fut):
             if fut in (handled_futures or set()):
                 continue
