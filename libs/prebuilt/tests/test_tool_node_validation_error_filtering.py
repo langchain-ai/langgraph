@@ -17,6 +17,7 @@ from langchain_core.runnables.config import RunnableConfig
 from langchain_core.tools import tool as dec_tool
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
+from pydantic import BaseModel, model_validator
 
 from langgraph.prebuilt import InjectedState, InjectedStore, ToolNode, ToolRuntime
 from langgraph.prebuilt.tool_node import ToolInvocationError
@@ -468,3 +469,142 @@ async def test_sync_tool_validation_error_filtering() -> None:
     assert tool_message.status == "error"
     assert "value" in tool_message.content
     assert "state" not in tool_message.content.lower()
+
+
+async def test_model_level_validation_error_is_preserved() -> None:
+    """Errors from a `model_validator` have an empty `loc` and must not be dropped.
+
+    They don't belong to any injected argument, so the LLM needs to see them.
+    """
+
+    class RangeInput(BaseModel):
+        low: int
+        high: int
+
+        @model_validator(mode="after")
+        def check_range(self) -> "RangeInput":
+            if self.low > self.high:
+                raise ValueError("low must be less than or equal to high")
+            return self
+
+    @dec_tool(args_schema=RangeInput)
+    def in_range(low: int, high: int) -> str:
+        """Check a range."""
+        return f"{low}-{high}"
+
+    tool_node = ToolNode([in_range])
+    result = await tool_node.ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "in_range",
+                            "args": {"low": 5, "high": 1},
+                            "id": "call_1",
+                            "type": "tool_call",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+
+    tool_message = result["messages"][0]
+    assert tool_message.status == "error"
+    assert "low must be less than or equal to high" in tool_message.content
+
+
+async def test_model_level_validation_error_in_tool_invocation_error() -> None:
+    """The raised ToolInvocationError keeps the model-level error and field errors."""
+
+    class RangeInput(BaseModel):
+        low: int
+        high: int
+
+        @model_validator(mode="after")
+        def check_range(self) -> "RangeInput":
+            if self.low > self.high:
+                raise ValueError("low must be less than or equal to high")
+            return self
+
+    @dec_tool(args_schema=RangeInput)
+    def in_range(low: int, high: int) -> str:
+        """Check a range."""
+        return f"{low}-{high}"
+
+    tool_node = ToolNode([in_range], handle_tool_errors=False)
+
+    with pytest.raises(ToolInvocationError) as exc_info:
+        await tool_node.ainvoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "hi?",
+                        tool_calls=[
+                            {
+                                "name": "in_range",
+                                "args": {"low": 5, "high": 1},
+                                "id": "call_1",
+                                "type": "tool_call",
+                            }
+                        ],
+                    )
+                ]
+            },
+            config=_create_config_with_runtime(),
+        )
+
+    error = exc_info.value
+    assert error.filtered_errors is not None
+    assert len(error.filtered_errors) == 1
+    assert error.filtered_errors[0]["loc"] == ()
+    assert "low must be less than or equal to high" in error.message
+    # No dangling "<empty loc>: " prefix when there is no location.
+    assert ": low must be" not in error.message
+    assert "\n: " not in error.message
+
+
+async def test_field_level_validation_error_control_with_model_validator() -> None:
+    """Control: a field error on a model that has a model_validator still reports its loc."""
+
+    class RangeInput(BaseModel):
+        low: int
+        high: int
+
+        @model_validator(mode="after")
+        def check_range(self) -> "RangeInput":
+            if self.low > self.high:
+                raise ValueError("low must be less than or equal to high")
+            return self
+
+    @dec_tool(args_schema=RangeInput)
+    def in_range(low: int, high: int) -> str:
+        """Check a range."""
+        return f"{low}-{high}"
+
+    tool_node = ToolNode([in_range])
+    result = await tool_node.ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "in_range",
+                            "args": {"low": "not_an_int", "high": 1},
+                            "id": "call_1",
+                            "type": "tool_call",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+
+    tool_message = result["messages"][0]
+    assert tool_message.status == "error"
+    assert "low:" in tool_message.content
