@@ -55,7 +55,7 @@ def _add_messages_wrapper(func: Callable) -> Callable[[Messages, Messages], Mess
             )
             raise ValueError(msg)
         else:
-            return partial(func, **kwargs)
+            return partial(_add_messages, **kwargs)
 
     _add_messages.__doc__ = func.__doc__
     return cast(Callable[[Messages, Messages], Messages], _add_messages)

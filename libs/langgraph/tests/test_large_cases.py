@@ -6614,7 +6614,7 @@ def test_weather_subgraph(
             (AnyStr("weather_graph:"),),
             {
                 "weather_node": {
-                    "messages": [{"role": "assistant", "content": "I'ts sunny in la!"}]
+                    "messages": [_AnyIdAIMessage(content="I'ts sunny in la!")]
                 }
             },
         ),

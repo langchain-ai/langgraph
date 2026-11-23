@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from collections.abc import (
     AsyncIterator,
     Callable,
@@ -9,6 +10,7 @@ from collections.abc import (
     Sequence,
 )
 from dataclasses import fields, is_dataclass
+from functools import partial
 from typing import (
     Any,
     TypeVar,
@@ -24,9 +26,9 @@ from pydantic import BaseModel
 
 from langgraph._internal._config import filter_to_user_tags
 from langgraph._internal._constants import NS_SEP, PUSH
-from langgraph.channels.binop import _get_overwrite
+from langgraph.channels.binop import BinaryOperatorAggregate, _get_overwrite
 from langgraph.channels.delta import DeltaChannel
-from langgraph.constants import TAG_HIDDEN, TAG_NOSTREAM
+from langgraph.constants import START, TAG_HIDDEN, TAG_NOSTREAM
 from langgraph.pregel.protocol import StreamChunk
 from langgraph.types import Command, Overwrite
 
@@ -46,12 +48,16 @@ Meta = tuple[tuple[str, ...], dict[str, Any]]
 
 def _state_values(obj: Any) -> Sequence[Any]:
     """Extract top-level field values from a state object (dict, BaseModel, or dataclass)."""
+    return [v for _, v in _state_items(obj)]
+
+
+def _state_items(obj: Any) -> Sequence[tuple[str, Any]]:
     if isinstance(obj, dict):
-        return list(obj.values())
+        return list(obj.items())
     elif isinstance(obj, BaseModel):
-        return [getattr(obj, k) for k in type(obj).model_fields]
+        return [(k, getattr(obj, k)) for k in type(obj).model_fields]
     elif is_dataclass(obj) and not isinstance(obj, type):
-        return [getattr(obj, f.name) for f in fields(obj)]
+        return [(f.name, getattr(obj, f.name)) for f in fields(obj)]
     return ()
 
 
@@ -526,12 +532,13 @@ def _is_message_dict(item: dict) -> bool:
 def ensure_message_ids(
     channels: Mapping[str, Any], writes: Sequence[tuple[str, Any]]
 ) -> None:
-    """Give the messages written to DeltaChannels stable ids.
+    """Give the messages written to messages channels stable ids.
 
-    A `DeltaChannel` replays its saved writes on every read, and its reducer
-    may not assign missing ids (`_messages_delta_reducer` doesn't), so a
-    message saved without an id comes back without one, or with a new one on
-    every read, and nothing can target it by id, for example `RemoveMessage`.
+    A message saved without an id gets one later, when a reducer reads it, so
+    the `updates` stream, the saved write and the state can each show a
+    different id, and a replay or fork from that checkpoint mints a new one.
+    A `DeltaChannel` replays its saved writes on every read, so there the id
+    can change on every read.
 
     In a channel whose reducer is `_messages_delta_reducer`, every message-like
     it accepts (a message, a dict, a string, a `(role, content)` tuple; alone,
@@ -542,19 +549,82 @@ def ensure_message_ids(
     it always has: a message dict in a list raises here, anything else when
     the reducer reads it. An empty id counts as missing.
 
+    In an `add_messages` channel, including `add_messages(format=...)`, the
+    message-likes `add_messages` accepts become messages with ids, including
+    those in an `Overwrite`, which `add_messages` never sees. As in
+    `add_messages`, only a `None` id is missing.
+
+    A `StateGraph` input is one write to `START`; the values in it get ids by
+    the channel they go to, so the input checkpoint saves them.
+
     A write that changes is replaced in `writes`: lists and dicts the caller
     passed in are never changed, only the ids of message objects.
     """
     for i, (ch, value) in enumerate(writes):
-        spec = channels.get(ch)
-        if not isinstance(spec, DeltaChannel):
-            continue
-        if spec.reducer is _messages_delta_reducer:
-            new_value = _with_message_ids(value)
+        if ch == START:
+            new_value = _input_with_message_ids(channels, value)
         else:
-            new_value = _with_base_message_ids(value)
+            new_value = _channel_value_with_message_ids(channels.get(ch), value)
         if new_value is not value:
             cast(MutableSequence[tuple[str, Any]], writes)[i] = (ch, new_value)
+
+
+def _channel_value_with_message_ids(spec: Any, value: Any) -> Any:
+    if isinstance(spec, DeltaChannel):
+        if spec.reducer is _messages_delta_reducer:
+            return _with_message_ids(value)
+        return _with_base_message_ids(value)
+    if isinstance(spec, BinaryOperatorAggregate) and _is_add_messages(spec.operator):
+        return _with_add_messages_ids(value)
+    return value
+
+
+def _input_with_message_ids(channels: Mapping[str, Any], value: Any) -> Any:
+    if isinstance(value, dict):
+        new_value = {
+            k: _channel_value_with_message_ids(channels.get(k), v)
+            for k, v in value.items()
+        }
+        if all(new_value[k] is v for k, v in value.items()):
+            return value
+        return new_value
+    # A state object keeps its values, so only its message objects get ids.
+    for name, field_value in _state_items(value):
+        _channel_value_with_message_ids(channels.get(name), field_value)
+    return value
+
+
+def _is_add_messages(operator: Any) -> bool:
+    # Imported here: `langgraph.graph.message` imports this module.
+    from langgraph.graph.message import add_messages
+
+    if isinstance(operator, partial):
+        operator = operator.func
+    return operator is add_messages
+
+
+def _with_add_messages_ids(value: Any) -> Any:
+    is_overwrite, overwrite_value = _get_overwrite(value)
+    items = overwrite_value if is_overwrite else value
+    if isinstance(items, list):
+        new_items = _map_messages(items, _add_messages_item_with_id)
+    else:
+        new_items = _add_messages_item_with_id(items)
+    if new_items is items:
+        return value
+    return Overwrite(new_items) if is_overwrite else new_items
+
+
+def _add_messages_item_with_id(item: Any) -> Any:
+    if not isinstance(item, BaseMessage):
+        try:
+            item = convert_to_messages([item])[0]
+        except Exception:
+            return item
+    if item.id is None:
+        # `uuid.uuid4`, as in `add_messages`, so tests that patch it still apply.
+        item.id = str(uuid.uuid4())
+    return item
 
 
 def _with_message_ids(value: Any) -> Any:

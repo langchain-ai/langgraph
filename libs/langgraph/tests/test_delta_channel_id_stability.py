@@ -13,12 +13,13 @@ from typing import Annotated, Any
 import pytest
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.last_value import LastValue
 from langgraph.graph import END, START, StateGraph
-from langgraph.graph.message import _messages_delta_reducer
+from langgraph.graph.message import _messages_delta_reducer, add_messages
 from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.types import Command, Durability, Overwrite
 
@@ -43,10 +44,13 @@ def _build_graph(
     *,
     reducer: Any = _append_reducer,
     write: Any = lambda: [AIMessage(content="reply", id="ai-1")],
+    channel: Any = None,
 ) -> Any:
+    if channel is None:
+        channel = DeltaChannel(reducer, snapshot_frequency=50)
     State = TypedDict(  # noqa: UP013
         "State",
-        {"messages": Annotated[list, DeltaChannel(reducer, snapshot_frequency=50)]},
+        {"messages": Annotated[list, channel]},
     )  # type: ignore[call-overload]
 
     def agent(state: dict) -> dict:
@@ -333,3 +337,133 @@ def test_other_delta_channels_keep_the_dicts_in_an_overwrite(value: dict) -> Non
     graph.invoke({"messages": []}, config)
 
     assert graph.get_state(config).values["messages"] == [value]
+
+
+MESSAGES_CHANNELS = [
+    pytest.param(lambda: DeltaChannel(_messages_delta_reducer), id="delta"),
+    pytest.param(lambda: add_messages, id="add_messages"),
+]
+
+
+@pytest.mark.parametrize("channel", MESSAGES_CHANNELS)
+@pytest.mark.parametrize(
+    "write",
+    [
+        pytest.param(lambda: [{"role": "user", "content": "hello"}], id="dict"),
+        pytest.param(lambda: [("user", "hello")], id="tuple"),
+        pytest.param(lambda: "hello", id="bare string"),
+    ],
+)
+def test_updates_carry_the_saved_message_ids(channel: Any, write: Any) -> None:
+    graph = _build_graph(InMemorySaver(), channel=channel(), write=write)
+    config = {"configurable": {"thread_id": "t"}}
+
+    updates = list(graph.stream({"messages": []}, config, stream_mode="updates"))
+
+    streamed = updates[0]["agent"]["messages"]
+    streamed = streamed if isinstance(streamed, list) else [streamed]
+    first, second = _hello_ids(graph, config)
+    assert [m.id for m in streamed] == [first], "updates must show the saved id"
+    assert first == second
+
+
+@pytest.mark.parametrize("channel", MESSAGES_CHANNELS)
+@pytest.mark.parametrize(
+    "write",
+    [
+        pytest.param(lambda: Overwrite([HumanMessage("hello")]), id="message"),
+        pytest.param(
+            lambda: Overwrite([{"role": "user", "content": "hello"}]), id="dict"
+        ),
+        pytest.param(lambda: Overwrite([("user", "hello")]), id="tuple"),
+    ],
+)
+def test_an_overwrite_keeps_its_message_ids_in_a_fork(channel: Any, write: Any) -> None:
+    graph = _build_graph(InMemorySaver(), channel=channel(), write=write)
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"messages": []}, config)
+    first, second = _hello_ids(graph, config)
+
+    forked = graph.update_state(
+        graph.get_state(config).config, {"messages": [AIMessage("x", id="x")]}
+    )
+
+    assert first, "the message should get a UUID"
+    assert first == second, "its id must be the same on every read"
+    assert _hello_ids(graph, forked) == [first, first], "a fork must keep it"
+
+
+@pytest.mark.parametrize("channel", MESSAGES_CHANNELS)
+@pytest.mark.parametrize(
+    "input",
+    [
+        pytest.param(lambda: [HumanMessage("hello")], id="message"),
+        pytest.param(lambda: [{"role": "user", "content": "hello"}], id="dict"),
+        pytest.param(lambda: "hello", id="bare string"),
+    ],
+)
+def test_a_replay_from_the_first_checkpoint_keeps_the_input_message_ids(
+    channel: Any, input: Any, durability: Durability
+) -> None:
+    graph = _build_graph(InMemorySaver(), channel=channel())
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"messages": input()}, config, durability=durability)
+    first, _ = _hello_ids(graph, config)
+    # `exit` saves no input checkpoint, only the last one (and, for a
+    # DeltaChannel, an anchor with no `source` that can't be replayed).
+    oldest = [s for s in graph.get_state_history(config) if "source" in s.metadata][-1]
+
+    graph.invoke(None, oldest.config)
+
+    assert first, "the message should get a UUID"
+    assert _hello_ids(graph, config) == [first, first]
+
+
+class _PydanticState(BaseModel):
+    messages: Annotated[list[AnyMessage], add_messages]
+
+
+def test_a_state_object_input_saves_its_message_ids() -> None:
+    graph = (
+        StateGraph(_PydanticState)
+        .add_node("agent", lambda state: {"messages": [AIMessage("reply")]})
+        .add_edge(START, "agent")
+        .compile(checkpointer=InMemorySaver())
+    )
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke(_PydanticState(messages=[HumanMessage("hello")]), config)
+    first, _ = _hello_ids(graph, config)
+    oldest = list(graph.get_state_history(config))[-1]
+
+    graph.invoke(None, oldest.config)
+
+    assert first, "the message should get a UUID"
+    assert _hello_ids(graph, config) == [first, first]
+
+
+def test_an_overwrite_on_a_formatting_add_messages_channel_gets_a_stable_id() -> None:
+    graph = _build_graph(
+        InMemorySaver(),
+        channel=add_messages(format="langchain-openai"),
+        write=lambda: Overwrite([HumanMessage("hello")]),
+    )
+    config = {"configurable": {"thread_id": "t"}}
+
+    graph.invoke({"messages": []}, config)
+
+    first, second = _hello_ids(graph, config)
+    assert first, "the message should get a UUID"
+    assert first == second, "its id must be the same on every read"
+
+
+def test_add_messages_keeps_an_empty_id() -> None:
+    graph = _build_graph(
+        InMemorySaver(),
+        channel=add_messages,
+        write=lambda: [HumanMessage("hello", id="")],
+    )
+    config = {"configurable": {"thread_id": "t"}}
+
+    graph.invoke({"messages": []}, config)
+
+    assert _hello_ids(graph, config) == ["", ""]
