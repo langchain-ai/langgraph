@@ -183,6 +183,7 @@ MESSAGE_SHAPES = [
     pytest.param(
         lambda: [{"role": "user", "content": "hello", "id": ""}], id="dict, empty id"
     ),
+    pytest.param(lambda: [HumanMessage("hello", id="")], id="message, empty id"),
     pytest.param(lambda: [("user", "hello")], id="tuple"),
     pytest.param(lambda: ("user", "hello"), id="bare tuple"),
     pytest.param(lambda: ["hello"], id="string"),
@@ -198,10 +199,14 @@ def _id(m: Any) -> str | None:
 
 
 def _hello_ids(graph: Any, config: dict) -> list[str | None]:
+    def messages() -> list:
+        value = graph.get_state(config).values["messages"]
+        return value if isinstance(value, list) else [value]
+
     return [
         next(
             _id(m)
-            for m in graph.get_state(config).values["messages"]
+            for m in messages()
             if (m.get("content") if isinstance(m, dict) else m.content) == "hello"
         )
         for _ in range(2)
@@ -220,7 +225,15 @@ def test_input_message_of_any_shape_gets_stable_id(write: Any) -> None:
     assert first == second, "its id must be the same on every read"
 
 
-@pytest.mark.parametrize("write", MESSAGE_SHAPES)
+@pytest.mark.parametrize(
+    "write",
+    [
+        *MESSAGE_SHAPES,
+        pytest.param(
+            lambda: Overwrite(HumanMessage("hello")), id="Overwrite of a message"
+        ),
+    ],
+)
 def test_node_message_of_any_shape_gets_stable_id(write: Any) -> None:
     graph = _build_graph(InMemorySaver(), reducer=_messages_delta_reducer, write=write)
     config = {"configurable": {"thread_id": "t"}}
