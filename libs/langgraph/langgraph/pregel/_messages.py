@@ -578,7 +578,8 @@ def _input_with_message_ids(channels: Mapping[str, Any], value: Any) -> Any:
     if not changed:
         return value
     if isinstance(value, dict):
-        return {**value, **changed}
+        # Built from the input's own keys, so the copy has exactly those.
+        return {k: changed.get(k, v) for k, v in value.items()}
     if isinstance(value, BaseModel):
         return value.model_copy(update=changed)
     # Copied, not rebuilt: rebuilding runs the user's `__post_init__` again.

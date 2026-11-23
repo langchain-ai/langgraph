@@ -494,8 +494,14 @@ class _SystemPromptState:
         self.messages = [SystemMessage("be brief"), *self.messages]
 
 
+@dataclass(frozen=True)
+class _FrozenDataclassState:
+    messages: Annotated[list, add_messages] = field(default_factory=list)
+
+
 @pytest.mark.parametrize(
-    "schema", [_PydanticState, _DataclassState, _SystemPromptState]
+    "schema",
+    [_PydanticState, _DataclassState, _FrozenDataclassState, _SystemPromptState],
 )
 @pytest.mark.parametrize(
     "input",
@@ -526,6 +532,33 @@ def test_a_state_object_input_saves_its_message_ids(schema: Any, input: Any) -> 
     assert first, "the message should get a UUID"
     assert _hello_ids(graph, config) == [first, first]
     assert [type(m) for m in state.messages] == input_types, "the input is left as is"
+
+
+def test_a_dict_input_keeps_its_keys_and_their_order() -> None:
+    State = TypedDict(  # noqa: UP013
+        "State", {"topic": str, "messages": Annotated[list, add_messages]}
+    )  # type: ignore[call-overload]
+    graph = (
+        StateGraph(State)
+        .add_node("agent", lambda state: {})
+        .add_edge(START, "agent")
+        .compile(checkpointer=InMemorySaver())
+    )
+    config = {"configurable": {"thread_id": "t"}}
+    input = {
+        "topic": "x",
+        "messages": [{"role": "user", "content": "hello"}],
+        "other": 1,
+    }
+
+    graph.invoke(input, config)
+
+    saved = list(graph.checkpointer.list(config))[-1].checkpoint["channel_values"]
+    (message,) = saved["__start__"]["messages"]
+    assert list(saved["__start__"]) == ["topic", "messages", "other"]
+    assert saved["__start__"]["topic"] == "x" and saved["__start__"]["other"] == 1
+    assert message == {"role": "user", "content": "hello", "id": message["id"]}
+    assert message["id"]
 
 
 @pytest.mark.parametrize(
