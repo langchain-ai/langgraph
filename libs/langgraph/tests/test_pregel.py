@@ -9975,3 +9975,93 @@ async def test_delta_channel_async_write_ordering() -> None:
 
     state = await graph.aget_state(config)
     assert len(state.values["messages"]) == 6  # 3 human + 3 AI
+
+
+def test_get_state_and_history_do_not_compute_cache_keys() -> None:
+    from langgraph.cache.memory import InMemoryCache
+
+    class State(TypedDict):
+        value: int
+
+    key_calls: list[int] = []
+    fail_key = False
+
+    def cache_key(state: State) -> str:
+        key_calls.append(state["value"])
+        if fail_key:
+            raise RuntimeError("cache key unavailable")
+        return str(state["value"])
+
+    builder = StateGraph(State)
+    builder.add_node(
+        "worker",
+        lambda state: {"value": state["value"] + 1},
+        cache_policy=CachePolicy(key_func=cache_key),
+    )
+    builder.add_edge(START, "worker")
+    graph = builder.compile(
+        cache=InMemoryCache(),
+        checkpointer=InMemorySaver(),
+        interrupt_before=["worker"],
+    )
+    config = {"configurable": {"thread_id": "snapshot-cache-key-sync"}}
+
+    graph.invoke({"value": 1}, config)
+    key_calls.clear()
+
+    assert graph.get_state(config).next == ("worker",)
+    assert key_calls == []
+
+    history = list(graph.get_state_history(config))
+    assert history
+    assert key_calls == []
+
+    fail_key = True
+    with pytest.raises(RuntimeError, match="cache key unavailable"):
+        graph.invoke(None, config)
+    assert key_calls == [1]
+
+
+async def test_aget_state_and_history_do_not_compute_cache_keys() -> None:
+    from langgraph.cache.memory import InMemoryCache
+
+    class State(TypedDict):
+        value: int
+
+    key_calls: list[int] = []
+    fail_key = False
+
+    def cache_key(state: State) -> str:
+        key_calls.append(state["value"])
+        if fail_key:
+            raise RuntimeError("cache key unavailable")
+        return str(state["value"])
+
+    builder = StateGraph(State)
+    builder.add_node(
+        "worker",
+        lambda state: {"value": state["value"] + 1},
+        cache_policy=CachePolicy(key_func=cache_key),
+    )
+    builder.add_edge(START, "worker")
+    graph = builder.compile(
+        cache=InMemoryCache(),
+        checkpointer=InMemorySaver(),
+        interrupt_before=["worker"],
+    )
+    config = {"configurable": {"thread_id": "snapshot-cache-key-async"}}
+
+    await graph.ainvoke({"value": 1}, config)
+    key_calls.clear()
+
+    assert (await graph.aget_state(config)).next == ("worker",)
+    assert key_calls == []
+
+    history = [state async for state in graph.aget_state_history(config)]
+    assert history
+    assert key_calls == []
+
+    fail_key = True
+    with pytest.raises(RuntimeError, match="cache key unavailable"):
+        await graph.ainvoke(None, config)
+    assert key_calls == [1]
