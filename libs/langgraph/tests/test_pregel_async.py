@@ -693,6 +693,49 @@ async def test_failed_step_streams_other_nodes_with_checkpointer(
     assert sent == ["email"]
 
 
+async def test_failed_step_keeps_streaming_other_nodes_with_checkpointer(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """After a node fails, what the others stream reaches the caller while they run."""
+    received = asyncio.Event()
+    seen_in_time: list[bool] = []
+
+    class State(TypedDict):
+        log: Annotated[list[str], operator.add]
+
+    async def slow(state: State, writer: StreamWriter) -> State:
+        await asyncio.sleep(0.05)  # `save` has failed by now
+        writer("progress")
+        try:
+            await asyncio.wait_for(received.wait(), 0.5)
+            seen_in_time.append(True)
+        except asyncio.TimeoutError:
+            seen_in_time.append(False)
+        return {"log": ["slow"]}
+
+    async def save(state: State) -> State:
+        raise ValueError("save failed")
+
+    graph = (
+        StateGraph(State)
+        .add_node("slow", slow)
+        .add_node("save", save)
+        .add_edge(START, "slow")
+        .add_edge(START, "save")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    with pytest.raises(ValueError, match="save failed"):
+        async for mode, chunk in graph.astream(
+            {"log": []},
+            {"configurable": {"thread_id": "1"}},
+            stream_mode=["custom", "updates"],
+        ):
+            if mode == "custom" and chunk == "progress":
+                received.set()
+    assert seen_in_time == [True]
+
+
 async def test_step_timeout_after_failure_raises_it_with_checkpointer(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:

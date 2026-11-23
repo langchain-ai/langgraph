@@ -4373,8 +4373,8 @@ def test_other_nodes_finish_when_one_fails_with_checkpointer(
 ) -> None:
     """With a checkpointer, a failing node doesn't cut off the others in its step.
 
-    A node whose output isn't saved by the time the step fails would run, and its
-    side effect, again when the failed step is resumed.
+    A node whose output isn't saved when the step fails runs again, side effect
+    included, when the failed step is resumed.
     """
     sent: list[str] = []
     fail = True
@@ -4420,6 +4420,45 @@ def test_other_nodes_finish_when_one_fails_with_checkpointer(
     result = graph.invoke(None, config, durability=durability)
     assert sorted(result["log"]) == ["saved", "sent"]
     assert sent == ["email"]
+
+
+def test_failed_step_keeps_streaming_other_nodes_with_checkpointer(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """After a node fails, what the others stream reaches the caller while they run."""
+    received = threading.Event()
+    seen_in_time: list[bool] = []
+
+    class State(TypedDict):
+        log: Annotated[list[str], operator.add]
+
+    def slow(state: State, writer: StreamWriter) -> State:
+        time.sleep(0.05)  # `save` has failed by now
+        writer("progress")
+        seen_in_time.append(received.wait(0.5))
+        return {"log": ["slow"]}
+
+    def save(state: State) -> State:
+        raise ValueError("save failed")
+
+    graph = (
+        StateGraph(State)
+        .add_node("slow", slow)
+        .add_node("save", save)
+        .add_edge(START, "slow")
+        .add_edge(START, "save")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    with pytest.raises(ValueError, match="save failed"):
+        for mode, chunk in graph.stream(
+            {"log": []},
+            {"configurable": {"thread_id": "1"}},
+            stream_mode=["custom", "updates"],
+        ):
+            if mode == "custom" and chunk == "progress":
+                received.set()
+    assert seen_in_time == [True]
 
 
 def test_earliest_failure_is_raised_with_checkpointer(
