@@ -8,11 +8,19 @@ ID in each LangSmith trace / on every resumed invocation.
 
 from __future__ import annotations
 
+import operator
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Annotated, Any
+from typing import Annotated, Any, get_origin
 
 import pytest
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+)
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel
@@ -41,6 +49,15 @@ def _append_reducer(
     return result
 
 
+def _last_50(left: Any, right: Any) -> Any:
+    return add_messages(left, right)[-50:]
+
+
+def _field(channel: Any) -> Any:
+    """`channel` is a reducer or channel, or a whole `Annotated` field type."""
+    return channel if get_origin(channel) is Annotated else Annotated[list, channel]
+
+
 def _build_graph(
     checkpointer: Any,
     *,
@@ -52,7 +69,7 @@ def _build_graph(
         channel = DeltaChannel(reducer, snapshot_frequency=50)
     State = TypedDict(  # noqa: UP013
         "State",
-        {"messages": Annotated[list, channel]},
+        {"messages": _field(channel)},
     )  # type: ignore[call-overload]
 
     def agent(state: dict) -> dict:
@@ -355,6 +372,9 @@ def test_other_delta_channels_keep_the_dicts_in_an_overwrite(value: dict) -> Non
 MESSAGES_CHANNELS = [
     pytest.param(lambda: DeltaChannel(_messages_delta_reducer), id="delta"),
     pytest.param(lambda: add_messages, id="add_messages"),
+    pytest.param(
+        lambda: Annotated[list[AnyMessage], _last_50], id="wrapped add_messages"
+    ),
 ]
 
 
@@ -362,6 +382,7 @@ MESSAGES_CHANNELS = [
 @pytest.mark.parametrize(
     "write",
     [
+        pytest.param(lambda: [HumanMessage("hello")], id="message"),
         pytest.param(lambda: [{"role": "user", "content": "hello"}], id="dict"),
         pytest.param(lambda: [("user", "hello")], id="tuple"),
         pytest.param(lambda: "hello", id="bare string"),
@@ -673,7 +694,7 @@ def test_an_overwrite_streams_in_the_form_it_was_written(write: Any) -> None:
 def test_a_resumed_step_applies_the_message_id_it_saved(
     channel: Any, sync_checkpointer: BaseCheckpointSaver
 ) -> None:
-    State = TypedDict("State", {"messages": Annotated[list, channel()]})  # noqa: UP013
+    State = TypedDict("State", {"messages": _field(channel())})  # noqa: UP013
 
     def ask(state: dict) -> dict:
         interrupt("continue?")
@@ -782,3 +803,64 @@ async def test_an_async_run_keeps_the_message_ids_it_saves(
         if (m.get("content") if isinstance(m, dict) else m.content) == "hello again"
     ]
     assert again and again[0], "aupdate_state gives the message an id"
+
+
+@pytest.mark.parametrize(
+    "typ",
+    [
+        pytest.param(list[AnyMessage], id="list[AnyMessage]"),
+        pytest.param(list[BaseMessage], id="list[BaseMessage]"),
+        pytest.param(Sequence[AnyMessage], id="Sequence[AnyMessage]"),
+        pytest.param(list[HumanMessage | AIMessage], id="union of messages"),
+    ],
+)
+def test_a_wrapped_add_messages_channel_is_found_by_its_message_type(
+    typ: Any,
+) -> None:
+    graph = _build_graph(InMemorySaver(), channel=Annotated[typ, _last_50])
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"messages": "hello"}, config)
+    first, _ = _hello_ids(graph, config)
+
+    graph.invoke(None, list(graph.get_state_history(config))[-1].config)
+
+    assert first, "the message should get a UUID"
+    assert _hello_ids(graph, config) == [first, first]
+
+
+@pytest.mark.parametrize("typ", [list, list[str], list[dict]])
+def test_a_channel_not_typed_as_messages_keeps_what_was_written(typ: Any) -> None:
+    written = ["hello", {"role": "user", "content": "hello"}]
+    graph = _build_graph(
+        InMemorySaver(),
+        channel=Annotated[typ, operator.add],
+        write=lambda: [*written],
+    )
+    config = {"configurable": {"thread_id": "t"}}
+
+    (update,) = graph.stream({"messages": []}, config, stream_mode="updates")
+
+    assert update["agent"]["messages"] == written
+    assert graph.get_state(config).values["messages"] == written
+
+
+def test_a_custom_reducer_on_a_messages_channel_receives_messages_with_ids() -> None:
+    received: list = []
+
+    def append(left: list, right: list) -> list:
+        received.extend(right)
+        return left + right
+
+    graph = _build_graph(
+        InMemorySaver(),
+        channel=Annotated[list[AnyMessage], append],
+        write=lambda: ["hello"],
+    )
+    config = {"configurable": {"thread_id": "t"}}
+
+    graph.invoke({"messages": []}, config)
+
+    (message,) = received
+    assert isinstance(message, HumanMessage), "a string becomes a message"
+    assert _hello_ids(graph, config) == [message.id, message.id]
+    assert message.id

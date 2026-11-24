@@ -3906,7 +3906,7 @@ def test_root_graph(
             AIMessage(
                 content="an extra message", id="00000000-0000-4000-8000-000000000010"
             ),
-            HumanMessage(content="what is weather in la"),
+            _AnyIdHumanMessage(content="what is weather in la"),
         ],
         "something_else": "value",
     }
