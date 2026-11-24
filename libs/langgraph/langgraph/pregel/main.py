@@ -2803,6 +2803,7 @@ class Pregel(
                 - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by `get_state()`.
                 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
                 - `"debug"`: Emit debug events with as much information as possible for each step.
+                - `"tools"`: Emit events when tool calls start, stream partial output, finish, and fail.
 
                 You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
                 The streamed outputs will be tuples of `(mode, data)`.
@@ -3216,6 +3217,7 @@ class Pregel(
                 - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by `get_state()`.
                 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
                 - `"debug"`: Emit debug events with as much information as possible for each step.
+                - `"tools"`: Emit events when tool calls start, stream partial output, finish, and fail.
 
                 You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
                 The streamed outputs will be tuples of `(mode, data)`.
