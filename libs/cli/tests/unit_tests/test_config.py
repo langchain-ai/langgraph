@@ -1,3 +1,4 @@
+import builtins
 import copy
 import json
 import os
@@ -775,6 +776,32 @@ def test_validate_config_pip_installer():
                 "project_root": "../..",
             }
         )
+
+
+def test_validate_config_file_reads_json_as_utf8(monkeypatch):
+    """Config and package.json must be read as UTF-8 regardless of the host locale."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        config_path = tmpdir_path / "langgraph.json"
+        config_path.write_text(
+            json.dumps(
+                {"dependencies": ["."], "graphs": {"客服": "./agent.py:graph"}},
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        real_open = builtins.open
+        encodings: list[str | None] = []
+
+        def tracking_open(file, *args, **kwargs):
+            encodings.append(kwargs.get("encoding"))
+            return real_open(file, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "open", tracking_open)
+        validate_config_file(config_path)
+
+        assert encodings[0] == "utf-8"
 
 
 def test_validate_config_file():
