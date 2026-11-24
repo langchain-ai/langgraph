@@ -13,6 +13,7 @@ from typing import Annotated, Any
 
 import pytest
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel
 from typing_extensions import TypedDict
@@ -22,7 +23,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import _messages_delta_reducer, add_messages
 from langgraph.pregel import NodeBuilder, Pregel
-from langgraph.types import Command, Durability, Overwrite
+from langgraph.types import Command, Durability, Overwrite, interrupt
 
 pytestmark = pytest.mark.anyio
 
@@ -403,6 +404,17 @@ def test_add_messages_keeps_a_message_dict_a_dict() -> None:
             lambda: Overwrite([{"role": "user", "content": "hello"}]), id="dict"
         ),
         pytest.param(lambda: Overwrite([("user", "hello")]), id="tuple"),
+        pytest.param(
+            lambda: {"__overwrite__": [{"role": "user", "content": "hello"}]},
+            id="__overwrite__ dict",
+        ),
+        pytest.param(
+            lambda: {
+                "type": "__overwrite__",
+                "value": [{"role": "user", "content": "hello"}],
+            },
+            id="serialized Overwrite",
+        ),
     ],
 )
 def test_an_overwrite_keeps_its_message_ids_in_a_fork(channel: Any, write: Any) -> None:
@@ -620,3 +632,153 @@ def test_add_messages_keeps_an_empty_id() -> None:
     graph.invoke({"messages": []}, config)
 
     assert _hello_ids(graph, config) == ["", ""]
+
+
+def _hello_write_id(checkpointer: BaseCheckpointSaver, config: dict) -> str | None:
+    for saved in checkpointer.list(config):
+        for _, channel, value in saved.pending_writes or []:
+            if channel != "messages":
+                continue
+            for m in value if isinstance(value, list) else [value]:
+                content = m.get("content") if isinstance(m, dict) else m.content
+                if content == "hello":
+                    return _id(m)
+    raise AssertionError("no saved write holds the message")
+
+
+@pytest.mark.parametrize(
+    "write",
+    [
+        pytest.param(lambda: Overwrite(["hello"]), id="Overwrite"),
+        pytest.param(lambda: {"__overwrite__": ["hello"]}, id="__overwrite__ dict"),
+        pytest.param(
+            lambda: {"type": "__overwrite__", "value": ["hello"]},
+            id="serialized Overwrite",
+        ),
+    ],
+)
+def test_an_overwrite_streams_in_the_form_it_was_written(write: Any) -> None:
+    graph = _build_graph(InMemorySaver(), channel=add_messages, write=write)
+    config = {"configurable": {"thread_id": "t"}}
+
+    (update,) = graph.stream({"messages": []}, config, stream_mode="updates")
+
+    streamed, written = update["agent"]["messages"], write()
+    assert type(streamed) is type(written)
+    if isinstance(written, dict):
+        assert streamed.keys() == written.keys()
+
+
+@pytest.mark.parametrize("channel", MESSAGES_CHANNELS)
+def test_a_resumed_step_applies_the_message_id_it_saved(
+    channel: Any, sync_checkpointer: BaseCheckpointSaver
+) -> None:
+    State = TypedDict("State", {"messages": Annotated[list, channel()]})  # noqa: UP013
+
+    def ask(state: dict) -> dict:
+        interrupt("continue?")
+        return {}
+
+    graph = (
+        StateGraph(State)
+        .add_node("write", lambda state: {"messages": [("user", "hello")]})
+        .add_node("ask", ask)
+        .add_edge(START, "write")
+        .add_edge(START, "ask")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"messages": []}, config)
+    saved = _hello_write_id(sync_checkpointer, config)
+
+    graph.invoke(Command(resume=True), config)
+
+    assert saved, "the write saved at the interrupt should carry an id"
+    assert _hello_ids(graph, config) == [saved, saved]
+
+
+@pytest.mark.parametrize("channel", MESSAGES_CHANNELS)
+def test_a_command_update_applies_the_message_id_it_saved(
+    channel: Any, sync_checkpointer: BaseCheckpointSaver
+) -> None:
+    graph = _build_graph(sync_checkpointer, channel=channel(), write=lambda: [])
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"messages": [HumanMessage("a", id="a")]}, config)
+
+    graph.invoke(
+        Command(update={"messages": [{"role": "user", "content": "hello"}]}), config
+    )
+
+    saved = _hello_write_id(sync_checkpointer, config)
+    assert saved, "the saved write should carry an id"
+    assert _hello_ids(graph, config) == [saved, saved]
+
+
+@pytest.mark.parametrize("channel", MESSAGES_CHANNELS)
+def test_update_state_applies_the_message_id_it_saved(
+    channel: Any, sync_checkpointer: BaseCheckpointSaver
+) -> None:
+    graph = _build_graph(sync_checkpointer, channel=channel(), write=lambda: [])
+    config = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"messages": [HumanMessage("a", id="a")]}, config)
+
+    updated = graph.update_state(
+        config, {"messages": [{"role": "user", "content": "hello"}]}
+    )
+
+    saved = _hello_write_id(sync_checkpointer, config)
+    assert saved, "the saved write should carry an id"
+    assert _hello_ids(graph, updated) == [saved, saved]
+
+
+async def _ahello_ids(graph: Any, config: dict) -> list[str | None]:
+    return [
+        next(
+            _id(m)
+            for m in (await graph.aget_state(config)).values["messages"]
+            if (m.get("content") if isinstance(m, dict) else m.content) == "hello"
+        )
+        for _ in range(2)
+    ]
+
+
+@pytest.mark.parametrize("channel", MESSAGES_CHANNELS)
+async def test_an_async_run_keeps_the_message_ids_it_saves(
+    channel: Any, async_checkpointer: BaseCheckpointSaver
+) -> None:
+    graph = _build_graph(
+        async_checkpointer,
+        channel=channel(),
+        write=lambda: [{"role": "assistant", "content": "reply"}],
+    )
+    config = {"configurable": {"thread_id": "t"}}
+
+    updates = [
+        c
+        async for c in graph.astream(
+            {"messages": [{"role": "user", "content": "hello"}]},
+            config,
+            stream_mode="updates",
+        )
+    ]
+    (streamed,) = updates[-1]["agent"]["messages"]
+    state = (await graph.aget_state(config)).values["messages"]
+    assert [_id(m) for m in state][-1] == _id(streamed), "updates show the saved id"
+    first, second = await _ahello_ids(graph, config)
+    assert first and first == second
+
+    oldest = [
+        s async for s in graph.aget_state_history(config) if "source" in s.metadata
+    ][-1]
+    await graph.ainvoke(None, oldest.config)
+    assert await _ahello_ids(graph, config) == [first, first], "replay keeps it"
+
+    updated = await graph.aupdate_state(
+        config, {"messages": [{"role": "user", "content": "hello again"}]}
+    )
+    again = [
+        _id(m)
+        for m in (await graph.aget_state(updated)).values["messages"]
+        if (m.get("content") if isinstance(m, dict) else m.content) == "hello again"
+    ]
+    assert again and again[0], "aupdate_state gives the message an id"
