@@ -1243,3 +1243,20 @@ def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
     assert result3[0].key == "3"
     assert result4[0].key == "4"
     assert result5[0].key == "5"
+
+
+def test_comparison_filters_drop_non_comparable_values() -> None:
+    store = InMemoryStore()
+    store.put(("items",), "match", {"score": 5})
+    store.put(("items",), "low", {"score": 2})
+    store.put(("items",), "missing", {"name": "no score"})
+    store.put(("items",), "null", {"score": None})
+    store.put(("items",), "non_numeric", {"score": "high"})
+    store.put(("items",), "bool_val", {"score": True})
+
+    gt_results = store.search(("items",), filter={"score": {"$gt": 4}})
+    assert [r.key for r in gt_results] == ["match"]
+
+    lte_results = store.search(("items",), filter={"score": {"$lte": 4}})
+    assert [r.key for r in lte_results] == ["low"]
+
