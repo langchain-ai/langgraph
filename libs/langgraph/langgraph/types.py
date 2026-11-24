@@ -33,7 +33,7 @@ from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._cache import default_cache_key
 from langgraph._internal._constants import INTERRUPT as _INTERRUPT_KEY
-from langgraph._internal._constants import NS_SEP
+from langgraph._internal._constants import NS_SEP, ROOT
 from langgraph._internal._fields import get_cached_annotated_keys, get_update_as_tuples
 from langgraph._internal._retry import default_retry_on
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
@@ -885,7 +885,7 @@ class Command(Generic[N], ToolOutputMixin):
         elif keys := get_cached_annotated_keys(type(self.update)):
             return get_update_as_tuples(self.update, keys)
         elif self.update is not None:
-            return [("__root__", self.update)]
+            return [(ROOT, self.update)]
         else:
             return []
 

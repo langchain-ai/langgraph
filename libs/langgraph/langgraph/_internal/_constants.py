@@ -93,6 +93,8 @@ PUSH = sys.intern("__pregel_push")
 # denotes push-style tasks, ie. those created by Send objects
 PULL = sys.intern("__pregel_pull")
 # denotes pull-style tasks, ie. those triggered by edges
+ROOT = sys.intern("__root__")
+# the single channel of a StateGraph whose state schema has no fields
 NS_SEP = sys.intern("|")
 # for checkpoint_ns, separates each level (ie. graph|subgraph|subsubgraph)
 NS_END = sys.intern(":")
