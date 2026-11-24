@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import threading
-from typing import Annotated, Any
+from typing import Annotated, Any, get_args, get_type_hints
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -26,7 +26,14 @@ from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.pregel._tools import _tool_call_writer
 from langgraph.runtime import RunControl
-from langgraph.types import Command, interrupt
+from langgraph.types import (
+    Command,
+    StreamMode,
+    StreamPart,
+    ToolsPayload,
+    ToolsStreamPart,
+    interrupt,
+)
 
 
 class _State(TypedDict):
@@ -152,6 +159,45 @@ class TestSyncGraphSyncTool:
         kinds = [p["event"] for _, p in events]
         assert kinds == ["tool-started", "tool-error"]
         assert events[1][1]["message"] == "nope"
+
+    def test_v2_parts_have_the_declared_keys(self) -> None:
+        @tool
+        def flaky(text: str, runtime: ToolRuntime) -> str:
+            """stream a chunk, then fail on "bad"."""
+            runtime.emit_output_delta(text)
+            if text == "bad":
+                raise ValueError("nope")
+            return text
+
+        parts: list[StreamPart] = []
+        for text in ("ok", "bad"):
+            graph = _build_graph(_caller_sync("flaky", {"text": text}), [flaky])
+            with contextlib.suppress(ValueError):
+                parts.extend(
+                    graph.stream({"messages": []}, stream_mode="tools", version="v2")
+                )
+
+        assert [part["data"]["event"] for part in parts] == [
+            "tool-started",
+            "tool-output-delta",
+            "tool-finished",
+            "tool-started",
+            "tool-output-delta",
+            "tool-error",
+        ]
+        assert "tools" in get_args(StreamMode)
+        assert ToolsStreamPart in get_args(StreamPart.__value__)
+        declared = {
+            get_args(get_type_hints(payload)["event"])[0]: payload
+            for payload in get_args(ToolsPayload)
+        }
+        for part in parts:
+            assert part["type"] == "tools"
+            assert part.keys() == ToolsStreamPart.__annotations__.keys()
+            payload = part["data"]
+            assert (
+                payload.keys() == declared[payload["event"]].__annotations__.keys()
+            ), f"{payload['event']} payload keys differ from its declared type"
 
     def test_interrupt_in_tool_is_not_a_tool_error(self) -> None:
         @tool

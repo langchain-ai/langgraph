@@ -37,6 +37,7 @@ from langgraph._internal._constants import (
     INTERRUPT,
     NS_END,
     NS_SEP,
+    ROOT,
     TASKS,
 )
 from langgraph._internal._fields import (
@@ -1268,9 +1269,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
         # prepare output channels
         output_channels = (
-            "__root__"
+            ROOT
             if len(self.schemas[self.output_schema]) == 1
-            and "__root__" in self.schemas[self.output_schema]
+            and ROOT in self.schemas[self.output_schema]
             else [
                 key
                 for key, val in self.schemas[self.output_schema].items()
@@ -1278,8 +1279,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             ]
         )
         stream_channels = (
-            "__root__"
-            if len(self.channels) == 1 and "__root__" in self.channels
+            ROOT
+            if len(self.channels) == 1 and ROOT in self.channels
             else [
                 key for key, val in self.channels.items() if not is_managed_value(val)
             ]
@@ -1498,7 +1499,7 @@ class CompiledStateGraph(
         # state updaters
         write_entries: tuple[ChannelWriteEntry | ChannelWriteTupleEntry, ...] = (
             ChannelWriteTupleEntry(
-                mapper=_get_root if output_keys == ["__root__"] else _get_updates
+                mapper=_get_root if output_keys == [ROOT] else _get_updates
             ),
             ChannelWriteTupleEntry(
                 mapper=_control_branch,
@@ -1519,7 +1520,7 @@ class CompiledStateGraph(
         elif node is not None:
             input_schema = node.input_schema if node else self.builder.state_schema
             input_channels = list(self.builder.schemas[input_schema])
-            is_single_input = len(input_channels) == 1 and "__root__" in input_channels
+            is_single_input = len(input_channels) == 1 and ROOT in input_channels
             if input_schema in self.schema_to_mapper:
                 mapper = self.schema_to_mapper[input_schema]
             else:
@@ -1535,7 +1536,7 @@ class CompiledStateGraph(
             self.nodes[key] = PregelNode(
                 triggers=[branch_channel],
                 # read state keys and managed values
-                channels=("__root__" if is_single_input else input_channels),
+                channels=(ROOT if is_single_input else input_channels),
                 # coerce state dict to schema class (eg. pydantic model)
                 mapper=mapper,
                 # publish to state keys
@@ -1616,7 +1617,7 @@ class CompiledStateGraph(
             # create reader
             reader: Callable[[RunnableConfig], Any] | None = partial(
                 ChannelRead.do_read,
-                select=channels[0] if channels == ["__root__"] else channels,
+                select=channels[0] if channels == [ROOT] else channels,
                 fresh=True,
                 # coerce state dict to schema class (eg. pydantic model)
                 mapper=mapper,
@@ -1736,7 +1737,7 @@ class CompiledStateGraph(
 def _pick_mapper(
     state_keys: Sequence[str], schema: type[Any]
 ) -> Callable[[Any], Any] | None:
-    if state_keys == ["__root__"]:
+    if state_keys == [ROOT]:
         return None
     if isclass(schema) and (issubclass(schema, BaseModel) or is_dataclass(schema)):
         return partial(_coerce_state, schema)
@@ -1810,10 +1811,10 @@ def _get_root(input: Any) -> Sequence[tuple[str, Any]] | None:
                     continue
                 updates.extend(i._update_as_tuples())
             else:
-                updates.append(("__root__", i))
+                updates.append((ROOT, i))
         return updates
     elif input is not None:
-        return [("__root__", input)]
+        return [(ROOT, input)]
 
 
 def _get_channels(
@@ -1821,7 +1822,7 @@ def _get_channels(
 ) -> tuple[dict[str, BaseChannel], dict[str, ManagedValueSpec], dict[str, Any]]:
     if not hasattr(schema, "__annotations__"):
         return (
-            {"__root__": _get_channel("__root__", schema, allow_managed=False)},
+            {ROOT: _get_channel(ROOT, schema, allow_managed=False)},
             {},
             {},
         )
@@ -1957,7 +1958,7 @@ def _get_json_schema(
         return TypeAdapter(typ).json_schema()
     else:
         keys = list(schemas[typ].keys())
-        if len(keys) == 1 and keys[0] == "__root__":
+        if len(keys) == 1 and keys[0] == ROOT:
             return create_model(
                 name,
                 root=(channels[keys[0]].UpdateType, None),

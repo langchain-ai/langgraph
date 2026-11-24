@@ -33,7 +33,7 @@ from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._cache import default_cache_key
 from langgraph._internal._constants import INTERRUPT as _INTERRUPT_KEY
-from langgraph._internal._constants import NS_SEP
+from langgraph._internal._constants import NS_SEP, ROOT
 from langgraph._internal._fields import get_cached_annotated_keys, get_update_as_tuples
 from langgraph._internal._retry import default_retry_on
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
@@ -72,8 +72,10 @@ __all__ = (
     "CheckpointStreamPart",
     "TasksStreamPart",
     "DebugStreamPart",
+    "ToolsStreamPart",
     "TaskPayload",
     "TaskResultPayload",
+    "ToolsPayload",
     "CheckpointTask",
     "CheckpointPayload",
     "DebugPayload",
@@ -130,7 +132,7 @@ def ensure_valid_checkpointer(checkpointer: Checkpointer) -> Checkpointer:
 
 
 StreamMode = Literal[
-    "values", "updates", "checkpoints", "tasks", "debug", "messages", "custom"
+    "values", "updates", "checkpoints", "tasks", "debug", "messages", "custom", "tools"
 ]
 """How the stream method should emit outputs.
 
@@ -143,6 +145,7 @@ StreamMode = Literal[
 - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by `get_state()`.
 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
 - `"debug"`: Emit `"checkpoints"` and `"tasks"` events for debugging purposes.
+- `"tools"`: Emit events when tool calls start, stream partial output, finish, and fail.
 """
 
 StreamWriter = Callable[[Any], None]
@@ -271,6 +274,59 @@ DebugPayload = TypeAliasType(
 """Wrapper payload for debug events. Discriminate on `type`."""
 
 
+class _ToolStartedPayload(TypedDict):
+    event: Literal["tool-started"]
+    """Event type discriminator, always `"tool-started"`."""
+    tool_call_id: str
+    """ID of the tool call, or the ID of the tool's run if it was not called with one."""
+    tool_name: str
+    """Name of the tool being called."""
+    input: NotRequired[dict[str, Any]]
+    """Arguments passed to the tool, without injected ones.
+
+    Absent when the tool was called with a plain string.
+    """
+
+
+class _ToolOutputDeltaPayload(TypedDict):
+    event: Literal["tool-output-delta"]
+    """Event type discriminator, always `"tool-output-delta"`."""
+    tool_call_id: str
+    """ID of the tool call that emitted this delta."""
+    delta: Any
+    """Partial output the tool passed to `ToolRuntime.emit_output_delta`."""
+
+
+class _ToolFinishedPayload(TypedDict):
+    event: Literal["tool-finished"]
+    """Event type discriminator, always `"tool-finished"`."""
+    tool_call_id: str
+    """ID of the tool call that finished."""
+    output: Any
+    """Output of the tool call.
+
+    In a `ToolNode`, a plain return value arrives wrapped in a `ToolMessage`.
+    """
+
+
+class _ToolErrorPayload(TypedDict):
+    event: Literal["tool-error"]
+    """Event type discriminator, always `"tool-error"`."""
+    tool_call_id: str
+    """ID of the tool call that failed."""
+    message: str
+    """Error message."""
+
+
+ToolsPayload = (
+    _ToolStartedPayload
+    | _ToolOutputDeltaPayload
+    | _ToolFinishedPayload
+    | _ToolErrorPayload
+)
+"""Payload for a tool call event. Discriminate on `event`."""
+
+
 class ValuesStreamPart(TypedDict, Generic[OutputT]):
     """Stream part emitted for `stream_mode="values"`.
 
@@ -350,6 +406,19 @@ class DebugStreamPart(TypedDict, Generic[StateT]):
     data: DebugPayload[StateT]
 
 
+class ToolsStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="tools"`.
+
+    `data` is a `ToolsPayload`: one of the `tool-started`,
+    `tool-output-delta`, `tool-finished` and `tool-error` events,
+    told apart by its `event` key.
+    """
+
+    type: Literal["tools"]
+    ns: tuple[str, ...]
+    data: ToolsPayload
+
+
 StreamPart = TypeAliasType(
     "StreamPart",
     ValuesStreamPart[OutputT]
@@ -358,7 +427,8 @@ StreamPart = TypeAliasType(
     | CustomStreamPart
     | CheckpointStreamPart[StateT]
     | TasksStreamPart
-    | DebugStreamPart[StateT],
+    | DebugStreamPart[StateT]
+    | ToolsStreamPart,
     type_params=(StateT, OutputT),
 )
 """A discriminated union of all v2 stream part types.
@@ -885,7 +955,7 @@ class Command(Generic[N], ToolOutputMixin):
         elif keys := get_cached_annotated_keys(type(self.update)):
             return get_update_as_tuples(self.update, keys)
         elif self.update is not None:
-            return [("__root__", self.update)]
+            return [(ROOT, self.update)]
         else:
             return []
 

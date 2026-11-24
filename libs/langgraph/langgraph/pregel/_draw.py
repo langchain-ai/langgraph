@@ -8,7 +8,7 @@ from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import Graph, Node
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
-from langgraph._internal._constants import CONF, CONFIG_KEY_SEND, INPUT
+from langgraph._internal._constants import CONF, CONFIG_KEY_SEND, INPUT, ROOT
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.last_value import LastValueAfterFinish
 from langgraph.constants import END, START
@@ -125,8 +125,8 @@ def draw_graph(
                 # apply regular writes
                 if isinstance(w, ChannelWrite):
                     empty_input = (
-                        cast(BaseChannel, specs["__root__"]).ValueType()
-                        if "__root__" in specs
+                        cast(BaseChannel, specs[ROOT]).ValueType()
+                        if ROOT in specs
                         else None
                     )
                     w.invoke(empty_input, task.config)
