@@ -1,8 +1,9 @@
 import inspect
 import operator
 import warnings
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Annotated, Any, Union
+from typing import Annotated, Any, Literal, Union
 from typing import Annotated as Annotated2
 
 import pytest
@@ -371,3 +372,29 @@ def test_is_field_channel() -> None:
     # No channel cases
     assert _is_field_channel(int) is None
     assert _is_field_channel(Annotated[int, "just_metadata"]) is None
+
+
+def test_conditional_edges_sequence_literal_inference() -> None:
+    class OverallState(TypedDict):
+        visited: Annotated[list[str], operator.add]
+
+    def route_list(_: OverallState) -> list[Literal["left", "right"]]:
+        return ["left", "right"]
+
+    def route_seq(_: OverallState) -> Sequence[Literal["left", "right"]]:
+        return ["left", "right"]
+
+    for route_func in (route_list, route_seq):
+        builder = StateGraph(OverallState)
+        builder.add_node("route", lambda _: {})
+        for name in ("left", "right"):
+            builder.add_node(name, lambda _, target=name: {"visited": [target]})
+            builder.add_edge(name, "__end__")
+        builder.add_edge("__start__", "route")
+        builder.add_conditional_edges("route", route_func)
+        graph = builder.compile()
+
+        targets = sorted(
+            e.target for e in graph.get_graph().edges if e.source == "route"
+        )
+        assert targets == ["left", "right"]

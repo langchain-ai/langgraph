@@ -112,6 +112,13 @@ class BranchSpec(NamedTuple):
                     if rtn_type := get_type_hints(func).get("return"):
                         if get_origin(rtn_type) is Literal:
                             path_map_ = {name: name for name in get_args(rtn_type)}
+                        elif args := get_args(rtn_type):
+                            literals: list[Any] = []
+                            for arg in args:
+                                if get_origin(arg) is Literal:
+                                    literals.extend(get_args(arg))
+                            if literals:
+                                path_map_ = {name: name for name in literals}
         except Exception:
             pass
         # infer input schema
