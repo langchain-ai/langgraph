@@ -8,7 +8,9 @@ through `Pregel.stream(stream_mode=["tools", ...])` and inspect the raw
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
+import threading
 from typing import Annotated, Any, get_args, get_type_hints
 
 import pytest
@@ -364,6 +366,54 @@ class TestAsyncGraphAsyncTool:
                     events.append(payload["event"])
 
         assert events == ["tool-started", "tool-started", "tool-finished"]
+
+
+class TestToolsModeAloneStreamsLive:
+    def test_sync_delta_arrives_before_tool_returns(self) -> None:
+        delta_received = threading.Event()
+        order: list[str] = []
+
+        @tool
+        def slow(runtime: ToolRuntime) -> str:
+            """emits, then waits for the consumer."""
+            runtime.emit_output_delta("partial")
+            delta_received.wait(timeout=5)
+            order.append("tool returned")
+            return "done"
+
+        graph = _build_graph(_caller_sync("slow", {}), [slow])
+        for payload in graph.stream({"messages": []}, stream_mode="tools"):
+            if payload["event"] == "tool-output-delta":
+                order.append("delta received")
+                delta_received.set()
+
+        assert order == ["delta received", "tool returned"], (
+            "the delta reached the consumer only after the tool returned"
+        )
+
+    @pytest.mark.anyio
+    async def test_async_delta_arrives_before_tool_returns(self) -> None:
+        delta_received = asyncio.Event()
+        order: list[str] = []
+
+        @tool
+        async def aslow(runtime: ToolRuntime) -> str:
+            """emits, then waits for the consumer."""
+            runtime.emit_output_delta("partial")
+            with contextlib.suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(delta_received.wait(), timeout=5)
+            order.append("tool returned")
+            return "done"
+
+        graph = _build_graph(_caller_async("aslow", {}), [aslow])
+        async for payload in graph.astream({"messages": []}, stream_mode="tools"):
+            if payload["event"] == "tool-output-delta":
+                order.append("delta received")
+                delta_received.set()
+
+        assert order == ["delta received", "tool returned"], (
+            "the delta reached the consumer only after the tool returned"
+        )
 
 
 class TestConcurrentToolCalls:
