@@ -27,7 +27,7 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResul
 from pydantic import BaseModel
 
 from langgraph._internal._config import filter_to_user_tags
-from langgraph._internal._constants import NS_SEP, OVERWRITE, PUSH
+from langgraph._internal._constants import NS_SEP, OVERWRITE, PUSH, ROOT
 from langgraph.channels.binop import BinaryOperatorAggregate, _get_overwrite
 from langgraph.channels.delta import DeltaChannel
 from langgraph.constants import START, TAG_HIDDEN, TAG_NOSTREAM
@@ -569,8 +569,8 @@ def _channel_value_with_message_ids(spec: object, value: object) -> object:
 
 
 def _input_with_message_ids(channels: Mapping[str, object], value: object) -> object:
-    if "__root__" in channels:
-        return _channel_value_with_message_ids(channels["__root__"], value)
+    if ROOT in channels:
+        return _channel_value_with_message_ids(channels[ROOT], value)
     changed = {
         name: new
         for name, old in _state_items(value)
