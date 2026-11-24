@@ -19,6 +19,7 @@ from typing_extensions import TypedDict
 
 from langgraph._internal._constants import NULL_TASK_ID
 from langgraph.channels.delta import DeltaChannel
+from langgraph.errors import EmptyInputError, InvalidUpdateError
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import _messages_delta_reducer
 from langgraph.pregel._checkpoint import exit_delta_task_id
@@ -656,3 +657,35 @@ def test_exit_runs_from_a_checkpoint_the_thread_moved_past_leave_its_newer_branc
     assert [s.values.get("log", []) for s in history] == [
         s.values.get("plain", []) for s in history
     ]
+
+
+class _FailedSuperstepState(TypedDict):
+    docs: Annotated[list[str], operator.add]
+    note: str
+
+
+def test_exit_durability_does_not_checkpoint_failed_superstep() -> None:
+    def write_a(state: _FailedSuperstepState) -> dict[str, object]:
+        return {"docs": ["x"], "note": "from-a"}
+
+    def write_b(state: _FailedSuperstepState) -> dict[str, object]:
+        return {"docs": ["x"], "note": "from-b"}
+
+    saver = InMemorySaver()
+    builder = StateGraph(_FailedSuperstepState)
+    builder.add_node("write_a", write_a)
+    builder.add_node("write_b", write_b)
+    builder.add_edge(START, "write_a")
+    builder.add_edge(START, "write_b")
+    graph = builder.compile(checkpointer=saver)
+    config = {"configurable": {"thread_id": "exit-failed-superstep"}}
+
+    with pytest.raises(InvalidUpdateError):
+        graph.invoke({"docs": []}, config, durability="exit")
+
+    saved = saver.get_tuple(config)
+    docs = None if saved is None else saved.checkpoint["channel_values"].get("docs")
+    assert docs in (None, [])
+
+    with pytest.raises(EmptyInputError):
+        graph.invoke(None, config, durability="exit")

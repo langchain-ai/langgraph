@@ -1551,14 +1551,18 @@ class PregelLoop:
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> bool | None:
-        # persist current checkpoint and writes
-        if self.durability == "exit" and (
-            # if it's a top graph
-            not self.is_nested
-            # or a nested graph with error or interrupt
-            or exc_value is not None
-            # or a nested graph with checkpointer=True
-            or all(NS_END not in part for part in self.checkpoint_ns)
+        # persist current checkpoint and writes (skip failed supersteps)
+        if (
+            self.durability == "exit"
+            and (exc_value is None or isinstance(exc_value, GraphInterrupt))
+            and (
+                # if it's a top graph
+                not self.is_nested
+                # or a nested graph with interrupt
+                or exc_value is not None
+                # or a nested graph with checkpointer=True
+                or all(NS_END not in part for part in self.checkpoint_ns)
+            )
         ):
             self._put_exit_delta_writes()
             self._put_checkpoint(self.checkpoint_metadata)
