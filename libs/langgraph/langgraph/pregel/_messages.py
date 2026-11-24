@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+import uuid
 from collections.abc import (
     AsyncIterator,
     Callable,
@@ -9,8 +11,10 @@ from collections.abc import (
     Sequence,
 )
 from dataclasses import fields, is_dataclass
+from functools import cache, partial
 from typing import (
     Any,
+    TypeGuard,
     TypeVar,
     cast,
 )
@@ -23,10 +27,10 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResul
 from pydantic import BaseModel
 
 from langgraph._internal._config import filter_to_user_tags
-from langgraph._internal._constants import NS_SEP, PUSH
-from langgraph.channels.binop import _get_overwrite
+from langgraph._internal._constants import NS_SEP, OVERWRITE, PUSH, ROOT
+from langgraph.channels.binop import BinaryOperatorAggregate, _get_overwrite
 from langgraph.channels.delta import DeltaChannel
-from langgraph.constants import TAG_HIDDEN, TAG_NOSTREAM
+from langgraph.constants import START, TAG_HIDDEN, TAG_NOSTREAM
 from langgraph.pregel.protocol import StreamChunk
 from langgraph.types import Command, Overwrite
 
@@ -46,12 +50,16 @@ Meta = tuple[tuple[str, ...], dict[str, Any]]
 
 def _state_values(obj: Any) -> Sequence[Any]:
     """Extract top-level field values from a state object (dict, BaseModel, or dataclass)."""
+    return [v for _, v in _state_items(obj)]
+
+
+def _state_items(obj: object) -> Sequence[tuple[str, object]]:
     if isinstance(obj, dict):
-        return list(obj.values())
+        return list(obj.items())
     elif isinstance(obj, BaseModel):
-        return [getattr(obj, k) for k in type(obj).model_fields]
+        return [(k, getattr(obj, k)) for k in type(obj).model_fields]
     elif is_dataclass(obj) and not isinstance(obj, type):
-        return [getattr(obj, f.name) for f in fields(obj)]
+        return [(f.name, getattr(obj, f.name)) for f in fields(obj)]
     return ()
 
 
@@ -524,102 +532,205 @@ def _is_message_dict(item: dict) -> bool:
 
 
 def ensure_message_ids(
-    channels: Mapping[str, Any], writes: Sequence[tuple[str, Any]]
+    channels: Mapping[str, object], writes: Sequence[tuple[str, object]]
 ) -> None:
-    """Give the messages written to DeltaChannels stable ids.
+    """Give the messages written to messages channels stable ids.
 
-    A `DeltaChannel` replays its saved writes on every read, and its reducer
-    may not assign missing ids (`_messages_delta_reducer` doesn't), so a
-    message saved without an id comes back without one, or with a new one on
-    every read, and nothing can target it by id, for example `RemoveMessage`.
+    A message saved without an id gets one later, when a reducer reads it, so
+    the `updates` stream, the saved write and the state can each show a
+    different id, and a replay or fork from that checkpoint mints a new one.
+    A `DeltaChannel` replays its saved writes on every read, so there the id
+    can change on every read.
 
-    In a channel whose reducer is `_messages_delta_reducer`, every message-like
-    it accepts (a message, a dict, a string, a `(role, content)` tuple; alone,
-    in a list or in an `Overwrite`) becomes a message with an id. Other
-    DeltaChannels may hold other data, so there only message objects get ids,
-    plus message dicts outside an `Overwrite`: one in a list becomes a message.
-    Anything that can't become a message is left as it is, so it fails where
-    it always has: a message dict in a list raises here, anything else when
-    the reducer reads it. An empty id counts as missing.
+    A `StateGraph` input is one write to `START`; the values in it get ids by
+    the channel they go to, so the input checkpoint saves them. In a graph
+    with one root channel, the whole input goes to that channel.
 
     A write that changes is replaced in `writes`: lists and dicts the caller
     passed in are never changed, only the ids of message objects.
     """
     for i, (ch, value) in enumerate(writes):
-        spec = channels.get(ch)
-        if not isinstance(spec, DeltaChannel):
-            continue
-        if spec.reducer is _messages_delta_reducer:
-            new_value = _with_message_ids(value)
+        if ch == START:
+            new_value = _input_with_message_ids(channels, value)
         else:
-            new_value = _with_base_message_ids(value)
+            new_value = _channel_value_with_message_ids(channels.get(ch), value)
         if new_value is not value:
-            cast(MutableSequence[tuple[str, Any]], writes)[i] = (ch, new_value)
+            cast(MutableSequence[tuple[str, object]], writes)[i] = (ch, new_value)
 
 
-def _with_message_ids(value: Any) -> Any:
-    is_overwrite, overwrite_value = _get_overwrite(value)
-    if not is_overwrite:
-        if isinstance(value, list):
-            return _map_messages(value, _list_item_with_id)
-        return _message_with_id(value)
-    if isinstance(overwrite_value, (list, tuple)):
-        items = _map_messages(overwrite_value, _message_with_id)
-        if items is not overwrite_value:
-            return Overwrite(items)
+def _channel_value_with_message_ids(spec: object, value: object) -> object:
+    if isinstance(spec, DeltaChannel):
+        if spec.reducer is _messages_delta_reducer:
+            return _delta_messages_ids(value)
+        return _delta_ids(value)
+    if isinstance(spec, BinaryOperatorAggregate) and _is_add_messages(spec.operator):
+        return _add_messages_ids(value)
     return value
 
 
-def _with_base_message_ids(value: Any) -> Any:
-    is_overwrite, overwrite_value = _get_overwrite(value)
-    if is_overwrite:
-        if isinstance(overwrite_value, (list, tuple)):
-            for item in overwrite_value:
-                _stamp_message_id(item)
+def _input_with_message_ids(channels: Mapping[str, object], value: object) -> object:
+    if ROOT in channels:
+        return _channel_value_with_message_ids(channels[ROOT], value)
+    changed = {
+        name: new
+        for name, old in _state_items(value)
+        if (new := _channel_value_with_message_ids(channels.get(name), old)) is not old
+    }
+    if not changed:
         return value
-    if isinstance(value, list):
-        return _map_messages(value, _base_list_item_with_id)
-    if isinstance(value, dict) and _is_message_dict(value) and not value.get("id"):
-        return {**value, "id": str(uuid4())}
-    _stamp_message_id(value)
-    return value
+    if isinstance(value, dict):
+        return {k: changed.get(k, v) for k, v in value.items()}
+    if isinstance(value, BaseModel):
+        return value.model_copy(update=changed)
+    # Not `dataclasses.replace`, which reruns `__post_init__`.
+    new_value = copy.copy(value)
+    for name, field_value in changed.items():
+        object.__setattr__(new_value, name, field_value)
+    return new_value
 
 
-def _map_messages(items: list | tuple, fn: Callable[[Any], Any]) -> list | tuple:
-    mapped = [fn(item) for item in items]
+@cache
+def _add_messages_reducers() -> tuple[object, object]:
+    # Imported here: `langgraph.graph.message` imports this module.
+    from langgraph.graph.message import add_messages
+
+    return add_messages, cast(Callable[[], partial], add_messages)().func
+
+
+def _is_add_messages(operator: object) -> bool:
+    add_messages, func = _add_messages_reducers()
+    if isinstance(operator, partial):
+        return operator.func is func
+    return operator is add_messages
+
+
+def _add_messages_ids(value: object) -> object:
+    is_overwrite, items = _unwrap(value)
+    if _is_many(items, is_overwrite):
+        new = _map_messages(items, _add_messages_item)
+    else:
+        new = _add_messages_item(items)
+    return _rewrap(value, is_overwrite, items, new)
+
+
+def _delta_messages_ids(value: object) -> object:
+    is_overwrite, items = _unwrap(value)
+    if not _is_many(items, is_overwrite):
+        new = _message(items)
+        if is_overwrite and isinstance(new, BaseMessage):
+            new = [new]
+    elif is_overwrite:
+        new = _map_messages(items, _message)
+    else:
+        new = _map_messages(items, _delta_messages_list_item)
+    return _rewrap(value, is_overwrite, items, new)
+
+
+def _delta_ids(value: object) -> object:
+    """Other DeltaChannels may hold other data, so less is converted."""
+    is_overwrite, items = _unwrap(value)
+    if is_overwrite:
+        many = _is_many(items, is_overwrite)
+        new = _map_messages(items, _stamped) if many else _stamped(items)
+    elif isinstance(items, list):
+        new = _map_messages(items, _delta_list_item)
+    else:
+        new = _dict_with_id(items)
+    return _rewrap(value, is_overwrite, items, new)
+
+
+def _unwrap(value: object) -> tuple[bool, object]:
+    is_overwrite, items = _get_overwrite(value)
+    return is_overwrite, items if is_overwrite else value
+
+
+def _rewrap(value: object, is_overwrite: bool, items: object, new: object) -> object:
+    if new is items:
+        return value
+    if not is_overwrite:
+        return new
+    if isinstance(value, dict):
+        return {OVERWRITE: new} if OVERWRITE in value else {**value, "value": new}
+    return Overwrite(new)
+
+
+def _is_many(
+    items: object, is_overwrite: bool
+) -> TypeGuard[list[object] | tuple[object, ...]]:
+    """In an `Overwrite`, a tuple is many messages unless it's a `(role, content)` pair."""
+    if isinstance(items, list):
+        return True
+    return is_overwrite and isinstance(items, tuple) and not _is_message_pair(items)
+
+
+def _is_message_pair(items: tuple[object, ...]) -> bool:
+    if len(items) != 2 or not isinstance(items[0], str):
+        return False
+    try:
+        convert_to_messages([items])
+    except Exception:
+        return False
+    return True
+
+
+def _map_messages(
+    items: list[object] | tuple[object, ...], step: Callable[[object], object]
+) -> list[object] | tuple[object, ...]:
+    mapped = [step(item) for item in items]
     if all(new is old for new, old in zip(mapped, items)):
         return items
     return mapped if isinstance(items, list) else tuple(mapped)
 
 
-def _list_item_with_id(item: Any) -> Any:
-    if isinstance(item, dict) and _is_message_dict(item):
-        return _message_with_id(item, strict=True)
-    return _message_with_id(item)
+def _new_id() -> str:
+    return str(uuid.uuid4())
 
 
-def _base_list_item_with_id(item: Any) -> Any:
-    if isinstance(item, dict) and _is_message_dict(item):
-        return _message_with_id(item, strict=True)
-    _stamp_message_id(item)
+def _needs_id(id: object, *, keep_empty: bool) -> bool:
+    return id is None or (not keep_empty and not id)
+
+
+def _stamped(item: T, *, keep_empty: bool = False) -> T:
+    if isinstance(item, BaseMessage) and _needs_id(item.id, keep_empty=keep_empty):
+        item.id = _new_id()
     return item
 
 
-def _message_with_id(item: Any, *, strict: bool = False) -> Any:
-    if isinstance(item, BaseMessage):
-        _stamp_message_id(item)
-        return item
-    try:
-        message = convert_to_messages([item])[0]
-    except Exception:
-        if strict:
-            raise
-        return item
-    if not message.id:
-        message.id = str(uuid4())
-    return message
+def _dict_with_id(item: object, *, keep_empty: bool = False) -> object:
+    if not isinstance(item, dict):
+        return _stamped(item, keep_empty=keep_empty)
+    if _is_message_dict(item) and _needs_id(item.get("id"), keep_empty=keep_empty):
+        return {**item, "id": _new_id()}
+    return item
 
 
-def _stamp_message_id(item: Any) -> None:
-    if isinstance(item, BaseMessage) and item.id is None:
-        item.id = str(uuid4())
+def _message(item: object, *, strict: bool = False, keep_empty: bool = False) -> object:
+    if not isinstance(item, BaseMessage):
+        try:
+            item = convert_to_messages([item])[0]
+        except Exception:
+            if strict:
+                raise
+            return item
+    return _stamped(item, keep_empty=keep_empty)
+
+
+def _is_list_message_dict(item: object) -> TypeGuard[dict[str, object]]:
+    # Raises here, before it is saved, if it can't become a message.
+    return isinstance(item, dict) and _is_message_dict(item)
+
+
+def _delta_messages_list_item(item: object) -> object:
+    return _message(item, strict=_is_list_message_dict(item))
+
+
+def _delta_list_item(item: object) -> object:
+    if _is_list_message_dict(item):
+        return _message(item, strict=True)
+    return _dict_with_id(item)
+
+
+def _add_messages_item(item: object) -> object:
+    if isinstance(item, dict):
+        return _dict_with_id(item, keep_empty=True)
+    return _message(item, keep_empty=True)
