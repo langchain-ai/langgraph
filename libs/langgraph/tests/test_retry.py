@@ -2983,3 +2983,54 @@ async def test_pregel_user_raised_cancellederror_fails_run():
     with pytest.raises(NodeCancelledError) as excinfo:
         await graph.ainvoke({"vals": []})
     assert excinfo.value.node == "boom"
+
+
+class _RetryTaskState(TypedDict):
+    value: str
+
+
+def test_node_retry_reuses_completed_task():
+    recorded: list[str] = []
+    attempts = 0
+
+    @task
+    def allocate() -> str:
+        allocated = f"id-{len(recorded)}"
+        recorded.append(allocated)
+        return allocated
+
+    def node(state: _RetryTaskState) -> dict[str, str]:
+        nonlocal attempts
+        allocated = allocate().result()
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("retry")
+        interrupt(allocated)
+        return {"value": allocated}
+
+    graph = (
+        StateGraph(_RetryTaskState)
+        .add_node(
+            "node",
+            node,
+            retry_policy=RetryPolicy(
+                max_attempts=2,
+                initial_interval=0,
+                jitter=False,
+                retry_on=RuntimeError,
+            ),
+        )
+        .add_edge(START, "node")
+        .add_edge("node", END)
+        .compile(checkpointer=InMemorySaver())
+    )
+    config = {"configurable": {"thread_id": "retry-task-counters"}}
+
+    paused = graph.invoke({"value": ""}, config)
+    assert recorded == ["id-0"]
+    assert paused["__interrupt__"][0].value == "id-0"
+
+    resumed = graph.invoke(Command(resume=True), config)
+    assert resumed["value"] == "id-0"
+    assert recorded == ["id-0"]
+
