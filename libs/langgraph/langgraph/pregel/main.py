@@ -717,7 +717,7 @@ class Pregel(
 
     stream_eager: bool = False
     """Whether to force emitting stream events eagerly, automatically turned on
-    for stream_mode "messages" and "custom"."""
+    for stream_mode "messages", "custom" and "tools"."""
 
     output_channels: str | Sequence[str]
 
@@ -3056,6 +3056,7 @@ class Pregel(
                     or subgraphs
                     or "messages" in stream_modes
                     or "custom" in stream_modes
+                    or "tools" in stream_modes
                 ):
                     # we are careful to have a single waiter live at any one time
                     # because on exit we increment semaphore count by exactly 1
@@ -3510,6 +3511,7 @@ class Pregel(
                     or subgraphs
                     or "messages" in stream_modes
                     or "custom" in stream_modes
+                    or "tools" in stream_modes
                 ):
                     # Keep a single waiter task alive; ensure cleanup on exit.
                     waiter: asyncio.Task[None] | None = None
