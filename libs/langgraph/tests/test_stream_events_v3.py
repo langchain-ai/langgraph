@@ -53,6 +53,8 @@ from langgraph.types import (
     TaskPayload,
     TaskResultPayload,
     TasksStreamPart,
+    ToolsPayload,
+    ToolsStreamPart,
     UpdatesStreamPart,
     ValuesStreamPart,
     interrupt,
@@ -1192,6 +1194,9 @@ def _check_type_narrowing(part: StreamPart[_StateT, _OutputT]) -> None:
     elif part["type"] == "debug":
         assert_type(part, DebugStreamPart[_StateT])
         assert_type(part["data"], DebugPayload[_StateT])
+    elif part["type"] == "tools":
+        assert_type(part, ToolsStreamPart)
+        assert_type(part["data"], ToolsPayload)
     assert_type(part["ns"], tuple[str, ...])
 
 
