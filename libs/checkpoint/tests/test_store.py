@@ -915,6 +915,19 @@ async def test_async_vector_update_with_embedding(
     assert not any(r.key == "doc4" for r in results_new)
 
 
+def test_comparison_filter_skips_missing_or_non_numeric_values() -> None:
+    """A field that is missing/None/non-numeric must not abort the whole search."""
+    store = InMemoryStore()
+    store.put(("items",), "a", {"score": 5})
+    store.put(("items",), "b", {"name": "no score field at all"})
+    store.put(("items",), "c", {"score": None})
+    store.put(("items",), "d", {"score": "high"})
+    store.put(("items",), "e", {"score": 7})
+
+    results = store.search(("items",), filter={"score": {"$gt": 4}})
+    assert {item.key for item in results} == {"a", "e"}
+
+
 def test_vector_search_with_filters(fake_embeddings: CharacterEmbeddings) -> None:
     """Test combining vector search with filters."""
     inmem_store = InMemoryStore(
