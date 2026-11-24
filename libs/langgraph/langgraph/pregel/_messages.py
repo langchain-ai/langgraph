@@ -12,11 +12,16 @@ from collections.abc import (
 )
 from dataclasses import fields, is_dataclass
 from functools import cache, partial
+from types import UnionType
 from typing import (
+    Annotated,
     Any,
     TypeGuard,
     TypeVar,
+    Union,
     cast,
+    get_args,
+    get_origin,
 )
 from uuid import UUID, uuid4
 
@@ -25,6 +30,7 @@ from langchain_core.messages import AnyMessage, BaseMessage, RemoveMessage, Tool
 from langchain_core.messages.utils import convert_to_messages
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 from pydantic import BaseModel
+from typing_extensions import NotRequired, ReadOnly, Required
 
 from langgraph._internal._config import filter_to_user_tags
 from langgraph._internal._constants import NS_SEP, OVERWRITE, PUSH, ROOT
@@ -563,7 +569,9 @@ def _channel_value_with_message_ids(spec: object, value: object) -> object:
         if spec.reducer is _messages_delta_reducer:
             return _delta_messages_ids(value)
         return _delta_ids(value)
-    if isinstance(spec, BinaryOperatorAggregate) and _is_add_messages(spec.operator):
+    if isinstance(spec, BinaryOperatorAggregate) and (
+        _is_add_messages(spec.operator) or _is_messages_type(spec.typ)
+    ):
         return _add_messages_ids(value)
     return value
 
@@ -602,6 +610,40 @@ def _is_add_messages(operator: object) -> bool:
     if isinstance(operator, partial):
         return operator.func is func
     return operator is add_messages
+
+
+def _is_messages_type(typ: object) -> bool:
+    # Catches reducers that wrap `add_messages`, which `_is_add_messages` misses.
+    try:
+        return _is_messages_type_cached(typ)
+    except TypeError:  # unhashable
+        return _is_messages_list(typ)
+
+
+@cache
+def _is_messages_type_cached(typ: object) -> bool:
+    return _is_messages_list(typ)
+
+
+def _is_messages_list(typ: object) -> bool:
+    typ = _strip_annotated(typ)
+    if get_origin(typ) not in (list, Sequence, MutableSequence):
+        return False
+    args = get_args(typ)
+    return len(args) == 1 and _is_message_class(args[0])
+
+
+def _is_message_class(typ: object) -> bool:
+    typ = _strip_annotated(typ)
+    if get_origin(typ) in (Union, UnionType):
+        return all(_is_message_class(arg) for arg in get_args(typ))
+    return isinstance(typ, type) and issubclass(typ, BaseMessage)
+
+
+def _strip_annotated(typ: object) -> object:
+    while get_origin(typ) in (Annotated, Required, NotRequired, ReadOnly):
+        typ = get_args(typ)[0]
+    return typ
 
 
 def _add_messages_ids(value: object) -> object:
