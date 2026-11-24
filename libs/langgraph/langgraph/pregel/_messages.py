@@ -528,7 +528,11 @@ _MESSAGE_TYPES: frozenset[str] = frozenset(
 
 
 def _is_message_dict(item: dict) -> bool:
-    return item.get("role") in _MESSAGE_ROLES or item.get("type") in _MESSAGE_TYPES
+    role = item.get("role")
+    msg_type = item.get("type")
+    return (isinstance(role, str) and role in _MESSAGE_ROLES) or (
+        isinstance(msg_type, str) and msg_type in _MESSAGE_TYPES
+    )
 
 
 def ensure_message_ids(

@@ -782,3 +782,34 @@ async def test_an_async_run_keeps_the_message_ids_it_saves(
         if (m.get("content") if isinstance(m, dict) else m.content) == "hello again"
     ]
     assert again and again[0], "aupdate_state gives the message an id"
+
+
+def _append_records(previous: list, writes: list[list]) -> list:
+    return previous + [record for batch in writes for record in batch]
+
+
+def test_delta_channel_ignores_non_string_role_and_type_discriminators() -> None:
+    class _State(TypedDict):
+        records: Annotated[list, DeltaChannel(_append_records)]
+
+    def write_records(state: _State) -> dict[str, list[dict[str, object]]]:
+        return {
+            "records": [
+                {"type": ["string", "null"]},
+                {"role": {"nested": "value"}},
+            ]
+        }
+
+    graph = (
+        StateGraph(_State)
+        .add_node("write_records", write_records)
+        .add_edge(START, "write_records")
+        .add_edge("write_records", END)
+        .compile()
+    )
+    result = graph.invoke({"records": []})
+    assert result["records"] == [
+        {"type": ["string", "null"]},
+        {"role": {"nested": "value"}},
+    ]
+
