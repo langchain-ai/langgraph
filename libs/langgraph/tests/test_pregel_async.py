@@ -8,6 +8,7 @@ import random
 import sys
 import uuid
 from collections import Counter, defaultdict, deque
+from collections.abc import AsyncIterator
 from dataclasses import replace
 from time import perf_counter
 from typing import (
@@ -20,18 +21,21 @@ from unittest.mock import patch
 from uuid import UUID
 
 import pytest
+from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
 from langchain_core.language_models import GenericFakeChatModel
 from langchain_core.language_models.fake_chat_models import (
     FakeMessagesListChatModel,
 )
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     AnyMessage,
     BaseMessage,
     HumanMessage,
     ToolCall,
     ToolMessage,
 )
+from langchain_core.outputs import ChatGenerationChunk
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
 from langchain_core.tools import tool
@@ -7768,6 +7772,45 @@ async def test_tags_stream_mode_messages() -> None:
             },
         )
     ]
+
+
+async def test_stream_mode_messages_keeps_a_model_calls_chunks_under_its_first_id() -> (
+    None
+):
+    class FirstChunkIdChatModel(GenericFakeChatModel):
+        async def _astream(
+            self,
+            messages: list[BaseMessage],
+            stop: list[str] | None = None,
+            run_manager: AsyncCallbackManagerForLLMRun | None = None,
+            **kwargs: Any,
+        ) -> AsyncIterator[ChatGenerationChunk]:
+            yield ChatGenerationChunk(message=AIMessageChunk(content="", id="resp_1"))
+            for token in ("Hel", "lo"):
+                yield ChatGenerationChunk(message=AIMessageChunk(content=token))
+
+    model = FirstChunkIdChatModel(messages=iter([]))
+
+    async def call_model(state: MessagesState, config: RunnableConfig) -> dict:
+        return {"messages": await model.ainvoke(state["messages"], config)}
+
+    graph = (
+        StateGraph(MessagesState)
+        .add_node(call_model)
+        .add_edge(START, "call_model")
+        .compile(checkpointer=InMemorySaver())
+    )
+    config: RunnableConfig = {"configurable": {"thread_id": "1"}}
+
+    chunks = [
+        chunk
+        async for chunk, _ in graph.astream(
+            {"messages": "hi"}, config, stream_mode="messages"
+        )
+    ]
+
+    assert {chunk.id for chunk in chunks} == {"resp_1"}
+    assert (await graph.aget_state(config)).values["messages"][-1].id == "resp_1"
 
 
 async def test_configurable_propagates_to_stream_metadata() -> None:

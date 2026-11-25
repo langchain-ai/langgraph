@@ -24,6 +24,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AnyMessage, BaseMessage, RemoveMessage, ToolMessage
 from langchain_core.messages.utils import convert_to_messages
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
+from langchain_core.utils.utils import LC_ID_PREFIX
 from pydantic import BaseModel
 
 from langgraph._internal._config import filter_to_user_tags
@@ -127,6 +128,8 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         self.metadata: dict[UUID, Meta] = {}
         self.seen: set[int | str] = set()
         self.parent_ns = parent_ns
+        self.message_ids: dict[UUID, str] = {}
+        """The id each chat model run streams its chunks under."""
 
     def _emit(self, meta: Meta, message: BaseMessage, *, dedupe: bool = False) -> None:
         if dedupe and message.id in self.seen:
@@ -193,7 +196,19 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         if not isinstance(chunk, ChatGenerationChunk):
             return
         if meta := self.metadata.get(run_id):
-            self._emit(meta, chunk.message)
+            message = chunk.message
+            # A provider can name a reply on its first chunk only (OpenAI's
+            # Responses API), and core gives the chunks after it
+            # `lc_run--<run id>`. They stream under the first id, which the
+            # saved message keeps too. A copy, since other handlers and the
+            # model's caller get the same chunk.
+            first_id = self.message_ids.get(run_id)
+            if first_id is not None and (
+                message.id is None or message.id == f"{LC_ID_PREFIX}-{run_id}"
+            ):
+                message = message.model_copy(update={"id": first_id})
+            self._emit(meta, message)
+            self.message_ids.setdefault(run_id, cast(str, message.id))
 
     def on_llm_end(
         self,
@@ -209,6 +224,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
                 if isinstance(gen, ChatGeneration):
                     self._emit(meta, gen.message, dedupe=True)
         self.metadata.pop(run_id, None)
+        self.message_ids.pop(run_id, None)
 
     def on_llm_error(
         self,
@@ -219,6 +235,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         **kwargs: Any,
     ) -> Any:
         self.metadata.pop(run_id, None)
+        self.message_ids.pop(run_id, None)
 
     def on_chain_start(
         self,
