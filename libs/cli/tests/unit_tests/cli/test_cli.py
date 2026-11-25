@@ -615,8 +615,8 @@ def test_deploy_list_command_json(monkeypatch) -> None:
 
     assert result.exit_code == 0, result.output
     assert json.loads(result.stdout) == [
-        {"id": "dep-123", "name": "alpha"},
-        {"id": "dep-456", "name": "beta"},
+        {"id": "dep-123", "name": "alpha", "url": "https://alpha.example.com"},
+        {"id": "dep-456", "name": "beta", "url": None},
     ]
 
 
@@ -635,7 +635,9 @@ def test_deploy_list_json_never_prints_deployment_secrets(monkeypatch) -> None:
 
     assert result.exit_code == 0, result.output
     assert "sk-plain-value" not in result.output
-    assert json.loads(result.stdout) == [{"id": "dep-123", "name": "alpha"}]
+    assert json.loads(result.stdout) == [
+        {"id": "dep-123", "name": "alpha", "url": None}
+    ]
 
 
 def test_deploy_list_command_json_no_results(monkeypatch) -> None:
@@ -663,7 +665,9 @@ def test_deploy_list_json_keeps_the_agent_note_off_stdout(monkeypatch) -> None:
     )
 
     assert result.exit_code == 0, result.output
-    assert json.loads(result.stdout) == [{"id": "dep-123", "name": "alpha"}]
+    assert json.loads(result.stdout) == [
+        {"id": "dep-123", "name": "alpha", "url": None}
+    ]
     assert "private beta" in result.stderr
 
 
