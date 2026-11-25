@@ -670,7 +670,7 @@ class DeploymentRow:
         return (self.id, self.name, self.url)
 
     def as_json(self) -> dict[str, str | None]:
-        return {"id": self.id, "name": self.name}
+        return {"id": self.id, "name": self.name, "url": self.url}
 
 
 DEPLOYMENTS_TABLE = Table(
@@ -2728,7 +2728,9 @@ def _deploy_cmd(
     "json_output",
     is_flag=True,
     default=False,
-    help="Print the Agent Servers as a JSON array of {id, name} instead of a table.",
+    help=(
+        "Print the Agent Servers as a JSON array of {id, name, url} instead of a table."
+    ),
 )
 @deploy.command("list", help="[Beta] List Agent Servers.")
 def deploy_list(
