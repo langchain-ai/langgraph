@@ -703,7 +703,9 @@ class PregelLoop:
         # stop before running the next tasks if a drain was requested. after
         # the breakpoint check: a resume passes the next step's breakpoints,
         # so draining in front of one would skip it
-        if self.control is not None and self.control.drain_requested:
+        if self.control is not None and self.control.should_drain(
+            list(self.tasks.values())
+        ):
             self.status = "draining"
             return False
 

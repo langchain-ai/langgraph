@@ -124,6 +124,41 @@ def test_run_control_request_drain_stops_future_steps() -> None:
         graph.compile().invoke({}, control=control)
 
 
+def test_run_control_should_drain_sees_next_tasks() -> None:
+    class State(TypedDict, total=False):
+        ran: list[str]
+
+    class DrainBeforeThird(RunControl):
+        def should_drain(self, next_tasks):
+            return self.drain_requested and [t.name for t in next_tasks] == ["third"]
+
+    control = DrainBeforeThird()
+
+    def node(name: str):
+        def run(state: State) -> dict[str, list[str]]:
+            if name == "first":
+                control.request_drain("steer")
+            return {"ran": [*state.get("ran", []), name]}
+
+        return run
+
+    graph = StateGraph(State)
+    for name in ("first", "second", "third"):
+        graph.add_node(name, node(name))
+    graph.add_edge(START, "first")
+    graph.add_edge("first", "second")
+    graph.add_edge("second", "third")
+    graph.add_edge("third", END)
+    app = graph.compile(checkpointer=MemorySaver())
+    config = {"configurable": {"thread_id": "1"}}
+
+    with pytest.raises(GraphDrained, match="steer"):
+        app.invoke({}, config, control=control)
+    state = app.get_state(config)
+    assert state.values == {"ran": ["first", "second"]}
+    assert state.next == ("third",)
+
+
 @pytest.mark.anyio
 async def test_run_control_request_drain_stops_future_steps_async() -> None:
     class State(TypedDict, total=False):
