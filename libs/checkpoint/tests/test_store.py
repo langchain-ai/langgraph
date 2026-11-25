@@ -486,6 +486,23 @@ def test_search_pages_match_full_listing() -> None:
     )
 
 
+def test_search_filter_missing_and_nonnumeric_values() -> None:
+    store = InMemoryStore()
+    store.put(("docs",), "missing", {"other": 1})
+    store.put(("docs",), "none", {"stage": None})
+    store.put(("docs",), "text", {"value": "hello"})
+    store.put(("docs",), "mapping", {"value": {"a": 1}})
+
+    assert [item.key for item in store.search(("docs",), filter={"stage": None})] == [
+        "none"
+    ]
+    assert [
+        item.key for item in store.search(("docs",), filter={"stage": {"$eq": None}})
+    ] == ["none"]
+    assert store.search(("docs",), filter={"value": {"$lt": 0}}) == []
+    assert store.search(("docs",), filter={"value": {"$gt": 99}}) == []
+
+
 def test_vector_search_scores_every_item(fake_embeddings: CharacterEmbeddings) -> None:
     store = InMemoryStore(
         index={"dims": fake_embeddings.dims, "embed": fake_embeddings}

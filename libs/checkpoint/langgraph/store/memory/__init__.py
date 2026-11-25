@@ -244,7 +244,7 @@ class InMemoryStore(BaseStore):
                 return True
 
             return all(
-                _compare_values(item.value.get(key), filter_value)
+                key in item.value and _compare_values(item.value[key], filter_value)
                 for key, filter_value in op.filter.items()
             )
 
@@ -587,14 +587,19 @@ def _apply_operator(value: Any, operator: str, op_value: Any) -> bool:
     """Apply a comparison operator, matching PostgreSQL's JSONB behavior."""
     if operator == "$eq":
         return value == op_value
-    elif operator == "$gt":
-        return float(value) > float(op_value)
-    elif operator == "$gte":
-        return float(value) >= float(op_value)
-    elif operator == "$lt":
-        return float(value) < float(op_value)
-    elif operator == "$lte":
-        return float(value) <= float(op_value)
+    elif operator in {"$gt", "$gte", "$lt", "$lte"}:
+        try:
+            left = float(value)
+            right = float(op_value)
+        except (TypeError, ValueError):
+            return False
+        if operator == "$gt":
+            return left > right
+        if operator == "$gte":
+            return left >= right
+        if operator == "$lt":
+            return left < right
+        return left <= right
     elif operator == "$ne":
         return value != op_value
     else:
