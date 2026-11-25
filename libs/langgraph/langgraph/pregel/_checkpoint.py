@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime, timezone
@@ -11,6 +12,7 @@ from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
+    CheckpointMetadata,
     CheckpointTuple,
     DeltaChannelHistory,
     PendingWrite,
@@ -36,6 +38,8 @@ from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate, _get_overwrite
 from langgraph.channels.delta import DeltaChannel
 from langgraph.managed.base import ManagedValueMapping, ManagedValueSpec
+
+logger = logging.getLogger(__name__)
 
 LATEST_VERSION = 4
 
@@ -443,6 +447,67 @@ def _replay(spec: BaseChannel, history: DeltaChannelHistory) -> BaseChannel:
     return ch
 
 
+def _warn_if_history_incomplete(
+    histories: Mapping[str, DeltaChannelHistory],
+    checkpoint: Checkpoint,
+    metadata: CheckpointMetadata | None,
+    config: RunnableConfig,
+) -> None:
+    """Log a warning for a channel whose stored history cannot rebuild its value.
+
+    Three signs. Each proves part of the history is gone, and none proves a
+    history complete:
+
+    - The saver reported a checkpoint on the parent chain it could not fetch
+      before it found a seed.
+    - The checkpoint's metadata counts the supersteps that wrote to the channel
+      since its last snapshot, and each of them stored at least one write, so
+      fewer writes than that count means some are gone. A superstep with
+      several writes can make up the number for a missing one.
+    - A replayed channel has a version, so it was written or snapshotted at
+      least once, and neither a seed nor a write came back. A thread's first
+      checkpoint is exempt, since nothing precedes it.
+    """
+    counters: Any = (metadata or {}).get("counters_since_delta_snapshot")
+    for k, history in histories.items():
+        found = []
+        if missing := history.get("missing_checkpoint_id"):
+            found.append(f"checkpoint {missing} on its parent chain is gone")
+        # Stored metadata is read as the loop writes it and skipped otherwise:
+        # a load must not fail on a counter this check cannot read.
+        counter: Any = counters.get(k) if isinstance(counters, Mapping) else None
+        updates = (
+            counter[0]
+            if isinstance(counter, Sequence) and counter and isinstance(counter[0], int)
+            else 0
+        )
+        if len(history["writes"]) < updates:
+            found.append(
+                f"{updates} supersteps wrote to it since its last snapshot and "
+                f"{len(history['writes'])} writes are stored"
+            )
+        if (
+            "seed" not in history
+            and not history["writes"]
+            # A thread's first checkpoint has no history to lose. A version
+            # there comes from input it holds as its own pending writes.
+            and (metadata or {}).get("step") != -1
+        ):
+            found.append("no snapshot and no write of it is stored")
+        if found:
+            logger.warning(
+                "DeltaChannel %r of thread %r at checkpoint %s is rebuilt from "
+                "incomplete history and may be missing part of its value: %s. "
+                "The checkpointer may no longer hold every checkpoint and write "
+                "back to the channel's last snapshot, as happens when it expires "
+                "or prunes checkpoints or keeps only the latest one.",
+                k,
+                config[CONF].get("thread_id"),
+                checkpoint["id"],
+                "; ".join(found),
+            )
+
+
 def _require_saver_for_history(
     delta_channels: list[str],
     saver: BaseCheckpointSaver | None,
@@ -461,6 +526,7 @@ def channels_from_checkpoint(
     *,
     saver: BaseCheckpointSaver | None = None,
     config: RunnableConfig | None = None,
+    metadata: CheckpointMetadata | None = None,
 ) -> tuple[Mapping[str, BaseChannel], ManagedValueMapping]:
     """Hydrate channels from a checkpoint.
 
@@ -471,6 +537,9 @@ def channels_from_checkpoint(
     (`_DeltaSnapshot` blob or pre-migration plain value) and accumulate
     the writes between it and the target. All delta channels needing
     replay are batched into a single saver call.
+
+    `metadata` is the checkpoint's own. Its update counters show a replay
+    that came back short, which is logged as a warning.
     """
     channel_specs: dict[str, BaseChannel] = {}
     managed_specs: dict[str, ManagedValueSpec] = {}
@@ -487,6 +556,7 @@ def channels_from_checkpoint(
         histories = saver.get_delta_channel_history(
             config=config, channels=delta_channels
         )
+        _warn_if_history_incomplete(histories, checkpoint, metadata, config)
 
     channels: dict[str, BaseChannel] = {}
     for k, spec in channel_specs.items():
@@ -505,6 +575,7 @@ async def achannels_from_checkpoint(
     *,
     saver: BaseCheckpointSaver | None = None,
     config: RunnableConfig | None = None,
+    metadata: CheckpointMetadata | None = None,
 ) -> tuple[Mapping[str, BaseChannel], ManagedValueMapping]:
     """Async version of `channels_from_checkpoint`. See docstring there."""
     channel_specs: dict[str, BaseChannel] = {}
@@ -522,6 +593,7 @@ async def achannels_from_checkpoint(
         histories = await saver.aget_delta_channel_history(
             config=config, channels=delta_channels
         )
+        _warn_if_history_incomplete(histories, checkpoint, metadata, config)
 
     channels: dict[str, BaseChannel] = {}
     for k, spec in channel_specs.items():

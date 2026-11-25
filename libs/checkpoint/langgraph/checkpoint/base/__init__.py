@@ -176,10 +176,17 @@ class DeltaChannelHistory(TypedDict):
       "start empty"). Typically a `_DeltaSnapshot` for delta channels with
       finite snapshot frequency, or a plain value for threads migrated
       from a pre-delta channel type.
+    * `missing_checkpoint_id` — the id of a checkpoint on the chain that
+      the saver no longer returns, set when the walk stopped there before
+      finding a `seed` and the channel already had a value by then.
+      `writes` then lacks that checkpoint's writes and everything older.
+      The default walk sets it; a saver that overrides the walk may leave
+      it out.
     """
 
     writes: list[PendingWrite]
     seed: NotRequired[Any]
+    missing_checkpoint_id: NotRequired[str]
 
 
 def writes_sort_key(
@@ -432,7 +439,9 @@ class BaseCheckpointSaver(Generic[V]):
             * Force a fresh snapshot on the kept checkpoint before deleting
               ancestors — rewrite `channel_values[k] = _DeltaSnapshot(value)`
               for each delta channel `k` (resolving `value` via the existing
-              ancestor walk first), then prune.
+              ancestor walk first) and remove `k` from the checkpoint
+              metadata's `counters_since_delta_snapshot`, which counts the
+              updates since the last snapshot, then prune.
             * Skip pruning threads whose graph uses `DeltaChannel` until one
               of the above is implemented.
         """
@@ -655,10 +664,14 @@ class BaseCheckpointSaver(Generic[V]):
         cursor_config: RunnableConfig | None = (
             target_tuple.parent_config if target_tuple else None
         )
+        missing_checkpoint_id = None if target_tuple else get_checkpoint_id(config)
+        child = target_tuple
         while cursor_config is not None and remaining:
             tup = self.get_tuple(cursor_config)
             if tup is None:
+                missing_checkpoint_id = get_checkpoint_id(cursor_config)
                 break
+            child = tup
             if tup.pending_writes:
                 for write in reversed(tup.pending_writes):
                     ch = write[1]
@@ -674,6 +687,12 @@ class BaseCheckpointSaver(Generic[V]):
             entry: DeltaChannelHistory = {"writes": list(reversed(collected_by_ch[ch]))}
             if ch in seed_by_ch:
                 entry["seed"] = seed_by_ch[ch]
+            elif missing_checkpoint_id is not None and (
+                # A channel the missing checkpoint's child has no version for
+                # was first written later, so nothing of it is missing.
+                child is None or ch in child.checkpoint["channel_versions"]
+            ):
+                entry["missing_checkpoint_id"] = missing_checkpoint_id
             result[ch] = entry
         return result
 
@@ -696,10 +715,14 @@ class BaseCheckpointSaver(Generic[V]):
         cursor_config: RunnableConfig | None = (
             target_tuple.parent_config if target_tuple else None
         )
+        missing_checkpoint_id = None if target_tuple else get_checkpoint_id(config)
+        child = target_tuple
         while cursor_config is not None and remaining:
             tup = await self.aget_tuple(cursor_config)
             if tup is None:
+                missing_checkpoint_id = get_checkpoint_id(cursor_config)
                 break
+            child = tup
             if tup.pending_writes:
                 for write in reversed(tup.pending_writes):
                     ch = write[1]
@@ -715,6 +738,12 @@ class BaseCheckpointSaver(Generic[V]):
             entry: DeltaChannelHistory = {"writes": list(reversed(collected_by_ch[ch]))}
             if ch in seed_by_ch:
                 entry["seed"] = seed_by_ch[ch]
+            elif missing_checkpoint_id is not None and (
+                # A channel the missing checkpoint's child has no version for
+                # was first written later, so nothing of it is missing.
+                child is None or ch in child.checkpoint["channel_versions"]
+            ):
+                entry["missing_checkpoint_id"] = missing_checkpoint_id
             result[ch] = entry
         return result
 
