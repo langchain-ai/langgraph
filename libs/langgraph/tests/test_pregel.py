@@ -88,7 +88,7 @@ from langgraph.types import (
     interrupt,
 )
 from tests.agents import AgentAction, AgentFinish
-from tests.any_str import AnyStr, AnyVersion, FloatBetween, UnsortedSequence
+from tests.any_str import AnyStr, AnyVersion, UnsortedSequence
 from tests.messages import (
     _AnyIdAIMessage,
     _AnyIdAIMessageChunk,
@@ -3385,6 +3385,12 @@ def test_subgraph_checkpoint_true_interrupt(
 def test_stream_subgraphs_during_execution(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
+    streamed = {"inner_1": threading.Event(), "outer_1": threading.Event()}
+
+    def wait_until_streamed(node: str) -> None:
+        if not streamed[node].wait(timeout=10):
+            raise TimeoutError(f"{node} was not streamed while the graph was running")
+
     class InnerState(TypedDict):
         my_key: Annotated[str, operator.add]
         my_other_key: str
@@ -3393,7 +3399,7 @@ def test_stream_subgraphs_during_execution(
         return {"my_key": "got here", "my_other_key": state["my_key"]}
 
     def inner_2(state: InnerState):
-        time.sleep(0.5)
+        wait_until_streamed("outer_1")
         return {
             "my_key": " and there",
             "my_other_key": state["my_key"],
@@ -3410,7 +3416,7 @@ def test_stream_subgraphs_during_execution(
         my_key: Annotated[str, operator.add]
 
     def outer_1(state: State):
-        time.sleep(0.2)
+        wait_until_streamed("inner_1")
         return {"my_key": " and parallel"}
 
     def outer_2(state: State):
@@ -3428,34 +3434,22 @@ def test_stream_subgraphs_during_execution(
 
     app = graph.compile(checkpointer=sync_checkpointer)
 
-    start = time.perf_counter()
-    chunks: list[tuple[float, Any]] = []
+    chunks: list[tuple[tuple[str, ...], dict[str, dict[str, str]]]] = []
     config = {"configurable": {"thread_id": "2"}}
-    for c in app.stream({"my_key": ""}, config, subgraphs=True):
-        chunks.append((round(time.perf_counter() - start, 1), c))
-    for idx in range(len(chunks)):
-        elapsed, c = chunks[idx]
-        chunks[idx] = (round(elapsed - chunks[0][0], 1), c)
+    for namespace, update in app.stream({"my_key": ""}, config, subgraphs=True):
+        chunks.append((namespace, update))
+        for node in update.keys() & streamed.keys():
+            streamed[node].set()
 
     assert chunks == [
-        # arrives before "inner" finishes
+        ((AnyStr("inner:"),), {"inner_1": {"my_key": "got here", "my_other_key": ""}}),
+        ((), {"outer_1": {"my_key": " and parallel"}}),
         (
-            FloatBetween(0.0, 0.1),
-            (
-                (AnyStr("inner:"),),
-                {"inner_1": {"my_key": "got here", "my_other_key": ""}},
-            ),
+            (AnyStr("inner:"),),
+            {"inner_2": {"my_key": " and there", "my_other_key": "got here"}},
         ),
-        (FloatBetween(0.2, 0.3), ((), {"outer_1": {"my_key": " and parallel"}})),
-        (
-            FloatBetween(0.5, 0.8),
-            (
-                (AnyStr("inner:"),),
-                {"inner_2": {"my_key": " and there", "my_other_key": "got here"}},
-            ),
-        ),
-        (FloatBetween(0.5, 0.8), ((), {"inner": {"my_key": "got here and there"}})),
-        (FloatBetween(0.5, 0.8), ((), {"outer_2": {"my_key": " and back again"}})),
+        ((), {"inner": {"my_key": "got here and there"}}),
+        ((), {"outer_2": {"my_key": " and back again"}}),
     ]
 
 
