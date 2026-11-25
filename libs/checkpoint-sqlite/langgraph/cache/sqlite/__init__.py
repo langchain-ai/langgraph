@@ -114,7 +114,14 @@ class SqliteCache(BaseCache[ValueT]):
         await asyncio.to_thread(self.clear, namespaces)
 
     def __del__(self) -> None:
+        """Best-effort cleanup of database connection.
+
+        Note: For reliable cleanup, use the context manager protocol.
+        """
         try:
-            self._conn.close()
+            if hasattr(self, "_conn"):
+                self._conn.close()
         except Exception:
+            # Silently ignore all exceptions during cleanup
+            # Logging or raising here can cause issues during interpreter shutdown
             pass
