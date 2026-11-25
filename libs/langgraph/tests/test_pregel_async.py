@@ -5141,6 +5141,11 @@ async def test_subgraph_checkpoint_true_interrupt(
 async def test_stream_subgraphs_during_execution(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
+    streamed = {"inner_1": asyncio.Event(), "outer_1": asyncio.Event()}
+
+    async def wait_until_streamed(node: str) -> None:
+        await asyncio.wait_for(streamed[node].wait(), timeout=10)
+
     class InnerState(TypedDict):
         my_key: Annotated[str, operator.add]
         my_other_key: str
@@ -5149,7 +5154,7 @@ async def test_stream_subgraphs_during_execution(
         return {"my_key": "got here", "my_other_key": state["my_key"]}
 
     async def inner_2(state: InnerState):
-        await asyncio.sleep(0.5)
+        await wait_until_streamed("outer_1")
         return {
             "my_key": " and there",
             "my_other_key": state["my_key"],
@@ -5166,7 +5171,7 @@ async def test_stream_subgraphs_during_execution(
         my_key: Annotated[str, operator.add]
 
     async def outer_1(state: State):
-        await asyncio.sleep(0.2)
+        await wait_until_streamed("inner_1")
         return {"my_key": " and parallel"}
 
     async def outer_2(state: State):
@@ -5184,34 +5189,22 @@ async def test_stream_subgraphs_during_execution(
 
     app = graph.compile(checkpointer=async_checkpointer)
 
-    start = perf_counter()
-    chunks: list[tuple[float, Any]] = []
+    chunks: list[tuple[tuple[str, ...], dict[str, dict[str, str]]]] = []
     config = {"configurable": {"thread_id": "2"}}
-    async for c in app.astream({"my_key": ""}, config, subgraphs=True):
-        chunks.append((round(perf_counter() - start, 1), c))
-    for idx in range(len(chunks)):
-        elapsed, c = chunks[idx]
-        chunks[idx] = (round(elapsed - chunks[0][0], 1), c)
+    async for namespace, update in app.astream({"my_key": ""}, config, subgraphs=True):
+        chunks.append((namespace, update))
+        for node in update.keys() & streamed.keys():
+            streamed[node].set()
 
     assert chunks == [
-        # arrives before "inner" finishes
+        ((AnyStr("inner:"),), {"inner_1": {"my_key": "got here", "my_other_key": ""}}),
+        ((), {"outer_1": {"my_key": " and parallel"}}),
         (
-            FloatBetween(0.0, 0.1),
-            (
-                (AnyStr("inner:"),),
-                {"inner_1": {"my_key": "got here", "my_other_key": ""}},
-            ),
+            (AnyStr("inner:"),),
+            {"inner_2": {"my_key": " and there", "my_other_key": "got here"}},
         ),
-        (FloatBetween(0.2, 0.4), ((), {"outer_1": {"my_key": " and parallel"}})),
-        (
-            FloatBetween(0.5, 0.8),
-            (
-                (AnyStr("inner:"),),
-                {"inner_2": {"my_key": " and there", "my_other_key": "got here"}},
-            ),
-        ),
-        (FloatBetween(0.5, 0.8), ((), {"inner": {"my_key": "got here and there"}})),
-        (FloatBetween(0.5, 0.8), ((), {"outer_2": {"my_key": " and back again"}})),
+        ((), {"inner": {"my_key": "got here and there"}}),
+        ((), {"outer_2": {"my_key": " and back again"}}),
     ]
 
 
