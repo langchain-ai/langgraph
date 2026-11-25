@@ -7,6 +7,7 @@ from types import TracebackType
 
 import httpx
 
+from langgraph_sdk._shared.retry import RetryTransport
 from langgraph_sdk._shared.types import TimeoutTypes
 from langgraph_sdk._shared.utilities import NOT_PROVIDED, _get_headers
 from langgraph_sdk._sync.assistants import SyncAssistantsClient
@@ -72,7 +73,7 @@ def get_sync_client(
     if url is None:
         url = "http://localhost:8123"
 
-    transport = httpx.HTTPTransport(retries=5)
+    transport = RetryTransport(httpx.HTTPTransport(retries=5))
     client = httpx.Client(
         base_url=url,
         transport=transport,
