@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Generic, cast
 
@@ -10,7 +10,7 @@ from typing_extensions import TypedDict, Unpack
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
 from langgraph.config import get_config
-from langgraph.types import _DC_KWARGS, StreamWriter
+from langgraph.types import _DC_KWARGS, PregelExecutableTask, StreamWriter
 from langgraph.typing import ContextT
 
 __all__ = (
@@ -102,6 +102,14 @@ class RunControl:
     @property
     def drain_reason(self) -> str | None:
         return self._drain_reason
+
+    def should_drain(self, next_tasks: Sequence[PregelExecutableTask]) -> bool:
+        """Whether the run stops before the step that would run `next_tasks`.
+
+        Checked once per superstep boundary. Override to drain only before
+        certain steps; the default drains at the first boundary after a request.
+        """
+        return self.drain_requested
 
 
 def _no_op_stream_writer(_: Any) -> None: ...
