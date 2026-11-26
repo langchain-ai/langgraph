@@ -1589,6 +1589,8 @@ ADD {relpath} /deps/{name}
     docker_file_contents.extend(
         [
             f"FROM {image_str}",
+            # BuildKit secrets do not invalidate RUN caches; hosted builds supply this hash.
+            "ARG USER_ENV_VARS_HASH",
             "",
             os.linesep.join(config["dockerfile_lines"]),
             "",
@@ -1679,6 +1681,8 @@ def node_config_to_docker(
 
     docker_file_contents = [
         f"FROM {image_str}",
+        # BuildKit secrets do not invalidate RUN caches; hosted builds supply this hash.
+        "ARG USER_ENV_VARS_HASH",
         "",
         os.linesep.join(config["dockerfile_lines"]),
         "",
