@@ -4,22 +4,58 @@ import time
 
 import pytest
 import redis
+from redis.backoff import NoBackoff
+from redis.retry import Retry
 
 from langgraph.cache.base import FullKey
 from langgraph.cache.redis import RedisCache
+
+REDIS_HOST = "localhost"
+REDIS_PORT = 6379
+# redis-py 8 retries ConnectionError with exponential backoff by default, which
+# makes probing an absent Redis server take tens of seconds on Windows. Probe
+# once with a single fast attempt instead of per-test retries.
+PROBE_TIMEOUT = 1.0
+
+
+def connect(
+    *,
+    host: str = REDIS_HOST,
+    port: int = REDIS_PORT,
+    timeout: float = PROBE_TIMEOUT,
+    **kwargs: object,
+) -> redis.Redis:
+    """Create a Redis client that fails fast instead of retrying with backoff."""
+    return redis.Redis(
+        host=host,
+        port=port,
+        socket_connect_timeout=timeout,
+        socket_timeout=timeout,
+        retry=Retry(NoBackoff(), 0),
+        **kwargs,
+    )
+
+
+def _redis_available() -> bool:
+    client = connect()
+    try:
+        client.ping()
+    except redis.RedisError:
+        return False
+    finally:
+        client.close()
+    return True
+
+
+if not _redis_available():
+    pytest.skip("Redis server not available", allow_module_level=True)
 
 
 class TestRedisCache:
     @pytest.fixture(autouse=True)
     def setup(self) -> None:
         """Set up test Redis client and cache."""
-        self.client = redis.Redis(
-            host="localhost", port=6379, db=0, decode_responses=False
-        )
-        try:
-            self.client.ping()
-        except redis.ConnectionError:
-            pytest.skip("Redis server not available")
+        self.client = connect(decode_responses=False)
 
         self.cache: RedisCache = RedisCache(self.client, prefix="test:cache:")
 
@@ -165,11 +201,7 @@ class TestRedisCache:
     async def test_async_operations(self) -> None:
         """Test async set and get operations with sync Redis client."""
         # Create sync Redis client and cache (like main integration tests)
-        client = redis.Redis(host="localhost", port=6379, db=1, decode_responses=False)
-        try:
-            client.ping()
-        except Exception:
-            pytest.skip("Redis not available")
+        client = connect(db=1, decode_responses=False)
 
         cache: RedisCache = RedisCache(client, prefix="test:async:")
 
@@ -191,11 +223,7 @@ class TestRedisCache:
     async def test_async_clear(self) -> None:
         """Test async clear operations with sync Redis client."""
         # Create sync Redis client and cache (like main integration tests)
-        client = redis.Redis(host="localhost", port=6379, db=1, decode_responses=False)
-        try:
-            client.ping()
-        except Exception:
-            pytest.skip("Redis not available")
+        client = connect(db=1, decode_responses=False)
 
         cache: RedisCache = RedisCache(client, prefix="test:async:")
 
@@ -221,9 +249,7 @@ class TestRedisCache:
     def test_redis_unavailable_get(self) -> None:
         """Test behavior when Redis is unavailable during get operations."""
         # Create cache with non-existent Redis server
-        bad_client = redis.Redis(
-            host="nonexistent", port=9999, socket_connect_timeout=0.1
-        )
+        bad_client = connect(host="nonexistent", port=9999, timeout=0.1)
         cache: RedisCache = RedisCache(bad_client, prefix="test:cache:")
 
         keys: list[FullKey] = [(("graph", "node"), "key")]
@@ -235,9 +261,7 @@ class TestRedisCache:
     def test_redis_unavailable_set(self) -> None:
         """Test behavior when Redis is unavailable during set operations."""
         # Create cache with non-existent Redis server
-        bad_client = redis.Redis(
-            host="nonexistent", port=9999, socket_connect_timeout=0.1
-        )
+        bad_client = connect(host="nonexistent", port=9999, timeout=0.1)
         cache: RedisCache = RedisCache(bad_client, prefix="test:cache:")
 
         keys: list[FullKey] = [(("graph", "node"), "key")]
@@ -250,9 +274,7 @@ class TestRedisCache:
     async def test_redis_unavailable_async(self) -> None:
         """Test async behavior when Redis is unavailable."""
         # Create sync cache with non-existent Redis server (like main integration tests)
-        bad_client = redis.Redis(
-            host="nonexistent", port=9999, socket_connect_timeout=0.1
-        )
+        bad_client = connect(host="nonexistent", port=9999, timeout=0.1)
         cache: RedisCache = RedisCache(bad_client, prefix="test:cache:")
 
         keys: list[FullKey] = [(("graph", "node"), "key")]
