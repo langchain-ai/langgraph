@@ -3,6 +3,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -447,4 +448,30 @@ async def test_base_saver_serializes_concurrent_calls(test_data) -> None:
         await asyncio.gather(
             *(saver.aput_writes(config, [("x", i)], str(uuid4())) for i in range(20)),
             *(saver.aget_tuple(config) for _ in range(20)),
+        )
+
+
+async def test_async_from_conn_string_prepare_threshold() -> None:
+    with patch(
+        "psycopg.AsyncConnection.connect", new_callable=AsyncMock
+    ) as mock_connect:
+        mock_conn = MagicMock()
+        mock_cm = AsyncMock()
+        mock_cm.__aenter__.return_value = mock_conn
+        mock_connect.return_value = mock_cm
+        async with AsyncPostgresSaver.from_conn_string(
+            "test_conn", prepare_threshold=None
+        ):
+            pass
+        mock_connect.assert_called_once_with(
+            "test_conn", autocommit=True, prepare_threshold=None, row_factory=dict_row
+        )
+
+        mock_connect.reset_mock()
+        async with AsyncShallowPostgresSaver.from_conn_string(
+            "test_conn", prepare_threshold=5
+        ):
+            pass
+        mock_connect.assert_called_once_with(
+            "test_conn", autocommit=True, prepare_threshold=5, row_factory=dict_row
         )
