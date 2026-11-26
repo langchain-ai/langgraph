@@ -39,7 +39,7 @@ __all__ = (
     "REMOVE_ALL_MESSAGES",
 )
 
-Messages = list[MessageLikeRepresentation] | MessageLikeRepresentation
+Messages = Sequence[MessageLikeRepresentation] | MessageLikeRepresentation
 
 
 def _add_messages_wrapper(func: Callable) -> Callable[[Messages, Messages], Messages]:
@@ -191,9 +191,9 @@ def add_messages(
     remove_all_idx = None
     # coerce to list
     if not isinstance(left, list):
-        left = [left]  # type: ignore[assignment]
+        left = list(left)
     if not isinstance(right, list):
-        right = [right]  # type: ignore[assignment]
+        right = list(right)
     # coerce to message
     left = _coerce_to_messages(left)
     right = _coerce_to_messages(right)
