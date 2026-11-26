@@ -605,6 +605,240 @@ async def test_node_cancellation_on_other_node_exception_two() -> None:
         await graph.ainvoke({"hello": "world"})
 
 
+async def test_other_nodes_finish_when_one_fails_with_checkpointer(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """With a checkpointer, a failing node doesn't cut off the others in its step.
+
+    A node cancelled after its side effect saves no output, so resuming the failed
+    step would run it, and its side effect, again.
+    """
+    sent: list[str] = []
+    fail = True
+
+    class State(TypedDict):
+        log: Annotated[list[str], operator.add]
+
+    async def send(state: State) -> State:
+        sent.append("email")
+        await asyncio.sleep(0.05)  # waiting on the reply to a request already sent
+        return {"log": ["sent"]}
+
+    async def save(state: State) -> State:
+        if fail:
+            raise ValueError("save failed")
+        return {"log": ["saved"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("send", send)
+        .add_node("save", save)
+        .add_edge(START, "send")
+        .add_edge(START, "save")
+        .compile(checkpointer=async_checkpointer)
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    with pytest.raises(ValueError, match="save failed"):
+        await graph.ainvoke({"log": []}, config)
+    assert sent == ["email"]
+
+    fail = False
+    result = await graph.ainvoke(None, config)
+    assert sorted(result["log"]) == ["saved", "sent"]
+    assert sent == ["email"]
+
+
+async def test_failed_step_streams_other_nodes_with_checkpointer(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """The other nodes' updates are streamed before the error, and aren't run again."""
+    sent: list[str] = []
+    fail = True
+
+    class State(TypedDict):
+        log: Annotated[list[str], operator.add]
+
+    async def send(state: State) -> State:
+        sent.append("email")
+        await asyncio.sleep(0.05)  # waiting on the reply to a request already sent
+        return {"log": ["sent"]}
+
+    async def save(state: State) -> State:
+        if fail:
+            raise ValueError("save failed")
+        return {"log": ["saved"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("send", send)
+        .add_node("save", save)
+        .add_edge(START, "send")
+        .add_edge(START, "save")
+        .compile(checkpointer=async_checkpointer)
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    chunks = []
+    with pytest.raises(ValueError, match="save failed"):
+        # "custom" streams while nodes run, the way the Agent Server streams
+        async for chunk in graph.astream(
+            {"log": []}, config, stream_mode=["updates", "custom"]
+        ):
+            chunks.append(chunk)
+    assert ("updates", {"send": {"log": ["sent"]}}) in chunks
+
+    fail = False
+    await graph.ainvoke(None, config)
+    assert sent == ["email"]
+
+
+async def test_failed_step_keeps_streaming_other_nodes_with_checkpointer(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """After a node fails, what the others stream reaches the caller while they run."""
+    received = asyncio.Event()
+    seen_in_time: list[bool] = []
+
+    class State(TypedDict):
+        log: Annotated[list[str], operator.add]
+
+    async def slow(state: State, writer: StreamWriter) -> State:
+        await asyncio.sleep(0.05)  # `save` has failed by now
+        writer("progress")
+        try:
+            await asyncio.wait_for(received.wait(), 0.5)
+            seen_in_time.append(True)
+        except asyncio.TimeoutError:
+            seen_in_time.append(False)
+        return {"log": ["slow"]}
+
+    async def save(state: State) -> State:
+        raise ValueError("save failed")
+
+    graph = (
+        StateGraph(State)
+        .add_node("slow", slow)
+        .add_node("save", save)
+        .add_edge(START, "slow")
+        .add_edge(START, "save")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    with pytest.raises(ValueError, match="save failed"):
+        async for mode, chunk in graph.astream(
+            {"log": []},
+            {"configurable": {"thread_id": "1"}},
+            stream_mode=["custom", "updates"],
+        ):
+            if mode == "custom" and chunk == "progress":
+                received.set()
+    assert seen_in_time == [True]
+
+
+async def test_step_timeout_after_failure_raises_it_with_checkpointer(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """A step that times out after a node failed raises that node's error, and the
+    nodes still running are cancelled."""
+    cancelled: list[str] = []
+
+    class State(TypedDict):
+        log: Annotated[list[str], operator.add]
+
+    async def slow(state: State) -> State:
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            cancelled.append("slow")
+            raise
+        return {"log": ["slow"]}
+
+    async def save(state: State) -> State:
+        raise ValueError("save failed")
+
+    graph = (
+        StateGraph(State)
+        .add_node("slow", slow)
+        .add_node("save", save)
+        .add_edge(START, "slow")
+        .add_edge(START, "save")
+        .compile(checkpointer=async_checkpointer)
+    )
+    graph.step_timeout = 0.1
+
+    with pytest.raises(ValueError, match="save failed"):
+        await graph.ainvoke({"log": []}, {"configurable": {"thread_id": "1"}})
+    assert cancelled == ["slow"]
+
+
+@NEEDS_CONTEXTVARS
+async def test_step_timeout_with_only_an_interrupt_raises_timeout_with_checkpointer(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """An interrupt isn't a failure: a step that times out with one pending still
+    raises TimeoutError."""
+
+    class State(TypedDict):
+        log: Annotated[list[str], operator.add]
+
+    async def slow(state: State) -> State:
+        await asyncio.sleep(1)
+        return {"log": ["slow"]}
+
+    async def ask(state: State) -> State:
+        interrupt("continue?")
+        return {"log": ["asked"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("slow", slow)
+        .add_node("ask", ask)
+        .add_edge(START, "slow")
+        .add_edge(START, "ask")
+        .compile(checkpointer=async_checkpointer)
+    )
+    graph.step_timeout = 0.1
+
+    with pytest.raises(asyncio.TimeoutError):
+        await graph.ainvoke({"log": []}, {"configurable": {"thread_id": "1"}})
+
+
+async def test_earliest_failure_is_raised_with_checkpointer(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """When several nodes fail in one step, the first to fail is the error raised."""
+
+    class State(TypedDict):
+        log: Annotated[list[str], operator.add]
+
+    async def first(state: State) -> State:
+        await asyncio.sleep(0.01)
+        raise ValueError("first")
+
+    async def second(state: State) -> State:
+        await asyncio.sleep(0.05)
+        raise KeyError("second")
+
+    async def ok(state: State) -> State:
+        await asyncio.sleep(0.1)
+        return {"log": ["ok"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("first", first)
+        .add_node("second", second)
+        .add_node("ok", ok)
+        .add_edge(START, "first")
+        .add_edge(START, "second")
+        .add_edge(START, "ok")
+        .compile(checkpointer=async_checkpointer)
+    )
+    for i in range(10):
+        with pytest.raises(ValueError, match="first"):
+            await graph.ainvoke({"log": []}, {"configurable": {"thread_id": str(i)}})
+
+
 @NEEDS_CONTEXTVARS
 async def test_dynamic_interrupt(async_checkpointer: BaseCheckpointSaver) -> None:
     class State(TypedDict):

@@ -4367,6 +4367,135 @@ def test_failing_task_result_is_streamed_before_the_error(stream_mode: str) -> N
     assert [type(error) for error in errors] == [ValueError]
 
 
+@pytest.mark.parametrize("durability", ["async", "sync", "exit"])
+def test_other_nodes_finish_when_one_fails_with_checkpointer(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    """With a checkpointer, a failing node doesn't cut off the others in its step.
+
+    A node whose output isn't saved when the step fails runs again, side effect
+    included, when the failed step is resumed.
+    """
+    sent: list[str] = []
+    fail = True
+
+    class State(TypedDict):
+        log: Annotated[list[str], operator.add]
+
+    def send(state: State) -> State:
+        sent.append("email")
+        time.sleep(0.2)  # waiting on the reply to a request already sent
+        return {"log": ["sent"]}
+
+    def save(state: State) -> State:
+        time.sleep(0.05)
+        if fail:
+            raise ValueError("save failed")
+        return {"log": ["saved"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("send", send)
+        .add_node("save", save)
+        .add_edge(START, "send")
+        .add_edge(START, "save")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    def slow_bookkeeping(node: str) -> None:
+        # runs after `send` returns, before its output is saved, as a busy thread
+        # pool would delay it
+        if node == "send":
+            time.sleep(0.05)
+
+    config = {
+        "configurable": {"thread_id": "1", CONFIG_KEY_NODE_FINISHED: slow_bookkeeping}
+    }
+
+    with pytest.raises(ValueError, match="save failed"):
+        graph.invoke({"log": []}, config, durability=durability)
+    assert sent == ["email"]
+
+    fail = False
+    result = graph.invoke(None, config, durability=durability)
+    assert sorted(result["log"]) == ["saved", "sent"]
+    assert sent == ["email"]
+
+
+def test_failed_step_keeps_streaming_other_nodes_with_checkpointer(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """After a node fails, what the others stream reaches the caller while they run."""
+    received = threading.Event()
+    seen_in_time: list[bool] = []
+
+    class State(TypedDict):
+        log: Annotated[list[str], operator.add]
+
+    def slow(state: State, writer: StreamWriter) -> State:
+        time.sleep(0.05)  # `save` has failed by now
+        writer("progress")
+        seen_in_time.append(received.wait(0.5))
+        return {"log": ["slow"]}
+
+    def save(state: State) -> State:
+        raise ValueError("save failed")
+
+    graph = (
+        StateGraph(State)
+        .add_node("slow", slow)
+        .add_node("save", save)
+        .add_edge(START, "slow")
+        .add_edge(START, "save")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    with pytest.raises(ValueError, match="save failed"):
+        for mode, chunk in graph.stream(
+            {"log": []},
+            {"configurable": {"thread_id": "1"}},
+            stream_mode=["custom", "updates"],
+        ):
+            if mode == "custom" and chunk == "progress":
+                received.set()
+    assert seen_in_time == [True]
+
+
+def test_earliest_failure_is_raised_with_checkpointer(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """When several nodes fail in one step, the first to fail is the error raised."""
+
+    class State(TypedDict):
+        log: Annotated[list[str], operator.add]
+
+    def first(state: State) -> State:
+        time.sleep(0.01)
+        raise ValueError("first")
+
+    def second(state: State) -> State:
+        time.sleep(0.08)
+        raise KeyError("second")
+
+    def ok(state: State) -> State:
+        time.sleep(0.1)
+        return {"log": ["ok"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("first", first)
+        .add_node("second", second)
+        .add_node("ok", ok)
+        .add_edge(START, "first")
+        .add_edge(START, "second")
+        .add_edge(START, "ok")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    for i in range(10):
+        with pytest.raises(ValueError, match="first"):
+            graph.invoke({"log": []}, {"configurable": {"thread_id": str(i)}})
+
+
 def test_debug_retry(sync_checkpointer: BaseCheckpointSaver):
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
