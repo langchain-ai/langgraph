@@ -7,11 +7,13 @@ import textwrap
 from unittest.mock import patch
 
 import click
+import httpx
 import pytest
 
 from langgraph_cli.config import (
     _BUILD_TOOLS,
     _get_pip_cleanup_lines,
+    _get_pypi_versions,
     config_to_compose,
     config_to_docker,
     default_base_image,
@@ -3504,6 +3506,184 @@ def test_docker_tag_with_compatible_api_version_rejects_tagged_base_image():
 
     with pytest.raises(click.UsageError, match="tagged base_image"):
         docker_tag(config, base_image="langchain/langgraph-api:0.11.0")
+
+
+_API_LINE_PYPI_VERSIONS = [
+    "0.17.9",
+    "0.18.0.dev1",
+    "0.18.0rc1",
+    "0.18.0",
+    "0.18.2",
+    "0.18.10",
+    "0.18.11rc1",
+    "0.19.0.dev1",
+    "0.19.0rc2",
+    "1.0.0rc1",
+]
+
+
+@pytest.mark.parametrize(
+    ("api_version", "expected"),
+    [("0.18", "0.18.10"), ("0", "0.18.10"), ("0.17", "0.17.9")],
+)
+def test_docker_tag_resolves_api_version_line_to_latest_final_release(
+    api_version: str, expected: str
+):
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "api_version": api_version,
+        }
+    )
+
+    with patch(
+        "langgraph_cli.config._get_pypi_versions",
+        return_value=_API_LINE_PYPI_VERSIONS,
+    ) as get_versions:
+        tag = docker_tag(config)
+
+    get_versions.assert_called_once_with("langgraph-api", exclude_yanked=True)
+    assert tag == f"langchain/langgraph-api:{expected}-py3.11"
+
+
+@pytest.mark.parametrize(
+    ("config_extra", "base_image", "expected_prefix"),
+    [
+        (
+            {"node_version": "20", "graphs": {"agent": "./agent.js:graph"}},
+            None,
+            "langchain/langgraphjs-api:0.18.10-node20",
+        ),
+        (
+            {"python_version": "3.12", "image_distro": "wolfi"},
+            "langchain/langgraph-executor",
+            "langchain/langgraph-executor:0.18.10-py3.12-wolfi",
+        ),
+    ],
+)
+def test_docker_tag_resolves_api_version_line_for_default_images(
+    config_extra: dict, base_image: str | None, expected_prefix: str
+):
+    config = validate_config(
+        {
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "api_version": "0.18",
+            **config_extra,
+        }
+    )
+
+    with patch(
+        "langgraph_cli.config._get_pypi_versions",
+        return_value=_API_LINE_PYPI_VERSIONS,
+    ):
+        tag = docker_tag(config, base_image=base_image)
+
+    assert tag == expected_prefix
+
+
+@pytest.mark.parametrize("api_version", ["0.18.3", "0.19.0rc2", "0.19.0.dev1"])
+def test_docker_tag_uses_exact_and_prerelease_api_version_verbatim(api_version: str):
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "api_version": api_version,
+        }
+    )
+
+    with patch("langgraph_cli.config._get_pypi_versions") as get_versions:
+        tag = docker_tag(config)
+
+    get_versions.assert_not_called()
+    assert tag == f"langchain/langgraph-api:{api_version}-py3.11"
+
+
+@pytest.mark.parametrize(
+    "base_image", ["my-registry/langgraph-api", "langchain/langgraph-server"]
+)
+def test_docker_tag_keeps_api_version_line_verbatim_for_custom_base_image(
+    base_image: str,
+):
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "api_version": "0.18",
+        }
+    )
+
+    with patch("langgraph_cli.config._get_pypi_versions") as get_versions:
+        tag = docker_tag(config, base_image=base_image)
+
+    get_versions.assert_not_called()
+    assert tag == f"{base_image}:0.18-py3.11"
+
+
+def test_docker_tag_api_version_line_without_final_release_asks_for_exact_pin():
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "api_version": "0.19",
+        }
+    )
+
+    with patch(
+        "langgraph_cli.config._get_pypi_versions",
+        return_value=_API_LINE_PYPI_VERSIONS,
+    ):
+        with pytest.raises(click.UsageError, match="No final PyPI releases") as exc:
+            docker_tag(config)
+
+    assert '"api_version": "0.18.3"' in exc.value.message
+
+
+def test_docker_tag_api_version_line_when_pypi_unreachable_asks_for_exact_pin():
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "api_version": "0.18",
+        }
+    )
+
+    with patch(
+        "langgraph_cli.config.httpx.get",
+        side_effect=httpx.ConnectError("network unreachable"),
+    ):
+        with pytest.raises(click.UsageError, match="Could not resolve") as exc:
+            docker_tag(config)
+
+    assert "network unreachable" in exc.value.message
+    assert '"api_version": "0.18.3"' in exc.value.message
+
+
+def test_get_pypi_versions_excludes_yanked_and_empty_releases():
+    releases = {
+        "0.18.0": [{"yanked": False}],
+        "0.18.1": [{"yanked": True}, {"yanked": True}],
+        "0.18.2": [{"yanked": True}, {"yanked": False}],
+        "0.18.3": [],
+    }
+    response = httpx.Response(
+        200,
+        json={"releases": releases},
+        request=httpx.Request("GET", "https://pypi.org/pypi/langgraph-api/json"),
+    )
+
+    with patch("langgraph_cli.config.httpx.get", return_value=response):
+        assert _get_pypi_versions("langgraph-api") == list(releases)
+        assert _get_pypi_versions("langgraph-api", exclude_yanked=True) == [
+            "0.18.0",
+            "0.18.2",
+        ]
 
 
 def test_config_to_docker_with_api_version():

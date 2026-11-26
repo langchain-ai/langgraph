@@ -50,7 +50,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Which semantic version of the Agent Server to use.\n\nDefaults to latest. Check the\nfor more information.\n"
+              "description": "Optional. Which semantic version of the Agent Server to use.\n\nDefaults to latest. Exact versions like `\"0.18.3\"` are used as-is. A bare\nminor like `\"0.18\"` (or major like `\"0\"`) resolves to the newest stable\nrelease in that line on PyPI when using the default base images. Check the\nfor more information.\n"
             },
             "auth": {
               "anyOf": [
@@ -303,7 +303,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Which semantic version of the Agent Server to use.\n\nDefaults to latest. Check the\nfor more information.\n"
+              "description": "Optional. Which semantic version of the Agent Server to use.\n\nDefaults to latest. Exact versions like `\"0.18.3\"` are used as-is. A bare\nminor like `\"0.18\"` (or major like `\"0\"`) resolves to the newest stable\nrelease in that line on PyPI when using the default base images. Check the\nfor more information.\n"
             },
             "auth": {
               "anyOf": [
@@ -542,7 +542,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Which semantic version of the Agent Server to use.\n\nDefaults to latest. Check the\nfor more information.\n"
+              "description": "Optional. Which semantic version of the Agent Server to use.\n\nDefaults to latest. Exact versions like `\"0.18.3\"` are used as-is. A bare\nminor like `\"0.18\"` (or major like `\"0\"`) resolves to the newest stable\nrelease in that line on PyPI when using the default base images. Check the\nfor more information.\n"
             },
             "auth": {
               "anyOf": [

@@ -649,7 +649,9 @@ class Config(TypedDict, total=False):
     api_version: str | None
     """Optional. Which semantic version of the Agent Server to use.
 
-    Defaults to latest. Check the
+    Defaults to latest. Exact versions like `"0.18.3"` are used as-is. A bare
+    minor like `"0.18"` (or major like `"0"`) resolves to the newest stable
+    release in that line on PyPI when using the default base images. Check the
     [changelog](https://docs.langchain.com/langgraph-platform/langgraph-server-changelog)
     for more information."""
 
