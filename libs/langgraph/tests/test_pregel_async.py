@@ -6,6 +6,7 @@ import logging
 import operator
 import random
 import sys
+import threading
 import uuid
 from collections import Counter, defaultdict, deque
 from dataclasses import replace
@@ -83,6 +84,7 @@ from langgraph.types import (
     Send,
     StateSnapshot,
     StateUpdate,
+    StreamMode,
     StreamWriter,
     interrupt,
 )
@@ -1171,6 +1173,113 @@ async def test_node_not_cancelled_on_other_node_interrupted(
 
     assert not inner_task_cancelled
     assert awhiles == 1
+
+
+async def _cancel_resume_after_interrupt_returned(
+    graph: Pregel,
+    config: RunnableConfig,
+    stream_mode: StreamMode,
+    resumed: threading.Event,
+    release: threading.Event,
+) -> None:
+    async def consume() -> None:
+        async for _ in graph.astream(
+            Command(resume="stall"), config, stream_mode=stream_mode
+        ):
+            pass
+
+    run = asyncio.create_task(consume())
+    assert await asyncio.to_thread(resumed.wait, 5)
+    run.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await run
+    release.set()
+
+
+@pytest.mark.parametrize("stream_mode", ["values", "messages"])
+@pytest.mark.parametrize("node_kind", ["sync", "async"])
+async def test_cancelled_resume_answer_not_reused(
+    async_checkpointer: BaseCheckpointSaver,
+    stream_mode: StreamMode,
+    node_kind: str,
+) -> None:
+    class State(TypedDict):
+        decision: str
+
+    resumed = threading.Event()
+    release = threading.Event()
+
+    def ask_sync(state: State) -> State:
+        answer = interrupt("approve?")
+        if answer == "stall":
+            resumed.set()
+            release.wait(5)
+        return {"decision": answer}
+
+    async def ask_async(state: State) -> State:
+        answer = interrupt("approve?")
+        if answer == "stall":
+            resumed.set()
+            await asyncio.sleep(5)
+        return {"decision": answer}
+
+    graph = (
+        StateGraph(State)
+        .add_node("ask", ask_sync if node_kind == "sync" else ask_async)
+        .add_edge(START, "ask")
+        .add_edge("ask", END)
+        .compile(checkpointer=async_checkpointer)
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    await graph.ainvoke({"decision": ""}, config)
+    await _cancel_resume_after_interrupt_returned(
+        graph, config, stream_mode, resumed, release
+    )
+
+    assert await graph.ainvoke(Command(resume="approve"), config) == {
+        "decision": "approve"
+    }
+
+
+@pytest.mark.parametrize("stream_mode", ["values", "messages"])
+async def test_cancelled_resume_keeps_earlier_answers(
+    async_checkpointer: BaseCheckpointSaver,
+    durability: Durability,
+    stream_mode: StreamMode,
+) -> None:
+    class State(TypedDict):
+        decision: str
+
+    resumed = threading.Event()
+    release = threading.Event()
+
+    def ask_twice(state: State) -> State:
+        first = interrupt("first?")
+        second = interrupt("second?")
+        if second == "stall":
+            resumed.set()
+            release.wait(5)
+        return {"decision": f"{first}+{second}"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("ask_twice", ask_twice)
+        .add_edge(START, "ask_twice")
+        .add_edge("ask_twice", END)
+        .compile(checkpointer=async_checkpointer)
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    await graph.ainvoke({"decision": ""}, config, durability=durability)
+    await graph.ainvoke(Command(resume="A"), config, durability=durability)
+    await _cancel_resume_after_interrupt_returned(
+        graph, config, stream_mode, resumed, release
+    )
+
+    assert await graph.ainvoke(Command(resume="B"), config, durability=durability) == {
+        "decision": "A+B"
+    }
 
 
 @pytest.mark.parametrize("stream_hang_s", [0.3, 0.6])

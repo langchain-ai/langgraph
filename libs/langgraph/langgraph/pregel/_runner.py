@@ -589,7 +589,11 @@ class PregelRunner:
             # for cancelled tasks, also save error in task,
             # so loop can finish super-step
             task.writes.append((ERROR, exception))
-            self.put_writes()(task.id, task.writes)  # type: ignore[misc]
+            # A cancelled attempt's answers must not beat the next resume. Savers
+            # upsert RESUME per task, so earlier stored answers are kept.
+            self.put_writes()(  # type: ignore[misc]
+                task.id, [w for w in task.writes if w[0] != RESUME]
+            )
         elif exception:
             if isinstance(exception, GraphInterrupt):
                 # save interrupt to checkpointer
