@@ -130,7 +130,15 @@ class TestSqliteSaver:
 
     def test_search_where(self) -> None:
         # call method / assertions
-        expected_predicate_1 = "WHERE json_extract(CAST(metadata AS TEXT), '$.source') = ? AND json_extract(CAST(metadata AS TEXT), '$.step') = ? AND json_extract(CAST(metadata AS TEXT), '$.writes') = ? AND json_extract(CAST(metadata AS TEXT), '$.score') = ? AND checkpoint_id < ?"
+        expected_predicate_1 = (
+            "WHERE json_extract(CAST(metadata AS TEXT), '$.source') = ? "
+            "AND (json_type(CAST(metadata AS TEXT), '$.step') IN ('integer', 'real') "
+            "AND json_extract(CAST(metadata AS TEXT), '$.step') = ?) "
+            "AND json_extract(CAST(metadata AS TEXT), '$.writes') = ? "
+            "AND (json_type(CAST(metadata AS TEXT), '$.score') IN ('integer', 'real') "
+            "AND json_extract(CAST(metadata AS TEXT), '$.score') = ?) "
+            "AND checkpoint_id < ?"
+        )
         expected_param_values_1 = ["input", 2, "{}", 1, "1"]
         assert search_where(
             None, cast(dict[str, Any], self.metadata_1), self.config_1
@@ -143,13 +151,13 @@ class TestSqliteSaver:
         # call method / assertions
         expected_predicate_1 = [
             "json_extract(CAST(metadata AS TEXT), '$.source') = ?",
-            "json_extract(CAST(metadata AS TEXT), '$.step') = ?",
+            "(json_type(CAST(metadata AS TEXT), '$.step') IN ('integer', 'real') AND json_extract(CAST(metadata AS TEXT), '$.step') = ?)",
             "json_extract(CAST(metadata AS TEXT), '$.writes') = ?",
-            "json_extract(CAST(metadata AS TEXT), '$.score') = ?",
+            "(json_type(CAST(metadata AS TEXT), '$.score') IN ('integer', 'real') AND json_extract(CAST(metadata AS TEXT), '$.score') = ?)",
         ]
         expected_predicate_2 = [
             "json_extract(CAST(metadata AS TEXT), '$.source') = ?",
-            "json_extract(CAST(metadata AS TEXT), '$.step') = ?",
+            "(json_type(CAST(metadata AS TEXT), '$.step') IN ('integer', 'real') AND json_extract(CAST(metadata AS TEXT), '$.step') = ?)",
             "json_extract(CAST(metadata AS TEXT), '$.writes') = ?",
             "json_extract(CAST(metadata AS TEXT), '$.score') IS ?",
         ]
@@ -307,3 +315,30 @@ class TestSqliteSaver:
             # Nested digit-starting key via dotted path
             results = list(saver.list(None, filter={"user.123abc": "ok2"}))
             assert len(results) == 1
+
+
+def test_sqlite_saver_filter_distinguishes_bool_and_int() -> None:
+    with SqliteSaver.from_conn_string(":memory:") as saver:
+        saver.setup()
+        cases = [
+            ("t_int0", 0),
+            ("t_false", False),
+            ("t_int1", 1),
+            ("t_true", True),
+            ("t_float1", 1.0),
+        ]
+        for tid, val in cases:
+            cfg = {"configurable": {"thread_id": tid, "checkpoint_ns": ""}}
+            saver.put(cfg, empty_checkpoint(), {"stage": val}, {})
+
+        for flt, expected_threads in [
+            (0, {"t_int0"}),
+            (False, {"t_false"}),
+            (1, {"t_int1", "t_float1"}),
+            (True, {"t_true"}),
+        ]:
+            found = {
+                c.config["configurable"]["thread_id"]
+                for c in saver.list(None, filter={"stage": flt})
+            }
+            assert found == expected_threads

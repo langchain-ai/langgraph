@@ -720,3 +720,36 @@ class TestPreDeltaBlobTerminator:
         assert "PRE-DELTA-WRITE" in values
         # And the pending write at the target is never folded in.
         assert "PENDING-AT-TARGET" not in values
+
+
+async def test_memory_saver_filter_distinguishes_bool_and_int() -> None:
+    saver = InMemorySaver()
+    cases = [
+        ("t_int0", 0),
+        ("t_false", False),
+        ("t_int1", 1),
+        ("t_true", True),
+        ("t_float1", 1.0),
+    ]
+    for tid, val in cases:
+        cfg = {"configurable": {"thread_id": tid, "checkpoint_ns": ""}}
+        ckpt = empty_checkpoint()
+        saver.put(cfg, ckpt, {"stage": val}, {})
+
+    for flt, expected_threads in [
+        (0, {"t_int0"}),
+        (False, {"t_false"}),
+        (1, {"t_int1", "t_float1"}),
+        (True, {"t_true"}),
+    ]:
+        sync_threads = {
+            c.config["configurable"]["thread_id"]
+            for c in saver.list(None, filter={"stage": flt})
+        }
+        assert sync_threads == expected_threads
+
+        async_threads = {
+            c.config["configurable"]["thread_id"]
+            async for c in saver.alist(None, filter={"stage": flt})
+        }
+        assert async_threads == expected_threads

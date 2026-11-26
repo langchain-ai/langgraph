@@ -377,7 +377,7 @@ class InMemorySaver(
                     # filter by metadata
                     metadata = self.serde.loads_typed(metadata_b)
                     if filter and not all(
-                        query_value == metadata.get(query_key)
+                        _strict_equals(query_value, metadata.get(query_key))
                         for query_key, query_value in filter.items()
                     ):
                         continue
@@ -705,3 +705,16 @@ class PersistentDict(defaultdict):
                     logger.error(f"Failed to load file: {fileobj.name}")
                     raise
             raise ValueError("File not in a supported format")
+
+
+def _strict_equals(a: Any, b: Any) -> bool:
+    """Compare values with JSON-like type strictness (bool != int/float)."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return type(a) is type(b) and a == b
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_strict_equals(a[k], b[k]) for k in a)
+    if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
+        return len(a) == len(b) and all(
+            _strict_equals(x, y) for x, y in zip(a, b, strict=False)
+        )
+    return a == b

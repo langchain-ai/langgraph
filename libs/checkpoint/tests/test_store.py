@@ -1243,3 +1243,37 @@ def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
     assert result3[0].key == "3"
     assert result4[0].key == "4"
     assert result5[0].key == "5"
+
+
+def test_inmemory_store_filter_distinguishes_bool_and_int() -> None:
+    store = InMemoryStore()
+    ns = ("bool_int_filter",)
+    store.put(ns, "int_0", {"stage": 0})
+    store.put(ns, "bool_false", {"stage": False})
+    store.put(ns, "int_1", {"stage": 1})
+    store.put(ns, "bool_true", {"stage": True})
+    store.put(ns, "float_1", {"stage": 1.0})
+
+    assert [i.key for i in store.search(ns, filter={"stage": 0})] == ["int_0"]
+    assert [i.key for i in store.search(ns, filter={"stage": False})] == ["bool_false"]
+    assert sorted(i.key for i in store.search(ns, filter={"stage": 1})) == [
+        "float_1",
+        "int_1",
+    ]
+    assert [i.key for i in store.search(ns, filter={"stage": True})] == ["bool_true"]
+
+    # Operator parity: $eq, $ne, $gte
+    assert [i.key for i in store.search(ns, filter={"stage": {"$eq": False}})] == [
+        "bool_false"
+    ]
+    assert "int_0" in {
+        i.key for i in store.search(ns, filter={"stage": {"$ne": False}})
+    }
+    assert "bool_false" in {
+        i.key for i in store.search(ns, filter={"stage": {"$ne": 0}})
+    }
+    assert sorted(i.key for i in store.search(ns, filter={"stage": {"$gte": 1}})) == [
+        "float_1",
+        "int_1",
+    ]
+    assert store.search(ns, filter={"stage": {"$gte": True}}) == []

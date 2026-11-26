@@ -44,14 +44,8 @@ def _metadata_predicate(
         """Return tuple of operator and value for WHERE clause predicate."""
         if query_value is None:
             return ("IS ?", None)
-        elif (
-            isinstance(query_value, str)
-            or isinstance(query_value, int)
-            or isinstance(query_value, float)
-        ):
+        elif isinstance(query_value, (str, int, float)):
             return ("= ?", query_value)
-        elif isinstance(query_value, bool):
-            return ("= ?", 1 if query_value else 0)
         elif isinstance(query_value, dict) or isinstance(query_value, list):
             # query value for JSON object cannot have trailing space after separators (, :)
             # SQLite json_extract() returns JSON string without whitespace
@@ -65,11 +59,21 @@ def _metadata_predicate(
     # process metadata query
     for query_key, query_value in metadata_filter.items():
         _validate_filter_key(query_key)
-        operator, param_value = _where_value(query_value)
-        predicates.append(
-            f"json_extract(CAST(metadata AS TEXT), '$.{query_key}') {operator}"
-        )
-        param_values.append(param_value)
+        if isinstance(query_value, bool):
+            predicates.append(f"json_type(CAST(metadata AS TEXT), '$.{query_key}') = ?")
+            param_values.append("true" if query_value else "false")
+        elif isinstance(query_value, (int, float)):
+            predicates.append(
+                f"(json_type(CAST(metadata AS TEXT), '$.{query_key}') IN ('integer', 'real')"
+                f" AND json_extract(CAST(metadata AS TEXT), '$.{query_key}') = ?)"
+            )
+            param_values.append(query_value)
+        else:
+            operator, param_value = _where_value(query_value)
+            predicates.append(
+                f"json_extract(CAST(metadata AS TEXT), '$.{query_key}') {operator}"
+            )
+            param_values.append(param_value)
 
     return (predicates, param_values)
 

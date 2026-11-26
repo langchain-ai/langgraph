@@ -188,3 +188,30 @@ class TestAsyncSqliteSaver:
             # (would have been dropped if injection succeeded)
             results = [c async for c in saver.alist(None, limit=None)]
             assert len(results) == 5
+
+
+async def test_async_sqlite_saver_filter_distinguishes_bool_and_int() -> None:
+    async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+        await saver.setup()
+        cases = [
+            ("t_int0", 0),
+            ("t_false", False),
+            ("t_int1", 1),
+            ("t_true", True),
+            ("t_float1", 1.0),
+        ]
+        for tid, val in cases:
+            cfg = {"configurable": {"thread_id": tid, "checkpoint_ns": ""}}
+            await saver.aput(cfg, empty_checkpoint(), {"stage": val}, {})
+
+        for flt, expected_threads in [
+            (0, {"t_int0"}),
+            (False, {"t_false"}),
+            (1, {"t_int1", "t_float1"}),
+            (True, {"t_true"}),
+        ]:
+            found = {
+                c.config["configurable"]["thread_id"]
+                async for c in saver.alist(None, filter={"stage": flt})
+            }
+            assert found == expected_threads

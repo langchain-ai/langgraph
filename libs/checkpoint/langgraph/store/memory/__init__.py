@@ -580,22 +580,43 @@ def _compare_values(item_value: Any, filter_value: Any) -> bool:
             )
         )
     else:
-        return item_value == filter_value
+        return _strict_equals(item_value, filter_value)
+
+
+def _strict_equals(a: Any, b: Any) -> bool:
+    """Compare values with JSON-like type strictness (bool != int/float)."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return type(a) is type(b) and a == b
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_strict_equals(a[k], b[k]) for k in a)
+    if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
+        return len(a) == len(b) and all(
+            _strict_equals(x, y) for x, y in zip(a, b, strict=False)
+        )
+    return a == b
 
 
 def _apply_operator(value: Any, operator: str, op_value: Any) -> bool:
     """Apply a comparison operator, matching PostgreSQL's JSONB behavior."""
     if operator == "$eq":
-        return value == op_value
+        return _strict_equals(value, op_value)
     elif operator == "$gt":
+        if isinstance(value, bool) or isinstance(op_value, bool):
+            return False
         return float(value) > float(op_value)
     elif operator == "$gte":
+        if isinstance(value, bool) or isinstance(op_value, bool):
+            return False
         return float(value) >= float(op_value)
     elif operator == "$lt":
+        if isinstance(value, bool) or isinstance(op_value, bool):
+            return False
         return float(value) < float(op_value)
     elif operator == "$lte":
+        if isinstance(value, bool) or isinstance(op_value, bool):
+            return False
         return float(value) <= float(op_value)
     elif operator == "$ne":
-        return value != op_value
+        return not _strict_equals(value, op_value)
     else:
         raise ValueError(f"Unsupported operator: {operator}")
