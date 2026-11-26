@@ -1243,3 +1243,66 @@ def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
     assert result3[0].key == "3"
     assert result4[0].key == "4"
     assert result5[0].key == "5"
+
+
+def test_inmemory_store_filter_missing_keys_and_none() -> None:
+    store = InMemoryStore()
+    ns = ("filter_missing_none",)
+    store.put(ns, "missing", {"other": 1})
+    store.put(ns, "explicit_none", {"stage": None})
+    store.put(ns, "present", {"stage": "done"})
+    store.put(ns, "nested_missing", {"details": {}})
+    store.put(ns, "nested_none", {"details": {"reviewer": None}})
+    store.put(ns, "nested_present", {"details": {"reviewer": "alice"}})
+
+    # Top-level None and $eq None must only match explicit None, not missing keys
+    assert [i.key for i in store.search(ns, filter={"stage": None})] == [
+        "explicit_none"
+    ]
+    assert [i.key for i in store.search(ns, filter={"stage": {"$eq": None}})] == [
+        "explicit_none"
+    ]
+    # $ne on missing key must not match missing keys (PostgreSQL JSONB parity)
+    assert [i.key for i in store.search(ns, filter={"stage": {"$ne": "done"}})] == [
+        "explicit_none"
+    ]
+
+    # Nested dict missing key vs explicit None
+    assert [
+        i.key for i in store.search(ns, filter={"details": {"reviewer": None}})
+    ] == ["nested_none"]
+    assert [
+        i.key for i in store.search(ns, filter={"details": {"reviewer": {"$eq": None}}})
+    ] == ["nested_none"]
+
+
+def test_inmemory_store_filter_heterogeneous_range_no_crash() -> None:
+    store = InMemoryStore()
+    ns = ("filter_heterogeneous_range",)
+    store.put(ns, "str_val", {"v": "hello"})
+    store.put(ns, "num_str", {"v": "100"})
+    store.put(ns, "dict_val", {"v": {"a": 1}})
+    store.put(ns, "list_val", {"v": [1, 2]})
+    store.put(ns, "none_val", {"v": None})
+    store.put(ns, "bool_true", {"v": True})
+    store.put(ns, "bool_false", {"v": False})
+    store.put(ns, "int_neg", {"v": -5})
+    store.put(ns, "int_pos", {"v": 10})
+    store.put(ns, "float_pos", {"v": 10.5})
+
+    assert sorted(i.key for i in store.search(ns, filter={"v": {"$lt": 0}})) == [
+        "int_neg"
+    ]
+    assert sorted(i.key for i in store.search(ns, filter={"v": {"$lte": 10}})) == [
+        "int_neg",
+        "int_pos",
+    ]
+    assert sorted(i.key for i in store.search(ns, filter={"v": {"$gt": 0}})) == [
+        "float_pos",
+        "int_pos",
+    ]
+    assert sorted(i.key for i in store.search(ns, filter={"v": {"$gte": 10}})) == [
+        "float_pos",
+        "int_pos",
+    ]
+    assert store.search(ns, filter={"v": {"$gt": 99}}) == []

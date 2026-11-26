@@ -244,7 +244,7 @@ class InMemoryStore(BaseStore):
                 return True
 
             return all(
-                _compare_values(item.value.get(key), filter_value)
+                key in item.value and _compare_values(item.value[key], filter_value)
                 for key, filter_value in op.filter.items()
             )
 
@@ -568,7 +568,8 @@ def _compare_values(item_value: Any, filter_value: Any) -> bool:
         if not isinstance(item_value, dict):
             return False
         return all(
-            _compare_values(item_value.get(k), v) for k, v in filter_value.items()
+            k in item_value and _compare_values(item_value[k], v)
+            for k, v in filter_value.items()
         )
     elif isinstance(filter_value, (list, tuple)):
         return (
@@ -583,17 +584,29 @@ def _compare_values(item_value: Any, filter_value: Any) -> bool:
         return item_value == filter_value
 
 
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
 def _apply_operator(value: Any, operator: str, op_value: Any) -> bool:
     """Apply a comparison operator, matching PostgreSQL's JSONB behavior."""
     if operator == "$eq":
         return value == op_value
     elif operator == "$gt":
+        if not (_is_number(value) and _is_number(op_value)):
+            return False
         return float(value) > float(op_value)
     elif operator == "$gte":
+        if not (_is_number(value) and _is_number(op_value)):
+            return False
         return float(value) >= float(op_value)
     elif operator == "$lt":
+        if not (_is_number(value) and _is_number(op_value)):
+            return False
         return float(value) < float(op_value)
     elif operator == "$lte":
+        if not (_is_number(value) and _is_number(op_value)):
+            return False
         return float(value) <= float(op_value)
     elif operator == "$ne":
         return value != op_value
