@@ -953,6 +953,27 @@ def test_vector_search_with_filters(fake_embeddings: CharacterEmbeddings) -> Non
     assert results[0].key == "doc3"
 
 
+@pytest.mark.parametrize(
+    ("operator", "threshold", "expected_key"),
+    [
+        ("$gt", "2025-01-05", "newer"),
+        ("$gte", "2025-01-10", "newer"),
+        ("$lt", "2025-01-05", "older"),
+        ("$lte", "2025-01-02", "older"),
+    ],
+)
+def test_in_memory_store_filters_iso_date_strings(
+    operator: str, threshold: str, expected_key: str
+) -> None:
+    store = InMemoryStore()
+    store.put(("test",), "newer", {"dt": "2025-01-10"})
+    store.put(("test",), "older", {"dt": "2025-01-02"})
+
+    results = store.search(("test",), filter={"dt": {operator: threshold}})
+
+    assert [result.key for result in results] == [expected_key]
+
+
 async def test_async_vector_search_with_filters(
     fake_embeddings: CharacterEmbeddings,
 ) -> None:
