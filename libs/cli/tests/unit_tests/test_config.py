@@ -199,6 +199,9 @@ def test_validate_config():
     expected_config["python_version"] = "3.13"
     actual_config = validate_config(expected_config)
     assert actual_config == expected_config
+    expected_config["python_version"] = "3.14"
+    actual_config = validate_config(expected_config)
+    assert actual_config == expected_config
 
     # check wrong python version raises
     with pytest.raises(click.UsageError):
