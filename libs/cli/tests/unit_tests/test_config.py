@@ -912,7 +912,7 @@ def test_config_to_docker_simple():
 FROM langchain/langgraph-api:3.11
 # -- Installing local requirements --
 COPY --from=outer-requirements.txt requirements.txt /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
-RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
+RUN --mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
 # -- End of local requirements install --
 # -- Adding local package ../../examples --
 COPY --from=examples . /deps/examples
@@ -946,7 +946,7 @@ RUN set -ex && \\
     done
 # -- End of non-package dependency graphs_reqs_a --
 # -- Installing all local dependencies --
-RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+RUN --mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
 # -- End of local dependencies install --
 ENV LANGGRAPH_HTTP='{{"app": "/deps/examples/my_app.py:app"}}'
 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
@@ -1003,7 +1003,7 @@ RUN set -ex && \\
     done
 # -- End of non-package dependency tests --
 # -- Installing all local dependencies --
-RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+RUN --mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
 # -- End of local dependencies install --
 ENV LANGSERVE_GRAPHS='{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}'
 """
@@ -1050,7 +1050,7 @@ RUN set -ex && \\
     done
 # -- End of non-package dependency unit_tests --
 # -- Installing all local dependencies --
-RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+RUN --mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
 # -- End of local dependencies install --
 ENV LANGSERVE_GRAPHS='{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}'
 """
@@ -1112,7 +1112,7 @@ RUN set -ex && \\
     done
 # -- End of non-package dependency graphs --
 # -- Installing all local dependencies --
-RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+RUN --mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
 # -- End of local dependencies install --
 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-graphs/src/agent.py:graph"}}'
 {FORMATTED_CLEANUP_LINES}\
@@ -1148,7 +1148,7 @@ dependencies = ["langchain"]"""
 ADD . /deps/unit_tests
 # -- End of local package . --
 # -- Installing all local dependencies --
-RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+RUN --mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
 # -- End of local dependencies install --
 ENV LANGSERVE_GRAPHS='{"agent": "/deps/unit_tests/graphs/agent.py:graph"}'
 """
@@ -1180,7 +1180,7 @@ def test_config_to_docker_end_to_end():
 ARG meow
 ARG foo
 ADD pipconfig.txt /pipconfig.txt
-RUN PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt langchain langchain_openai
+RUN --mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt langchain langchain_openai
 # -- Adding non-package dependency graphs --
 ADD ./graphs/ /deps/outer-graphs/src
 RUN set -ex && \\
@@ -1196,7 +1196,7 @@ RUN set -ex && \\
     done
 # -- End of non-package dependency graphs --
 # -- Installing all local dependencies --
-RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+RUN --mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
 # -- End of local dependencies install --
 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-graphs/src/agent.py:graph"}}'
 {FORMATTED_CLEANUP_LINES}"""
@@ -1226,7 +1226,7 @@ ARG meow
 ARG foo
 ADD . /deps/unit_tests
 WORKDIR /deps/unit_tests
-RUN npm i
+RUN --mount=type=secret,id=LANGSMITH_NPMRC,target=/root/.npmrc,required=false npm i
 ENV LANGGRAPH_AUTH='{"path": "./graphs/auth.mts:auth"}'
 ENV LANGGRAPH_UI='{"agent": "./graphs/agent.ui.jsx"}'
 ENV LANGGRAPH_UI_CONFIG='{"shared": ["nuqs"]}'
@@ -1417,7 +1417,7 @@ ARG meow
 ARG foo
 ADD . /deps/unit_tests
 WORKDIR /deps/unit_tests
-RUN npm i
+RUN --mount=type=secret,id=LANGSMITH_NPMRC,target=/root/.npmrc,required=false npm i
 ENV LANGGRAPH_AUTH='{"path": "./graphs/auth.mts:auth"}'
 ENV LANGGRAPH_UI='{"agent": "./graphs/agent.ui.jsx"}'
 ENV LANGGRAPH_UI_CONFIG='{"shared": ["nuqs"]}'
@@ -1540,7 +1540,7 @@ RUN set -ex && \\
     done
 # -- End of non-package dependency unit_tests --
 # -- Installing all local dependencies --
-RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+RUN --mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
 # -- End of local dependencies install --
 ENV LANGGRAPH_UI='{{"agent": "./graphs/agent.ui.jsx"}}'
 ENV LANGGRAPH_UI_CONFIG='{{"shared": ["nuqs"]}}'
@@ -1548,7 +1548,8 @@ ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:gra
 # -- Installing JS dependencies --
 ENV NODE_VERSION=20
 WORKDIR /deps/outer-unit_tests/unit_tests
-RUN npm i && tsx /api/langgraph_api/js/build.mts
+RUN --mount=type=secret,id=LANGSMITH_NPMRC,target=/root/.npmrc,required=false npm i
+RUN tsx /api/langgraph_api/js/build.mts
 # -- End of JS dependencies install --
 {FORMATTED_CLEANUP_LINES}
 WORKDIR /deps/outer-unit_tests/unit_tests"""
@@ -1587,13 +1588,14 @@ RUN set -ex && \\
     done
 # -- End of non-package dependency unit_tests --
 # -- Installing all local dependencies --
-RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+RUN --mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
 # -- End of local dependencies install --
 ENV LANGSERVE_GRAPHS='{{"python": "/deps/outer-unit_tests/unit_tests/multiplatform/python.py:graph", "js": "/deps/outer-unit_tests/unit_tests/multiplatform/js.mts:graph"}}'
 # -- Installing JS dependencies --
 ENV NODE_VERSION=22
 WORKDIR /deps/outer-unit_tests/unit_tests
-RUN npm i && tsx /api/langgraph_api/js/build.mts
+RUN --mount=type=secret,id=LANGSMITH_NPMRC,target=/root/.npmrc,required=false npm i
+RUN tsx /api/langgraph_api/js/build.mts
 # -- End of JS dependencies install --
 {FORMATTED_CLEANUP_LINES}
 WORKDIR /deps/outer-unit_tests/unit_tests"""
@@ -1625,7 +1627,10 @@ def test_config_to_docker_gen_ui_python_uses_workdir_with_special_chars():
         )
 
         assert "WORKDIR /deps/outer-proj;echo pwned/src" in docker
-        assert "RUN npm i && tsx /api/langgraph_api/js/build.mts" in docker
+        assert (
+            "RUN --mount=type=secret,id=LANGSMITH_NPMRC,target=/root/.npmrc,required=false npm i\nRUN tsx /api/langgraph_api/js/build.mts"
+            in docker
+        )
         assert "RUN cd /deps/outer-proj;echo pwned/src" not in docker
         assert ">> '/deps/outer-proj;echo pwned/pyproject.toml'" in docker
 
@@ -1652,8 +1657,102 @@ def test_config_to_docker_nodejs_uses_workdir_with_special_chars():
         )
 
         assert "WORKDIR /deps/proj;echo pwned" in docker
-        assert "RUN npm i" in docker
+        assert (
+            "RUN --mount=type=secret,id=LANGSMITH_NPMRC,target=/root/.npmrc,required=false npm i"
+            in docker
+        )
         assert "RUN cd /deps/proj;echo pwned" not in docker
+
+
+@pytest.mark.parametrize("pip_installer", ["pip", "uv"])
+@pytest.mark.parametrize("pip_config_file", [None, "pipconfig.txt"])
+def test_config_to_docker_python_registry_secrets(pip_installer, pip_config_file):
+    custom_run = "RUN pip install custom-dependency"
+    docker, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "dependencies": [
+                    ".",
+                    "../../examples/graphs_reqs_a",
+                    "../../examples",
+                    "httpx",
+                ],
+                "graphs": {"agent": "./agent.py:graph"},
+                "pip_installer": pip_installer,
+                "pip_config_file": pip_config_file,
+                "dockerfile_lines": [custom_run],
+            }
+        ),
+        base_image="langchain/langgraph-api",
+    )
+    install_runs = [
+        line
+        for line in docker.splitlines()
+        if line.startswith("RUN ") and "pip install" in line and line != custom_run
+    ]
+    assert len(install_runs) == 4
+    if pip_installer == "uv":
+        mount = "--mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false"
+        assert "LANGSMITH_PIP_CONFIG" not in docker
+    else:
+        mount = "--mount=type=secret,id=LANGSMITH_PIP_CONFIG,target=/run/secrets/LANGSMITH_PIP_CONFIG,required=false"
+        for line in install_runs:
+            assert (
+                "if [ -f /run/secrets/LANGSMITH_PIP_CONFIG ]; then export PIP_CONFIG_FILE=/run/secrets/LANGSMITH_PIP_CONFIG;"
+                in line
+            )
+        if pip_config_file:
+            assert "else export PIP_CONFIG_FILE=/pipconfig.txt; fi;" in install_runs[0]
+        assert "LANGSMITH_UV_CONFIG" not in docker
+    assert all(line.startswith(f"RUN {mount} ") for line in install_runs)
+    assert docker.count("--mount=type=secret") == len(install_runs)
+    assert custom_run in docker.splitlines()
+    assert not any(
+        line.startswith(("ENV ", "ADD ", "COPY ")) and "LANGSMITH_" in line
+        for line in docker.splitlines()
+    )
+
+
+@pytest.mark.parametrize("monorepo", [False, True])
+@pytest.mark.parametrize(
+    "lockfile, install_command, expected_command",
+    [
+        ("package-lock.json", None, "npm ci"),
+        ("yarn.lock", None, "yarn install --frozen-lockfile"),
+        ("pnpm-lock.yaml", None, "pnpm i --frozen-lockfile"),
+        ("package-lock.json", "npm ci --ignore-scripts", "npm ci --ignore-scripts"),
+    ],
+)
+def test_config_to_docker_node_registry_secrets(
+    tmp_path, monorepo, lockfile, install_command, expected_command
+):
+    config_dir = tmp_path / "agent" if monorepo else tmp_path
+    config_dir.mkdir(exist_ok=True)
+    (tmp_path / lockfile).write_text("")
+    (tmp_path / "package.json").write_text('{"name":"agent"}')
+    custom_run = "RUN npm install custom-dependency"
+    docker, _ = config_to_docker(
+        config_dir / "langgraph.json",
+        validate_config(
+            {
+                "node_version": "20",
+                "graphs": {"agent": "./agent.js:graph"},
+                "dockerfile_lines": [custom_run],
+            }
+        ),
+        install_command=install_command,
+        build_command="npm run build",
+        build_context=str(tmp_path) if monorepo else None,
+    )
+    assert (
+        f"RUN --mount=type=secret,id=LANGSMITH_NPMRC,target=/root/.npmrc,required=false {expected_command}"
+        in docker.splitlines()
+    )
+    assert docker.count("--mount=type=secret") == 1
+    assert custom_run in docker.splitlines()
+    if monorepo:
+        assert "RUN npm run build" in docker.splitlines()
 
 
 def test_config_to_docker_pip_installer():
@@ -1733,7 +1832,19 @@ def test_config_to_docker_uv_lock():
             config_path, config, base_image="langchain/langgraph-api:0.2.47"
         )
 
-        assert "uv pip install --system" in docker
+        install_runs = [
+            line
+            for line in docker.splitlines()
+            if line.startswith("RUN ") and "uv pip install --system" in line
+        ]
+        assert len(install_runs) == 4
+        assert all(
+            line.startswith(
+                "RUN --mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false "
+            )
+            for line in install_runs
+        )
+        assert docker.count("--mount=type=secret") == len(install_runs)
         assert (
             "uv export --package agent --frozen --no-hashes --no-emit-project --no-emit-workspace"
             in docker
@@ -1773,7 +1884,7 @@ def test_config_to_docker_uv_lock():
 
         shared_workdir = "WORKDIR /deps/workspace/libs/shared"
         shared_install = (
-            "RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir "
+            "RUN --mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir "
             "-c /api/constraints.txt --no-deps -e ."
         )
         agent_workdir = "WORKDIR /deps/workspace/apps/agent"
@@ -2154,7 +2265,7 @@ def test_config_to_docker_uv_lock_detects_js_pm_from_target_package_root():
 
         assert "WORKDIR /deps/workspace/apps/agent" in docker
         assert (
-            "RUN pnpm i --frozen-lockfile && tsx /api/langgraph_api/js/build.mts"
+            "RUN --mount=type=secret,id=LANGSMITH_NPMRC,target=/root/.npmrc,required=false pnpm i --frozen-lockfile\nRUN tsx /api/langgraph_api/js/build.mts"
             in docker
         )
         assert (
@@ -2191,7 +2302,7 @@ def test_config_to_docker_uv_lock_uses_workdir_for_js_install_with_special_chars
 
         assert "WORKDIR /deps/workspace/apps/agent;echo pwned" in docker
         assert (
-            "RUN pnpm i --frozen-lockfile && tsx /api/langgraph_api/js/build.mts"
+            "RUN --mount=type=secret,id=LANGSMITH_NPMRC,target=/root/.npmrc,required=false pnpm i --frozen-lockfile\nRUN tsx /api/langgraph_api/js/build.mts"
             in docker
         )
         assert "RUN cd /deps/workspace/apps/agent;echo pwned" not in docker
@@ -2725,7 +2836,7 @@ def test_config_to_docker_uv_lock_root_package_copy_skips_unrelated_members():
         )
         assert "WORKDIR /deps/workspace" in docker
         assert (
-            "RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir "
+            "RUN --mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir "
             "-c /api/constraints.txt --no-deps -e ." in docker
         )
 
@@ -2858,7 +2969,7 @@ def test_config_to_compose_simple_config():
                     done
                 # -- End of non-package dependency unit_tests --
                 # -- Installing all local dependencies --
-                RUN for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+                RUN --mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
@@ -2899,7 +3010,7 @@ def test_config_to_compose_env_vars():
                     done
                 # -- End of non-package dependency unit_tests --
                 # -- Installing all local dependencies --
-                RUN for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+                RUN --mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
@@ -2944,7 +3055,7 @@ def test_config_to_compose_env_file():
                     done
                 # -- End of non-package dependency unit_tests --
                 # -- Installing all local dependencies --
-                RUN for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+                RUN --mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
@@ -2982,7 +3093,7 @@ def test_config_to_compose_watch():
                     done
                 # -- End of non-package dependency unit_tests --
                 # -- Installing all local dependencies --
-                RUN for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+                RUN --mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
@@ -3029,7 +3140,7 @@ def test_config_to_compose_end_to_end():
                     done
                 # -- End of non-package dependency unit_tests --
                 # -- Installing all local dependencies --
-                RUN for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+                RUN --mount=type=secret,id=LANGSMITH_UV_CONFIG,target=/root/.config/uv/uv.toml,required=false for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
