@@ -6,9 +6,13 @@ from typing import Any, Protocol, runtime_checkable
 class UntypedSerializerProtocol(Protocol):
     """Protocol for serialization and deserialization of objects."""
 
-    def dumps(self, obj: Any) -> bytes: ...
+    def dumps(self, obj: Any) -> bytes:
+        """Serialize an object to bytes."""
+        ...
 
-    def loads(self, data: bytes) -> Any: ...
+    def loads(self, data: bytes) -> Any:
+        """Deserialize an object from bytes."""
+        ...
 
 
 @runtime_checkable
@@ -21,19 +25,47 @@ class SerializerProtocol(Protocol):
     Valid implementations include the `pickle`, `json` and `orjson` modules.
     """
 
-    def dumps_typed(self, obj: Any) -> tuple[str, bytes]: ...
+    def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
+        """Serialize an object to a `(type, bytes)` tuple."""
+        ...
 
-    def loads_typed(self, data: tuple[str, bytes]) -> Any: ...
+    def loads_typed(self, data: tuple[str, bytes]) -> Any:
+        """Deserialize an object from a `(type, bytes)` tuple."""
+        ...
 
 
 class SerializerCompat(SerializerProtocol):
+    """Adapter that wraps an `UntypedSerializerProtocol` to provide `SerializerProtocol`.
+
+    Adds type information by using the object's class name as the type tag.
+
+    Args:
+        serde: The untyped serializer to wrap.
+    """
+
     def __init__(self, serde: UntypedSerializerProtocol) -> None:
         self.serde = serde
 
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
+        """Serialize an object, tagging it with its class name.
+
+        Args:
+            obj: The object to serialize.
+
+        Returns:
+            A tuple of `(class_name, serialized_bytes)`.
+        """
         return type(obj).__name__, self.serde.dumps(obj)
 
     def loads_typed(self, data: tuple[str, bytes]) -> Any:
+        """Deserialize an object, ignoring the type tag.
+
+        Args:
+            data: A `(type, bytes)` tuple as produced by `dumps_typed`.
+
+        Returns:
+            The deserialized object.
+        """
         return self.serde.loads(data[1])
 
 
