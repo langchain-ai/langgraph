@@ -1738,6 +1738,7 @@ def docker_tag(
         api_version = _resolve_compatible_api_version(
             api_version, base_image, f"{language}{version_distro_tag}"
         )
+        api_version = re.sub(r"(?<=\d)dev(?=\d+$)", ".dev", api_version)
         full_tag = f"{api_version}-{language}{version_distro_tag}"
     elif "/langgraph-server" in base_image and version_distro_tag not in base_image:
         return f"{base_image}-{language}{version_distro_tag}"
