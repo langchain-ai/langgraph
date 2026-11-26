@@ -47,10 +47,10 @@ def _redis_available() -> bool:
     return True
 
 
-if not _redis_available():
-    pytest.skip("Redis server not available", allow_module_level=True)
+REDIS_AVAILABLE = _redis_available()
 
 
+@pytest.mark.skipif(not REDIS_AVAILABLE, reason="Redis server not available")
 class TestRedisCache:
     @pytest.fixture(autouse=True)
     def setup(self) -> None:
@@ -246,47 +246,6 @@ class TestRedisCache:
         # Cleanup
         client.flushdb()
 
-    def test_redis_unavailable_get(self) -> None:
-        """Test behavior when Redis is unavailable during get operations."""
-        # Create cache with non-existent Redis server
-        bad_client = connect(host="nonexistent", port=9999, timeout=0.1)
-        cache: RedisCache = RedisCache(bad_client, prefix="test:cache:")
-
-        keys: list[FullKey] = [(("graph", "node"), "key")]
-        result = cache.get(keys)
-
-        # Should return empty dict when Redis unavailable
-        assert result == {}
-
-    def test_redis_unavailable_set(self) -> None:
-        """Test behavior when Redis is unavailable during set operations."""
-        # Create cache with non-existent Redis server
-        bad_client = connect(host="nonexistent", port=9999, timeout=0.1)
-        cache: RedisCache = RedisCache(bad_client, prefix="test:cache:")
-
-        keys: list[FullKey] = [(("graph", "node"), "key")]
-        values = {keys[0]: ({"data": "test"}, None)}
-
-        # Should not raise exception when Redis unavailable
-        cache.set(values)  # Should silently fail
-
-    @pytest.mark.asyncio
-    async def test_redis_unavailable_async(self) -> None:
-        """Test async behavior when Redis is unavailable."""
-        # Create sync cache with non-existent Redis server (like main integration tests)
-        bad_client = connect(host="nonexistent", port=9999, timeout=0.1)
-        cache: RedisCache = RedisCache(bad_client, prefix="test:cache:")
-
-        keys: list[FullKey] = [(("graph", "node"), "key")]
-        values = {keys[0]: ({"data": "test"}, None)}
-
-        # Should return empty dict for get (delegates to sync)
-        result = await cache.aget(keys)
-        assert result == {}
-
-        # Should not raise exception for set (delegates to sync)
-        await cache.aset(values)  # Should silently fail
-
     def test_corrupted_data_handling(self) -> None:
         """Test handling of corrupted data in Redis."""
         # Set some valid data first
@@ -336,3 +295,48 @@ class TestRedisCache:
 
         assert len(result) == 1
         assert result[key] == large_data
+
+
+class TestRedisUnavailable:
+    """Tests that do not need a running Redis server."""
+
+    def test_redis_unavailable_get(self) -> None:
+        """Test behavior when Redis is unavailable during get operations."""
+        # Create cache with non-existent Redis server
+        bad_client = connect(host="127.0.0.1", port=9999, timeout=0.1)
+        cache: RedisCache = RedisCache(bad_client, prefix="test:cache:")
+
+        keys: list[FullKey] = [(("graph", "node"), "key")]
+        result = cache.get(keys)
+
+        # Should return empty dict when Redis unavailable
+        assert result == {}
+
+    def test_redis_unavailable_set(self) -> None:
+        """Test behavior when Redis is unavailable during set operations."""
+        # Create cache with non-existent Redis server
+        bad_client = connect(host="127.0.0.1", port=9999, timeout=0.1)
+        cache: RedisCache = RedisCache(bad_client, prefix="test:cache:")
+
+        keys: list[FullKey] = [(("graph", "node"), "key")]
+        values = {keys[0]: ({"data": "test"}, None)}
+
+        # Should not raise exception when Redis unavailable
+        cache.set(values)  # Should silently fail
+
+    @pytest.mark.asyncio
+    async def test_redis_unavailable_async(self) -> None:
+        """Test async behavior when Redis is unavailable."""
+        # Create sync cache with non-existent Redis server (like main integration tests)
+        bad_client = connect(host="127.0.0.1", port=9999, timeout=0.1)
+        cache: RedisCache = RedisCache(bad_client, prefix="test:cache:")
+
+        keys: list[FullKey] = [(("graph", "node"), "key")]
+        values = {keys[0]: ({"data": "test"}, None)}
+
+        # Should return empty dict for get (delegates to sync)
+        result = await cache.aget(keys)
+        assert result == {}
+
+        # Should not raise exception for set (delegates to sync)
+        await cache.aset(values)  # Should silently fail
