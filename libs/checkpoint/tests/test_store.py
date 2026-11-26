@@ -1243,3 +1243,67 @@ def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
     assert result3[0].key == "3"
     assert result4[0].key == "4"
     assert result5[0].key == "5"
+
+
+def test_search_filter_missing_keys_vs_explicit_none() -> None:
+    """Missing keys must not match None filters (top-level or nested)."""
+    store = InMemoryStore()
+    ns = ("filter_missing",)
+    store.put(ns, "missing", {"other": 1})
+    store.put(ns, "explicit_none", {"stage": None})
+    store.put(ns, "present", {"stage": "draft"})
+
+    assert [r.key for r in store.search(ns, filter={"stage": None})] == [
+        "explicit_none"
+    ]
+    assert [r.key for r in store.search(ns, filter={"stage": {"$eq": None}})] == [
+        "explicit_none"
+    ]
+    assert [r.key for r in store.search(ns, filter={"stage": {"$ne": None}})] == [
+        "present"
+    ]
+
+    nested_ns = ("filter_missing_nested",)
+    store.put(nested_ns, "missing_nested", {"details": {}})
+    store.put(nested_ns, "explicit_nested_none", {"details": {"reviewer": None}})
+    store.put(nested_ns, "present_nested", {"details": {"reviewer": "alice"}})
+
+    assert [
+        r.key for r in store.search(nested_ns, filter={"details": {"reviewer": None}})
+    ] == ["explicit_nested_none"]
+    assert [
+        r.key
+        for r in store.search(
+            nested_ns, filter={"details": {"reviewer": {"$eq": None}}}
+        )
+    ] == ["explicit_nested_none"]
+
+
+def test_search_filter_range_operators_heterogeneous_types() -> None:
+    """Range filters should return False for incompatible types instead of crashing."""
+    store = InMemoryStore()
+    ns = ("filter_heterogeneous",)
+    store.put(ns, "int_low", {"v": -5})
+    store.put(ns, "int_high", {"v": 100})
+    store.put(ns, "float_mid", {"v": 3.5})
+    store.put(ns, "str_val", {"v": "hello"})
+    store.put(ns, "dict_val", {"v": {"a": 1}})
+    store.put(ns, "list_val", {"v": [1, 2]})
+    store.put(ns, "bool_val", {"v": True})
+    store.put(ns, "none_val", {"v": None})
+    store.put(ns, "missing_val", {"other": 1})
+
+    assert [r.key for r in store.search(ns, filter={"v": {"$lt": 0}})] == ["int_low"]
+    assert [r.key for r in store.search(ns, filter={"v": {"$gt": 99}})] == ["int_high"]
+    assert sorted(r.key for r in store.search(ns, filter={"v": {"$gte": 3.5}})) == [
+        "float_mid",
+        "int_high",
+    ]
+    assert sorted(r.key for r in store.search(ns, filter={"v": {"$lte": 3.5}})) == [
+        "float_mid",
+        "int_low",
+    ]
+    assert [r.key for r in store.search(ns, filter={"v": {"$gt": "a"}})] == ["str_val"]
+
+    with pytest.raises(ValueError, match="Unsupported operator"):
+        store.search(ns, filter={"v": {"$invalid": 1}})

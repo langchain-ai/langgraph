@@ -244,7 +244,7 @@ class InMemoryStore(BaseStore):
                 return True
 
             return all(
-                _compare_values(item.value.get(key), filter_value)
+                _compare_values(item.value.get(key, _MISSING), filter_value)
                 for key, filter_value in op.filter.items()
             )
 
@@ -557,6 +557,13 @@ def _does_match(match_condition: MatchCondition, key: tuple[str, ...]) -> bool:
         raise ValueError(f"Unsupported match type: {match_type}")
 
 
+_MISSING = object()
+
+
+def _is_number(val: Any) -> bool:
+    return isinstance(val, (int, float)) and not isinstance(val, bool)
+
+
 def _compare_values(item_value: Any, filter_value: Any) -> bool:
     """Compare values in a JSONB-like way, handling nested objects."""
     if isinstance(filter_value, dict):
@@ -568,8 +575,11 @@ def _compare_values(item_value: Any, filter_value: Any) -> bool:
         if not isinstance(item_value, dict):
             return False
         return all(
-            _compare_values(item_value.get(k), v) for k, v in filter_value.items()
+            _compare_values(item_value.get(k, _MISSING), v)
+            for k, v in filter_value.items()
         )
+    elif item_value is _MISSING:
+        return False
     elif isinstance(filter_value, (list, tuple)):
         return (
             isinstance(item_value, (list, tuple))
@@ -585,17 +595,29 @@ def _compare_values(item_value: Any, filter_value: Any) -> bool:
 
 def _apply_operator(value: Any, operator: str, op_value: Any) -> bool:
     """Apply a comparison operator, matching PostgreSQL's JSONB behavior."""
+    if operator not in ("$eq", "$ne", "$gt", "$gte", "$lt", "$lte"):
+        raise ValueError(f"Unsupported operator: {operator}")
+    if value is _MISSING:
+        return False
     if operator == "$eq":
         return value == op_value
-    elif operator == "$gt":
-        return float(value) > float(op_value)
-    elif operator == "$gte":
-        return float(value) >= float(op_value)
-    elif operator == "$lt":
-        return float(value) < float(op_value)
-    elif operator == "$lte":
-        return float(value) <= float(op_value)
     elif operator == "$ne":
         return value != op_value
+
+    if _is_number(value) and _is_number(op_value):
+        lhs: Any = float(value)
+        rhs: Any = float(op_value)
+    elif isinstance(value, str) and isinstance(op_value, str):
+        lhs = value
+        rhs = op_value
     else:
-        raise ValueError(f"Unsupported operator: {operator}")
+        return False
+
+    if operator == "$gt":
+        return lhs > rhs
+    elif operator == "$gte":
+        return lhs >= rhs
+    elif operator == "$lt":
+        return lhs < rhs
+    else:
+        return lhs <= rhs
