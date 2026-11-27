@@ -244,7 +244,7 @@ class InMemoryStore(BaseStore):
                 return True
 
             return all(
-                _compare_values(item.value.get(key), filter_value)
+                key in item.value and _compare_values(item.value[key], filter_value)
                 for key, filter_value in op.filter.items()
             )
 
@@ -568,7 +568,8 @@ def _compare_values(item_value: Any, filter_value: Any) -> bool:
         if not isinstance(item_value, dict):
             return False
         return all(
-            _compare_values(item_value.get(k), v) for k, v in filter_value.items()
+            k in item_value and _compare_values(item_value[k], v)
+            for k, v in filter_value.items()
         )
     elif isinstance(filter_value, (list, tuple)):
         return (

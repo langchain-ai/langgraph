@@ -915,6 +915,39 @@ async def test_async_vector_update_with_embedding(
     assert not any(r.key == "doc4" for r in results_new)
 
 
+def test_filter_missing_key_not_matching_none() -> None:
+    """Items missing a filtered key should not match, even when filtering for None.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/9807.
+    """
+    store = InMemoryStore()
+
+    # doc1 has color=None explicitly, doc2 has no "color" key at all
+    store.put(("test",), "doc1", {"text": "apple", "color": None})
+    store.put(("test",), "doc2", {"text": "banana"})
+    store.put(("test",), "doc3", {"text": "cherry", "color": "red"})
+
+    # Filtering for color=None should match only doc1 (explicit None), not doc2
+    results = store.search(("test",), filter={"color": None})
+    assert len(results) == 1
+    assert results[0].key == "doc1"
+
+    # Filtering for color="red" should match only doc3
+    results = store.search(("test",), filter={"color": "red"})
+    assert len(results) == 1
+    assert results[0].key == "doc3"
+
+    # $ne filter: color != "red" should match only doc1 (has color=None),
+    # NOT doc2 (missing key entirely)
+    results = store.search(("test",), filter={"color": {"$ne": "red"}})
+    assert len(results) == 1
+    assert results[0].key == "doc1"
+
+    # Filtering for a key that no document has should return nothing
+    results = store.search(("test",), filter={"nonexistent": "value"})
+    assert len(results) == 0
+
+
 def test_vector_search_with_filters(fake_embeddings: CharacterEmbeddings) -> None:
     """Test combining vector search with filters."""
     inmem_store = InMemoryStore(
