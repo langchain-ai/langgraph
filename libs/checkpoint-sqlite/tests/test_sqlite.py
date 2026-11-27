@@ -244,6 +244,34 @@ class TestSqliteSaver:
             with pytest.raises(ValueError, match="Invalid filter key"):
                 list(saver.list(None, filter={malicious_key: "dummy"}))
 
+    def test_search_filter_top_level_keys_with_dots(self) -> None:
+        """A filter key containing '.' matches a top-level key of that name.
+
+        Matches InMemorySaver and PostgresSaver. Nested dotted paths still work
+        when no top-level key of that name exists.
+        """
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            top_level: CheckpointMetadata = {  # type: ignore[typeddict-unknown-key]
+                "group.sub": "top",
+                "group": {"sub": "nested"},
+            }
+            nested_only: CheckpointMetadata = {"team": {"name": "core"}}  # type: ignore[typeddict-unknown-key]
+            for thread_id, metadata in (("t1", top_level), ("t2", nested_only)):
+                config: RunnableConfig = {
+                    "configurable": {"thread_id": thread_id, "checkpoint_ns": ""}
+                }
+                saver.put(config, empty_checkpoint(), metadata, {})
+
+            def threads(filter: dict[str, Any]) -> list[str]:
+                return [
+                    c.config["configurable"]["thread_id"]
+                    for c in saver.list(None, filter=filter)
+                ]
+
+            assert threads({"group.sub": "top"}) == ["t1"]
+            assert threads({"group.sub": "nested"}) == []
+            assert threads({"team.name": "core"}) == ["t2"]
+
     def test_limit_parameter_sql_injection_prevention(self) -> None:
         """Test that the limit parameter properly uses parameterized queries to prevent SQL injection."""
         with SqliteSaver.from_conn_string(":memory:") as saver:

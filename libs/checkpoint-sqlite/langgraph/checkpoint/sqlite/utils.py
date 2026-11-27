@@ -66,9 +66,16 @@ def _metadata_predicate(
     for query_key, query_value in metadata_filter.items():
         _validate_filter_key(query_key)
         operator, param_value = _where_value(query_value)
-        predicates.append(
-            f"json_extract(CAST(metadata AS TEXT), '$.{query_key}') {operator}"
-        )
+        column = f"json_extract(CAST(metadata AS TEXT), '$.{query_key}')"
+        if "." in query_key:
+            # Prefer a top-level key literally named "a.b", which is what
+            # InMemorySaver and PostgresSaver match, and fall back to the nested
+            # path a -> b. _validate_filter_key rejects '"', so quoting is safe.
+            column = (
+                f"COALESCE(json_extract(CAST(metadata AS TEXT), "
+                f"'$.\"{query_key}\"'), {column})"
+            )
+        predicates.append(f"{column} {operator}")
         param_values.append(param_value)
 
     return (predicates, param_values)
