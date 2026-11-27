@@ -101,8 +101,11 @@ async def test_async_executor_second_cancellation_aborts_blocked_cleanup() -> No
         assert not outer.done()
 
         outer.cancel("force stop")
+        # wait_for would cancel outer again and wait indefinitely if it ignores cancellation.
+        done, _ = await asyncio.wait({outer}, timeout=5)
+        assert outer in done
         with pytest.raises(asyncio.CancelledError):
-            await asyncio.wait_for(outer, timeout=5)
+            await outer
 
         assert outer.cancelled()
         assert not children[0].done()
