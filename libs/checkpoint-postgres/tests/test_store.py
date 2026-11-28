@@ -526,6 +526,25 @@ def test_search(store) -> None:
         store.delete(namespace, key)
 
 
+def test_search_numeric_range_filter(store) -> None:
+    """Numeric metadata range filters compare numbers, not their text form."""
+    namespace = ("test", "scores")
+    for key, score in (("two", 2), ("ten", 10), ("twenty", 20)):
+        store.put(namespace, key, {"score": score})
+
+    greater = store.search(namespace, filter={"score": {"$gt": 5}})
+    assert {item.key for item in greater} == {"ten", "twenty"}
+
+    less = store.search(namespace, filter={"score": {"$lt": 10}})
+    assert {item.key for item in less} == {"two"}
+
+    between = store.search(namespace, filter={"score": {"$gte": 2, "$lte": 20}})
+    assert {item.key for item in between} == {"two", "ten", "twenty"}
+
+    for key in ("two", "ten", "twenty"):
+        store.delete(namespace, key)
+
+
 @contextmanager
 def _create_vector_store(
     vector_type: str,

@@ -334,6 +334,25 @@ async def test_batch_search_ops(store: AsyncPostgresStore) -> None:
     assert len(results[1]) == 2  # All results
 
 
+async def test_search_numeric_range_filter(store: AsyncPostgresStore) -> None:
+    """Numeric metadata range filters compare numbers, not their text form."""
+    namespace = ("test", "scores")
+    for key, score in (("two", 2), ("ten", 10), ("twenty", 20)):
+        await store.aput(namespace, key, {"score": score})
+
+    greater = await store.asearch(namespace, filter={"score": {"$gt": 5}})
+    assert {item.key for item in greater} == {"ten", "twenty"}
+
+    less = await store.asearch(namespace, filter={"score": {"$lt": 10}})
+    assert {item.key for item in less} == {"two"}
+
+    between = await store.asearch(namespace, filter={"score": {"$gte": 2, "$lte": 20}})
+    assert {item.key for item in between} == {"two", "ten", "twenty"}
+
+    for key in ("two", "ten", "twenty"):
+        await store.adelete(namespace, key)
+
+
 async def test_batch_list_namespaces_ops(store: AsyncPostgresStore) -> None:
     # Setup test data
     await store.aput(("test", "namespace1"), "key1", {"data": "value1"})

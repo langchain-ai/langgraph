@@ -651,14 +651,18 @@ class BasePostgresStore(Generic[C]):
         """Helper to generate filter conditions."""
         if op == "$eq":
             return "value->%s = %s::jsonb", [key, json.dumps(value)]
-        elif op == "$gt":
-            return "value->>%s > %s", [key, str(value)]
-        elif op == "$gte":
-            return "value->>%s >= %s", [key, str(value)]
-        elif op == "$lt":
-            return "value->>%s < %s", [key, str(value)]
-        elif op == "$lte":
-            return "value->>%s <= %s", [key, str(value)]
+        elif op in ("$gt", "$gte", "$lt", "$lte"):
+            symbol = {"$gt": ">", "$gte": ">=", "$lt": "<", "$lte": "<="}[op]
+            if isinstance(value, bool):
+                # InMemoryStore compares booleans through float(); casting the
+                # JSONB text to boolean keeps false < true the same way.
+                return f"(value->>%s)::boolean {symbol} %s", [key, value]
+            if isinstance(value, (int, float)):
+                # ``value->>%s`` yields text, so comparing 10 with 5 as text
+                # returns false ("10" < "5" lexicographically). InMemoryStore
+                # compares these numerically, so cast both sides.
+                return f"(value->>%s)::numeric {symbol} %s::numeric", [key, str(value)]
+            return f"value->>%s {symbol} %s", [key, str(value)]
         elif op == "$ne":
             return "value->%s != %s::jsonb", [key, json.dumps(value)]
         else:
