@@ -16,16 +16,13 @@ REDIS_PORT = 6379
 # makes probing an absent Redis server take tens of seconds on Windows. Probe
 # once with a single fast attempt instead of per-test retries.
 PROBE_TIMEOUT = 1.0
-# Live tests talk to a real server and must tolerate slower round trips on CI
-# runners, so they get a more generous per-operation timeout than the probe.
-OPERATION_TIMEOUT = 5.0
 
 
 def connect(
     *,
     host: str = REDIS_HOST,
     port: int = REDIS_PORT,
-    timeout: float = OPERATION_TIMEOUT,
+    timeout: float = PROBE_TIMEOUT,
     **kwargs: object,
 ) -> redis.Redis:
     """Create a Redis client that fails fast instead of retrying with backoff."""
@@ -40,7 +37,7 @@ def connect(
 
 
 def _redis_available() -> bool:
-    client = connect(timeout=PROBE_TIMEOUT)
+    client = connect()
     try:
         client.ping()
     except redis.RedisError:
@@ -50,20 +47,13 @@ def _redis_available() -> bool:
     return True
 
 
-@pytest.fixture(scope="session")
-def redis_available() -> bool:
-    """Probe Redis once per session instead of during test collection."""
-    return _redis_available()
+REDIS_AVAILABLE = _redis_available()
 
 
+@pytest.mark.skipif(not REDIS_AVAILABLE, reason="Redis server not available")
 class TestRedisCache:
     @pytest.fixture(autouse=True)
-    def require_redis(self, redis_available: bool) -> None:
-        if not redis_available:
-            pytest.skip("Redis server not available")
-
-    @pytest.fixture(autouse=True)
-    def setup(self, require_redis: None) -> None:
+    def setup(self) -> None:
         """Set up test Redis client and cache."""
         self.client = connect(decode_responses=False)
 
